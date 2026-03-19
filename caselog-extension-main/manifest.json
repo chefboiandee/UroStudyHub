@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "SurgiLog",
+  "version": "1.1.0",
+  "description": "Dictate surgical cases, auto-parse CPT codes, and fill ACGME case logs in seconds.",
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://apps.acgme.org/*",
+    "https://www.acgme.org/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://apps.acgme.org/*",
+        "https://www.acgme.org/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["page-bridge.js"],
+      "matches": ["https://apps.acgme.org/*", "https://www.acgme.org/*"]
+    }
+  ],
+  "externally_connectable": {
+    "matches": ["*://localhost/*", "file:///*", "https://*/*"]
+  },
+  "action": {
+    "default_title": "Open SurgiLog"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
