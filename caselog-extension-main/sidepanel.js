@@ -775,14 +775,15 @@ let state = {
     residentName: "", pgyLevel: "PGY-3", specialty: "urology",
     llmMode: "local", localLLMUrl: "http://100.X.X.X:1234", localModelName: "local-model",
     cloudProvider: "claude", cloudApiKey: "", cloudModel: "",
+    caseIdMode: "none", caseIdPrefix: "", caseIdNextNum: 1, caseIdPadding: 3,
   },
   showSettings: false, settingsTab: "team", autocorrectActive: true,
-  quickFire: false,
+  quickFire: false, showLogged: false,
   expandedCase: null, toast: "", _undoCase: null, _undoTimer: null,
   newAttending: "", newHospital: "", newWrong: "", newRight: "",
   missingFields: null, // null = not checked yet, [] = all good
   lastFailedTranscript: null,
-  _localModels: [],
+  _localModels: [], _cloudModels: [], _cloudModelsFetched: false,
   pendingTranscripts: [],
 };
 
@@ -857,13 +858,15 @@ async function copyText(text, label) {
 }
 
 function sendToACGME(caseData, label) {
-  if (!caseData.case_id) caseData.case_id = generateCaseId(caseData);
+  var mode = (state.settings && state.settings.caseIdMode) || "none";
+  if (!caseData.case_id && mode !== "none") caseData.case_id = generateCaseId(caseData);
   const json = fmtACGMEJson(caseData);
   chrome.storage.local.set({ "surgilog-pending-case": JSON.parse(json) }, () => {
     chrome.tabs.query({ url: "https://apps.acgme.org/*" }, (tabs) => {
       if (tabs && tabs.length > 0) {
         chrome.tabs.update(tabs[0].id, { active: true });
         chrome.windows.update(tabs[0].windowId, { focused: true });
+        caseData.logged = true; saveCases();
         setCopied(label);
       } else {
         setCopied(label);
@@ -877,37 +880,61 @@ function sendToACGME(caseData, label) {
 
 function fmtACGME(c) {
   var caseId = c.case_id || generateCaseId(c);
-  return ["Procedure: "+c.procedure_name,"CPT: "+(c.cpt_codes||[]).map(x=>x.code+" - "+x.description).join("; "),
-    "Case ID: "+caseId,
-    "Date: "+(c.date||"TODAY"),"Attending: "+(c.attending||""),"Hospital: "+(c.hospital||""),
-    "Role: "+(c.role||""),"Approach: "+(c.approach||""),"Laterality: "+(c.laterality||"")].join("\n");
+  var lines = ["Procedure: "+c.procedure_name,"CPT: "+(c.cpt_codes||[]).map(x=>x.code+" - "+x.description).join("; ")];
+  if (caseId) lines.push("Case ID: "+caseId);
+  lines.push("Date: "+(c.date||"TODAY"),"Attending: "+(c.attending||""),"Hospital: "+(c.hospital||""),
+    "Role: "+(c.role||""),"Approach: "+(c.approach||""),"Laterality: "+(c.laterality||""));
+  return lines.join("\n");
 }
 function generateCaseId(c) {
+  var mode = (state.settings && state.settings.caseIdMode) || "none";
+  if (mode === "none") return "";
+  if (mode === "auto") return generateCaseIdAuto(c);
+  // Counter-based modes
+  var s = state.settings;
+  var pad = Math.max(1, Math.min(s.caseIdPadding || 3, 10));
+  var num = String(s.caseIdNextNum || 1).padStart(pad, '0');
+  s.caseIdNextNum = (s.caseIdNextNum || 1) + 1;
+  saveSettings();
+  if (mode === "prefix_counter") return (s.caseIdPrefix || "") + num;
+  if (mode === "date_counter") {
+    var dateStr = (c && c.date) ? String(c.date) : '';
+    var m = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    var now = new Date();
+    var yy = m ? m[1].slice(2) : String(now.getFullYear()).slice(2);
+    var mm = m ? String(m[2]).padStart(2, '0') : String(now.getMonth() + 1).padStart(2, '0');
+    var dd = m ? String(m[3]).padStart(2, '0') : String(now.getDate()).padStart(2, '0');
+    return yy + mm + dd + "-" + num;
+  }
+  if (mode === "counter") return num;
+  return "";
+}
+function generateCaseIdAuto(c) {
   var dateStr = (c && c.date) ? String(c.date) : '';
   var m = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   var now = new Date();
   var yyyy = m ? m[1] : String(now.getFullYear());
   var mm = m ? String(m[2]).padStart(2, '0') : String(now.getMonth() + 1).padStart(2, '0');
   var dd = m ? String(m[3]).padStart(2, '0') : String(now.getDate()).padStart(2, '0');
-  var datePart = yyyy.slice(2) + mm + dd; // YYMMDD
+  var datePart = yyyy.slice(2) + mm + dd;
   var cptPart = '0000';
   if (c && c.cpt_codes && c.cpt_codes.length) {
     var first = c.cpt_codes[0];
     cptPart = String((first && first.code) || '').replace(/\D/g, '').slice(0, 4).padEnd(4, '0') || '0000';
   }
-  var suffix = String(Date.now()).slice(-6); // 6 digits
-  // 16 digits total: YYMMDD + CPT4 + 6-digit suffix (safe for numeric-only fields)
+  var suffix = String(Date.now()).slice(-6);
   return (datePart + cptPart + suffix);
 }
 
 function fmtACGMEJson(c) {
   let d = "";
   var caseId = c.case_id || generateCaseId(c);
+  var mode = (state.settings && state.settings.caseIdMode) || "none";
   if (c.date) { const p = c.date.match(/(\d{4})-(\d{1,2})-(\d{1,2})/); d = p ? parseInt(p[2])+"/"+parseInt(p[3])+"/"+p[1] : c.date; }
   return JSON.stringify({source:"surgilog",date:d,role:c.role||"",site:c.hospital||"",attending:c.attending||"",
     specialty:(state.settings.specialty||"urology"),
-    case_id: caseId,
-    cpt_codes:(c.cpt_codes||[]).map(x=>({code:x.code,attributes:x.attributes||[]})),is_pediatric:c.is_pediatric||false});
+    case_id: caseId, caseIdMode: mode,
+    cpt_codes:(c.cpt_codes||[]).map(x=>({code:x.code,description:x.description||"",attributes:x.attributes||[]})),is_pediatric:c.is_pediatric||false});
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1008,7 +1035,8 @@ function mapUroCPT(procs, laterality, approach, isPediatric) {
       }
       break;
     case 'prostate_biopsy':
-      if (m.saturation || m.template) codes.push({code:'55706',description:'Saturation prostate biopsy',attributes:attrs});
+      if ((m.saturation || m.template) && !m.fusion) codes.push({code:'55706',description:'Saturation prostate biopsy',attributes:attrs});
+      else if (m.fusion) codes.push({code:'55700',description:'Prostate needle biopsy MRI fusion guided',attributes:attrs});
       else codes.push({code:'55700',description:'Prostate needle biopsy',attributes:attrs});
       break;
 
@@ -2290,7 +2318,7 @@ KEY MODIFIERS (include only what applies):
 - retroperitoneal: true/false (lymph node dissection)
 - incarcerated: true/false, recurrent: true/false (hernia)
 - voiding_study: true/false (urodynamics)
-- saturation: true/false, template: true/false (prostate biopsy)
+- saturation: true/false, template: true/false, fusion: true/false (prostate biopsy — fusion = MRI-fusion guided, which is a standard needle biopsy NOT saturation)
 - open: true/false (sacral neuromod), generator: true/false
 - raw_code: "XXXXX" (ONLY for "other" category if you know the exact CPT)
 
@@ -2309,7 +2337,13 @@ COMPOUND PROCEDURES (output multiple procedure entries):
 - "URS + stent exchange" or "URS + LL + stent exchange" = ureteroscopy with stent_placed:true (and lithotripsy if applicable) + cystoscopy_stent_pull. The stent PLACEMENT goes on the URS as stent_placed:true. The stent REMOVAL is a separate cystoscopy_stent_pull entry.
 - "cysto with stent pull and retrograde" = cystoscopy_stent_pull + cystoscopy with retrograde:true
 - TURBT + stent placement = turbt entry + cystoscopy_stent_place entry
-- Do NOT output a separate cystoscopy entry when URS is also present (URS includes cystoscopy).
+- Do NOT output a separate cystoscopy entry when URS is also present (URS includes cystoscopy) — EXCEPT when urethral dilation is performed. Urethral dilation (52281) is a separate billable procedure, so output it as its own cystoscopy entry with dilation:true even when URS is also present.
+- "URS + urethral dilation + stent" = ureteroscopy entry + cystoscopy with dilation:true entry (two entries)
+
+CRITICAL — urethral vs ureteral dilation:
+- "URETHRAL dilation" (urethra/meatus) = cystoscopy with dilation:true → 52281. This is dilating the urethra for stricture. Output as a SEPARATE cystoscopy entry.
+- "URETERAL dilation" (ureter) = part of URS access, NOT a separate procedure. Ureteral balloon dilation or sequential dilation is bundled into the ureteroscopy and should NOT be a separate entry. Do NOT set dilation:true for ureteral dilation.
+- Speech recognition often confuses these words. Use context: if the patient has stones/URS, "dilation" likely refers to ureteral access (bundled). If there's a stricture or the dilation is mentioned alongside cystoscopy alone, it's urethral (52281).
 
 CLINICAL DEFAULTS (do NOT set these modifiers unless dictation explicitly says otherwise):
 - Stent pull: do NOT set complicated:true unless "complicated" or "difficult" is explicitly stated. Default is simple removal (52310).
@@ -2385,6 +2419,41 @@ async function fetchLocalModels() {
   try {
     const res = await fetch(baseUrl + "/api/tags");
     if (res.ok) { const data = await res.json(); return (data.models || []).map(m => m.name); }
+  } catch {}
+  return [];
+}
+
+async function fetchCloudModels() {
+  const s = state.settings;
+  const key = s.cloudApiKey;
+  const provider = s.cloudProvider;
+  if (!key) return [];
+  try {
+    if (provider === "claude") {
+      const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.data || []).map(m => m.id).sort();
+    }
+    if (provider === "openai") {
+      const res = await fetch("https://api.openai.com/v1/models", {
+        headers: { "Authorization": "Bearer " + key }
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      const skip = /^(whisper|tts|dall-e|text-embedding|babbage|davinci|canary|chatgpt)/;
+      return (data.data || []).map(m => m.id).filter(id => !skip.test(id)).sort();
+    }
+    if (provider === "gemini") {
+      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + encodeURIComponent(key) + "&pageSize=100");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.models || [])
+        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+        .map(m => (m.name || "").replace(/^models\//, "")).sort();
+    }
   } catch {}
   return [];
 }
@@ -2893,6 +2962,51 @@ function render() {
       pgy.onchange = () => { s.pgyLevel = pgy.value; saveSettings(); };
       pDiv.appendChild(pgy); sc.appendChild(pDiv);
 
+      // ── Case ID Config ──
+      sc.insertAdjacentHTML("beforeend",'<div class="section-divider"></div>');
+      const cidDiv = document.createElement("div"); cidDiv.className = "form-group";
+      cidDiv.innerHTML = '<div class="label">Case ID Format</div>';
+      const cidSel = document.createElement("select"); cidSel.className = "input"; cidSel.style.width = "auto";
+      for (const [val, label] of [["none","None (leave blank)"],["prefix_counter","Prefix + Counter"],["date_counter","Date + Counter"],["counter","Counter Only"],["auto","Auto-generate (legacy)"]]) {
+        const o = document.createElement("option"); o.value = val; o.textContent = label;
+        if(val===(s.caseIdMode||"none")) o.selected = true; cidSel.appendChild(o);
+      }
+      cidSel.onchange = () => { s.caseIdMode = cidSel.value; saveSettings(); render(); };
+      cidDiv.appendChild(cidSel); sc.appendChild(cidDiv);
+
+      var cidMode = s.caseIdMode || "none";
+      if (cidMode === "prefix_counter") {
+        const pfxDiv = document.createElement("div"); pfxDiv.className = "form-group";
+        pfxDiv.innerHTML = '<div class="label">Prefix</div>';
+        const pfxIn = document.createElement("input"); pfxIn.className = "input"; pfxIn.value = s.caseIdPrefix || ""; pfxIn.placeholder = "e.g. CASE-, OP-";
+        pfxIn.oninput = () => { s.caseIdPrefix = pfxIn.value; saveSettings(); };
+        pfxDiv.appendChild(pfxIn); sc.appendChild(pfxDiv);
+      }
+      if (cidMode === "prefix_counter" || cidMode === "date_counter" || cidMode === "counter") {
+        const numDiv = document.createElement("div"); numDiv.className = "form-group";
+        numDiv.innerHTML = '<div class="label">Next Number</div>';
+        const numRow = document.createElement("div"); numRow.style.cssText = "display:flex;gap:8px;align-items:center";
+        const numIn = document.createElement("input"); numIn.className = "input"; numIn.type = "number"; numIn.min = "1"; numIn.style.width = "80px";
+        numIn.value = s.caseIdNextNum || 1;
+        numIn.onchange = () => { s.caseIdNextNum = Math.max(1, parseInt(numIn.value)||1); saveSettings(); render(); };
+        numRow.appendChild(numIn);
+        const padLabel = document.createElement("span"); padLabel.style.cssText = "font-size:11px;color:var(--muted)"; padLabel.textContent = "Digits:";
+        numRow.appendChild(padLabel);
+        const padSel = document.createElement("select"); padSel.className = "input"; padSel.style.width = "auto";
+        for (var pi = 1; pi <= 6; pi++) { const o = document.createElement("option"); o.value = pi; o.textContent = pi; if(pi===(s.caseIdPadding||3)) o.selected=true; padSel.appendChild(o); }
+        padSel.onchange = () => { s.caseIdPadding = parseInt(padSel.value)||3; saveSettings(); render(); };
+        numRow.appendChild(padSel);
+        numDiv.appendChild(numRow); sc.appendChild(numDiv);
+        // Preview
+        var previewId = "";
+        var padW = s.caseIdPadding || 3;
+        var nextStr = String(s.caseIdNextNum || 1).padStart(padW, '0');
+        if (cidMode === "prefix_counter") previewId = (s.caseIdPrefix||"") + nextStr;
+        else if (cidMode === "date_counter") previewId = "YYMMDD-" + nextStr;
+        else previewId = nextStr;
+        sc.insertAdjacentHTML("beforeend",'<div style="font-size:11px;color:var(--muted);margin-top:-4px">Next ID: <b>'+previewId+'</b></div>');
+      }
+
       sc.insertAdjacentHTML("beforeend",'<div class="section-divider"></div><div class="label">Attending Physicians</div>');
       const aRow = document.createElement("div"); aRow.className = "form-row"; aRow.style.marginBottom = "10px";
       const aIn = document.createElement("input"); aIn.className = "input"; aIn.style.flex = "1"; aIn.placeholder = "Last, First"; aIn.value = state.newAttending;
@@ -2982,22 +3096,49 @@ function render() {
         const fg = sc.lastElementChild;
         const pSel = document.createElement("select"); pSel.className = "input"; pSel.style.width = "auto";
         for (const [k,v] of Object.entries(CLOUD_PROVIDERS)) { const o = document.createElement("option"); o.value = k; o.textContent = v.name; if(k===s.cloudProvider)o.selected=true; pSel.appendChild(o); }
-        pSel.onchange = () => { s.cloudProvider = pSel.value; saveSettings(); render(); };
+        pSel.onchange = () => { s.cloudProvider = pSel.value; state._cloudModels = []; state._cloudModelsFetched = false; saveSettings(); render(); };
         fg.appendChild(pSel);
 
         sc.insertAdjacentHTML("beforeend",'<div class="form-group"><div class="label">API Key</div></div>');
         const fg2 = sc.lastElementChild;
         const ki = document.createElement("input"); ki.className = "input input-mono"; ki.type = "password"; ki.value = s.cloudApiKey; ki.placeholder = "sk-... or AIza...";
-        ki.oninput = () => { s.cloudApiKey = ki.value; saveSettings(); };
+        ki.oninput = () => { s.cloudApiKey = ki.value; state._cloudModels = []; state._cloudModelsFetched = false; saveSettings(); };
         fg2.appendChild(ki);
 
-        sc.insertAdjacentHTML("beforeend",'<div class="form-group"><div class="label">Model (optional)</div></div>');
+        sc.insertAdjacentHTML("beforeend",'<div class="form-group"><div class="label">Model</div></div>');
         const fg3 = sc.lastElementChild;
-        const moI = document.createElement("input"); moI.className = "input input-mono"; moI.value = s.cloudModel||"";
-        moI.placeholder = s.cloudProvider==="claude"?"claude-sonnet-4-20250514":s.cloudProvider==="openai"?"gpt-4o":"gemini-2.5-flash";
-        moI.oninput = () => { s.cloudModel = moI.value; saveSettings(); };
-        fg3.appendChild(moI);
-        fg3.insertAdjacentHTML("beforeend",'<div style="font-size:10px;color:var(--muted);margin-top:4px">Leave blank for default. Key stored in extension only.</div>');
+        const cModelRow = document.createElement("div"); cModelRow.style.cssText = "display:flex;gap:6px;align-items:center";
+        if (state._cloudModels.length > 0) {
+          const cmSel = document.createElement("select"); cmSel.className = "input input-mono"; cmSel.style.flex = "1";
+          state._cloudModels.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = m; if(m===s.cloudModel) o.selected=true; cmSel.appendChild(o); });
+          if (s.cloudModel && !state._cloudModels.includes(s.cloudModel)) {
+            const cur = document.createElement("option"); cur.value = s.cloudModel; cur.textContent = s.cloudModel; cur.selected = true; cmSel.prepend(cur);
+          }
+          cmSel.onchange = () => { s.cloudModel = cmSel.value; saveSettings(); };
+          cModelRow.appendChild(cmSel);
+        } else {
+          const moI = document.createElement("input"); moI.className = "input input-mono"; moI.style.flex = "1"; moI.value = s.cloudModel||"";
+          moI.placeholder = s.cloudProvider==="claude"?"claude-sonnet-4-20250514":s.cloudProvider==="openai"?"gpt-4o":"gemini-2.5-flash";
+          moI.oninput = () => { s.cloudModel = moI.value; saveSettings(); };
+          cModelRow.appendChild(moI);
+        }
+        const cFetchBtn = document.createElement("button"); cFetchBtn.className = "btn btn-secondary"; cFetchBtn.style.cssText = "padding:6px 10px;font-size:11px;white-space:nowrap";
+        cFetchBtn.textContent = "\u21BB Fetch";
+        cFetchBtn.onclick = async () => {
+          cFetchBtn.textContent = "..."; cFetchBtn.disabled = true;
+          state._cloudModels = await fetchCloudModels();
+          if (state._cloudModels.length === 0) { cFetchBtn.textContent = "\u2715 None"; cFetchBtn.style.color = "var(--red)"; setTimeout(() => { cFetchBtn.textContent = "\u21BB Fetch"; cFetchBtn.style.color = ""; cFetchBtn.disabled = false; }, 2000); }
+          else { if (!s.cloudModel && state._cloudModels.length) { s.cloudModel = state._cloudModels[0]; saveSettings(); } render(); }
+        };
+        cModelRow.appendChild(cFetchBtn);
+        fg3.appendChild(cModelRow);
+        fg3.insertAdjacentHTML("beforeend",'<div style="font-size:10px;color:var(--muted);margin-top:4px">' + (state._cloudModels.length ? state._cloudModels.length + " model(s) found" : "Enter API key, then click Fetch") + '</div>');
+
+        // Auto-fetch cloud models on first render if key is set
+        if (state._cloudModels.length === 0 && s.cloudApiKey && !state._cloudModelsFetched) {
+          state._cloudModelsFetched = true;
+          fetchCloudModels().then(models => { if (models.length) { state._cloudModels = models; if (!s.cloudModel) { s.cloudModel = models[0]; saveSettings(); } render(); } });
+        }
       }
 
       // Test Connection button (works for both local and cloud)
@@ -3356,21 +3497,34 @@ function render() {
       }
     }
 
-    if (state.cases.length === 0 && state.processingQueue.length === 0) {
+    const activeCases = state.cases.filter(c => !c.logged);
+    const loggedCases = state.cases.filter(c => c.logged);
+
+    if (activeCases.length === 0 && loggedCases.length === 0 && state.processingQueue.length === 0) {
       content.insertAdjacentHTML("beforeend",'<div class="empty-state"><div class="empty-icon-wrapper"><div class="empty-icon">\uD83D\uDCCB</div></div><div class="empty-title">No cases queued</div><div class="empty-subtitle">Dictate or type a case on the Record tab to get started</div></div>');
     } else {
-      state.cases.forEach(c => {
+      // Render a single case card (used for both active and logged)
+      function renderCaseCard(c, container, isLogged) {
         const isExpanded = state.expandedCase === c.id;
-        const card = document.createElement("div"); card.className = "case-card" + (isExpanded ? " expanded" : "");
+        const card = document.createElement("div"); card.className = "case-card" + (isExpanded ? " expanded" : "") + (isLogged ? " logged" : "");
 
         // Top row: procedure name + action buttons
         const topRow = document.createElement("div"); topRow.className = "case-card-inner";
-        const nameEl = document.createElement("div"); nameEl.className = "case-name"; nameEl.textContent = c.procedure_name || "Case";
+        const nameEl = document.createElement("div"); nameEl.className = "case-name";
+        if (isLogged) { const chk = document.createElement("span"); chk.style.cssText = "color:var(--green,#4caf50);margin-right:4px"; chk.textContent = "\u2713"; nameEl.appendChild(chk); nameEl.appendChild(document.createTextNode(c.procedure_name || "Case")); }
+        else { nameEl.textContent = c.procedure_name || "Case"; }
         topRow.appendChild(nameEl);
         const btns = document.createElement("div"); btns.className = "case-actions";
-        const ab = document.createElement("button"); ab.className = "btn btn-primary"; ab.style.fontSize = "11px";
-        ab.textContent = state.copied==="acgme-"+c.id?"\u2713 Logged":"Log";
-        ab.onclick = (e) => { e.stopPropagation(); sendToACGME(c, "acgme-"+c.id); };
+        if (isLogged) {
+          const unmark = document.createElement("button"); unmark.className = "btn btn-secondary"; unmark.style.fontSize = "11px";
+          unmark.textContent = "Unmark"; unmark.onclick = (e) => { e.stopPropagation(); c.logged = false; saveCases(); render(); };
+          btns.appendChild(unmark);
+        } else {
+          const ab = document.createElement("button"); ab.className = "btn btn-primary"; ab.style.fontSize = "11px";
+          ab.textContent = state.copied==="acgme-"+c.id?"\u2713 Logged":"Log";
+          ab.onclick = (e) => { e.stopPropagation(); sendToACGME(c, "acgme-"+c.id); };
+          btns.appendChild(ab);
+        }
         const cpb = document.createElement("button"); cpb.className = "btn btn-secondary"; cpb.style.fontSize = "11px";
         cpb.textContent = state.copied==="c-"+c.id?"\u2713":"Copy"; cpb.onclick = (e) => { e.stopPropagation(); copyText(fmtACGME(c),"c-"+c.id); };
         const del = document.createElement("button"); del.className = "btn btn-danger"; del.style.fontSize = "11px";
@@ -3388,7 +3542,7 @@ function render() {
             saveCases(); render();
           }, 5000);
         };
-        btns.appendChild(ab); btns.appendChild(cpb); btns.appendChild(del);
+        btns.appendChild(cpb); btns.appendChild(del);
         topRow.appendChild(btns); card.appendChild(topRow);
 
         // Detail rows: attending, hospital, date, role
@@ -3541,8 +3695,22 @@ function render() {
           card.appendChild(expandDiv);
         }
 
-        content.appendChild(card);
-      });
+        container.appendChild(card);
+      }
+
+      // Render active cases
+      activeCases.forEach(c => renderCaseCard(c, content, false));
+
+      // Render logged archive section
+      if (loggedCases.length > 0) {
+        const loggedHeader = document.createElement("div"); loggedHeader.className = "logged-section-header";
+        loggedHeader.innerHTML = '<span class="logged-toggle">' + (state.showLogged ? '▲' : '▼') + '</span> Logged <span class="logged-count">(' + loggedCases.length + ')</span>';
+        loggedHeader.onclick = () => { state.showLogged = !state.showLogged; render(); };
+        content.appendChild(loggedHeader);
+        if (state.showLogged) {
+          loggedCases.forEach(c => renderCaseCard(c, content, true));
+        }
+      }
     }
   }
 

@@ -391,7 +391,7 @@ function hasAnyToken(text, tokens) {
   }
   return false;
 }
-function scoreRowMatch(match, specialty, isPeds, cpt) {
+function scoreRowMatch(match, specialty, isPeds, cpt, cptDesc) {
   var score = 0;
   if (isPeds && match.isPedsRow) score += 200;
   if (!isPeds && !match.isPedsRow) score += 20;
@@ -407,6 +407,25 @@ function scoreRowMatch(match, specialty, isPeds, cpt) {
   } else if (specialty === 'urology') {
     if (hasAnyToken(t, ['urology', 'prostate', 'bladder', 'kidney', 'ureter', 'urethra', 'testis', 'penis'])) score += 20;
   }
+
+  // Description-based matching: when we have a description from the mapper,
+  // score rows higher if their text shares significant words with our description.
+  // This disambiguates duplicate CPT codes (e.g. two 55700 rows with different area/type).
+  if (cptDesc) {
+    var descWords = cptDesc.split(/\s+/).filter(function(w) { return w.length > 2; });
+    var wordHits = 0;
+    for (var wi = 0; wi < descWords.length; wi++) {
+      if (t.indexOf(descWords[wi]) !== -1) wordHits++;
+    }
+    score += wordHits * 15;
+
+    // Penalize "with fusion" rows when description does NOT mention fusion (and vice versa)
+    var descHasFusion = cptDesc.indexOf('fusion') !== -1;
+    var rowHasFusion = t.indexOf('with fusion') !== -1 || t.indexOf('fusion') !== -1;
+    if (descHasFusion && rowHasFusion) score += 100;
+    else if (!descHasFusion && rowHasFusion) score -= 100;
+  }
+
   return score;
 }
 
@@ -446,8 +465,10 @@ async function fillFromStorage(autoTriggered) {
       var L = [];
       var isPeds = d.is_pediatric || false;
       var specialty = (d.specialty || '').toLowerCase();
-      var caseIdForForm = normalizeCaseIdForForm(d.case_id || generateCaseIdLocal(d));
+      var skipCaseId = (d.caseIdMode === "none" && !d.case_id);
+      var caseIdForForm = skipCaseId ? "" : normalizeCaseIdForForm(d.case_id || generateCaseIdLocal(d));
       async function applyCaseId(retries) {
+        if (skipCaseId) return false;
         var tries = retries || 1;
         for (var ri = 0; ri < tries; ri++) {
           var cid = findCaseIdInput();
@@ -482,6 +503,7 @@ async function fillFromStorage(autoTriggered) {
           var raw=d.cpt_codes[ci];
           var co=(typeof raw==='string') ? {code:raw, attributes:[]} : raw;
           var cpt=co.code;
+          var cptDesc=(co.description||'').toLowerCase();
           var attrs=(co.attributes||[]).map(function(x){ return x.toLowerCase() });
 
           var searchBox=document.getElementById('CodeDescription');
@@ -544,7 +566,7 @@ async function fillFromStorage(autoTriggered) {
             var bestScore=-Infinity;
             for(var mi=0; mi<matchingRows.length; mi++){
               var m=matchingRows[mi];
-              var score=scoreRowMatch(m, specialty, isPeds, cpt);
+              var score=scoreRowMatch(m, specialty, isPeds, cpt, cptDesc);
               console.log('[SurgiLog] CPT '+cpt+' row '+mi+': area='+m.area+' type='+m.type+' score='+score);
               if(score>bestScore){
                 bestScore=score;
