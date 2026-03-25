@@ -1,79 +1,122 @@
 #!/bin/bash
-# Build script for UroStudyHub — compiles JSX, minifies, and obfuscates
-# Produces UroStudyHub.min.html ready for deployment (GitHub Pages, Netlify, etc.)
-#
-# Prerequisites (one-time):
-#   npm install -g @babel/cli @babel/preset-react terser
+# Build script for UroStudyHub — produces obfuscated/minified version
+# No Node.js required — uses Python only.
 #
 # Usage:
-#   chmod +x build.sh
-#   ./build.sh
+#   ./build.sh           (Python minification — no dependencies)
+#   ./build.sh --full    (Babel + Terser — requires Node.js: brew install node)
+#
+# Output: UroStudyHub.min.html
 
 set -e
+cd "$(dirname "$0")"
 
-INPUT="UroStudyHub.html"
-OUTPUT="UroStudyHub.min.html"
-TEMP_JSX="/tmp/uro_extract.jsx"
-TEMP_JS="/tmp/uro_compiled.js"
-TEMP_MIN="/tmp/uro_minified.js"
+SRC="UroStudyHub.html"
+OUT="UroStudyHub.min.html"
 
-echo "Building $OUTPUT from $INPUT..."
+if [ ! -f "$SRC" ]; then
+  echo "Error: $SRC not found"
+  exit 1
+fi
 
-# 1. Extract the script content between <script type="text/babel"...> and </script>
-echo "  Extracting JSX..."
-sed -n '/<script type="text\/babel"/,/<\/script>/p' "$INPUT" | \
-  sed '1d;$d' > "$TEMP_JSX"
+if [ "$1" = "--full" ]; then
+  if ! command -v npx &> /dev/null; then
+    echo "Error: --full requires Node.js. Install with: brew install node"
+    echo "Then: npm install -g @babel/cli @babel/core @babel/preset-react terser"
+    exit 1
+  fi
 
-# 2. Compile JSX to plain JS using Babel
-echo "  Compiling JSX -> JS..."
-npx babel --presets @babel/preset-react "$TEMP_JSX" -o "$TEMP_JS" 2>/dev/null
+  echo "Building with full obfuscation (Babel + Terser)..."
 
-# 3. Minify and mangle with terser
-echo "  Minifying..."
-npx terser "$TEMP_JS" \
-  --compress "passes=2,drop_console=false" \
-  --mangle "toplevel=false" \
-  --output "$TEMP_MIN" 2>/dev/null
+  # Extract JSX
+  sed -n '/<script type="text\/babel"/,/<\/script>/p' "$SRC" | sed '1d;$d' > /tmp/uro_build.jsx
 
-# 4. Build the output HTML
-echo "  Assembling $OUTPUT..."
+  # Compile JSX -> JS, then minify with variable mangling
+  npx babel --presets @babel/preset-react /tmp/uro_build.jsx -o /tmp/uro_compiled.js 2>/dev/null
+  npx terser /tmp/uro_compiled.js --compress "passes=2" --mangle -o /tmp/uro_min.js 2>/dev/null
 
-# Get everything before the babel script tag
-sed -n '1,/<script type="text\/babel"/p' "$INPUT" | \
-  sed '$d' > "$OUTPUT"
+  # Get head (before babel script), removing babel CDN tag
+  BABEL_LINE=$(grep -n '<script type="text/babel"' "$SRC" | head -1 | cut -d: -f1)
+  head -n $((BABEL_LINE - 1)) "$SRC" | grep -v 'babel.*\.js' > "$OUT"
 
-# Remove the Babel standalone CDN scripts (no longer needed)
-# Replace babel script tag with regular script tag + minified code
-cat >> "$OUTPUT" << 'SCRIPT_OPEN'
-<script type="module">
-SCRIPT_OPEN
+  # Insert compiled script
+  echo '<script>' >> "$OUT"
+  cat /tmp/uro_min.js >> "$OUT"
+  echo -e '\n</script>' >> "$OUT"
 
-cat "$TEMP_MIN" >> "$OUTPUT"
+  # Get tail (after closing script tag)
+  BABEL_END=$((BABEL_LINE + $(tail -n +"$BABEL_LINE" "$SRC" | grep -n '</script>' | head -1 | cut -d: -f1)))
+  tail -n +"$BABEL_END" "$SRC" >> "$OUT"
 
-echo "" >> "$OUTPUT"
-echo "</script>" >> "$OUTPUT"
+  rm -f /tmp/uro_build.jsx /tmp/uro_compiled.js /tmp/uro_min.js
 
-# Get everything after the closing </script> of the babel block
-# Find the line number of the closing script tag after the babel block
-BABEL_START=$(grep -n '<script type="text/babel"' "$INPUT" | head -1 | cut -d: -f1)
-BABEL_END=$(tail -n +"$BABEL_START" "$INPUT" | grep -n '</script>' | head -1 | cut -d: -f1)
-AFTER_LINE=$((BABEL_START + BABEL_END))
-tail -n +"$AFTER_LINE" "$INPUT" >> "$OUTPUT"
+else
+  echo "Building with Python minification..."
+  python3 << 'PYEOF'
+import re
 
-# Remove Babel CDN script tags from the output (they're no longer needed)
-# Keep React and ReactDOM CDN scripts
-sed -i '' '/@babel\/standalone/d' "$OUTPUT"
-sed -i '' '/babel\.min\.js/d' "$OUTPUT"
+with open("UroStudyHub.html", "r") as f:
+    html = f.read()
 
-# 5. Cleanup
-rm -f "$TEMP_JSX" "$TEMP_JS" "$TEMP_MIN"
+# Find script block
+m = re.search(r'(<script type="text/babel"[^>]*>)(.*?)(</script>)', html, re.DOTALL)
+if not m:
+    print("Error: Could not find babel script block")
+    exit(1)
 
-# Report sizes
-ORIG_SIZE=$(wc -c < "$INPUT" | tr -d ' ')
-MIN_SIZE=$(wc -c < "$OUTPUT" | tr -d ' ')
-RATIO=$((MIN_SIZE * 100 / ORIG_SIZE))
+jsx = m.group(2)
+
+# Strip single-line comments (preserve URLs with ://)
+jsx = re.sub(r'(?<!:)//(?!/)[^\n]*', '', jsx)
+
+# Strip multi-line comments
+jsx = re.sub(r'/\*.*?\*/', '', jsx, flags=re.DOTALL)
+
+# Strip section header decorations
+jsx = re.sub(r'[═]{3,}[^\n]*', '', jsx)
+
+# Collapse multiple blank lines
+jsx = re.sub(r'\n\s*\n\s*\n', '\n', jsx)
+
+# Reduce indentation (halve it)
+lines = jsx.split('\n')
+out = []
+for line in lines:
+    stripped = line.lstrip()
+    if stripped:
+        indent = len(line) - len(stripped)
+        out.append(' ' * (indent // 2) + stripped)
+    elif out and out[-1] != '':
+        out.append('')
+jsx_min = '\n'.join(out)
+
+# Minify CSS
+css_m = re.search(r'(<style>)(.*?)(</style>)', html, re.DOTALL)
+if css_m:
+    css = css_m.group(2)
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.DOTALL)
+    css = re.sub(r'\s+', ' ', css)
+    css = css.replace(' { ', '{').replace(' } ', '}').replace('; ', ';')
+    html = html[:css_m.start(2)] + css + html[css_m.end(2):]
+    m = re.search(r'(<script type="text/babel"[^>]*>)(.*?)(</script>)', html, re.DOTALL)
+
+result = html[:m.start(2)] + '\n' + jsx_min + '\n' + html[m.end(2):]
+
+with open("UroStudyHub.min.html", "w") as f:
+    f.write(result)
+
+orig = len(html)
+mini = len(result)
+print(f"Done! {orig:,} -> {mini:,} bytes ({(1 - mini/orig)*100:.0f}% smaller)")
+PYEOF
+fi
+
+ORIG_SIZE=$(wc -c < "$SRC" | tr -d ' ')
+MIN_SIZE=$(wc -c < "$OUT" | tr -d ' ')
 echo ""
-echo "Done!"
-echo "  Original: $(echo "$ORIG_SIZE" | awk '{printf "%'\''d", $1}') bytes"
-echo "  Minified: $(echo "$MIN_SIZE" | awk '{printf "%'\''d", $1}') bytes (${RATIO}%)"
-echo "  Output:   $OUTPUT"
+echo "Output: $OUT"
+echo "  Original: $ORIG_SIZE bytes"
+echo "  Minified: $MIN_SIZE bytes"
+echo ""
+echo "Test it: python3 -m http.server 2023"
+echo "Then open: http://localhost:2023/$OUT"
