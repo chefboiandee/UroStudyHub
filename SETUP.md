@@ -1,69 +1,28 @@
 # UroStudy Hub — Setup Guide
 
-No programming experience needed. Follow the steps for your computer (Mac or Windows).
+No programming experience needed. Just open the link below.
 
 ---
 
-## Step 1: Download the App
+## Step 1: Open the App
 
-1. Go to **https://github.com/chefboiandee/UroStudyHub**
-2. Click the green **Code** button
-3. Click **Download ZIP**
-4. Find the downloaded file (usually in your Downloads folder) and **double-click to unzip** it
-5. You should now have a folder called `UroStudyHub-main`
+Go to **https://chefboiandee.github.io/UroStudyHub/** in your browser. That's it — no downloads, no installation.
 
 ---
 
-## Step 2: Start the App
+## Step 2: Use It on Your Phone (Best Experience)
 
-### Mac
+The app is designed for phones:
 
-1. Open **Terminal**
-   - Press `Cmd + Space` to open Spotlight
-   - Type **Terminal** and press Enter
-2. Copy and paste this entire command, then press Enter:
-   ```
-   cd ~/Downloads/UroStudyHub-main && python3 -m http.server 2023
-   ```
-3. You should see: `Serving HTTP on :: port 2023 ...`
-4. Open **Safari** or **Chrome** and go to: **http://localhost:2023/UroStudyHub.html**
-
-### Windows
-
-1. Open **Command Prompt**
-   - Press the Windows key
-   - Type **cmd** and press Enter
-2. Copy and paste this entire command, then press Enter:
-   ```
-   cd %USERPROFILE%\Downloads\UroStudyHub-main && python3 -m http.server 2023
-   ```
-   - If that doesn't work, try replacing `python3` with `python`:
-   ```
-   cd %USERPROFILE%\Downloads\UroStudyHub-main && python -m http.server 2023
-   ```
-3. **Don't have Python?** Download it free from **python.org/downloads** — click the big yellow "Download" button, run the installer, and **check the box that says "Add Python to PATH"** during install. Then restart Command Prompt and try again.
-4. You should see: `Serving HTTP on :: port 2023 ...`
-5. Open **Chrome** or **Edge** and go to: **http://localhost:2023/UroStudyHub.html**
-
----
-
-## Step 3: Use It on Your Phone (Best Experience)
-
-The app is designed for phones. To use it on your phone while the server runs on your computer:
-
-1. Make sure your **phone and computer are on the same Wi-Fi network**
-2. Find your computer's IP address:
-   - **Mac:** System Settings → Wi-Fi → click your network name → look for "IP Address" (looks like `192.168.x.x`)
-   - **Windows:** Open Command Prompt → type `ipconfig` → look for "IPv4 Address" under your Wi-Fi adapter (looks like `192.168.x.x`)
-3. On your phone's browser, go to: `http://YOUR_IP:2023/UroStudyHub.html`
-   - Example: `http://192.168.1.42:2023/UroStudyHub.html`
-4. **Add to Home Screen** for the best experience:
+1. Open **https://chefboiandee.github.io/UroStudyHub/** on your phone's browser
+2. **Add to Home Screen** for the best experience:
    - **iPhone:** Tap the Share button (square with arrow) → "Add to Home Screen"
    - **Android:** Tap the three-dot menu → "Add to Home Screen"
+3. Open it from your home screen — it runs like a native app
 
 ---
 
-## Step 4: Set Up AI Features (Free)
+## Step 3: Set Up AI Features (Free)
 
 The app uses AI to power the tutor, generate flashcards, and build study plans. You need a free API key from Google.
 
@@ -115,18 +74,52 @@ Take notes as you go and share feedback with Andrew!
 
 ## Troubleshooting
 
-**"python3 is not recognized" (Windows)**
-→ Install Python from python.org/downloads. Make sure to check "Add Python to PATH" during install. Restart Command Prompt after installing.
-
-**Page won't load / "connection refused"**
-→ Make sure Terminal/Command Prompt is still running with the server. Don't close that window while using the app.
-
-**Phone can't connect**
-→ Make sure phone and computer are on the same Wi-Fi. Some public/campus networks block this — try a personal hotspot instead.
-
 **AI says "No API key configured"**
 → Go to Settings (gear icon) → make sure Gemini is selected and your key is pasted in → tap "Connect to Gemini"
 
-## Stopping the Server
+**App won't load on GitHub Pages**
+→ Try a hard refresh (Ctrl+Shift+R or Cmd+Shift+R). If still broken, try a different browser.
 
-Go back to Terminal / Command Prompt and press `Ctrl+C` to stop the server when you're done.
+---
+
+## Run Locally (Optional)
+
+If you want to run the app offline or for development, you can serve it from your computer:
+
+### Download
+
+1. Go to **https://github.com/chefboiandee/UroStudyHub**
+2. Click the green **Code** button → **Download ZIP**
+3. Unzip the downloaded file
+
+### Mac
+
+1. Open **Terminal** (Cmd+Space → type "Terminal" → Enter)
+2. Run:
+   ```
+   cd ~/Downloads/UroStudyHub-main && python3 -m http.server 2023
+   ```
+3. Open **http://localhost:2023/UroStudyHub.html**
+
+### Windows
+
+1. Open **Command Prompt** (Windows key → type "cmd" → Enter)
+2. Run:
+   ```
+   cd %USERPROFILE%\Downloads\UroStudyHub-main && python3 -m http.server 2023
+   ```
+   If that doesn't work, try `python` instead of `python3`.
+3. **Don't have Python?** Download it free from **python.org/downloads** — check "Add Python to PATH" during install.
+4. Open **http://localhost:2023/UroStudyHub.html**
+
+### Phone Access (Local Server)
+
+1. Make sure phone and computer are on the same Wi-Fi
+2. Find your computer's IP:
+   - **Mac:** System Settings → Wi-Fi → click network → "IP Address"
+   - **Windows:** Command Prompt → `ipconfig` → "IPv4 Address"
+3. On your phone: `http://YOUR_IP:2023/UroStudyHub.html`
+
+### Stopping the Server
+
+Press `Ctrl+C` in Terminal / Command Prompt.
