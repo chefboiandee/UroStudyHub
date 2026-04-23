@@ -301,6 +301,18 @@ var SYSTEM_PROMPT_LECTURE = [
 
 var SYSTEM_PROMPT_FREEFORM = "You are a urology attending helping a resident prep for boards. Teach through clinical scenarios and cases, not just lists of facts. Flag classic board questions and pimp questions. Create memorable mnemonics — funny, crude, rhyming, whatever sticks. Use Socratic method naturally but don't overdo it. Board-exam level detail. Be direct with feedback. No medical disclaimers.";
 
+var TONE_INJECTIONS = {
+  clinical: "\n\nTONE OVERRIDE: Be formal and structured. Use precise medical terminology. Present information systematically — definitions first, then classifications, then clinical details. Minimize analogies and humor. Bullet points and numbered lists are preferred. Think textbook attending, not coffee-shop mentor.",
+  balanced: "",
+  personality: "\n\nTONE OVERRIDE: Crank up the personality. You're the attending everyone wants to round with — funny, engaging, tells great stories from the OR. Use vivid analogies, memorable (even crude) mnemonics, and real-talk language. Make boring topics interesting. Drop in 'classic attending' moments. Still board-accurate, but make it stick through personality, not just repetition."
+};
+
+var TONE_OPTIONS = [
+  { id: "clinical", label: "\ud83d\udccb Clinical", desc: "Formal, structured, textbook" },
+  { id: "balanced", label: "\u26a1 Balanced", desc: "Conversational, case-driven" },
+  { id: "personality", label: "\ud83d\udd25 High Energy", desc: "Personality, humor, stories" }
+];
+
 const INIT = {
   role: "", // "" = not set, "resident", "student"
   surgilogId: "", // Chrome extension ID for SurgiLog integration
@@ -804,6 +816,13 @@ export default function UroStudyHub() {
   var [lectureMode, setLectureMode] = useState(false);
   var [lecturePhase, setLecturePhase] = useState(0);
   var [lectureTopic, setLectureTopic] = useState("");
+  var [lectureTone, setLectureTone] = useState(function() {
+    try { return localStorage.getItem("uroStudyHub_lectureTone") || "balanced"; } catch (e) { return "balanced"; }
+  });
+  useEffect(function() {
+    try { localStorage.setItem("uroStudyHub_lectureTone", lectureTone); } catch (e) { /* ignore */ }
+  }, [lectureTone]);
+  var [topicInput, setTopicInput] = useState("");
   var chatEnd = useRef(null);
   var fileRef = useRef(null);
   var ankiFileRef = useRef(null);
@@ -1878,7 +1897,8 @@ export default function UroStudyHub() {
       setLecturePhase(function(prev) { return Math.min(prev + 1, LECTURE_PHASES.length - 1); });
     }
     var chatHistory = msgs.filter(function(m) { return m.role !== "system"; });
-    var sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_FREEFORM) + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
+    var toneInject = lectureMode ? (TONE_INJECTIONS[lectureTone] || "") : "";
+    var sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_FREEFORM) + toneInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
 
     callAI(sysContent, chatHistory, { temperature: 0.7 }, function(reply) {
       setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response." }]));
@@ -4961,6 +4981,10 @@ export default function UroStudyHub() {
     var [lmModels, setLmModels] = useState([]);
     var [selectedLmModel, setSelectedLmModel] = useState(lm.model || "");
     var [lmFetchErr, setLmFetchErr] = useState("");
+    var [gModels, setGModels] = useState(lm.geminiModelList || []);
+    var [cModels, setCModels] = useState(lm.claudeModelList || []);
+    var [oModels, setOModels] = useState(lm.openaiModelList || []);
+    var [orFetchedModels, setOrFetchedModels] = useState(lm.openrouterModelList || []);
 
     function fetchLmModels() {
       setTesting(true); setLmFetchErr(""); setLmModels([]);
@@ -5024,6 +5048,90 @@ export default function UroStudyHub() {
         .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
     }
 
+    function fetchGeminiModels() {
+      if (!gKey) { setTestMsg("Enter API key first"); return; }
+      setTesting(true); setTestMsg("");
+      fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + encodeURIComponent(gKey))
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok) throw new Error((res.data && res.data.error && res.data.error.message) || ("HTTP " + res.status));
+          var models = (res.data.models || [])
+            .filter(function(m) { return m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf("generateContent") >= 0; })
+            .map(function(m) { var id = m.name.replace("models/", ""); return { id: id, name: m.displayName || id }; });
+          if (!models.length) { setTestMsg("No compatible models found"); setTesting(false); return; }
+          setGModels(models);
+          setLm(function(p) { return Object.assign({}, p, { geminiKey: gKey, geminiModelList: models }); });
+          setTestMsg("Found " + models.length + " models");
+          setTesting(false);
+        })
+        .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
+
+    function fetchClaudeModels() {
+      if (!cKey) { setTestMsg("Enter API key first"); return; }
+      setTesting(true); setTestMsg("");
+      fetch("https://api.anthropic.com/v1/models?limit=1000", {
+        headers: { "x-api-key": cKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok) throw new Error((res.data && res.data.error && res.data.error.message) || ("HTTP " + res.status));
+          var models = (res.data.data || []).map(function(m) { return { id: m.id, name: m.display_name || m.id }; });
+          if (!models.length) { setTestMsg("No models found"); setTesting(false); return; }
+          setCModels(models);
+          setLm(function(p) { return Object.assign({}, p, { claudeKey: cKey, claudeModelList: models }); });
+          setTestMsg("Found " + models.length + " models");
+          setTesting(false);
+        })
+        .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
+
+    function fetchOpenaiModels() {
+      if (!oKey) { setTestMsg("Enter API key first"); return; }
+      setTesting(true); setTestMsg("");
+      fetch("https://api.openai.com/v1/models", {
+        headers: { "Authorization": "Bearer " + oKey },
+      })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok) throw new Error((res.data && res.data.error && res.data.error.message) || ("HTTP " + res.status));
+          var chatRe = /^(gpt-|o1|o3|o4|chatgpt-)/;
+          var models = (res.data.data || [])
+            .filter(function(m) { return chatRe.test(m.id); })
+            .sort(function(a, b) { return a.id < b.id ? 1 : -1; })
+            .map(function(m) { return { id: m.id, name: m.id }; });
+          if (!models.length) { setTestMsg("No chat models found"); setTesting(false); return; }
+          setOModels(models);
+          setLm(function(p) { return Object.assign({}, p, { openaiKey: oKey, openaiModelList: models }); });
+          setTestMsg("Found " + models.length + " models");
+          setTesting(false);
+        })
+        .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
+
+    function fetchOpenrouterModels() {
+      setTesting(true); setTestMsg("");
+      fetch("https://openrouter.ai/api/v1/models")
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          var models = (res.data.data || [])
+            .map(function(m) { return { id: m.id, name: m.name || m.id }; })
+            .sort(function(a, b) {
+              var af = a.id.indexOf(":free") >= 0 ? 0 : 1;
+              var bf = b.id.indexOf(":free") >= 0 ? 0 : 1;
+              if (af !== bf) return af - bf;
+              return a.id < b.id ? -1 : 1;
+            });
+          if (!models.length) { setTestMsg("No models found"); setTesting(false); return; }
+          setOrFetchedModels(models);
+          setLm(function(p) { return Object.assign({}, p, { openrouterModelList: models }); });
+          setTestMsg("Found " + models.length + " models");
+          setTesting(false);
+        })
+        .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
+
     var isConnected = lm.on && lm.provider === prov;
     var statusDot = { width: 8, height: 8, borderRadius: "50%", background: isConnected ? "#4ade80" : "#64748b" };
     var inputStyle = { width: "100%", padding: "10px 14px", background: c.cd, border: "1px solid #334155", borderRadius: 10, color: "#e2e8f0", fontSize: 12, outline: "none", marginBottom: 10, boxSizing: "border-box" };
@@ -5074,13 +5182,18 @@ export default function UroStudyHub() {
             <div>
               <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Google AI API Key</label>
               <input value={gKey} onChange={function(e) { setGKey(e.target.value); }} type="password" placeholder="AIza..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model</label>
+              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model{gModels.length > 0 ? " (" + gModels.length + " available)" : ""}</label>
               <select value={gModel} onChange={function(e) { setGModel(e.target.value); }} style={selectStyle}>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (fast, smart)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (best)</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash (legacy)</option>
-                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite (cheapest)</option>
+                {gModels.length > 0
+                  ? gModels.map(function(m) { return <option key={m.id} value={m.id}>{m.name + " (" + m.id + ")"}</option>; })
+                  : [
+                    <option key="f" value="gemini-2.5-flash">Gemini 2.5 Flash (fast, smart)</option>,
+                    <option key="p" value="gemini-2.5-pro">Gemini 2.5 Pro (best)</option>,
+                    <option key="l" value="gemini-2.0-flash">Gemini 2.0 Flash (legacy)</option>,
+                    <option key="lite" value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite (cheapest)</option>,
+                  ]}
               </select>
+              <button onClick={fetchGeminiModels} disabled={!gKey || testing} style={{ width: "100%", padding: 8, background: "#33415580", color: "#94a3b8", border: "1px solid #334155", borderRadius: 8, cursor: !gKey ? "default" : "pointer", fontSize: 11, fontWeight: 600, opacity: testing || !gKey ? 0.6 : 1, marginBottom: 8 }}>{testing ? "Fetching..." : (gModels.length > 0 ? "Refresh Model List" : "Fetch Available Models")}</button>
               <button onClick={function() { testApiKey("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", gKey, gModel); }} disabled={!gKey || testing} style={{ width: "100%", padding: 10, background: !gKey ? "#334155" : "linear-gradient(135deg, #4285f4, #34a853)", color: "#fff", border: "none", borderRadius: 10, cursor: !gKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to Gemini"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
                 <strong style={{ color: "#94a3b8" }}>Get a key:</strong> aistudio.google.com/apikey — Free tier has generous limits.
@@ -5093,13 +5206,18 @@ export default function UroStudyHub() {
             <div>
               <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Anthropic API Key</label>
               <input value={cKey} onChange={function(e) { setCKey(e.target.value); }} type="password" placeholder="sk-ant-..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model</label>
+              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model{cModels.length > 0 ? " (" + cModels.length + " available)" : ""}</label>
               <select value={cModel} onChange={function(e) { setCModel(e.target.value); }} style={selectStyle}>
-                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (latest)</option>
-                <option value="claude-opus-4-6">Claude Opus 4.6 (smartest)</option>
-                <option value="claude-sonnet-4-5-20250514">Claude Sonnet 4.5</option>
-                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast)</option>
+                {cModels.length > 0
+                  ? cModels.map(function(m) { return <option key={m.id} value={m.id}>{m.name + " (" + m.id + ")"}</option>; })
+                  : [
+                    <option key="s46" value="claude-sonnet-4-6">Claude Sonnet 4.6 (latest)</option>,
+                    <option key="o46" value="claude-opus-4-6">Claude Opus 4.6 (smartest)</option>,
+                    <option key="s45" value="claude-sonnet-4-5-20250514">Claude Sonnet 4.5</option>,
+                    <option key="h45" value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast)</option>,
+                  ]}
               </select>
+              <button onClick={fetchClaudeModels} disabled={!cKey || testing} style={{ width: "100%", padding: 8, background: "#33415580", color: "#94a3b8", border: "1px solid #334155", borderRadius: 8, cursor: !cKey ? "default" : "pointer", fontSize: 11, fontWeight: 600, opacity: testing || !cKey ? 0.6 : 1, marginBottom: 8 }}>{testing ? "Fetching..." : (cModels.length > 0 ? "Refresh Model List" : "Fetch Available Models")}</button>
               <button onClick={testClaude} disabled={!cKey || testing} style={{ width: "100%", padding: 10, background: !cKey ? "#334155" : "linear-gradient(135deg, #c084fc, #818cf8)", color: "#fff", border: "none", borderRadius: 10, cursor: !cKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to Claude"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
                 <strong style={{ color: "#94a3b8" }}>Get a key:</strong> console.anthropic.com/settings/keys
@@ -5112,16 +5230,21 @@ export default function UroStudyHub() {
             <div>
               <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>OpenAI API Key</label>
               <input value={oKey} onChange={function(e) { setOKey(e.target.value); }} type="password" placeholder="sk-..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model</label>
+              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model{oModels.length > 0 ? " (" + oModels.length + " available)" : ""}</label>
               <select value={oModel} onChange={function(e) { setOModel(e.target.value); }} style={selectStyle}>
-                <option value="gpt-4o">GPT-4o (reliable)</option>
-                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
-                <option value="gpt-4.1">GPT-4.1</option>
-                <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                <option value="gpt-4.1-nano">GPT-4.1 Nano (cheapest)</option>
-                <option value="o3-mini">o3-mini (reasoning)</option>
-                <option value="o4-mini">o4-mini (reasoning)</option>
+                {oModels.length > 0
+                  ? oModels.map(function(m) { return <option key={m.id} value={m.id}>{m.id}</option>; })
+                  : [
+                    <option key="4o" value="gpt-4o">GPT-4o (reliable)</option>,
+                    <option key="4om" value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>,
+                    <option key="41" value="gpt-4.1">GPT-4.1</option>,
+                    <option key="41m" value="gpt-4.1-mini">GPT-4.1 Mini</option>,
+                    <option key="41n" value="gpt-4.1-nano">GPT-4.1 Nano (cheapest)</option>,
+                    <option key="o3m" value="o3-mini">o3-mini (reasoning)</option>,
+                    <option key="o4m" value="o4-mini">o4-mini (reasoning)</option>,
+                  ]}
               </select>
+              <button onClick={fetchOpenaiModels} disabled={!oKey || testing} style={{ width: "100%", padding: 8, background: "#33415580", color: "#94a3b8", border: "1px solid #334155", borderRadius: 8, cursor: !oKey ? "default" : "pointer", fontSize: 11, fontWeight: 600, opacity: testing || !oKey ? 0.6 : 1, marginBottom: 8 }}>{testing ? "Fetching..." : (oModels.length > 0 ? "Refresh Model List" : "Fetch Available Models")}</button>
               <button onClick={function() { testApiKey("openai", "https://api.openai.com/v1/chat/completions", oKey, oModel); }} disabled={!oKey || testing} style={{ width: "100%", padding: 10, background: !oKey ? "#334155" : "linear-gradient(135deg, #10a37f, #1a7f64)", color: "#fff", border: "none", borderRadius: 10, cursor: !oKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to OpenAI"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
                 <strong style={{ color: "#94a3b8" }}>Get a key:</strong> platform.openai.com/api-keys
@@ -5134,23 +5257,28 @@ export default function UroStudyHub() {
             <div>
               <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>OpenRouter API Key</label>
               <input value={orKey} onChange={function(e) { setOrKey(e.target.value); }} type="password" placeholder="sk-or-..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model (any model on OpenRouter)</label>
+              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model{orFetchedModels.length > 0 ? " (" + orFetchedModels.length + " available)" : " (any model on OpenRouter)"}</label>
               <select value={orModel} onChange={function(e) { setOrModel(e.target.value); }} style={selectStyle}>
-                <optgroup label="Free Models">
-                  <option value="google/gemini-2.5-flash:free">Gemini 2.5 Flash (free)</option>
-                  <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (free)</option>
-                  <option value="deepseek/deepseek-r1:free">DeepSeek R1 (free, reasoning)</option>
-                  <option value="meta-llama/llama-4-maverick:free">Llama 4 Maverick (free)</option>
-                  <option value="qwen/qwen3-235b-a22b:free">Qwen 3 235B (free)</option>
-                </optgroup>
-                <optgroup label="Premium Models">
-                  <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
-                  <option value="openai/gpt-4o">GPT-4o</option>
-                  <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-                  <option value="deepseek/deepseek-r1">DeepSeek R1</option>
-                </optgroup>
+                {orFetchedModels.length > 0
+                  ? orFetchedModels.map(function(m) { return <option key={m.id} value={m.id}>{(m.id.indexOf(":free") >= 0 ? "🆓 " : "") + m.name + " (" + m.id + ")"}</option>; })
+                  : [
+                    <optgroup key="free" label="Free Models">
+                      <option value="google/gemini-2.5-flash:free">Gemini 2.5 Flash (free)</option>
+                      <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (free)</option>
+                      <option value="deepseek/deepseek-r1:free">DeepSeek R1 (free, reasoning)</option>
+                      <option value="meta-llama/llama-4-maverick:free">Llama 4 Maverick (free)</option>
+                      <option value="qwen/qwen3-235b-a22b:free">Qwen 3 235B (free)</option>
+                    </optgroup>,
+                    <optgroup key="prem" label="Premium Models">
+                      <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
+                      <option value="openai/gpt-4o">GPT-4o</option>
+                      <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      <option value="deepseek/deepseek-r1">DeepSeek R1</option>
+                    </optgroup>,
+                  ]}
               </select>
-              <input value={orModel} onChange={function(e) { setOrModel(e.target.value); }} placeholder="Or type any model ID..." style={Object.assign({}, inputStyle, { fontSize: 10, marginBottom: 12 })} />
+              <input value={orModel} onChange={function(e) { setOrModel(e.target.value); }} placeholder="Or type any model ID..." style={Object.assign({}, inputStyle, { fontSize: 10, marginBottom: 8 })} />
+              <button onClick={fetchOpenrouterModels} disabled={testing} style={{ width: "100%", padding: 8, background: "#33415580", color: "#94a3b8", border: "1px solid #334155", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600, opacity: testing ? 0.6 : 1, marginBottom: 8 }}>{testing ? "Fetching..." : (orFetchedModels.length > 0 ? "Refresh Model List" : "Fetch Available Models")}</button>
               <button onClick={function() { testApiKey("openrouter", "https://openrouter.ai/api/v1/chat/completions", orKey, orModel, { "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" }); }} disabled={!orKey || testing} style={{ width: "100%", padding: 10, background: !orKey ? "#334155" : "linear-gradient(135deg, #f97316, #ea580c)", color: "#fff", border: "none", borderRadius: 10, cursor: !orKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect via OpenRouter"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
                 <strong style={{ color: "#94a3b8" }}>Get a key:</strong> openrouter.ai/keys — Access 200+ models including free options. One key for everything.
@@ -7581,6 +7709,17 @@ export default function UroStudyHub() {
                 <button onClick={function() { sendChat("NEXT"); }} disabled={chatLoad} style={{ padding: "3px 10px", background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 5, cursor: chatLoad ? "default" : "pointer", color: c.a, fontSize: 10, fontWeight: 700 }}>NEXT {"→"}</button>
                 <button onClick={function() { sendChat("Go deeper into this section. Give me more detail, more examples, more board-relevant nuance."); }} disabled={chatLoad} style={{ padding: "3px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 5, cursor: chatLoad ? "default" : "pointer", color: "#4ade80", fontSize: 10, fontWeight: 600 }}>DEEP</button>
                 <button onClick={function() { sendChat("SKIP this phase and move to the next one."); }} disabled={chatLoad} style={{ padding: "3px 10px", background: "transparent", border: "1px solid #334155", borderRadius: 5, cursor: chatLoad ? "default" : "pointer", color: "#64748b", fontSize: 10 }}>SKIP</button>
+                <div style={{ flex: 1 }} />
+                <div style={{ display: "flex", gap: 2 }}>
+                  {TONE_OPTIONS.map(function(t) {
+                    var active = lectureTone === t.id;
+                    return (
+                      <button key={t.id} onClick={function() { setLectureTone(t.id); }} style={{ padding: "2px 6px", background: active ? c.a + "20" : "transparent", border: "1px solid " + (active ? c.a + "50" : "#33415500"), borderRadius: 10, color: active ? c.a : "#475569", fontSize: 8, cursor: "pointer", fontWeight: active ? 700 : 400 }} title={t.desc}>
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {/* Mark Done button linked to study plan */}
               {matchedTopic && (
@@ -7766,14 +7905,37 @@ export default function UroStudyHub() {
                 ) : (
                   <div style={{ background: c.a + "10", border: "1px solid " + c.a + "25", borderRadius: 12, padding: 16, margin: "0 auto 16px", maxWidth: 360 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: c.a, marginBottom: 6 }}>📄 Upload a Chapter</div>
-                    <p style={{ fontSize: 11, lineHeight: 1.6, color: "#94a3b8", margin: 0 }}>Drop in any AUA Core Curriculum PDF or doc and a structured lecture session kicks off automatically — 9 phases from big picture to board questions, with checkpoints, pimp rounds, and mnemonics built in.</p>
+                    <p style={{ fontSize: 11, lineHeight: 1.6, color: "#94a3b8", margin: "0 0 10px" }}>Drop in any AUA Core Curriculum PDF or doc and a structured lecture kicks off automatically.</p>
+                    <button onClick={function() { fileRef.current && fileRef.current.click(); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>{"📄 Upload PDF / Doc"}</button>
+                    <div style={{ borderTop: "1px solid #334155", paddingTop: 12, marginTop: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Or type any topic</div>
+                      <p style={{ fontSize: 10, lineHeight: 1.5, color: "#64748b", margin: "0 0 8px" }}>No document needed — get a full 9-phase structured lecture from AI knowledge alone.</p>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input value={topicInput} onChange={function(e) { setTopicInput(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter" && topicInput.trim()) { var t = topicInput.trim(); setTopicInput(""); setLectureTopic(t); setLectureMode(true); setLecturePhase(0); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + t }]); setTimeout(function() { sendChat("Let's study: " + t + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); } }} placeholder="e.g. Renal Cell Carcinoma" style={{ flex: 1, padding: "8px 12px", background: c.bg, border: "1px solid #334155", borderRadius: 8, color: "#e2e8f0", fontSize: 11, outline: "none" }} />
+                        <button onClick={function() { var t = topicInput.trim(); if (!t) return; setTopicInput(""); setLectureTopic(t); setLectureMode(true); setLecturePhase(0); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + t }]); setTimeout(function() { sendChat("Let's study: " + t + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 14px", background: topicInput.trim() ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : "#334155", border: "none", borderRadius: 8, color: topicInput.trim() ? "#fff" : "#64748b", fontSize: 11, fontWeight: 700, cursor: topicInput.trim() ? "pointer" : "default" }}>{"Start"}</button>
+                      </div>
+                    </div>
                   </div>
                 )}
-                <p style={{ fontSize: 11, color: "#475569", marginBottom: 12 }}>Or ask any question to start a freeform session:</p>
+                {/* Tone picker */}
+                <div style={{ margin: "12px auto 12px", maxWidth: 360 }}>
+                  <div style={{ fontSize: 9, color: "#64748b", marginBottom: 6, fontWeight: 600 }}>LECTURE TONE</div>
+                  <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                    {TONE_OPTIONS.map(function(t) {
+                      var active = lectureTone === t.id;
+                      return (
+                        <button key={t.id} onClick={function() { setLectureTone(t.id); }} style={{ padding: "5px 10px", background: active ? c.a + "20" : "transparent", border: "1px solid " + (active ? c.a + "60" : "#334155"), borderRadius: 20, color: active ? c.a : "#64748b", fontSize: 10, cursor: "pointer", fontWeight: active ? 700 : 400 }} title={t.desc}>
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: "#475569", marginBottom: 8 }}>Quick start:</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
                   {["RCC High-Yield", "BPH Review", "Testis Cancer Staging", "Stone Mnemonics"].map(function(q) {
                     return (
-                      <button key={q} onClick={function() { sendChat("Give me a high-yield review of " + q + " for boards."); }} style={{ padding: "6px 12px", background: c.cd, border: "1px solid #334155", borderRadius: 16, color: "#94a3b8", cursor: "pointer", fontSize: 11 }}>
+                      <button key={q} onClick={function() { setLectureTopic(q); setLectureMode(true); setLecturePhase(0); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + q }]); setTimeout(function() { sendChat("Let's study: " + q + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "6px 12px", background: c.cd, border: "1px solid #334155", borderRadius: 16, color: "#94a3b8", cursor: "pointer", fontSize: 11 }}>
                         {q}
                       </button>
                     );
