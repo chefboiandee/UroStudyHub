@@ -434,11 +434,77 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 ## Roadmap
 
 ### Phase 1: Mobile Experience (High Priority)
-- [ ] Touch controls for games (virtual joystick / tap-to-move)
+- [x] Touch controls for games (virtual joystick / tap-to-move) — shipped April 2026 as reusable `<TouchOverlay>` applied to UroClinicRush, InpatientConsults, DrugMatch
+- [x] Device detection + per-game fit hints in Games tab (device picker on onboarding + auto-detection fallback)
+- [x] Snap Decision — touch-first swipe game (Bench or OR?) with AI-generated deck + seed fallback
 - [ ] Responsive layout audit at 375px and 390px
 - [ ] PWA support (inline service worker + manifest)
 - [ ] Touch-friendly Anki review (swipe gestures)
-- [ ] 44px minimum tap targets
+- [ ] 44px minimum tap targets across non-game UI
+
+### Planned Game Sessions
+
+#### Session B: On Call — Roguelike "Next Best Step" gauntlet
+**Goal:** A run-based clinical reasoning game with meta-progression. The headline new game.
+
+**Core loop:**
+- Player picks a biome to start (Oncology / Stones / Infections / Trauma / Pediatrics). Each biome is a themed chain of cases with its own difficulty curve.
+- Each case is a clinical vignette + 4 "next best step" options. Tap one. Wrong answer costs HP.
+- Every 5 cases is a boss case — multi-step, higher HP cost, bigger reward.
+- Between cases, pick 1 of 3 perks (loot-style choice): "+1 max HP," "First wrong answer per case is free," "Imaging questions reveal one wrong answer," "Drug-class hint for pharm questions," etc.
+- Run ends at 0 HP → see stats → choose next run's starting biome.
+
+**Meta-progression:**
+- Start with 2 biomes unlocked; unlock more by completing runs.
+- Cosmetic unlocks: themes, card backs, attending-personality voices for case narration.
+- Persistent topic mastery — weak topics (from in-app confidence ratings) appear as "fortified" variants. As confidence improves, they get easier.
+
+**AI integration:**
+- Use existing `callAI` to generate fresh case content per biome.
+- Bosses = longer multi-turn cases; cache a seed set of 5-10 per biome as fallback.
+- "Attending voice" = system-prompt personality injection (chill / drill sergeant / old-school / research-minded) mapped to the tutor styles already in the app.
+
+**Data model additions:**
+- `ironlog_onCall_runs_{user}` — array of completed runs with biome picks, final stats.
+- `ironlog_onCall_unlocks_{user}` — `{ biomes: [], perks: [], voices: [] }`.
+- Game flag: `reqs: { touch: true }` — fully touch-first.
+
+**Tech notes:**
+- HP / streak state in component-local useState; run history via S namespaced storage.
+- Boss cases: break the vignette into 3-4 sequential question objects; track subscore.
+- Perk effects modeled as flags on the run object that mutate scoring/display logic.
+
+**Estimated effort:** Medium-large. Plan for a dedicated session.
+
+#### Session C: Stone Crusher → "Urolithiasis: Bullet Hell" (Gradius-style rework)
+**Goal:** Retire the current asteroids-style Stone Crusher in favor of a side-scrolling bullet hell with unique staghorn bosses and urology-themed power-ups. Touch-first from the jump.
+
+**Core loop:**
+- Ship auto-scrolls right (or stays centered; enemies scroll left-to-right).
+- Waves of small stones / crystals fly across with bullet patterns (simple linear at wave 1, spirals and scatter by wave 5).
+- Every 3-4 waves: a boss fight. Staghorn calculus as boss art, 3 phases with distinct bullet patterns. Other bosses: Fournier's gangrene mass, BPH prostate wall, bladder tumor with muscle-invasion phase.
+- Power-up pickups drop from destroyed enemies.
+
+**Power-ups (urology-flavored):**
+- **Suction URS** — cone-shaped vacuum that consumes incoming bullets in front of the ship (short cooldown).
+- **Moses Mode** — beam splits into 3 with bonus damage on pulse.
+- **PCNL Bomb** — full-screen clear, limited charges per run.
+- **Dusting Laser** — faster fire, lower damage, good for crowds.
+- **Popcorn Mode** — wide scatter spread.
+- **Stent** — passive shield for 10 seconds.
+- **Alpha Blocker** — slows enemy speed for 8 seconds.
+
+**Controls:**
+- Touch: virtual joystick (left thumb) + auto-fire + action buttons for PCNL bomb / ult.
+- Desktop: WASD + spacebar / mouse click, preserves current muscle memory for users on laptop.
+
+**Tech notes:**
+- Reuse existing ship/bullet/collision infra from StoneCrusherGame.
+- Bullet patterns driven by JSON wave definitions — makes adding future bosses data-driven (aligns with Phase 4 specialty-agnostic goal).
+- Side-scrolling simplifies physics: enemies move only on X axis at fixed speeds, bullets use simple parametric patterns.
+- Keep gameId = `"blaster"` for continuity, or bump to `"blaster2"` with migration logic if save compat matters.
+
+**Estimated effort:** Medium-large. ~1-2 weeks of focused work. Bullet patterns and boss phases are where time goes.
 
 ### Phase 2: Cross-Device Sync (Medium Priority)
 **Recommended: Supabase (free tier)** — 500MB database, 50K monthly API requests, built-in auth, real-time subscriptions.
