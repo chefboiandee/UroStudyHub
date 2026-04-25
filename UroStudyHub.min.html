@@ -157,13 +157,13 @@ function loadCustomPlans() {
 try { var v = localStorage.getItem("uroStudyHub_customPlans"); return v ? JSON.parse(v) : []; } catch(e) { console.warn("Failed to load custom plans from localStorage:", e); return []; }
 }
 function saveCustomPlans(plans) {
-try { localStorage.setItem("uroStudyHub_customPlans", JSON.stringify(plans)); } catch(e)
+try { localStorage.setItem("uroStudyHub_customPlans", JSON.stringify(plans)); } catch(e) {  }
 }
 function loadActivePlan() {
 try { var v = localStorage.getItem("uroStudyHub_activePlan"); return v || "aua"; } catch(e) { return "aua"; }
 }
 function saveActivePlan(id) {
-try { localStorage.setItem("uroStudyHub_activePlan", id); } catch(e)
+try { localStorage.setItem("uroStudyHub_activePlan", id); } catch(e) {  }
 }
 var SYLLABUS_PARSE_PROMPT = [
 "You are a study plan generator. The user will provide a syllabus, textbook table of contents, chapter guide, or course outline.",
@@ -500,7 +500,7 @@ var [s, setS] = useState(function() {
 try {
 var saved = localStorage.getItem("uroStudyHub_progress");
 if (saved) return Object.assign({}, INIT, JSON.parse(saved));
-} catch (e)
+} catch (e) {  }
 return INIT;
 });
 var [page, setPage] = useState("hub");
@@ -543,7 +543,7 @@ if (saved) {
 var parsed = JSON.parse(saved);
 return Object.assign({}, defaults, parsed, { on: false });
 }
-} catch (e)
+} catch (e) {  }
 return defaults;
 });
 useEffect(function() {
@@ -555,10 +555,10 @@ geminiKey: lm.geminiKey, geminiModel: lm.geminiModel,
 openaiKey: lm.openaiKey, openaiModel: lm.openaiModel,
 openrouterKey: lm.openrouterKey, openrouterModel: lm.openrouterModel,
 }));
-} catch (e)
+} catch (e) {  }
 }, [lm]);
 useEffect(function() {
-try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); } catch (e)
+try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); } catch (e) {  }
 }, [s]);
 var STUDY_RANDOMIZE = false;  // true = random A/B split, false = everyone gets Group A
 var STUDY_SYNC_URL = "";      // Paste your Google Apps Script URL here for auto data collection
@@ -638,7 +638,7 @@ headers: { "Content-Type": "text/plain" },
 body: JSON.stringify(payload),
 });
 setS(function(p) { return Object.assign({}, p, { lastSyncDate: todayStr }); });
-} catch (err)
+} catch (err) {  }
 }
 useEffect(function() {
 if (s.studySyncUrl || STUDY_SYNC_URL) {
@@ -895,7 +895,7 @@ setPlanBuilderPhases(null);
 setPlanBuilderError("");
 }
 useEffect(function() {
-try { localStorage.setItem("uroStudyHub_reminders", JSON.stringify(reminderTimes)); } catch(e)
+try { localStorage.setItem("uroStudyHub_reminders", JSON.stringify(reminderTimes)); } catch(e) {  }
 }, [reminderTimes]);
 function enableReminders() {
 if (!("Notification" in window)) { return; }
@@ -2015,7 +2015,7 @@ var dn2 = getFullDeck().replace(/[^a-zA-Z0-9]/g, "_").substring(0, 40);
 a2.href = url2; a2.download = dn2 + "_cloze.txt"; a2.click();
 URL.revokeObjectURL(url2);
 }
-} catch (e)
+} catch (e) {  }
 }
 var [ankiCheckMsg, setAnkiCheckMsg] = useState("");
 function checkAnkiConnect() {
@@ -2097,13 +2097,13 @@ setTimeout(function() { setAnkiProgress(""); }, 4000);
 }
 useEffect(function() { checkAnkiConnect(); }, []);
 useEffect(function() {
-try { localStorage.setItem("uroStudyHub_autoAnki", autoAnki ? "true" : "false"); } catch (e)
+try { localStorage.setItem("uroStudyHub_autoAnki", autoAnki ? "true" : "false"); } catch (e) {  }
 }, [autoAnki]);
 useEffect(function() {
-try { localStorage.setItem("uroStudyHub_ankiDeck", ankiDeck); } catch (e)
+try { localStorage.setItem("uroStudyHub_ankiDeck", ankiDeck); } catch (e) {  }
 }, [ankiDeck]);
 useEffect(function() {
-try { localStorage.setItem("uroStudyHub_ankiSubDeck", ankiSubDeck); } catch (e)
+try { localStorage.setItem("uroStudyHub_ankiSubDeck", ankiSubDeck); } catch (e) {  }
 }, [ankiSubDeck]);
 useEffect(function() {
 if (chatEnd.current) chatEnd.current.scrollIntoView({ behavior: "smooth" });
@@ -2379,7 +2379,7 @@ base.type = "basic"; base.front = cd.front || ""; base.back = cd.back || "";
 }
 allCards.push(base);
 });
-} catch (e)
+} catch (e) {  }
 processChunk(idx + 1);
 }, function() {
 processChunk(idx + 1);

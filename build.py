@@ -21,8 +21,10 @@ def obfuscate_script(code):
     """Strip comments, blank lines, and compress whitespace."""
     # First pass: remove JSX comments {/* ... */} entirely (including the wrapping braces).
     # JSX rejects empty expression slots {} so we must not leave them behind.
-    # This handles single-line {/* ... */} patterns which are the common case.
-    code = re.sub(r'\{\s*/\*[\s\S]*?\*/\s*\}', '', code)
+    # IMPORTANT: require NO whitespace between { and /* — JSX comments in this codebase
+    # have no space, while JS catch blocks like `catch(e) { /* ignore */ }` do. Without
+    # this distinction the regex would eat catch-block bodies and leave orphan `catch(e)`.
+    code = re.sub(r'\{/\*[\s\S]*?\*/\}', '', code)
 
     lines = code.split('\n')
     result = []
