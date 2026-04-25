@@ -19,6 +19,11 @@ OUTPUT = "UroStudyHub.min.html"
 
 def obfuscate_script(code):
     """Strip comments, blank lines, and compress whitespace."""
+    # First pass: remove JSX comments {/* ... */} entirely (including the wrapping braces).
+    # JSX rejects empty expression slots {} so we must not leave them behind.
+    # This handles single-line {/* ... */} patterns which are the common case.
+    code = re.sub(r'\{\s*/\*[\s\S]*?\*/\s*\}', '', code)
+
     lines = code.split('\n')
     result = []
     in_multiline = False
