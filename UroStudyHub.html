@@ -6,6 +6,7 @@
 <title>UroStudy Hub — Urology Board Prep</title>
 <meta name="description" content="All-in-one urology board exam study app with AI tutor, Anki card generation, mini-games, spaced repetition, and more." />
 <meta name="theme-color" content="#0f172a" />
+<link rel="manifest" href="manifest.json" />
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; width: 100%; overflow: hidden; background: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -1620,7 +1621,13 @@ export default function UroStudyHub() {
     var map = {};
     for (var i = 0; i < log.length; i++) {
       var d = log[i].date;
-      map[d] = (map[d] || 0) + (log[i].tokens || 1);
+      var t = log[i].type || "other";
+      var tk = log[i].tokens || 0;
+      if (!map[d]) map[d] = { total: 0, types: {} };
+      map[d].total += tk || 1;
+      if (!map[d].types[t]) map[d].types[t] = { count: 0, tokens: 0 };
+      map[d].types[t].count++;
+      map[d].types[t].tokens += tk;
     }
     return map;
   }, [s.activityLog]);
@@ -1745,6 +1752,7 @@ export default function UroStudyHub() {
   var [gateTarget, setGateTarget] = useState("");
   var [gateFeedback, setGateFeedback] = useState("");
   var [tokenToast, setTokenToast] = useState("");
+  var [heatHover, setHeatHover] = useState(null);
 
   function showGateQuestion(gameId) {
     var q = GATE_QUESTIONS[Math.floor(Math.random() * GATE_QUESTIONS.length)];
@@ -6079,6 +6087,28 @@ export default function UroStudyHub() {
     var [lmModels, setLmModels] = useState([]);
     var [selectedLmModel, setSelectedLmModel] = useState(lm.model || "");
     var [lmFetchErr, setLmFetchErr] = useState("");
+    var [gModels, setGModels] = useState([]);
+    var [gFetchErr, setGFetchErr] = useState("");
+
+    function fetchGeminiModels() {
+      if (!gKey) { setGFetchErr("Enter an API key first"); return; }
+      setTesting(true); setGFetchErr(""); setGModels([]);
+      fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + gKey)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) { setGFetchErr(data.error.message || "API error"); setTesting(false); return; }
+          var models = (data.models || [])
+            .filter(function(m) { return m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf("generateContent") >= 0; })
+            .map(function(m) { return { id: m.name.replace("models/", ""), name: m.displayName || m.name.replace("models/", "") }; })
+            .sort(function(a, b) { return a.name < b.name ? -1 : 1; });
+          if (models.length === 0) { setGFetchErr("No generative models found for this key"); setTesting(false); return; }
+          setGModels(models);
+          var current = models.find(function(m) { return m.id === gModel; });
+          if (!current) setGModel(models[0].id);
+          setTesting(false);
+        })
+        .catch(function(err) { setGFetchErr("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
 
     function fetchLmModels() {
       setTesting(true); setLmFetchErr(""); setLmModels([]);
@@ -6192,14 +6222,23 @@ export default function UroStudyHub() {
             <div>
               <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Google AI API Key</label>
               <input value={gKey} onChange={function(e) { setGKey(e.target.value); }} type="password" placeholder="AIza..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model</label>
-              <select value={gModel} onChange={function(e) { setGModel(e.target.value); }} style={selectStyle}>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (fast, smart)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (best)</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash (legacy)</option>
-                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite (cheapest)</option>
-              </select>
-              <button onClick={function() { testApiKey("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", gKey, gModel); }} disabled={!gKey || testing} style={{ width: "100%", padding: 10, background: !gKey ? "#334155" : "linear-gradient(135deg, #4285f4, #34a853)", color: "#fff", border: "none", borderRadius: 10, cursor: !gKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to Gemini"}</button>
+              <button onClick={fetchGeminiModels} disabled={!gKey || testing} style={{ width: "100%", padding: 8, marginBottom: 10, background: !gKey ? "#334155" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, cursor: !gKey ? "default" : "pointer", fontWeight: 600, fontSize: 11, opacity: testing ? 0.6 : 1 }}>{testing ? "Fetching..." : "Fetch Available Models"}</button>
+              {gFetchErr && <div style={{ fontSize: 10, color: "#f87171", marginBottom: 8 }}>{gFetchErr}</div>}
+              {gModels.length > 0 && (
+                <div>
+                  <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model ({gModels.length} available)</label>
+                  <select value={gModel} onChange={function(e) { setGModel(e.target.value); }} style={selectStyle}>
+                    {gModels.map(function(m) { return <option key={m.id} value={m.id}>{m.name} ({m.id})</option>; })}
+                  </select>
+                </div>
+              )}
+              {gModels.length === 0 && !gFetchErr && (
+                <div>
+                  <label style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4, display: "block" }}>Model (enter key & fetch, or type manually)</label>
+                  <input value={gModel} onChange={function(e) { setGModel(e.target.value); }} placeholder="gemini-2.5-flash" style={inputStyle} />
+                </div>
+              )}
+              <button onClick={function() { testApiKey("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", gKey, gModel); }} disabled={!gKey || !gModel || testing} style={{ width: "100%", padding: 10, background: !gKey ? "#334155" : "linear-gradient(135deg, #4285f4, #34a853)", color: "#fff", border: "none", borderRadius: 10, cursor: !gKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to Gemini"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
                 <strong style={{ color: "#94a3b8" }}>Get a key:</strong> aistudio.google.com/apikey — Free tier has generous limits.
               </div>
@@ -7327,14 +7366,16 @@ export default function UroStudyHub() {
           {/* Row 6: Activity heatmap */}
           {(function() {
             var hm = activityHeatmap;
+            var TYPE_LABELS = { lecture: "📖 Lectures", reading: "📚 Reading", anki: "🧠 Anki", pomodoro: "⏱ Pomodoro", sasp: "📝 SASP", topic: "✅ Topics", feature: "🔧 Features" };
             var cells = [];
             var d = new Date();
             for (var i = 83; i >= 0; i--) {
               var dd = new Date(d.getTime() - i * 86400000);
               var key = dd.toISOString().slice(0, 10);
-              var val = hm[key] || 0;
+              var entry = hm[key];
+              var val = entry ? entry.total : 0;
               var bg = val === 0 ? "#1e293b" : val <= 2 ? "#164e3f" : val <= 4 ? "#166534" : val <= 7 ? "#15803d" : "#22c55e";
-              cells.push({ key: key, val: val, bg: bg, day: dd.getDay() });
+              cells.push({ key: key, val: val, bg: bg, day: dd.getDay(), types: entry ? entry.types : {} });
             }
             var weeks = [];
             var week = [];
@@ -7342,20 +7383,46 @@ export default function UroStudyHub() {
               week.push(cells[j]);
               if (cells[j].day === 6 || j === cells.length - 1) { weeks.push(week); week = []; }
             }
+            var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            function fmtDate(iso) {
+              var p = iso.split("-");
+              var dt = new Date(+p[0], +p[1] - 1, +p[2]);
+              return DAYS[dt.getDay()] + ", " + MONTHS[dt.getMonth()] + " " + dt.getDate() + ", " + dt.getFullYear();
+            }
             return (
-              <div style={{ background: c.cd, borderRadius: 10, padding: 10, marginBottom: 12, border: "1px solid #334155" }}>
+              <div style={{ background: c.cd, borderRadius: 10, padding: 10, marginBottom: 12, border: "1px solid #334155", position: "relative" }} onMouseLeave={function() { setHeatHover(null); }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Activity</div>
                 <div style={{ display: "flex", gap: 2, overflowX: "auto" }}>
                   {weeks.map(function(wk, wi) {
                     return (
                       <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         {wk.map(function(cell) {
-                          return <div key={cell.key} title={cell.key + ": " + cell.val + " tokens"} style={{ width: 9, height: 9, borderRadius: 2, background: cell.bg }} />;
+                          return <div key={cell.key} style={{ width: 9, height: 9, borderRadius: 2, background: cell.bg, cursor: "pointer" }} onMouseEnter={function(e) {
+                            var rect = e.currentTarget.getBoundingClientRect();
+                            setHeatHover({ key: cell.key, val: cell.val, types: cell.types, x: rect.left + rect.width / 2, y: rect.top });
+                          }} />;
                         })}
                       </div>
                     );
                   })}
                 </div>
+                {heatHover && ReactDOM.createPortal(
+                  <div style={{ position: "fixed", left: Math.min(heatHover.x - 80, window.innerWidth - 175), top: heatHover.y - 8, transform: "translateY(-100%)", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: "8px 10px", zIndex: 99999, minWidth: 140, maxWidth: 200, pointerEvents: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#e2e8f0", marginBottom: 4 }}>{fmtDate(heatHover.key)}</div>
+                    {heatHover.val === 0
+                      ? <div style={{ fontSize: 9, color: "#64748b" }}>No activity</div>
+                      : <div>
+                          <div style={{ fontSize: 9, color: "#94a3b8", marginBottom: 3 }}>{heatHover.val} token{heatHover.val !== 1 ? "s" : ""} earned</div>
+                          {Object.keys(heatHover.types).filter(function(t) { return t !== "feature"; }).map(function(t) {
+                            var info = heatHover.types[t];
+                            return <div key={t} style={{ fontSize: 9, color: "#cbd5e1", marginTop: 1 }}>{TYPE_LABELS[t] || t}: {info.count}× ({info.tokens} 🪙)</div>;
+                          })}
+                        </div>
+                    }
+                  </div>,
+                  document.body
+                )}
                 <div style={{ display: "flex", gap: 6, marginTop: 4, fontSize: 7, color: "#475569", alignItems: "center" }}>
                   <span>Less</span>
                   {["#1e293b", "#164e3f", "#166534", "#15803d", "#22c55e"].map(function(bg2, i) {
@@ -11780,6 +11847,19 @@ export default function UroStudyHub() {
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(UroStudyHub));
 document.getElementById("loading").style.display = "none";
+</script>
+<script>
+// Register service worker for auto-updates
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then(function(reg) {
+    // Check for updates every 30 minutes while app is open
+    setInterval(function() { reg.update(); }, 1800000);
+    // Also check on visibility change (user switches back to app)
+    document.addEventListener("visibilitychange", function() {
+      if (!document.hidden) reg.update();
+    });
+  });
+}
 </script>
 </body>
 </html>
