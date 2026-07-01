@@ -493,11 +493,560 @@ var TUTOR_STYLES = {
   }
 };
 
+// ============ SURGICAL SKILLS COURSE (Sub-I / intern / med-student "OR fundamentals") ============
+// General surgical technique taught conversationally: mental models, decision trees, common
+// mistakes, urology applications, and a cheat sheet. Each module can be read offline OR launched
+// into the AI tutor ("Teach me" / "Quiz me") grounded in the module's own reference text.
+var SURGICAL_SKILLS = [
+  {
+    id: "sterile", n: 1, icon: "🧼", color: "#38bdf8",
+    title: "Sterile Technique & OR Etiquette",
+    tag: "Day one: how not to contaminate the field",
+    bigIdea: "The sterile field is a bubble of trust: everything inside is clean, everything outside is dirty, and your one job as the junior is to not pop the bubble. Learn what's sterile, what's not, and where you can stand before you ever touch an instrument.",
+    blocks: [
+      { h: "The sterile zone, defined", b: [
+        "Sterile on YOU = the front of your gown from chest to waist, and your gloved hands up to about mid-forearm. NOT your back, below the waist, above your shoulders, or your armpits.",
+        "Sterile in the ROOM = the draped surgical site and the tops of the covered tables (Mayo stand, back table). The edge of any drape, and anything hanging below table height, is dead.",
+        "If your hands drop below your waist or you turn your back to the field, assume you just contaminated." ] },
+      { h: "Scrub, gown, glove", b: [
+        "Scrub or use the alcohol-chlorhexidine rub fingertips-to-elbow, hands ABOVE elbows so water drips off the elbow, not back onto clean hands.",
+        "Closed-gloving (your gown cuff stays over your hand until the glove is on) is the more sterile method and the default for the main case." ] },
+      { h: "Moving around the field", b: [
+        "Sterile-to-sterile, back-to-back. Pass another scrubbed person front-to-front or back-to-back, never brush your dirty back across their sterile front.",
+        "Face the field at all times. Hands clasped in front, above the waist, below the shoulders — the default resting position." ] },
+      { h: "Prep and drape (the part students fumble)", b: [
+        "Prep goes on from the incision OUTWARD in expanding circles, clean-to-dirty, never painting back over a spot you already cleaned.",
+        "Let the prep DRY before draping or buzzing. Alcohol/chlorhexidine preps are flammable, and wet prep plus cautery is a classic OR fire.",
+        "Once drapes are on they only move AWAY from the field. You can pull a drape off, never push it back over sterile." ] },
+      { h: "Being the useful junior", b: [
+        "Ask 'where do you want me?' and take the spot given. Never reach across the field or over another person's hands — go around.",
+        "Hold retraction where it's placed, and speak up before your hand fails rather than silently dropping it." ] }
+    ],
+    rules: [
+      "In doubt whether something is sterile? It's contaminated. No 'probably fine.'",
+      "Hands above the waist, below the shoulders, in front of you — always.",
+      "Let the prep dry before you drape or buzz (fire risk).",
+      "Broke scrub? Say it out loud and re-gown. A re-gown costs 60 seconds; a hidden contamination costs an infection." ],
+    mistakes: [
+      { m: "Resting your hands down at your sides.", fix: "Clasp them at your chest. Below the waist is non-sterile, every time." },
+      { m: "Turning your back to the field to talk to the circulator.", fix: "Keep your front to the field; pivot only back-to-back with other scrubbed staff." },
+      { m: "Reaching across the field to grab something.", fix: "Walk around or ask. A sleeve trailing over the incision contaminates it." },
+      { m: "Adjusting your mask or glasses with a gloved hand.", fix: "Anything above the shoulders is non-sterile — have the circulator help, then re-glove." } ],
+    uro: [
+      "Cysto/endoscopy: keep the camera head and light cord above waist level; hand the cord end off to the circulator rather than letting it swing below the table.",
+      "Combined abdominal + genital prep: prep the genitalia/perineum LAST and separately (it's the dirtiest area).",
+      "Robotic cases: the sterile boundary extends onto the draped robot arms — know where they sweep before you lean in." ],
+    cheat: [
+      "Sterile = gown chest-to-waist + gloved hands to mid-forearm. Everything else is dirty.",
+      "Prep clean-to-dirty, outward, no painting back — and let it DRY.",
+      "Face the field, hands up front, pass back-to-back.",
+      "Broke scrub? Announce it and re-gown." ]
+  },
+  {
+    id: "scalpel", n: 2, icon: "🔪", color: "#f97316",
+    title: "Scalpel & Incisions",
+    tag: "Grips, blades, and clean single-stroke cuts",
+    bigIdea: "The blade does the cutting — your job is to control depth and let it glide, not to press. Pick the grip for the job, the blade for the tissue, and make one confident stroke instead of ten timid scratches.",
+    blocks: [
+      { h: "Two grips, two jobs", b: [
+        "Pencil grip (like writing) = precision and short controlled cuts. Fingertip control, blade around 45 degrees. Your default for most urology skin work and fine dissection.",
+        "Palm / table grip (fingers on the spine, thumb on the side) = power and length, for a long deep single-stroke incision like a laparotomy." ] },
+      { h: "Blade selection, decoded", b: [
+        "- #10 — big curved belly, the workhorse for long skin incisions. Your default 'open the skin' blade.",
+        "- #15 — small curved belly, a smaller #10, for short precise cuts and delicate work (scrotal, pediatric).",
+        "- #11 — straight pointed spear, for stabs: draining an abscess, a cystotomy, cutting onto a stent or a vessel. Point in, cut out.",
+        "- #20 — a giant #10 on a #4 handle, for big thick incisions where you want mass (rare in uro)." ] },
+      { h: "Depth control", b: [
+        "Cut perpendicular to the skin with the belly of the blade, one smooth stroke, even pressure. You're through the dermis when you see fat pearl up.",
+        "Don't saw. Sawing shreds tissue and wanders. Reload depth with a second deliberate pass instead of pressing harder.",
+        "If unsure, SCORE the line lightly first, then deepen — better than one over-committed cut into something you can't see." ] },
+      { h: "Feel by tissue", b: [
+        "- Skin: firm and springy — needs a committed stroke through the dermis.",
+        "- Fat: gives easily — ease off or you'll plunge.",
+        "- Fascia: tough and white — often nicked with the knife then opened with scissors/cautery under direct vision to protect what's beneath.",
+        "- Over a mass/stent/vessel: switch to the #11 stab, or cut onto a clamp so you can't go too deep." ] }
+    ],
+    rules: [
+      "Long skin cut → #10. Short/fine → #15. Stab into something → #11. Thick/huge → #20.",
+      "Precision → pencil grip. Length and power → palm grip.",
+      "Fat pearling up = you're through the dermis; ease off.",
+      "Never deepen a cut you can't see the bottom of — cut onto a clamp or under direct vision." ],
+    mistakes: [
+      { m: "Sawing back and forth like a bread knife.", fix: "One smooth stroke with the belly of the blade. Let the sharp do the work." },
+      { m: "Pressing harder to get through fat.", fix: "Fat offers no resistance — a light hand, or you plunge into bowel/vessel. Deepen with a controlled second pass." },
+      { m: "Tentative scratchy strokes that fray the edge.", fix: "Commit. A clean single-stroke edge heals and looks better than ten timid ones." },
+      { m: "Passing the scalpel blade-first to the tech.", fix: "Use a neutral zone/basin, or hand it back handle-first, blade down, and say 'blade back.'" } ],
+    uro: [
+      "Circumcision, hydrocele, scrotal, vasectomy: #15 — small delicate field, precision over power.",
+      "Cutting onto a palpable stone, a stent, or a cystotomy: #11 stab, then extend with Metzenbaum scissors under vision to protect the back wall.",
+      "Open flank/midline (nephrectomy, cystectomy): #10 for skin, then knife/cautery to fascia and open the peritoneum sharply under vision." ],
+    cheat: [
+      "10 long, 15 fine, 11 stab, 20 huge.",
+      "Pencil = precision, palm = power.",
+      "One smooth stroke, belly of the blade, no sawing.",
+      "Fat pearls up = through the dermis; ease off." ]
+  },
+  {
+    id: "tissue", n: 3, icon: "🤝", color: "#22c55e",
+    title: "Tissue Handling, Instruments & Electrosurgery",
+    tag: "Gentle hands, the right forceps, and safe energy",
+    bigIdea: "Great surgeons are gentle. Tissue you crush, tear, or char dies and heals badly. Pick tissue up by a 'handle,' pull it into the plane you want with counter-traction, and treat every bite of the forceps like it leaves a bruise — because it does.",
+    blocks: [
+      { h: "Forceps: match the teeth to the tissue", b: [
+        "- Toothed (Adson-with-teeth, rat-tooth) = tough tissue that tolerates grip — skin, fascia. The teeth interlock so you hold with LESS crushing force than smooth forceps mashing down.",
+        "- Atraumatic (DeBakey) = delicate/vascular/hollow tissue — bowel, ureter, bladder, vessels. The ridges hold without puncturing.",
+        "- Fine tips (Gerald, jeweler's) = precise work near delicate structures; fine Adson for skin closure.",
+        "Rule: teeth for skin and fascia, DeBakey for anything you'd hate to put a hole in." ] },
+      { h: "Hold tissue by its edge, not its face", b: [
+        "Grab the cut edge, the fat, the adventitia — a 'handle' that tolerates it or that you're removing anyway. Don't clamp the delicate structure itself (don't grab the ureter wall, grab the tissue around it).",
+        "One firm hold beats five regrips. Every regrip is another bruise." ] },
+      { h: "Traction & counter-traction — the whole game", b: [
+        "Tissue only opens along a plane when it's under tension. Pull the tissue you want toward you, hold the other side away, and the plane between them goes taut and shows you where to cut.",
+        "The natural areolar (loose) plane appears as white filmy strands. Divide THOSE and stay out of the vascular tissue on either side.",
+        "No tension = pushing blind into mush. Reset your retraction until the plane is obvious." ] },
+      { h: "Respect the planes", b: [
+        "There's an anatomic plane between every organ and its neighbor. Find it and the dissection is bloodless; leave it and you're in parenchyma, bleeding.",
+        "'Bloody' usually means 'wrong plane.' Stop, re-expose, find the areolar plane — don't dig." ] },
+      { h: "Electrosurgery — the genuinely dangerous part", b: [
+        "Monopolar: current runs from the tip THROUGH the patient to a return pad. High power, cuts and coags well, but the current travels — dangerous near bowel and ureter, and on a thin structure on a pedicle (current density can necrose it).",
+        "Bipolar: current runs only between the two forceps tips. Precise, no return pad, safe near delicate structures — the default near ureter, nerves, and fine vessels.",
+        "CUT waveform = continuous, lower voltage, clean division, less char. COAG = interrupted, higher voltage, more heat spread and hemostasis but more collateral damage. Blend sits in between.",
+        "'Buzzing' a clamp: touch the active electrode to a hemostat holding a vessel and the whole instrument conducts — everyone off the metal, and it must not touch a retractor or skin (alternate-path burn)." ] },
+      { h: "Energy safety checklist", b: [
+        "Return pad on good muscle, no scar/bone/implant under it. Holster the active tip when not firing — a loose Bovie is a classic drape fire and burn source.",
+        "Pacemaker/ICD: prefer bipolar and short bursts, and the team should know." ] }
+    ],
+    rules: [
+      "Teeth for skin/fascia, DeBakey for bowel/ureter/bladder/vessels.",
+      "No plane without tension — set traction/counter-traction first, then divide the white strands.",
+      "Bleeding a lot? Wrong plane. Re-expose, don't dig.",
+      "Near ureter, nerve, or a thin pedicle → bipolar. Broad hemostasis on tough tissue → monopolar coag.",
+      "One good grab beats five regrips." ],
+    mistakes: [
+      { m: "Grabbing bowel or ureter wall directly.", fix: "Handle the tissue around it (fat/adventitia/mesentery). A crush becomes a leak or stricture days later." },
+      { m: "Dissecting with no counter-traction.", fix: "Set opposing tension so the plane declares itself, then divide it." },
+      { m: "Monopolar near the ureter or on a thin pedicle.", fix: "Switch to bipolar — monopolar current density in a narrow structure can necrose it." },
+      { m: "Leaving the Bovie tip loose on the drapes.", fix: "Holster it. Accidental activation is a classic OR fire and burn." } ],
+    uro: [
+      "Ureter: handle only the peri-ureteral tissue, protect its longitudinal blood supply, use bipolar nearby — a crushed or devascularized ureter strictures.",
+      "Nerve-sparing prostatectomy: minimize ALL energy near the neurovascular bundles — cold scissors and clips or fine bipolar, not monopolar spread.",
+      "Mobilizing colon off the kidney: a monopolar arc can cause a delayed thermal bowel injury that leaks on POD 3-5. Be deliberate.",
+      "Robotic: no haptics, so you must READ the tension and blanch visually — over-grip and thermal spread are worse when you can't feel." ],
+    cheat: [
+      "Teeth = tough tissue; DeBakey = delicate/hollow/vascular.",
+      "Traction + counter-traction reveals the bloodless plane.",
+      "Bloody = wrong plane.",
+      "Monopolar travels through the patient; bipolar stays between the tips — go bipolar near ureter/nerve/pedicle.",
+      "CUT = clean/less char; COAG = more heat/hemostasis. Holster the Bovie." ]
+  },
+  {
+    id: "suture", n: 4, icon: "🧵", color: "#a855f7",
+    title: "Suture Selection",
+    tag: "Size, absorbable vs permanent, mono vs braided",
+    bigIdea: "Two questions answer almost every suture choice: how long must it hold (that picks absorbable vs permanent and the material), and how much strength does the tissue need (that picks the size). Mono vs braided is mostly about infection risk and glide.",
+    blocks: [
+      { h: "Size: bigger number = thinner thread", b: [
+        "Sizes run 0, 2-0, 3-0, 4-0, 5-0, 6-0 and up — more zeros = finer and weaker. Match strength to tissue, don't over-build.",
+        "- 0 / 1: fascia, mass closure, big pedicles",
+        "- 2-0 / 3-0: muscle, deep subcutaneous, bowel, bladder, GU/GI tract",
+        "- 3-0 / 4-0: subcutaneous, ties",
+        "- 4-0 / 5-0: skin, delicate mucosa",
+        "- 5-0 / 6-0: vessels, fine/pediatric, microsurgery" ] },
+      { h: "Absorbable vs permanent — how long must it hold?", b: [
+        "Absorbable = the tissue heals and takes over before the suture dissolves. Use inside the body and for anything you don't want to leave behind (mucosa, bladder, bowel, subcutaneous, ties, pediatric skin).",
+        "Permanent = tissue that never regains much strength or needs indefinite support — high-risk fascia, vascular anastomoses, mesh, tendon, permanent slings." ] },
+      { h: "Monofilament vs braided — glide vs grip vs bugs", b: [
+        "Braided (Vicryl, silk) = easy to handle and holds knots superbly, but the interstices harbor bacteria — avoid in contaminated fields and NEVER where it sits in urine (a stone/infection nidus).",
+        "Monofilament (PDS, Monocryl, Prolene, nylon) = slick, low infection risk, passes cleanly — but knots slip, so add throws. First choice in contaminated or urinary fields." ] },
+      { h: "The named sutures you'll actually be handed", b: [
+        "- Vicryl (polyglactin): braided absorbable, about 60% strength at 2-3 wks, gone by 8-10 wks. Workhorse for deep/subcutaneous, ties, GU/GI.",
+        "- Monocryl (poliglecaprone): monofilament absorbable, fast, gone by 3-4 months. Subcuticular skin, delicate closures.",
+        "- PDS (polydioxanone): monofilament absorbable, LONG hold (~50% at 4-6 wks, gone ~6 months). Fascia, and GU/GI where prolonged support plus low infection matter.",
+        "- Prolene (polypropylene): monofilament PERMANENT. Vascular anastomoses, mesh, slings, retention. Slick — extra throws.",
+        "- Nylon (Ethilon): monofilament permanent. Skin to be removed, securing drains.",
+        "- Silk: braided permanent, comfortable to handle. Old-school ties, securing lines. Not for the urinary tract.",
+        "- Chromic gut: absorbable, reactive, short hold. Mucosa/skin you never want to remove (peds, scrotum)." ] },
+      { h: "The urology golden rule", b: [
+        "Anything exposed to urine = ABSORBABLE and ideally MONOFILAMENT (PDS, Monocryl, Vicryl). Permanent or braided suture in the collecting system encrusts into a stone and seeds chronic infection. Prolene, silk, nylon — never in the urinary tract." ] }
+    ],
+    rules: [
+      "How long must it hold? Short → Monocryl/chromic. Medium → Vicryl. Long → PDS. Forever → Prolene/nylon/silk.",
+      "Contaminated or urine-exposed → monofilament.",
+      "Fascia → 0/1 PDS (or looped). Skin → 4-0/5-0. Vessel → 5-0/6-0 Prolene.",
+      "Urinary tract → absorbable + monofilament. Never permanent or braided." ],
+    mistakes: [
+      { m: "Reaching for silk or Prolene near the urinary tract.", fix: "Absorbable monofilament only — permanent suture in urine becomes a stone." },
+      { m: "Using a huge suture 'to be safe' on skin.", fix: "Oversized suture means more inflammation and worse scar. Skin is 4-0/5-0." },
+      { m: "Braided suture in a contaminated wound.", fix: "Go monofilament — braided wicks bacteria into the interstices." },
+      { m: "Expecting Monocryl to hold high-tension fascia.", fix: "Fascia needs long-hold strength — PDS or looped Vicryl, not fast-absorbing Monocryl." } ],
+    uro: [
+      "Ureteral anastomosis/reimplant: 4-0 to 5-0 absorbable, fine, tension-free, over a stent.",
+      "Bladder closure: 2-0/3-0 absorbable, two layers, watertight — never permanent.",
+      "Vesicourethral anastomosis (post-prostatectomy): 3-0 absorbable monofilament or barbed, mucosa-to-mucosa.",
+      "Scrotal/peds skin: chromic or fast-gut so nothing needs removal. Vascular control: 5-0/6-0 Prolene." ],
+    cheat: [
+      "More zeros = thinner. 0-1 fascia, 3-0 deep, 4-0/5-0 skin, 5-0/6-0 vessel.",
+      "Hold time picks material: Monocryl < Vicryl < PDS << Prolene (forever).",
+      "Contaminated/urine → monofilament.",
+      "URINARY TRACT = absorbable + monofilament, NEVER permanent/braided." ]
+  },
+  {
+    id: "needle", n: 5, icon: "📍", color: "#ec4899",
+    title: "Needle Selection",
+    tag: "Taper vs cutting, loading, driving on the curve",
+    bigIdea: "Match the point to how tough the tissue is (taper for soft, cutting for tough), load the needle at the right spot on the driver, and drive it along its own curve with a wrist roll — fighting the arc is how you bend needles and tear tissue.",
+    blocks: [
+      { h: "Point types", b: [
+        "- Taper (round body, sharp tip): spreads tissue rather than slicing. For soft tissue — bowel, bladder, ureter, vessels, fascia, muscle. Leaves the smallest hole, critical for watertight/hemostatic closures.",
+        "- Cutting (triangular, sharp edge on the INNER/concave curve): slices tough tissue like skin, but the inner edge can cut back toward the wound.",
+        "- Reverse cutting (sharp edge on the OUTER/convex curve): tough tissue with the cutting edge AWAY from the wound so it's less likely to tear out. The usual skin needle.",
+        "- Blunt: friable tissue (liver) and to reduce needlestick in high-risk fascia closures." ] },
+      { h: "Size and curve", b: [
+        "Curvature is named as a fraction of a circle. 3/8 circle is the everyday skin/superficial needle (open field, shallow bites); 1/2 circle for deep confined spaces (pelvis, bladder) where you rotate in a tight pocket.",
+        "Bigger needle for deeper/thicker bites, smaller for fine work. The suture packet lists point type + needle + suture — read it before you commit." ] },
+      { h: "Loading the driver", b: [
+        "Grasp the needle about 1/2 to 2/3 back from the tip (toward the swage). NOT at the tip (dulls/bends it) and NOT at the swage (weakest point, where it breaks off the suture).",
+        "Load it perpendicular in the TIP of the driver jaws, not deep in the hinge, oriented the way you'll drive it." ] },
+      { h: "Driving on the curve", b: [
+        "Enter perpendicular to the tissue so the point doesn't skive, then follow the ARC — roll your wrist (supinate to pronate) so the needle travels its own curved path. Pushing straight bends it and makes a ragged hole.",
+        "Take symmetric bites (equal depth and distance each side) so the edges evert and appose evenly. Regrasp behind the tip on the far side — don't grab the point with the metal driver." ] }
+    ],
+    rules: [
+      "Soft tissue (bowel/bladder/vessel/fascia) → TAPER. Tough tissue (skin) → CUTTING / REVERSE-CUTTING.",
+      "Skin default = reverse cutting, 3/8 circle.",
+      "Deep in a hole (pelvis/bladder) = 1/2 circle.",
+      "Load 1/2 to 2/3 back from the tip, in the driver's tip.",
+      "Drive along the arc with a wrist roll — never shove straight." ],
+    mistakes: [
+      { m: "A cutting needle on bowel/bladder/vessel.", fix: "Taper only — a cutting edge slices an oversized hole that leaks or bleeds." },
+      { m: "Loading the needle at the swage.", fix: "That's the weak point; it bends or the suture pops off. Load the mid-to-back third." },
+      { m: "Pushing straight through and bending the needle.", fix: "Follow the curve with wrist rotation — the needle exits where its arc points." },
+      { m: "Grabbing the needle tip with the driver to pull it through.", fix: "Regrasp behind the tip, or catch it with forceps — driver-on-point dulls it." } ],
+    uro: [
+      "Bladder, ureter, bowel, urethra, vessels → taper, always.",
+      "Scrotal/skin → reverse cutting; delicate genital skin → small (4-0/5-0).",
+      "Deep pelvic anastomosis (VUA) → small 1/2 (or 5/8) circle taper — you're rotating in a tight space.",
+      "Fascia (flank/midline) → taper (or blunt), larger body for the thick bite." ],
+    cheat: [
+      "Taper = soft (bowel/bladder/vessel/fascia). Cutting/reverse-cutting = skin/tough.",
+      "Skin = reverse cutting, 3/8 circle. Deep hole = 1/2 circle.",
+      "Load 1/2 to 2/3 back, in the jaw tip.",
+      "Drive on the arc with a wrist roll." ]
+  },
+  {
+    id: "knots", n: 6, icon: "🪢", color: "#14b8a6",
+    title: "Knot Tying",
+    tag: "Square vs granny, instrument vs hand, surgeon's throw",
+    bigIdea: "A knot is only as good as it is flat and square. A true square knot locks; a granny slips. Learn the instrument tie cold (it's 95% of what you do), add a surgeon's throw when tension wants to loosen you, and lay each throw down flat without sawing or air-knotting.",
+    blocks: [
+      { h: "Square vs granny", b: [
+        "Square knot = two throws in OPPOSITE directions (over-under, then under-over). The second reverses the first so it locks flat.",
+        "Granny knot = both throws the same direction. It looks tied but slips and fails — the number one novice error." ] },
+      { h: "Instrument vs hand tie", b: [
+        "Instrument tie: wrap the suture around the driver, grab the short end, pull through. Economical with suture, precise, your default for wound closure.",
+        "Hand tie: faster for many ties and reaches deep where an instrument won't (a pedicle down in the pelvis). Two-handed is the most controlled; one-handed is fast but easy to botch into a granny." ] },
+      { h: "Surgeon's knot", b: [
+        "The first throw is a DOUBLE wrap. The extra friction holds the tissue approximated while you set the second throw — essential under tension (fascia, anything that springs open) so your first throw doesn't back off before you lock it." ] },
+      { h: "Laying it flat", b: [
+        "Pull your hands LOW and to the sides so each throw seats flat and square — don't pull UP into a peak ('air knot'), which turns a square into a slip.",
+        "Keep tension with the opposite hand as you set the next throw, and don't SAW the suture back and forth — that cuts tissue and weakens the thread.",
+        "Approximate, don't strangulate. Tissue blanched white is tissue you just killed." ] },
+      { h: "How many throws?", b: [
+        "Braided (Vicryl/silk): 3-4 throws hold well. Monofilament (PDS/Prolene/nylon): add throws (5-6) because it's slick and backs off. More throws for more tension and slicker suture." ] }
+    ],
+    rules: [
+      "Two throws in OPPOSITE directions = square (locks). Same direction = granny (slips).",
+      "Under tension → start with a surgeon's throw (double wrap).",
+      "Monofilament → 5-6 throws. Braided → 3-4.",
+      "Pull flat and low; approximate, don't strangulate.",
+      "Deep/tight spot → hand tie. Everything else → instrument tie." ],
+    mistakes: [
+      { m: "Tying grannies (both throws the same way).", fix: "Reverse direction each throw — the loop should flip over the driver the opposite way the second time." },
+      { m: "Air knots pulled up into a peak.", fix: "Drop your hands low and flat so each throw seats square against the tissue." },
+      { m: "Strangling the tissue white.", fix: "Snug to approximate. Blanched tissue necroses and the wound breaks down." },
+      { m: "Too few throws on slick monofilament.", fix: "PDS/Prolene need 5-6 throws or the knot creeps open." } ],
+    uro: [
+      "Deep pelvic pedicles (dorsal venous complex, bladder pedicles): often hand-tied or clipped/stapled — practice the two-handed tie for depth.",
+      "Fine anastomoses (ureter, urethra): gentle, flat, minimal throws with fine absorbable — over-tightening strictures the lumen.",
+      "Laparoscopic/robotic: intracorporeal knots are their own skill (or use barbed suture/clips) — the square-knot logic still applies.",
+      "Tie down onto a stent or anastomosis approximating, never strangulating — ischemia becomes stricture or leak." ],
+    cheat: [
+      "Square = opposite throws (holds). Granny = same (slips).",
+      "Tension → surgeon's (double-wrap) first throw.",
+      "Monofilament → 5-6 throws; braided → 3-4.",
+      "Flat and low. Approximate, don't strangulate." ]
+  },
+  {
+    id: "closure", n: 7, icon: "🧷", color: "#eab308",
+    title: "Closure Techniques",
+    tag: "Interrupted, running, subcuticular, mattress, retention",
+    bigIdea: "Close in layers, take the strength where the strength is (fascia, not skin), and pick the stitch for the job — interrupted for security or infection risk, running for speed and a watertight seal. Evert skin edges so the scar is flat, not a trench.",
+    blocks: [
+      { h: "Layers and the strength layer", b: [
+        "A wound closes layer by layer (fascia → deep dermal/subcutaneous → skin). The FASCIA is the strength layer that holds the belly in; skin is cosmetic. Approximate each layer without leaving dead space (fluid pockets become infection)." ] },
+      { h: "Simple interrupted", b: [
+        "Separate individual knotted stitches. Secure and forgiving — if one fails or gets infected the rest hold, and you can remove just one to drain. Default for skin with infection risk, irregular wounds, and anywhere security beats speed." ] },
+      { h: "Running (continuous)", b: [
+        "One unbroken suture, knotted at both ends. Fast, and creates a watertight/hemostatic seal (bladder, bowel, fascia). Downside: one break unravels the line, and infection tracks along it. Best in clean tissue where speed and a seal matter." ] },
+      { h: "Subcuticular", b: [
+        "Buried running bites in the dermis, no external marks — the best-looking skin closure (usually Monocryl), no suture to remove. For clean, low-tension skin you want to look good." ] },
+      { h: "Figure-of-eight & mattress", b: [
+        "Figure-of-eight: a crossing stitch that's extra secure and hemostatic — for a bleeding vessel/pedicle or a high-tension anchor.",
+        "Vertical mattress ('far-far, near-near'): maximal edge eversion and closes deep + superficial in one stitch, for lax or gaping edges that want to invert.",
+        "Horizontal mattress: everts and spreads tension across a broad bridge, good for fragile/high-tension edges — but can strangle if too tight." ] },
+      { h: "Retention sutures", b: [
+        "Big full-thickness stitches through skin, fat, and fascia placed to prevent evisceration in a high-risk abdomen (malnourished, infected, re-op, high pressures). A backup, not the primary closure, often bolstered." ] }
+    ],
+    rules: [
+      "Strength lives in the fascia — close it right; skin is cosmetic.",
+      "Infection risk / need to drain / irregular wound → interrupted. Clean + need a seal/speed → running.",
+      "Best-looking skin → subcuticular.",
+      "Bleeder or high-tension anchor → figure-of-eight. Gaping/inverting edges → vertical mattress.",
+      "High dehiscence risk → add retention sutures." ],
+    mistakes: [
+      { m: "Closing skin over an ignored fascial gap.", fix: "Take the strength in the fascia; skin closed over open fascia dehisces." },
+      { m: "Leaving dead space under the skin.", fix: "Approximate the deep layers to obliterate pockets — dead space fills with fluid and abscesses." },
+      { m: "Inverting (rolling in) the skin edges.", fix: "Evert — bite wider at the base, or use a mattress. Inverted edges heal as a depressed scar." },
+      { m: "Running a closure in a contaminated wound.", fix: "Use interrupted so you can open one stitch to drain without losing the whole closure." } ],
+    uro: [
+      "Bladder: two-layer running absorbable (mucosa/submucosa, then muscularis), watertight, catheter to divert.",
+      "Fascia (flank/midline): running or interrupted 0/1 PDS — the Jenkins rule: suture length at least 4x the wound length, small bites close together.",
+      "Scrotum: dartos then skin with absorbable, sometimes left partly open to drain.",
+      "Contaminated (Fournier's, infected): pack open, delayed or secondary closure — don't seal in pus." ],
+    cheat: [
+      "Layers: fascia (strength) → deep dermal → skin (cosmetic). No dead space.",
+      "Interrupted = secure/drainable; running = fast/watertight; subcuticular = prettiest.",
+      "Figure-of-8 = bleeder/anchor; vertical mattress = eversion; retention = anti-dehiscence backup.",
+      "Evert skin edges; approximate, don't strangulate." ]
+  },
+  {
+    id: "hemostasis", n: 8, icon: "🩸", color: "#dc2626",
+    title: "Hemostasis & Local Anesthesia",
+    tag: "The bleeding ladder + anesthetic numbers that keep people safe",
+    bigIdea: "Every surgeon has a hemostasis ladder they climb from least to most invasive — pressure first, escalate only as needed. And know your local anesthetic max doses cold, because they're a hard safety limit, not a suggestion.",
+    blocks: [
+      { h: "The hemostasis ladder", b: [
+        "- 1) Direct pressure + time: the most underused. Pack, hold, wait five real minutes. Most oozing stops.",
+        "- 2) Energy: cautery for small vessels; buzz a hemostat on a small bleeder.",
+        "- 3) Ligature: tie the vessel — a simple tie for small vessels, a suture ligature (stick tie) for anything big or that could retract.",
+        "- 4) Clips: metal or absorbable clips for named vessels you can see but don't want to tie.",
+        "- 5) Topical / bolster: Surgicel, Floseal, thrombin, fibrin sealant for broad raw surfaces (a partial-nephrectomy bed); pressure dressings for slow ooze." ] },
+      { h: "Tie vs suture ligature (stick tie)", b: [
+        "Free tie: a loop knotted around a clamped vessel — fine for small, short vessels.",
+        "Suture ligature (transfixion 'stick tie'): pass the needle THROUGH the vessel/pedicle, then wrap and tie so it can't slip off. Use on anything that would be a disaster if it let go — the renal hilum, big pedicles." ] },
+      { h: "Anticipate, don't chase", b: [
+        "Control vessels BEFORE you divide them: clamp/tie/clip proximal and distal, then cut between. Chasing a retracted bleeding artery in a pool is how injuries happen.",
+        "Dry as you go — a bloodless field is a field where you can see the planes." ] },
+      { h: "Local anesthetic numbers", b: [
+        "Lidocaine max about 4.5 mg/kg plain, 7 mg/kg WITH epinephrine (epi slows absorption). 1% lidocaine = 10 mg/mL — do the math before you draw up.",
+        "Bupivacaine (Marcaine): longer acting, more cardiotoxic, max about 2.5-3 mg/kg. Respect it — bupivacaine cardiac arrest is hard to resuscitate.",
+        "Epinephrine 1:100,000 = 10 mcg/mL prolongs the block and reduces bleeding. Classic teaching: avoid epi in end-arteries (digits, penis, nose, ears) — modern evidence softens the digit rule, but know the caution, especially on the penis.",
+        "Buffer with bicarb, inject slowly, and aspirate first to avoid intravascular injection." ] },
+      { h: "Recognize LAST", b: [
+        "Local Anesthetic Systemic Toxicity: perioral numbness, tinnitus, metallic taste, agitation → seizures → cardiac arrest. Stop injecting, call for help, support the airway — lipid emulsion (Intralipid) is the antidote." ] }
+    ],
+    rules: [
+      "Climb the ladder: pressure → cautery → tie → suture-ligate → clip → topical. Don't skip to heroics.",
+      "Big/arterial/retractable vessel → suture ligature (stick tie), not a free tie.",
+      "Control before you cut — clamp/tie proximal and distal, divide between.",
+      "Lidocaine 4.5 plain / 7 with epi (mg/kg); 1% = 10 mg/mL.",
+      "Penis/digits/end-arteries → know the classic 'no epi' caution." ],
+    mistakes: [
+      { m: "Chasing a bleeder with cautery in a pool of blood.", fix: "Pressure and suction to a dry field first, find the exact source, then control it precisely." },
+      { m: "Free-tying a big arterial pedicle that slips.", fix: "Suture-ligate (transfix) important/large vessels so the tie can't roll off." },
+      { m: "Injecting local past the max dose on a big field.", fix: "Calculate mg/kg first; dilute or use epi to extend the ceiling, or change the plan." },
+      { m: "Injecting fast without aspirating (LAST risk).", fix: "Aspirate, inject slowly, watch for perioral numbness/tinnitus, have Intralipid available." } ],
+    uro: [
+      "Renal hilum (nephrectomy): artery THEN vein, secured with suture ligature, staple, or clips — never a lone free tie on the renal artery.",
+      "Partial nephrectomy bed: bolster sutures + a topical hemostatic after releasing the arterial clamp.",
+      "Dorsal venous complex (prostatectomy): a classic brisk bleeder controlled with a suture ligature before division.",
+      "Penile blocks (circumcision, priapism): classic teaching is plain local, no epi, on the penis." ],
+    cheat: [
+      "Ladder: pressure → cautery → tie → stick-tie → clip → topical.",
+      "Big/arterial vessel = suture ligature (transfix).",
+      "Control before you cut.",
+      "Lido 4.5 plain / 7 with epi (mg/kg); 1% = 10 mg/mL. No epi on the penis. LAST → Intralipid." ]
+  },
+  {
+    id: "healing", n: 9, icon: "🩹", color: "#10b981",
+    title: "Wound Healing & Classification",
+    tag: "Primary/secondary/tertiary, clean-to-dirty, the timeline",
+    bigIdea: "How you close depends on how clean the wound is and how much tissue you have. Clean, fresh, edges meet → close it now. Contaminated or too much loss → don't seal in infection; heal open or close later. And know the healing timeline so you know when it's safe to stress the wound.",
+    blocks: [
+      { h: "Three ways a wound heals", b: [
+        "- Primary intention: edges approximated and closed now. Fastest, least scar. For clean, fresh, low-tension wounds.",
+        "- Secondary intention: left OPEN to granulate, contract, and epithelialize from the bottom up. For contaminated/infected wounds or tissue loss where closing would trap infection.",
+        "- Tertiary (delayed primary): left open a few days for washouts, then closed once clean. The middle path for contaminated wounds you still want to close." ] },
+      { h: "Surgical wound classes", b: [
+        "- Class I Clean: no inflammation, no GI/GU/resp entry. Lowest infection risk → close primarily.",
+        "- Class II Clean-contaminated: controlled entry into GU/GI/resp under prep (MOST urology — you open the urinary tract). Usually primary closure + peri-op antibiotics.",
+        "- Class III Contaminated: gross spillage, fresh trauma, major sterility break, acute non-purulent inflammation. Consider delayed/secondary.",
+        "- Class IV Dirty/infected: pus, perforated viscus, dead tissue. Do NOT close primarily — debride, drain, heal open." ] },
+      { h: "The healing timeline", b: [
+        "- Inflammatory (days 0-5): hemostasis and cells move in. The wound has almost NO tensile strength — it's held by your sutures alone.",
+        "- Proliferative (days 5-21): fibroblasts lay collagen, granulation, angiogenesis, epithelialization.",
+        "- Remodeling (weeks to ~1 year): collagen cross-links. The wound reaches only about 80% of original strength, ever — and it's still weak at 6 weeks, which is why straining and heavy lifting are restricted." ] },
+      { h: "Dehiscence and what wrecks healing", b: [
+        "Fascial dehiscence classically POD 5-8, heralded by salmon-colored serosanguinous drainage — assume it until proven otherwise.",
+        "Enemies of healing: infection, ischemia (smoking, tight sutures), poor nutrition (low albumin, vitamin C/zinc), steroids/immunosuppression, diabetes/hyperglycemia, radiation, and tension." ] }
+    ],
+    rules: [
+      "Clean + fresh + edges meet → primary. Contaminated → delayed/tertiary. Pus/dead tissue → open, secondary.",
+      "Entered the urinary tract under prep = Class II clean-contaminated → primary + peri-op abx.",
+      "Never primarily close a dirty/infected wound — you'll abscess.",
+      "Max ~80% strength, still weak at 6 wks → activity restrictions are real.",
+      "Salmon-colored drainage POD 5-8 = fascial dehiscence until proven otherwise." ],
+    mistakes: [
+      { m: "Primarily closing an infected/dirty wound.", fix: "Debride and leave open (secondary) or delayed-close — sealing in bacteria makes an abscess." },
+      { m: "Clearing a fresh post-op patient for heavy lifting.", fix: "The wound is weakest early and about 80% at best — restrict straining ~6 weeks." },
+      { m: "Ignoring salmon-colored drainage on POD 6.", fix: "Assume fascial dehiscence — examine, don't wait for evisceration." },
+      { m: "Closing over a contaminated dead space.", fix: "Obliterate or drain it; granulation needs a clean open cavity." } ],
+    uro: [
+      "Most urology = Class II clean-contaminated (you open bladder/ureter/kidney under prep) → primary closure + peri-op antibiotics.",
+      "Fournier's gangrene = Class IV: aggressive serial debridement, heal by secondary intention, reconstruct later.",
+      "Scrotal wounds granulate remarkably well by secondary intention (great blood supply) — don't over-close a contaminated scrotum.",
+      "Urine leak impairs healing — divert (catheter/stent/nephrostomy) so the repair heals dry." ],
+    cheat: [
+      "Primary = close now (clean). Secondary = heal open (dirty). Tertiary = close later (contaminated).",
+      "Classes: I clean → II clean-contam (most uro) → III contam → IV dirty.",
+      "Dirty/infected = never close primarily.",
+      "Max ~80% strength, weakest early; salmon drainage POD 5-8 = dehiscence. Divert urine so the repair heals dry." ]
+  },
+  {
+    id: "drains", n: 10, icon: "🚰", color: "#6366f1",
+    title: "Drains",
+    tag: "JP/Blake vs Penrose, placement, when to pull",
+    bigIdea: "A drain doesn't prevent a problem — it evacuates fluid that would collect and it tells you about a leak. Know closed-suction vs passive, place it dependent and near (not on) your repair, watch the trend, and pull it when output is low and the fluid isn't urine, lymph, or pus.",
+    blocks: [
+      { h: "Closed-suction vs passive", b: [
+        "JP (Jackson-Pratt) and Blake: closed SUCTION drains (a bulb makes negative pressure). Blake is a fluted channel design (less likely to clog); JP is a flat perforated bulb. Closed = lower infection and quantifiable output. The urology default.",
+        "Penrose: a passive open drain (a soft rubber wick) that drains by gravity/capillary action into the dressing. For contaminated spaces/abscesses where you want an open track — but it soils dressings and is a two-way street for bacteria." ] },
+      { h: "When to place one", b: [
+        "To evacuate expected fluid: anastomotic areas, raw surfaces (lymph after node dissection), abscess cavities, dead space that will collect blood/serum.",
+        "To WARN you: near a repair that might leak — a urine leak shows up as high drain output (send drain-fluid creatinine; if it's far above serum, it's urine).",
+        "Not a substitute for hemostasis or a good repair. A drain over a bleeder just measures your bleeding." ] },
+      { h: "Placement principles", b: [
+        "Dependent position (fluid flows downhill to it), NEAR the repair but not ON it (a drain on an anastomosis can erode it or delay healing).",
+        "Bring it out through a SEPARATE stab incision, not the main wound (protects your closure), and secure it to skin so it can't migrate or fall out." ] },
+      { h: "Managing and pulling", b: [
+        "Track the trend — volume and character (sanguinous → serosanguinous → serous is normal maturation). Rising or high output means investigate.",
+        "Pull when output is low (commonly under ~30-50 mL/24h, case-dependent) AND the fluid isn't urine/lymph/pus AND any leak has resolved.",
+        "Release the bulb SUCTION before withdrawing a closed drain — pulling against suction hurts and can avulse tissue." ] }
+    ],
+    rules: [
+      "Closed suction (JP/Blake) = clean cases, quantifiable, urology default. Penrose = contaminated/abscess.",
+      "Place dependent, NEAR not ON the repair, out a SEPARATE stab, secured.",
+      "High/rising output near a GU repair → send drain-fluid creatinine (urine if far above serum).",
+      "Pull when low-output + non-urine/lymph/pus + leak resolved. Break suction first.",
+      "A drain manages a problem — it never replaces hemostasis or a watertight repair." ],
+    mistakes: [
+      { m: "Laying the drain directly on the anastomosis.", fix: "Place it NEAR the repair — contact can erode or delay healing, and suction can pull a leak open." },
+      { m: "Bringing the drain out the main incision.", fix: "Use a separate stab — a drain through your closure weakens it and tracks infection." },
+      { m: "Pulling a drain over a fresh urine leak.", fix: "Confirm the leak resolved (imaging/creatinine trend) first; a premature pull makes a urinoma." },
+      { m: "Yanking a JP without releasing suction.", fix: "Break the bulb suction first, then withdraw gently." } ],
+    uro: [
+      "Post-prostatectomy / partial nephrectomy / pyeloplasty: JP or Blake near (not on) the anastomosis; an output jump → drain creatinine to catch a urine leak.",
+      "Retroperitoneal node dissection: expect lymphatic (chylous) output — the drain may stay longer; watch for milky chyle.",
+      "Nephrostomy tube, ureteral stent, Foley, suprapubic tube are DIVERSIONS (keep urine off a repair) — distinct from a wound drain; don't confuse pulling one for the other.",
+      "Foley after a bladder/urethral repair IS the drain that keeps it dry — don't pull early; often a cystogram first." ],
+    cheat: [
+      "JP/Blake = closed suction (default). Penrose = passive/contaminated.",
+      "Dependent, near-not-on the repair, separate stab, secured.",
+      "Output spike near a GU repair → drain creatinine = urine check.",
+      "Pull when low + non-urine/lymph/pus + leak resolved; break suction first. Stent/nephrostomy/Foley = diversion, not a wound drain." ]
+  },
+  {
+    id: "urology", n: 11, icon: "⚕️", color: "#0ea5e9",
+    title: "Urology-Specific Applications",
+    tag: "How it all comes together in real GU cases",
+    bigIdea: "Everything from Modules 1-10 shows up in urology with a few non-negotiable rules: the urinary tract gets ABSORBABLE suture (never permanent), repairs are TENSION-FREE and WATERTIGHT, and you DIVERT (stent/catheter/nephrostomy) so the repair heals dry. Learn these patterns and you can follow any urology case.",
+    blocks: [
+      { h: "The three urology commandments", b: [
+        "- 1) Absorbable, ideally monofilament, in the urinary tract (Vicryl/Monocryl/PDS). Permanent/braided suture in urine becomes a stone and seeds infection.",
+        "- 2) Tension-free + watertight anastomoses. A repair under tension or that leaks strictures or fistulizes.",
+        "- 3) Divert to protect the repair — Foley, ureteral stent, or nephrostomy keeps urine off the suture line while it heals." ] },
+      { h: "Scrotal & genital (circ, hydrocele, orchiectomy, orchiopexy, vasectomy)", b: [
+        "Fine instruments (#15, fine forceps, bipolar), absorbable suture (chromic/Monocryl — nothing to remove), and meticulous hemostasis (scrotal hematomas are miserable).",
+        "Orchiopexy for torsion: detorse, assess viability, and fix BOTH testes — the bell-clapper deformity is bilateral." ] },
+      { h: "Ureter — reimplant, repair, anastomosis", b: [
+        "Fine absorbable (4-0/5-0) on a taper needle, spatulated and tension-free over a STENT, preserving the peri-ureteral blood supply (handle adventitia only).",
+        "A reimplant needs adequate tunnel length (anti-reflux) and no tension — a psoas hitch or Boari flap if the ureter is short." ] },
+      { h: "Bladder & urethra", b: [
+        "Cystotomy: open with a #11 stab and extend, then close in TWO layers of absorbable (mucosa/submucosa, then muscularis), watertight, with a Foley to divert. Never permanent suture.",
+        "Vesicourethral anastomosis (after prostatectomy): mucosa-to-mucosa, absorbable monofilament or barbed (3-0), tension-free (descend the bladder), watertight over a Foley." ] },
+      { h: "Kidney — nephrectomy, partial, PCNL/nephrostomy", b: [
+        "Nephrectomy: control the hilum ARTERY then VEIN with suture ligature/staple/clips — never a lone free tie on the renal artery.",
+        "Partial: clamp the artery, excise the tumor, close the collecting system (absorbable) and renorrhaphy over a bolster + topical hemostatic, then unclamp — watch the warm ischemia time.",
+        "Nephrostomy/PCNL: access the collecting system, dilate a tract, tube drainage." ] },
+      { h: "Stents & tubes — know what each protects", b: [
+        "Ureteral stent = internal drainage/splint for a ureteral repair or obstruction. Nephrostomy = percutaneous kidney drainage. Foley/SPT = bladder drainage. Each keeps urine off a repair or relieves obstruction — know why it's in and when it comes out (often after a cystogram/imaging confirms healing)." ] }
+    ],
+    rules: [
+      "Urinary tract suture = ABSORBABLE (never permanent/braided).",
+      "Every anastomosis: tension-free + watertight + diverted.",
+      "Handle the ureter by adventitia only; keep its blood supply.",
+      "Renal artery = suture ligature/staple/clips, never a lone free tie; artery before vein.",
+      "Scrotal cases: fine instruments, absorbable suture, obsessive hemostasis." ],
+    mistakes: [
+      { m: "Reaching for silk/Prolene to close the bladder or ureter.", fix: "Absorbable only — permanent suture in urine encrusts into a stone." },
+      { m: "Closing a ureteral/urethral anastomosis under tension.", fix: "Mobilize for length (psoas hitch, Boari flap, bladder descent) — tension strictures." },
+      { m: "Skeletonizing or grabbing the ureter wall.", fix: "Handle adventitia and preserve the longitudinal vessels — a devascularized segment necroses and leaks." },
+      { m: "Pulling the Foley/stent early after a repair.", fix: "Divert until healing is confirmed (often a cystogram) — early removal risks leak, urinoma, fistula." } ],
+    uro: [
+      "The meta-lesson: name every suture, needle, and drain the attending hands you and ASK 'why this one here?' You'll internalize the patterns fast.",
+      "Say the warm ischemia time out loud during a partial nephrectomy — it's a number the whole room cares about.",
+      "For any tube/stent/drain, be the person on rounds who knows why it's in and the plan to remove it." ],
+    cheat: [
+      "Urinary tract = absorbable, never permanent.",
+      "Anastomosis = tension-free + watertight + diverted.",
+      "Ureter: adventitia only, spatulate, stent.",
+      "Bladder: 2-layer absorbable, watertight, Foley. Renal artery: transfix/staple, artery before vein." ]
+  }
+];
+
+// Serialize a module to plain text so the AI tutor is grounded in the same facts the card shows.
+function skillsModuleReference(m) {
+  if (!m) return "";
+  var L = [];
+  L.push("MODULE " + m.n + ": " + m.title);
+  L.push("Big idea: " + m.bigIdea);
+  (m.blocks || []).forEach(function(bl) {
+    var body = (bl.b || []).map(function(x) { return x.indexOf("- ") === 0 ? x.slice(2) : x; }).join(" ");
+    L.push(bl.h + ": " + body);
+  });
+  if (m.rules && m.rules.length) L.push("Rules of thumb: " + m.rules.join(" | "));
+  if (m.mistakes && m.mistakes.length) L.push("Common mistakes: " + m.mistakes.map(function(x) { return x.m + " -> " + x.fix; }).join(" | "));
+  if (m.uro && m.uro.length) L.push("Urology applications: " + m.uro.join(" | "));
+  if (m.cheat && m.cheat.length) L.push("Cheat sheet: " + m.cheat.join(" | "));
+  return L.join("\n");
+}
+
+var SYSTEM_PROMPT_SURGICAL = [
+  "You are a surgical skills tutor for a junior learner — a medical student on a surgery rotation, a sub-intern, or an intern who never got a structured foundation in basic surgical technique. Teach the way a great senior resident or attending would on a slow call night: conversational, clear mental models, the WHY behind every choice, practical heuristics and analogies — NOT textbook lists.",
+  "",
+  "HOW YOU TEACH:",
+  "- One module at a time. Build the mental model first, then the details.",
+  "- Give decision trees and rules of thumb the learner can internalize, not long lists to memorize.",
+  "- Flag common trainee mistakes and how to avoid or recover from them.",
+  "- Ground everything in what actually happens at the table — the choice in the moment, not abstract facts.",
+  "- Keep it conversational and digestible; break big content into a couple of messages rather than a wall of text.",
+  "- Be direct when the learner is wrong: correct clearly, explain why, move on. Skip filler like 'great question.'",
+  "- This is a urology-oriented program, so weave in urology applications where natural — but these fundamentals are general surgery and apply to any specialty.",
+  "",
+  "TEACH MODE: Deliver the module conversationally — big picture, then the key decisions and heuristics, then the common mistakes. At the END, give a short quiz of 3-4 CLINICAL-SCENARIO questions (not rote recall), one at a time, waiting for the learner's answer and giving feedback before the next.",
+  "",
+  "QUIZ MODE: Skip straight to 4-5 clinical-scenario questions on the module, one at a time, wait for each answer, then explain why the right answer is right and why tempting wrong ones are wrong.",
+  "",
+  "Accuracy matters — this learner is clinically training. Use the MODULE REFERENCE provided below as your factual backbone and expand on it conversationally; do not contradict it. No medical-advice disclaimers — this is skills coaching between colleagues."
+].join("\n");
+// ============ END SURGICAL SKILLS COURSE ============
+
 const INIT = {
   role: "", // "" = not set, "resident", "student"
   ankiEnabled: true, // toggle Anki integration on/off
   tutorStyle: "engaging", // "engaging", "clinical", "socratic", "chill"
   tutorCustomNote: "", // user's custom flavor text injected into prompt
+  skillsProgress: {}, // { moduleId: { conf: 1-5, done: bool, ts } } — per-module confidence + completion (QI hooks)
   surgilogId: "", // Chrome extension ID for SurgiLog integration
   studySyncUrl: "", // Google Apps Script URL for auto-syncing study analytics
   lastSyncDate: null, // last analytics sync date
@@ -1293,7 +1842,9 @@ export default function UroStudyHub() {
   var [ankiConnected, setAnkiConnected] = useState(false);
   var [showAnkiAdvanced, setShowAnkiAdvanced] = useState(false);
   var [ankiTab, setAnkiTab] = useState("batch");
-  var [chatView, setChatView] = useState("chat"); // "chat" or "saved"
+  var [chatView, setChatView] = useState("chat"); // "chat", "saved", or "skills"
+  var [skillsCtx, setSkillsCtx] = useState(function() { try { var v = sessionStorage.getItem("uroStudyHub_skillsCtx"); return v ? JSON.parse(v) : null; } catch(e) { return null; } }); // active surgical-skills module session { id, mode }
+  var [expandedSkill, setExpandedSkill] = useState({}); // which skills cards / cheat sheet are open
   var [showTutorNotes, setShowTutorNotes] = useState(false);
   var [tutorNoteText, setTutorNoteText] = useState("");
   var [saveFeedback, setSaveFeedback] = useState(""); // brief confirmation text
@@ -2554,19 +3105,30 @@ export default function UroStudyHub() {
     _sendFromMsgs(msgs);
   }
 
-  function _sendFromMsgs(msgs) {
+  function _sendFromMsgs(msgs, ctxOverride) {
     var chatHistory = msgs.filter(function(m) { return m.role !== "system"; });
     var styleKey = s.tutorStyle || "engaging";
     var styleInject = TUTOR_STYLES[styleKey] ? TUTOR_STYLES[styleKey].inject : "";
     var customNote = (s.tutorCustomNote || "").trim();
     var customInject = customNote ? "\n\nADDITIONAL CONTEXT FROM THE LEARNER: " + customNote : "";
-    var sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
+    var skills = ctxOverride !== undefined ? ctxOverride : skillsCtx;
+    var sysContent;
+    if (skills && skills.id) {
+      var _mod = SURGICAL_SKILLS.filter(function(m) { return m.id === skills.id; })[0];
+      var _ref = skillsModuleReference(_mod);
+      var _modeInject = skills.mode === "quiz"
+        ? "\n\nCURRENT MODE: QUIZ. Go straight to clinical-scenario questions on this module, one at a time, waiting for each answer."
+        : "\n\nCURRENT MODE: TEACH. Teach this module conversationally, then quiz at the end.";
+      sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject + (_ref ? "\n\nMODULE REFERENCE (your factual backbone — expand on it, do not contradict it):\n\n" + _ref : "");
+    } else {
+      sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
+    }
 
     callAI(sysContent, chatHistory, { temperature: 0.7 }, function(reply) {
       setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
       setChatLoad(false);
       // If AI response has a clear phase signal, use it (overrides optimistic advance)
-      if (lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
+      if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
     }, function(err) {
       var provNames = { claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "OpenRouter", lmstudio: "LM Studio" };
       var errMsg = (lm.provider === "lmstudio")
@@ -2587,6 +3149,29 @@ export default function UroStudyHub() {
     setChatMsgs(msgs);
     setChatLoad(true);
     _sendFromMsgs(msgs);
+  }
+
+  // Launch a surgical-skills module into the AI tutor ("Teach me" / "Quiz me").
+  function startSkillsModule(mod, mode) {
+    if (!mod) return;
+    var ctx = { id: mod.id, mode: mode || "teach" };
+    setSkillsCtx(ctx);
+    try { sessionStorage.setItem("uroStudyHub_skillsCtx", JSON.stringify(ctx)); } catch(e) {}
+    setLectureMode(false); setLecturePhase(0); setUpText("");
+    setChatView("chat");
+    setPage("chat");
+    var opener = ctx.mode === "quiz"
+      ? "Quiz me on Module " + mod.n + ": " + mod.title + ". Give me clinical-scenario questions one at a time and wait for my answers."
+      : "Let's do Module " + mod.n + ": " + mod.title + ". Teach me — big picture first, then the key decisions, heuristics, and common mistakes, and quiz me at the end.";
+    var msgs = [{ role: "user", content: opener }];
+    setChatMsgs(msgs);
+    setChatLoad(true);
+    _sendFromMsgs(msgs, ctx);
+  }
+
+  function exitSkills() {
+    setSkillsCtx(null);
+    try { sessionStorage.removeItem("uroStudyHub_skillsCtx"); } catch(e) {}
   }
 
   var ANKI_SYS_PROMPT = [
@@ -8631,8 +9216,9 @@ export default function UroStudyHub() {
                 reader.readAsText(file);
               }
             }} style={{ display: "none" }} />
+            <button onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={{ background: chatView === "skills" ? "#f9731620" : c.cd, border: "1px solid " + (chatView === "skills" ? "#f9731680" : "#334155"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "skills" ? "#fb923c" : "#94a3b8", fontSize: 10, fontWeight: chatView === "skills" ? 700 : 400 }}>{"🔪 OR Skills"}</button>
             <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={{ background: chatView === "saved" ? "#a78bfa20" : c.cd, border: "1px solid " + (chatView === "saved" ? "#a78bfa60" : "#334155"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "saved" ? "#a78bfa" : "#94a3b8", fontSize: 10, fontWeight: chatView === "saved" ? 700 : 400 }}>{"📚 Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
-            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setLecturePhase(0); setLectureTopic(""); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid #334155", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}>Clear</button>
+            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid #334155", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}>Clear</button>
           </div>
           {/* Tutor style picker */}
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, overflowX: "auto" }}>
@@ -8835,6 +9421,126 @@ export default function UroStudyHub() {
               </div>
             </div>
           )}
+          {skillsCtx && chatView === "chat" && (function() {
+            var _bm = SURGICAL_SKILLS.filter(function(m) { return m.id === skillsCtx.id; })[0];
+            if (!_bm) return null;
+            return (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 12px", background: _bm.color + "18", borderBottom: "1px solid " + _bm.color + "40" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: _bm.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{_bm.icon + " OR Skills · Module " + _bm.n + ": " + _bm.title + (skillsCtx.mode === "quiz" ? " · Quiz" : "")}</div>
+                <button onClick={function() { exitSkills(); setChatView("skills"); }} style={{ background: "none", border: "1px solid " + _bm.color + "55", borderRadius: 6, padding: "2px 8px", color: _bm.color, cursor: "pointer", fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{"Exit course"}</button>
+              </div>
+            );
+          })()}
+          {chatView === "skills" && (function() {
+            var prog = s.skillsProgress || {};
+            function toggleSkill(id) { setExpandedSkill(function(p) { var n = Object.assign({}, p); n[id] = !n[id]; return n; }); }
+            function setSkillProg(id, patch) { setS(function(p) { var sp = Object.assign({}, p.skillsProgress || {}); sp[id] = Object.assign({}, sp[id] || {}, patch, { ts: Date.now() }); return Object.assign({}, p, { skillsProgress: sp }); }); }
+            var doneCount = SURGICAL_SKILLS.filter(function(m) { return prog[m.id] && prog[m.id].done; }).length;
+            var cheatOpen = !!expandedSkill["_cheat"];
+            return (
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#fb923c" }}>{"🔪 OR Skills — Surgical Fundamentals"}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3, lineHeight: 1.5 }}>{"The hands-on basics nobody teaches in an organized way — scalpel, suture, knots, closure, energy, drains. Read a module, then tap Teach me or Quiz me to work through it with the AI tutor."}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <span style={{ fontSize: 10, color: "#64748b" }}>{doneCount + " / " + SURGICAL_SKILLS.length + " reviewed"}</span>
+                    <button onClick={function() { toggleSkill("_cheat"); }} style={{ background: cheatOpen ? "#fb923c20" : c.cd, border: "1px solid " + (cheatOpen ? "#fb923c60" : "#334155"), borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: cheatOpen ? "#fb923c" : "#94a3b8", fontSize: 10, fontWeight: 700 }}>{"📄 Course cheat sheet"}</button>
+                  </div>
+                </div>
+                {cheatOpen && (
+                  <div style={{ background: c.cd, border: "1px solid #f9731640", borderRadius: 10, padding: 14, marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#fb923c", marginBottom: 8 }}>{"One-page cheat sheet — every module's key frameworks"}</div>
+                    {SURGICAL_SKILLS.map(function(m) {
+                      return (
+                        <div key={m.id} style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: m.color, marginBottom: 2 }}>{m.icon + " " + m.n + ". " + m.title}</div>
+                          {(m.cheat || []).map(function(cl, ci) { return <div key={ci} style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.5, paddingLeft: 6 }}>{"• " + cl}</div>; })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {SURGICAL_SKILLS.map(function(mod) {
+                  var open = !!expandedSkill[mod.id];
+                  var p = prog[mod.id] || {};
+                  var pconf = p.conf || 0;
+                  return (
+                    <div key={mod.id} style={{ marginBottom: 10, background: c.cd, borderRadius: 10, border: "1px solid " + (open ? mod.color + "60" : "#334155"), borderLeft: "4px solid " + mod.color, overflow: "hidden" }}>
+                      <div onClick={function() { toggleSkill(mod.id); }} style={{ padding: "11px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ fontSize: 20, flexShrink: 0 }}>{mod.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{mod.n + ". " + mod.title}</div>
+                          <div style={{ fontSize: 9, color: "#64748b", marginTop: 1 }}>{mod.tag}</div>
+                        </div>
+                        {p.done && <span title="Reviewed" style={{ fontSize: 12, color: mod.color, flexShrink: 0 }}>{"✓"}</span>}
+                        {pconf > 0 && <span style={{ fontSize: 9, color: "#64748b", flexShrink: 0 }}>{pconf + "/5"}</span>}
+                        <span style={{ color: "#64748b", fontSize: 12, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
+                      </div>
+                      {open && (
+                        <div style={{ padding: "0 12px 12px" }}>
+                          <div style={{ background: mod.color + "14", border: "1px solid " + mod.color + "33", borderRadius: 8, padding: "8px 10px", fontSize: 12, lineHeight: 1.6, color: "#e2e8f0", marginBottom: 12 }}>
+                            <span style={{ fontWeight: 700, color: mod.color }}>{"Big idea — "}</span>{mod.bigIdea}
+                          </div>
+                          {(mod.blocks || []).map(function(bl, bi) {
+                            return (
+                              <div key={bi} style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", marginBottom: 4 }}>{bl.h}</div>
+                                {(bl.b || []).map(function(x, xi) {
+                                  var isB = x.indexOf("- ") === 0;
+                                  return (
+                                    <div key={xi} style={{ display: "flex", gap: 6, marginBottom: 3, paddingLeft: isB ? 6 : 0 }}>
+                                      {isB && <span style={{ color: mod.color, flexShrink: 0 }}>{"•"}</span>}
+                                      <span style={{ fontSize: 12, lineHeight: 1.6, color: "#cbd5e1" }}>{isB ? x.slice(2) : x}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                          {mod.rules && mod.rules.length > 0 && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "#4ade80", marginBottom: 4 }}>{"⚡ Rules of thumb"}</div>
+                              {mod.rules.map(function(r, ri) { return <div key={ri} style={{ fontSize: 12, lineHeight: 1.6, color: "#cbd5e1", paddingLeft: 6, marginBottom: 2 }}>{"→ " + r}</div>; })}
+                            </div>
+                          )}
+                          {mod.mistakes && mod.mistakes.length > 0 && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "#f87171", marginBottom: 4 }}>{"⚠ Common mistakes"}</div>
+                              {mod.mistakes.map(function(mk, mi) {
+                                return (
+                                  <div key={mi} style={{ fontSize: 12, lineHeight: 1.55, color: "#cbd5e1", marginBottom: 5, paddingLeft: 6 }}>
+                                    <span style={{ color: "#f87171", fontWeight: 600 }}>{mk.m}</span>{" → " + mk.fix}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {mod.uro && mod.uro.length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginBottom: 4 }}>{"⚕ In urology"}</div>
+                              {mod.uro.map(function(u, ui) { return <div key={ui} style={{ fontSize: 12, lineHeight: 1.6, color: "#cbd5e1", paddingLeft: 6, marginBottom: 2 }}>{"• " + u}</div>; })}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, paddingTop: 8, borderTop: "1px solid #334155" }}>
+                            <span style={{ fontSize: 10, color: "#64748b" }}>{"Confidence:"}</span>
+                            {[1, 2, 3, 4, 5].map(function(n) {
+                              return <button key={n} onClick={function(e) { e.stopPropagation(); setSkillProg(mod.id, { conf: n }); }} style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid " + mod.color + "80", background: n <= pconf ? mod.color : "transparent", color: n <= pconf ? "#0b1220" : "#64748b", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>{n}</button>;
+                            })}
+                            <button onClick={function(e) { e.stopPropagation(); setSkillProg(mod.id, { done: !p.done }); }} style={{ marginLeft: "auto", background: p.done ? "#4ade8020" : "transparent", border: "1px solid " + (p.done ? "#4ade8060" : "#334155"), borderRadius: 6, padding: "4px 10px", color: p.done ? "#4ade80" : "#94a3b8", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>{p.done ? "✓ Reviewed" : "Mark reviewed"}</button>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={function(e) { e.stopPropagation(); startSkillsModule(mod, "teach"); }} style={{ flex: 1, padding: "9px 12px", background: "linear-gradient(135deg," + mod.color + "," + mod.color + "cc)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{"🎓 Teach me"}</button>
+                            <button onClick={function(e) { e.stopPropagation(); startSkillsModule(mod, "quiz"); }} style={{ flex: 1, padding: "9px 12px", background: "transparent", border: "1px solid " + mod.color + "80", borderRadius: 8, color: mod.color, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{"🎯 Quiz me"}</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 9, color: "#475569", textAlign: "center", padding: "8px 0 4px", lineHeight: 1.5 }}>{"Teaching aid for skills coaching — always defer to your attending and institution in the OR."}</div>
+              </div>
+            );
+          })()}
           {chatView === "saved" && (
             <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#a78bfa", marginBottom: 10 }}>{"📚 Saved Lectures & Bookmarks"}</div>
@@ -8943,6 +9649,14 @@ export default function UroStudyHub() {
                     );
                   })}
                 </div>
+                <div onClick={function() { setChatView("skills"); }} style={{ marginTop: 16, background: "#f9731610", border: "1px solid #f9731640", borderRadius: 12, padding: 14, maxWidth: 360, marginLeft: "auto", marginRight: "auto", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 26, flexShrink: 0 }}>{"🔪"}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#fb923c" }}>{"New — OR Skills course"}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5, marginTop: 2 }}>{"Surgical fundamentals for sub-Is & interns: scalpel, suture, knots, closure, drains. Read a module or get taught & quizzed by the tutor."}</div>
+                  </div>
+                  <div style={{ fontSize: 16, color: "#fb923c", flexShrink: 0 }}>{"→"}</div>
+                </div>
               </div>
             )}
             {chatMsgs.map(function(msg, i) {
@@ -8977,15 +9691,15 @@ export default function UroStudyHub() {
             )}
             <div ref={chatEnd} />
           </div>}
-          <div style={{ padding: "10px 12px 68px", borderTop: "1px solid " + c.cd, background: c.bg }}>
-            {upText && !lectureMode && <div style={{ fontSize: 10, color: c.a, marginBottom: 6 }}>📄 Content loaded <button onClick={function() { setUpText(""); }} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 10 }}>x Remove</button></div>}
+          {chatView !== "skills" && <div style={{ padding: "10px 12px 68px", borderTop: "1px solid " + c.cd, background: c.bg }}>
+            {upText && !lectureMode && !skillsCtx && <div style={{ fontSize: 10, color: c.a, marginBottom: 6 }}>📄 Content loaded <button onClick={function() { setUpText(""); }} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 10 }}>x Remove</button></div>}
             <div style={{ display: "flex", gap: 6 }}>
-              <input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={lectureMode ? "Ask a question or type NEXT..." : "Ask about any urology topic..."} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid #334155", borderRadius: 12, color: "#e2e8f0", fontSize: 12, outline: "none" }} />
+              <input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : (lectureMode ? "Ask a question or type NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid #334155", borderRadius: 12, color: "#e2e8f0", fontSize: 12, outline: "none" }} />
               <button onClick={function() { sendChat(chatIn); }} disabled={chatLoad || !chatIn.trim()} style={{ background: (chatLoad || !chatIn.trim()) ? "#334155" : "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 12, padding: "0 16px", cursor: (chatLoad || !chatIn.trim()) ? "default" : "pointer", color: "white", fontSize: 14 }}>
                 {"->"}
               </button>
             </div>
-          </div>
+          </div>}
         </div>
       )}
 
