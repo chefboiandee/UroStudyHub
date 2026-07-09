@@ -1868,6 +1868,12 @@ export default function UroStudyHub() {
   var [lectureMode, setLectureMode] = useState(false);
   var [lecturePhase, setLecturePhase] = useState(0);
   var [lectureTopic, setLectureTopic] = useState("");
+  // Quick Ask sidekick — a side chat that rides along the lecture without touching it
+  var [sideOpen, setSideOpen] = useState(false);
+  var [sideMsgs, setSideMsgs] = useState([]);
+  var [sideIn, setSideIn] = useState("");
+  var [sideLoad, setSideLoad] = useState(false);
+  var sideEnd = useRef(null);
   var chatEnd = useRef(null);
   var fileRef = useRef(null);
   var ankiFileRef = useRef(null);
@@ -2429,6 +2435,7 @@ export default function UroStudyHub() {
       type: "session",
       topic: topic || "Untitled Session",
       messages: messages.filter(function(m) { return m.role !== "system"; }),
+      sideMsgs: sideMsgs,
       lecturePhase: lecturePhase || 0,
       lectureMode: lectureMode || false,
       date: new Date().toISOString(),
@@ -2440,6 +2447,9 @@ export default function UroStudyHub() {
   function resumeSavedSession(item) {
     setLectureTopic(item.topic || "");
     setChatMsgs(item.messages || []);
+    setSideMsgs(item.sideMsgs || []);
+    setSideOpen(false);
+    setSideIn("");
     setLectureMode(item.lectureMode !== false);
     setLecturePhase(item.lecturePhase || 0);
     setUpText(""); // original doc not saved, but conversation has the AI's responses
@@ -2951,6 +2961,9 @@ export default function UroStudyHub() {
   useEffect(function() {
     if (chatEnd.current) chatEnd.current.scrollIntoView({ behavior: "smooth" });
   }, [chatMsgs]);
+  useEffect(function() {
+    if (sideEnd.current) sideEnd.current.scrollIntoView({ behavior: "smooth" });
+  }, [sideMsgs, sideLoad]);
 
   // Unified AI call — routes to Claude or LM Studio based on provider
   // ═══ UNIFIED AI CALL — routes to Claude, Gemini, OpenAI, OpenRouter, or LM Studio ═══
@@ -3151,6 +3164,89 @@ export default function UroStudyHub() {
     _sendFromMsgs(msgs);
   }
 
+  // ═══ QUICK ASK SIDEKICK — side chat that rides along the lecture without touching it ═══
+  function resetSidekick() {
+    setSideMsgs([]);
+    setSideIn("");
+    setSideOpen(false);
+  }
+
+  function sidekickTranscriptTail() {
+    // Most recent slice of the main-thread conversation, so the sidekick knows
+    // exactly what the learner is reading right now. Capped ~12k chars from the end.
+    var parts = [];
+    var used = 0;
+    for (var i = chatMsgs.length - 1; i >= 0; i--) {
+      var m = chatMsgs[i];
+      if (m.role === "system") continue;
+      var label = m.role === "user" ? "LEARNER" : "LECTURER";
+      var body = m.content || "";
+      if (used + body.length > 12000) {
+        var room = 12000 - used;
+        if (room > 400) parts.unshift(label + ": [...] " + body.slice(body.length - room));
+        break;
+      }
+      parts.unshift(label + ": " + body);
+      used += body.length;
+    }
+    return parts.join("\n\n");
+  }
+
+  function buildSidekickSys() {
+    var lines = [
+      "You are the QUICK ASK sidekick — a small side panel running next to an AI-taught urology board-prep session. The learner is mid-lecture in the main thread; they use you for fast clarifications so the lecture itself stays clean and readable.",
+      "",
+      "RULES:",
+      "- Be compact. Default to 1-4 sentences. No headers, no intro or outro, no 'great question'. Bullets only if the answer is inherently a short list (max 5).",
+      "- Board-exam precision: exact numbers, doses, thresholds, stages, guideline cutoffs.",
+      "- You can see the lecture transcript below. When the question points at it ('that trial', 'the second drug', 'what it meant by X'), ground your answer in what the lecture actually said, and use the lecture's own numbers when it gave them.",
+      "- Complement the lecture, never compete with it: if a question truly needs depth, give the 2-3 sentence core and end with: 'worth a DEEP on this in the main lecture.'",
+      "- Never deliver lecture phases, never say NEXT, never summarize whole sections unless explicitly asked.",
+      "- If the lecture said something that conflicts with current guidelines, answer correctly and flag the discrepancy in one clause.",
+      "- No medical-advice disclaimers. This is board prep between colleagues.",
+    ];
+    if (lectureTopic) lines.push("", "SESSION TOPIC: " + lectureTopic);
+    if (skillsCtx && skillsCtx.id) {
+      var _mod = SURGICAL_SKILLS.filter(function(m) { return m.id === skillsCtx.id; })[0];
+      if (_mod) {
+        lines.push("", "The main thread is teaching the surgical-skills module: " + _mod.title + ".");
+        var _ref = skillsModuleReference(_mod);
+        if (_ref) lines.push("", "MODULE REFERENCE (vetted content the lecture teaches from — do not contradict it):", _ref);
+      }
+    } else if (lectureMode && LECTURE_PHASES[lecturePhase]) {
+      lines.push("CURRENT LECTURE PHASE: " + LECTURE_PHASES[lecturePhase].name + " — " + LECTURE_PHASES[lecturePhase].desc);
+    }
+    var tail = sidekickTranscriptTail();
+    if (tail) lines.push("", "LECTURE TRANSCRIPT (most recent part — what the learner is reading right now):", "", tail);
+    return lines.join("\n");
+  }
+
+  function sendSide(text) {
+    if (!text || !text.trim() || sideLoad) return;
+    var msgs = sideMsgs.concat([{ role: "user", content: text.trim() }]);
+    setSideMsgs(msgs);
+    setSideIn("");
+    setSideLoad(true);
+    // Note: no low max_tokens cap here — thinking models (gemma, Gemini 2.5) spend reasoning
+    // tokens inside the cap, so a tight cap truncates the visible answer. The prompt keeps it short.
+    callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4 }, function(reply) {
+      setSideMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try again." }]));
+      setSideLoad(false);
+    }, function(err) {
+      setSideMsgs(msgs.concat([{ role: "assistant", content: "⚠ " + (err.message || "AI error — check Settings.") }]));
+      setSideLoad(false);
+    });
+  }
+
+  function openSidekick() {
+    // If the learner has lecture text selected, prefill the box with it (quote-to-ask)
+    try {
+      var sel = (window.getSelection ? window.getSelection().toString() : "").trim();
+      if (sel && sel.length <= 300 && !sideIn.trim()) setSideIn('"' + sel + '" — ');
+    } catch (e) { /* ignore */ }
+    setSideOpen(true);
+  }
+
   // Launch a surgical-skills module into the AI tutor ("Teach me" / "Quiz me").
   function startSkillsModule(mod, mode) {
     if (!mod) return;
@@ -3158,6 +3254,7 @@ export default function UroStudyHub() {
     setSkillsCtx(ctx);
     try { sessionStorage.setItem("uroStudyHub_skillsCtx", JSON.stringify(ctx)); } catch(e) {}
     setLectureMode(false); setLecturePhase(0); setUpText("");
+    resetSidekick();
     setChatView("chat");
     setPage("chat");
     var opener = ctx.mode === "quiz"
@@ -3337,7 +3434,7 @@ export default function UroStudyHub() {
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {!isDone && <button onClick={function() { markDone(tKey, med); }} style={{ padding: "7px 14px", background: "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 6, color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", flex: 1 }}>{"✓ Complete (+" + Math.ceil(50 * xpM) + " XP)"}</button>}
-              <button onClick={function() { setChatMsgs([{ role: "user", content: "Let's review: " + label + ". Give me a high-yield overview with pimp questions and mnemonics." }]); setPage("chat"); }} style={{ padding: "7px 14px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 6, color: "#4ade80", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>AI Review</button>
+              <button onClick={function() { resetSidekick(); setChatMsgs([{ role: "user", content: "Let's review: " + label + ". Give me a high-yield overview with pimp questions and mnemonics." }]); setPage("chat"); }} style={{ padding: "7px 14px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 6, color: "#4ade80", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>AI Review</button>
               {s.ankiEnabled !== false && <button onClick={function() { setAnkiTopic(label); setPage("anki"); }} style={{ padding: "7px 14px", background: "#fb923c20", border: "1px solid #fb923c40", borderRadius: 6, color: "#fb923c", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Anki</button>}
             </div>
           </div>
@@ -9091,7 +9188,7 @@ export default function UroStudyHub() {
 
       {/* ═══ CHAT ═══ */}
       {page === "chat" && (
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 60px)" }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 60px)", position: "relative" }}>
           <div style={{ display: "flex", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: lm.on ? "#4ade80" : "#f87171" }} />
@@ -9130,6 +9227,7 @@ export default function UroStudyHub() {
                 msg += ")";
                 if (autoAnki) msg += " — Configure Anki card settings...";
                 msg += " — Starting structured lecture session...";
+                resetSidekick();
                 setChatMsgs([{ role: "system", content: msg }]);
                 setConvertingChat("");
                 // Auto-kick-off: send the first message to start the lecture
@@ -9218,7 +9316,7 @@ export default function UroStudyHub() {
             }} style={{ display: "none" }} />
             <button onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={{ background: chatView === "skills" ? "#f9731620" : c.cd, border: "1px solid " + (chatView === "skills" ? "#f9731680" : "#334155"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "skills" ? "#fb923c" : "#94a3b8", fontSize: 10, fontWeight: chatView === "skills" ? 700 : 400 }}>{"🔪 OR Skills"}</button>
             <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={{ background: chatView === "saved" ? "#a78bfa20" : c.cd, border: "1px solid " + (chatView === "saved" ? "#a78bfa60" : "#334155"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "saved" ? "#a78bfa" : "#94a3b8", fontSize: 10, fontWeight: chatView === "saved" ? 700 : 400 }}>{"📚 Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
-            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid #334155", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}>Clear</button>
+            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid #334155", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}>Clear</button>
           </div>
           {/* Tutor style picker */}
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, overflowX: "auto" }}>
@@ -9629,8 +9727,8 @@ export default function UroStudyHub() {
                     <p style={{ fontSize: 11, lineHeight: 1.6, color: "#94a3b8", margin: "0 0 12px" }}>Upload the chapter for a structured lecture, kick off a no-doc lecture, or do a mechanism-first Deep Dive.</p>
                     <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
                       <button onClick={function() { fileRef.current && fileRef.current.click(); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Upload chapter PDF/doc — auto-starts a 9-phase lecture">{"📄 Upload Chapter"}</button>
-                      <button onClick={function() { setLectureMode(false); setLecturePhase(0); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setTimeout(function() { sendChat("Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,#a78bfa,#8b5cf6)", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
-                      <button onClick={function() { setLectureMode(true); setLecturePhase(0); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setTimeout(function() { sendChat("Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 8, color: c.a, fontSize: 11, fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
+                      <button onClick={function() { setLectureMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setTimeout(function() { sendChat("Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,#a78bfa,#8b5cf6)", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
+                      <button onClick={function() { setLectureMode(true); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setTimeout(function() { sendChat("Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 8, color: c.a, fontSize: 11, fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
                     </div>
                   </div>
                 ) : (
@@ -9700,6 +9798,49 @@ export default function UroStudyHub() {
               </button>
             </div>
           </div>}
+          {/* ═══ QUICK ASK — floating side chat: quick clarifications that never touch the lecture thread ═══ */}
+          {chatView === "chat" && chatMsgs.length > 0 && !sideOpen && (
+            <button onClick={openSidekick} title="Side chat for quick definitions & clarifications — the lecture won't see it" style={{ position: "absolute", right: 10, bottom: 132, zIndex: 30, display: "flex", alignItems: "center", gap: 5, padding: "8px 13px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 20, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,0.45)" }}>
+              {"💬 Quick ask"}{sideMsgs.length > 0 && <span style={{ background: "#ffffff30", borderRadius: 8, padding: "0 6px", fontSize: 9 }}>{sideMsgs.length}</span>}
+            </button>
+          )}
+          {chatView === "chat" && sideOpen && (
+            <div style={{ position: "absolute", right: 8, bottom: 132, width: "min(340px, calc(100% - 16px))", height: "min(46%, 380px)", display: "flex", flexDirection: "column", background: c.bg, border: "1px solid " + c.a + "55", borderRadius: 14, boxShadow: "0 14px 44px rgba(0,0,0,0.6)", zIndex: 30, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "70", flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: c.a }}>{"💬 Quick Ask"}</span>
+                <span style={{ fontSize: 8, color: "#64748b", flex: 1, lineHeight: 1.3 }}>side chat — the lecture won't see this</span>
+                {sideMsgs.length > 0 && <button onClick={function() { setSideMsgs([]); }} title="Clear side chat" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 11, padding: 2 }}>{"🗑"}</button>}
+                <button onClick={function() { setSideOpen(false); }} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 2, fontWeight: 700 }}>{"✕"}</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                {sideMsgs.length === 0 && (
+                  <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6, padding: "6px 2px" }}>
+                    {"Quick definitions, abbreviations, \"wait, why?\" questions — answered short, right here, without breaking the lecture."}
+                    <br />
+                    {"It can read the lecture, so \"what did it mean by that\" works. Tip: select text in the lecture first and it lands here as a quote."}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                      {["Define that last term", "Why that cutoff?", "Mechanism in one line?"].map(function(q) {
+                        return <button key={q} onClick={function() { sendSide(q); }} style={{ padding: "4px 9px", background: c.cd, border: "1px solid #334155", borderRadius: 10, color: "#94a3b8", cursor: "pointer", fontSize: 9 }}>{q}</button>;
+                      })}
+                    </div>
+                  </div>
+                )}
+                {sideMsgs.map(function(m, i) {
+                  return (
+                    <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                      <div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid #334155" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "#e2e8f0", fontSize: 11, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.content}</div>
+                    </div>
+                  );
+                })}
+                {sideLoad && <div style={{ alignSelf: "flex-start", background: c.cd, border: "1px solid #334155", borderRadius: "11px 11px 11px 2px", padding: "7px 10px", color: "#64748b", fontSize: 11 }}>{"Thinking..."}</div>}
+                <div ref={sideEnd} />
+              </div>
+              <div style={{ display: "flex", gap: 5, padding: 8, borderTop: "1px solid " + c.cd, flexShrink: 0 }}>
+                <input value={sideIn} onChange={function(e) { setSideIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendSide(sideIn); } }} placeholder="Quick question..." style={{ flex: 1, minWidth: 0, padding: "8px 11px", background: c.cd, border: "1px solid #334155", borderRadius: 10, color: "#e2e8f0", fontSize: 11, outline: "none" }} />
+                <button onClick={function() { sendSide(sideIn); }} disabled={sideLoad || !sideIn.trim()} style={{ background: (sideLoad || !sideIn.trim()) ? "#334155" : "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 10, padding: "0 13px", cursor: (sideLoad || !sideIn.trim()) ? "default" : "pointer", color: "#fff", fontSize: 13 }}>{"↑"}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
