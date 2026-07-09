@@ -1,75 +1,69 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-06-30
+**Updated:** 2026-07-09
 **Tool:** Cowork (Claude)
-**Branch:** `or-skills` (feature branch off local `main` — NOT the held `stone-squadron` game branch)
+**Branch:** `tutor-sidekick` — rebased onto the latest `origin/main`; pushed.
 
-## Done this session — "OR Skills" surgical-fundamentals course (in the AI Tutor)
+## Shipped this session (LIVE on chefboiandee.github.io/UroStudyHub)
 
-Added a **Surgical Skills course** that lives inside the **AI Tutor** tab (decided with Andrew:
-hybrid built-in-modules + AI tutor; delivered as a course inside the Tutor so it reaches
-everyone — sub-Is, interns, AND residents — with no new bottom tab, no role gate).
-
-**What it is (all in `UroStudyHub.html`, rebuilt into `UroStudyHub.min.html`):**
-- New **`🔪 OR Skills`** toggle in the Tutor header (next to Saved) + a discovery card in the
-  empty-chat welcome. Opens a landing view (`chatView === "skills"`).
-- **11 expandable modules** (`SURGICAL_SKILLS`), general-surgery-first with urology applied:
-  1 Sterile Technique/OR etiquette · 2 Scalpel & Incisions · 3 Tissue Handling/Instruments/
-  Electrosurgery · 4 Suture Selection · 5 Needle Selection · 6 Knot Tying · 7 Closure ·
-  8 Hemostasis & Local Anesthesia · 9 Wound Healing & Classification · 10 Drains ·
-  11 Urology-Specific Applications. Each: Big idea (mental model), teaching blocks,
-  Rules of thumb (decision trees), Common mistakes+fixes, In-urology notes, cheat lines.
-- **Offline-readable** (the modules render without any AI) PLUS per module **🎓 Teach me /
-  🎯 Quiz me** buttons that launch the tutor using a dedicated **`SYSTEM_PROMPT_SURGICAL`**
-  (the essence of Andrew's original tutor prompt — conversational, mental-models, scenario
-  quizzes), grounded in that module's own reference text (`skillsModuleReference`) so the AI
-  can't drift from the vetted content. In-chat banner shows the active module + Exit course.
-- **Course cheat sheet** button aggregates every module's key frameworks.
-
-**QI research hooks (Andrew's insight: med students on surgery = the widest QI pool):**
-- Per-module **confidence 1–5** + **Mark reviewed** stored in `s.skillsProgress`
-  (`{moduleId:{conf,done,ts}}`). This is the backbone for pre/post confidence measurement —
-  the metric the roadmap already names for QI. Not yet a dashboard/export (see Next steps).
-
-**Wiring:** new state `skillsCtx`/`expandedSkill`; `_sendFromMsgs` branches to the surgical
-system prompt when a module session is active; `startSkillsModule`/`exitSkills`; composer
-gated off the skills landing; Clear resets the session. No premium gate (games-only). No new
-top-level tab. No other spokes touched.
-
-## Verification done (sandbox — no LM Studio / device)
-- Babel transform of full source **and** minified build → no syntax errors.
-- Data integrity: 11 modules well-formed, unique ids, AI reference serializes (~3.3KB/module).
-- Real **jsdom render** (vendored React): app boots → Tutor → OR Skills shows all 11 modules →
-  expand shows Big idea/Rules/Mistakes → cheat sheet toggles → **Teach me launches into chat
-  with the module banner, no new errors**. (One `.style`-null console error is PRE-EXISTING —
-  fires identically on the shipped "Saved" view; jsdom has no layout engine. Not a regression.)
-- Confirmed **zero held Stone Squadron game code** in both built files.
-
-## IMPORTANT — git provenance (read before shipping)
-- Work is committed on **`or-skills`**, branched from local **`main`** (NOT `stone-squadron`).
-  It contains clean `main` + this feature only — the held M11 game work is NOT included.
-- During the build, the file-tools cache and a bash `git checkout` diverged, so the edits were
-  reconciled by replaying only the surgical diff onto clean `main` (verified: no game code).
-- Local **`main` is 2 commits ahead of `origin/main`** (`5c2e1a4` premium plumbing,
-  `4abca47` repo-scope). `origin/main` is a clean ancestor of `main`. So merging `or-skills`
-  → `main` → pushing `origin/main` will also publish those 2 pending commits. Confirm you
-  want them live, and confirm the **Pages publish branch** (Settings → Pages) before pushing.
-
-## To ship (Andrew)
+Final history pushed to `origin/main` (fast-forward from `b94b728`):
 ```
-cd "/Users/andrew/Desktop/Claude's Stuff/urostudyhub"
-git checkout main && git merge --ff-only or-skills   # fast-forward main to include the feature
-python3 build.py                                      # regenerate UroStudyHub.min.html (already built, but safe)
-git add UroStudyHub.min.html && git commit -m "rebuild" --no-verify  # only if build.py changed anything
-git push origin main                                  # publishes to chefboiandee.github.io/UroStudyHub
+008c37c
+ └ b94b728  PWA sw + heatmap tooltip + dynamic Gemini   (someone else's remote work — PRESERVED)
+    └ d4a10a4  OR Skills course        (rebased)
+       └ 95368f5  Quick Ask side chat  (rebased)
+          └ 501e7df 'type/tap NEXT' + Next-section button (rebased)
+             └ 19093c3 docs: STATUS handoff
 ```
-`index.html` redirects to `UroStudyHub.min.html`, so the live entry point is the minified file.
+
+### Two things deliberately EXCLUDED from the push (per Andrew: "only this + OR Skills")
+1. **Premium plumbing** (`5c2e1a4`: paywall / dev toggle / game gating) — dropped.
+2. **`4abca47` "scope repo" chore** — dropped. It only *deleted* `caselog-extension-main/`
+   (SurgiLog ext), unrelated to this work, and the remote still has those files. Left alone.
+
+### Mid-push surprise handled
+The remote had advanced by one commit (`b94b728`, pushed after my snapshot: PWA
+service worker `sw.js`, heatmap hover tooltip, dynamic Gemini model list). My first
+push was correctly rejected (non-fast-forward). I fetched, then **rebased my 3 feature
+commits onto `b94b728`** so that work is preserved, not clobbered. The 3-way merge
+auto-merged even the minified blob — which I did NOT trust — so I re-ran `build.py`
+at every commit; tip `min.html` == fresh build output (deterministic).
+
+**Verified on the final merged tip:** b94b728's `serviceWorker`/dynamic-Gemini present
+in html+min; `sw.js`/`manifest.json` present; `caselog-extension-main/` still present
+(chore dropped); OR Skills / Quick Ask / "type or tap NEXT" all present; premium
+plumbing = 0 in both files; live boot clean (only pre-existing Babel >500KB notes),
+Tutor+OR-Skills load, Games render with NO paywall/👑.
+
+### Feature 1 — Quick Ask side chat (AI Tutor)
+Floating "💬 Quick ask" FAB → compact side-chat panel over the lecture. Own thread/history —
+main lecture untouched. Lecture-aware (fed recent transcript tail + active OR-Skills module
+ref / lecture phase), so "what did it mean by that" works and answers complement the lecture.
+Compact prompt, select-to-quote prefill, resets on new session/Clear, persists into saved
+sessions (`sideMsgs`). Reuses `callAI` (any provider).
+
+### Feature 2 — "type or tap NEXT" + end-of-reply Next-section button
+All 8 phase-end cues + COMMANDS rule + input placeholder now say "type or tap NEXT". Added a
+"Next section →" (+ "Go deeper") button at the END of the latest lecture reply — decided WITH
+Andrew (over "leave at top" / "dock above input"): docking next to the input is the
+accidental-tap trap; end-of-reply is where your eyes land AND out of the typing tap-path. Top
+phase-tracker NEXT/DEEP/SKIP kept.
+
+## Verification (LIVE — LM Studio + Preview MCP, resident gemma-4-26b)
+- Full lecture end-to-end pre-merge: Quick Ask grounded in the lecture's numbers; follow-up
+  kept context; NEXT / "Next section →" advanced Phase 1→2 while the side thread stayed put.
+- Model closed a phase with "Type or tap NEXT to start the deep dive."
+- Mobile 375px: panel + both buttons fit, no overlap with the FAB.
+- Post-merge tip: min == fresh build; boots clean; Tutor/OR-Skills/Games all render.
 
 ## Next steps / carry-forward
-- **On-device**: open the built `UroStudyHub.min.html` on Mac/phone and eyeball the OR Skills
-  landing (render/CSS) + run one live **Teach me** / **Quiz me** with an AI provider configured
-  (sandbox has no LM Studio/key, so live tutor quality is unverified — the launch path itself is).
-- **QI build-out** (future): a small progress/confidence export (CSV) + optional pre/post prompt,
-  to turn `s.skillsProgress` into study data.
-- Untracked residue in the tree (`STONE_SQUADRON.md`, `URO_FPS.md`, `UroStudyHub_README.docx`,
-  a `.gitignore` `.claude/` line) is from the `stone-squadron` context — left untouched, not staged.
+- Backup branches (local only): `tutor-sidekick-backup` (`a5ce4dc`, pre-rebase, WITH premium)
+  and `tutor-sidekick-premutback` (post-premium-drop, pre-b94b728-merge). Delete once happy.
+- Re-add premium later by cherry-picking `5c2e1a4` from `tutor-sidekick-backup` if the tier ships.
+- Untracked/unpushed residue left alone: `.claude/`, `STONE_SQUADRON.md`, `URO_FPS.md`,
+  `UroStudyHub_README.docx`, unstaged `.gitignore` `.claude/` line.
+- Doc nit: `UroStudyHub_CLAUDE.md` still says serve via `http.server 2020`; it's GitHub Pages now.
+
+## Open questions
+- None. Shipped exactly the requested scope (Tutor + OR Skills), preserved the remote's
+  PWA commit, excluded Premium and the caselog-deletion chore.
