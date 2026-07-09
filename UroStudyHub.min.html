@@ -320,26 +320,26 @@ var SYSTEM_PROMPT_LECTURE = [
 "",
 "SESSION STRUCTURE — follow these phases in order:",
 "",
-"Phase 1 🗺️ BIG PICTURE: Orient the learner. What is this topic, why does it matter clinically, and how does it show up on boards? Open with a case or clinical hook that frames the whole topic. Keep it concise. End with: 'Ready to build the framework? Type NEXT or ask me anything.'",
+"Phase 1 🗺️ BIG PICTURE: Orient the learner. What is this topic, why does it matter clinically, and how does it show up on boards? Open with a case or clinical hook that frames the whole topic. Keep it concise. End with: 'Ready to build the framework? Type or tap NEXT, or ask me anything.'",
 "",
-"Phase 2 🏗️ CONCEPTUAL FRAMEWORK: Build the mental scaffolding. Walk through key classifications, relevant anatomy, and the pathophysiology chain. Use analogies and connect to things the learner already knows. Organize the topic into a few conceptual buckets they can hang details on. End with: 'NEXT to start the deep dive.'",
+"Phase 2 🏗️ CONCEPTUAL FRAMEWORK: Build the mental scaffolding. Walk through key classifications, relevant anatomy, and the pathophysiology chain. Use analogies and connect to things the learner already knows. Organize the topic into a few conceptual buckets they can hang details on. End with: 'Type or tap NEXT to start the deep dive.'",
 "",
-"Phase 3 🔬 CORE DETAILS I: Epidemiology, risk factors, presentation, workup, diagnosis, staging/grading. Weave in clinical scenarios to make the facts stick — present a patient, walk through the thinking. Hit the board-testable numbers and flag traps. End with: 'NEXT for a checkpoint.'",
+"Phase 3 🔬 CORE DETAILS I: Epidemiology, risk factors, presentation, workup, diagnosis, staging/grading. Weave in clinical scenarios to make the facts stick — present a patient, walk through the thinking. Hit the board-testable numbers and flag traps. End with: 'Type or tap NEXT for a checkpoint.'",
 "",
-"Phase 4 ⚡ CHECKPOINT: 5 rapid-fire recall questions testing Phase 2-3 material. Fill-in-the-blank, one-liners, quick scenarios. Wait for answers. Grade directly — correct mistakes with brief explanations. Then: 'NEXT for treatment and management.'",
+"Phase 4 ⚡ CHECKPOINT: 5 rapid-fire recall questions testing Phase 2-3 material. Fill-in-the-blank, one-liners, quick scenarios. Wait for answers. Grade directly — correct mistakes with brief explanations. Then: 'Type or tap NEXT for treatment and management.'",
 "",
-"Phase 5 💊 CORE DETAILS II: Treatment algorithms, surgical techniques, medical management, complications, follow-up, AUA guidelines. Frame as clinical decision-making — 'What's your next step?' Walk through management scenarios. Highlight the pearls that separate a good answer from a great one. End with: 'NEXT for the pimp round.'",
+"Phase 5 💊 CORE DETAILS II: Treatment algorithms, surgical techniques, medical management, complications, follow-up, AUA guidelines. Frame as clinical decision-making — 'What's your next step?' Walk through management scenarios. Highlight the pearls that separate a good answer from a great one. End with: 'Type or tap NEXT for the pimp round.'",
 "",
-"Phase 6 🔥 PIMP ROUND: Classic attending pimp questions — anatomy, blood supply, nerve pathways, surgical landmarks, the detail stuff. Ask one at a time, wait for the answer, give feedback with clinical context for why it matters. 5-7 questions. Then: 'NEXT for memory anchors.'",
+"Phase 6 🔥 PIMP ROUND: Classic attending pimp questions — anatomy, blood supply, nerve pathways, surgical landmarks, the detail stuff. Ask one at a time, wait for the answer, give feedback with clinical context for why it matters. 5-7 questions. Then: 'Type or tap NEXT for memory anchors.'",
 "",
-"Phase 7 🧠 MEMORY ANCHORS: Build 3-5 memorable mnemonics for the toughest facts from this topic. Be creative — funny, crude, rhyming, visual, whatever makes it stick. Explain each one. Then: 'NEXT for board questions.'",
+"Phase 7 🧠 MEMORY ANCHORS: Build 3-5 memorable mnemonics for the toughest facts from this topic. Be creative — funny, crude, rhyming, visual, whatever makes it stick. Explain each one. Then: 'Type or tap NEXT for board questions.'",
 "",
-"Phase 8 📋 BOARD-STYLE QUESTIONS: 5 realistic ABCDE multiple-choice questions in board format. Present one at a time, wait for the answer. Explain why the right answer is right AND why each tempting wrong answer is wrong. Use 'next best step' and 'most likely diagnosis' formats. Then: 'NEXT for the rapid review.'",
+"Phase 8 📋 BOARD-STYLE QUESTIONS: 5 realistic ABCDE multiple-choice questions in board format. Present one at a time, wait for the answer. Explain why the right answer is right AND why each tempting wrong answer is wrong. Use 'next best step' and 'most likely diagnosis' formats. Then: 'Type or tap NEXT for the rapid review.'",
 "",
 "Phase 9 📄 RAPID REVIEW: Compress everything into a morning-of-the-exam cheat sheet. Key facts, critical numbers, essential algorithms, decision points. Structured format is fine here — this is a reference, not a lecture.",
 "",
 "COMMANDS:",
-"- NEXT: advance to next phase.",
+"- NEXT: advance to next phase. When you tell the learner to advance, always phrase it as 'type or tap NEXT' — there is a NEXT button in the app and typing NEXT also works, so name both. Never write just 'type NEXT'.",
 "- SKIP: skip current phase entirely.",
 "- DEEP / MORE: go deeper into current phase with more detail, harder cases, trickier scenarios.",
 "- Any question at any time: answer it fully, then resume where you left off.",
@@ -8739,6 +8739,12 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 </div>
 );
 })}
+{lectureMode && !chatLoad && chatMsgs.length > 0 && chatMsgs[chatMsgs.length - 1].role === "assistant" && (
+<div style={{ alignSelf: "flex-start", display: "flex", gap: 6, marginTop: 2, marginBottom: 4, flexWrap: "wrap" }}>
+<button onClick={function() { sendChat("NEXT"); }} style={{ padding: "9px 17px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 11, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>{"Next section →"}</button>
+<button onClick={function() { sendChat("Go deeper into this section. Give me more detail, more examples, more board-relevant nuance."); }} style={{ padding: "9px 14px", background: "#4ade8018", border: "1px solid #4ade8044", borderRadius: 11, color: "#4ade80", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{"Go deeper"}</button>
+</div>
+)}
 {chatLoad && (
 <div style={{ alignSelf: "flex-start" }}>
 <div style={{ background: c.cd, borderRadius: "14px 14px 14px 2px", padding: "12px 16px", border: "1px solid #334155", color: "#64748b", fontSize: 12 }}>Thinking...</div>
@@ -8749,7 +8755,7 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 {chatView !== "skills" && <div style={{ padding: "10px 12px 68px", borderTop: "1px solid " + c.cd, background: c.bg }}>
 {upText && !lectureMode && !skillsCtx && <div style={{ fontSize: 10, color: c.a, marginBottom: 6 }}>📄 Content loaded <button onClick={function() { setUpText(""); }} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 10 }}>x Remove</button></div>}
 <div style={{ display: "flex", gap: 6 }}>
-<input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : (lectureMode ? "Ask a question or type NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid #334155", borderRadius: 12, color: "#e2e8f0", fontSize: 12, outline: "none" }} />
+<input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : (lectureMode ? "Ask a question, or type/tap NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid #334155", borderRadius: 12, color: "#e2e8f0", fontSize: 12, outline: "none" }} />
 <button onClick={function() { sendChat(chatIn); }} disabled={chatLoad || !chatIn.trim()} style={{ background: (chatLoad || !chatIn.trim()) ? "#334155" : "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 12, padding: "0 16px", cursor: (chatLoad || !chatIn.trim()) ? "default" : "pointer", color: "white", fontSize: 14 }}>
 {"->"}
 </button>
