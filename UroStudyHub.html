@@ -1103,6 +1103,51 @@ var STREAK_MILESTONES = [
   { days: 60, coins: 500, msg: "Legendary Streak! 🏆" },
 ];
 
+// ═══ PERSISTENT SESSION STORE (IndexedDB) ═══
+// iPadOS kills suspended PWAs; anything living only in React state (the in-progress
+// lecture, the uploaded chapter text) is gone on relaunch. Lecture sessions and
+// chapter docs checkpoint here — IndexedDB holds megabytes where localStorage can't.
+function idbOpen() {
+  return new Promise(function(resolve, reject) {
+    try {
+      var req = indexedDB.open("uroStudyHubDB", 1);
+      req.onupgradeneeded = function() { try { req.result.createObjectStore("kv"); } catch (e) {} };
+      req.onsuccess = function() { resolve(req.result); };
+      req.onerror = function() { reject(req.error); };
+    } catch (e) { reject(e); }
+  });
+}
+function idbSet(key, val) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(val, key);
+      tx.oncomplete = function() { db.close(); resolve(true); };
+      tx.onabort = tx.onerror = function() { db.close(); reject(tx.error); };
+    });
+  });
+}
+function idbGet(key) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction("kv", "readonly");
+      var rq = tx.objectStore("kv").get(key);
+      rq.onsuccess = function() { db.close(); resolve(rq.result); };
+      rq.onerror = function() { db.close(); reject(rq.error); };
+    });
+  });
+}
+function idbDel(key) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").delete(key);
+      tx.oncomplete = function() { db.close(); resolve(true); };
+      tx.onabort = tx.onerror = function() { db.close(); reject(tx.error); };
+    });
+  });
+}
+
 // ═══ MAIN APP ═══
 export default function UroStudyHub() {
   var [s, setS] = useState(function() {
@@ -1170,7 +1215,17 @@ export default function UroStudyHub() {
   }, [lm]);
   // Persist study progress to localStorage
   useEffect(function() {
-    try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); }
+    catch (e) {
+      // Quota hit (saved lecture transcripts can be big) — never let core progress
+      // (topics done, XP, streak) silently stop persisting; shed transcript bulk and retry.
+      try {
+        var slim = Object.assign({}, s, { savedLectures: (s.savedLectures || []).map(function(l) {
+          return l.type === "session" ? Object.assign({}, l, { messages: (l.messages || []).slice(0, 4), sideMsgs: [], truncated: true }) : l;
+        }) });
+        localStorage.setItem("uroStudyHub_progress", JSON.stringify(slim));
+      } catch (e2) { /* ignore */ }
+    }
   }, [s]);
 
   // Study group assignment on first open
@@ -1877,6 +1932,63 @@ export default function UroStudyHub() {
   var chatEnd = useRef(null);
   var fileRef = useRef(null);
   var ankiFileRef = useRef(null);
+  // Tutor session autosave/resume — the live lecture survives an iPad PWA kill/restart
+  var [pendingResume, setPendingResume] = useState(null);
+  var bootChecked = useRef(false);
+  var autosaveT = useRef(null);
+
+  // On launch: request durable storage, then look for an interrupted lecture to offer back.
+  useEffect(function() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function() {}); } catch (e) {}
+    idbGet("activeSession").then(function(sess) {
+      bootChecked.current = true;
+      if (sess && ((sess.messages || []).some(function(m) { return m.role === "user" || m.role === "assistant"; }) || sess.upText)) {
+        setPendingResume(sess);
+      }
+    }).catch(function() { bootChecked.current = true; });
+  }, []);
+
+  // Continuously checkpoint the live tutor session (debounced), and flush immediately
+  // when the app is backgrounded — the moment before iOS may kill the PWA.
+  useEffect(function() {
+    if (!bootChecked.current) return;
+    function snapshot() {
+      var real = chatMsgs.some(function(m) { return m.role === "user" || m.role === "assistant"; });
+      if (!real && !upText) { idbDel("activeSession").catch(function() {}); return; }
+      setPendingResume(function(p) { return p ? null : p; }); // a live session supersedes the resume offer
+      idbSet("activeSession", {
+        topic: lectureTopic, messages: chatMsgs, sideMsgs: sideMsgs,
+        lectureMode: lectureMode, lecturePhase: lecturePhase,
+        upText: upText, skillsCtx: skillsCtx,
+        date: new Date().toISOString(),
+      }).catch(function() {});
+    }
+    if (autosaveT.current) clearTimeout(autosaveT.current);
+    autosaveT.current = setTimeout(snapshot, 700);
+    function onHide() { if (document.visibilityState === "hidden") { if (autosaveT.current) clearTimeout(autosaveT.current); snapshot(); } }
+    document.addEventListener("visibilitychange", onHide);
+    return function() { document.removeEventListener("visibilitychange", onHide); };
+  }, [chatMsgs, sideMsgs, upText, lectureTopic, lectureMode, lecturePhase, skillsCtx]);
+
+  // Restore an interrupted session from the resume banner — everything comes back,
+  // including the uploaded chapter, so quizzing/explaining stays grounded in the source.
+  function resumeInterrupted() {
+    var sess = pendingResume; if (!sess) return;
+    setPendingResume(null);
+    setLectureTopic(sess.topic || "");
+    setChatMsgs(sess.messages || []);
+    setSideMsgs(sess.sideMsgs || []);
+    setSideOpen(false); setSideIn("");
+    setLectureMode(!!sess.lectureMode);
+    setLecturePhase(sess.lecturePhase || 0);
+    setUpText(sess.upText || "");
+    if (sess.skillsCtx) { setSkillsCtx(sess.skillsCtx); try { sessionStorage.setItem("uroStudyHub_skillsCtx", JSON.stringify(sess.skillsCtx)); } catch (e) {} }
+    else { setSkillsCtx(null); try { sessionStorage.removeItem("uroStudyHub_skillsCtx"); } catch (e) {} }
+    setChatView("chat");
+    setPage("chat");
+    setSaveFeedback("📖 Picking up where you left off");
+    setTimeout(function() { setSaveFeedback(""); }, 2000);
+  }
 
   var th = THEMES.find(function(t) { return t.id === s.theme; }) || THEMES[0];
   var c = th.c;
@@ -2429,17 +2541,23 @@ export default function UroStudyHub() {
   // ═══ SAVED LECTURES ═══
   var savedLectures = s.savedLectures || [];
 
-  function saveLectureSession(topic, messages) {
+  function saveLectureSession(topic, messages, opts) {
+    opts = opts || {};
+    var doc = opts.upText !== undefined ? opts.upText : upText;
     var session = {
       id: Date.now() + Math.random(),
       type: "session",
       topic: topic || "Untitled Session",
-      messages: messages.filter(function(m) { return m.role !== "system"; }),
-      sideMsgs: sideMsgs,
-      lecturePhase: lecturePhase || 0,
-      lectureMode: lectureMode || false,
+      messages: (messages || []).filter(function(m) { return m.role !== "system"; }),
+      sideMsgs: opts.sideMsgs !== undefined ? opts.sideMsgs : sideMsgs,
+      lecturePhase: opts.lecturePhase !== undefined ? opts.lecturePhase : (lecturePhase || 0),
+      lectureMode: opts.lectureMode !== undefined ? opts.lectureMode : (lectureMode || false),
+      hasDoc: !!doc,
       date: new Date().toISOString(),
     };
+    // Chapter text goes to IndexedDB (too big for the localStorage progress blob),
+    // keyed by session id, so Resume can keep quizzing against the source.
+    if (doc) idbSet("doc_" + session.id, doc).catch(function() {});
     setS(function(p) { return Object.assign({}, p, { savedLectures: (p.savedLectures || []).concat([session]) }); });
     return session.id;
   }
@@ -2452,10 +2570,12 @@ export default function UroStudyHub() {
     setSideIn("");
     setLectureMode(item.lectureMode !== false);
     setLecturePhase(item.lecturePhase || 0);
-    setUpText(""); // original doc not saved, but conversation has the AI's responses
+    setUpText(""); // legacy saves have no stored doc; replaced below when one exists
+    if (item.hasDoc) idbGet("doc_" + item.id).then(function(doc) { if (doc) setUpText(doc); }).catch(function() {});
     setChatView("chat");
     setPage("chat");
-    toast("📖 Resumed: " + (item.topic || "session"));
+    setSaveFeedback("📖 Resumed: " + (item.topic || "session"));
+    setTimeout(function() { setSaveFeedback(""); }, 2000);
   }
 
   function bookmarkMessage(topic, message, phaseLabel) {
@@ -2473,6 +2593,7 @@ export default function UroStudyHub() {
   }
 
   function deleteSavedLecture(id) {
+    idbDel("doc_" + id).catch(function() {});
     setS(function(p) { return Object.assign({}, p, { savedLectures: (p.savedLectures || []).filter(function(l) { return l.id !== id; }) }); });
   }
 
@@ -7150,6 +7271,20 @@ export default function UroStudyHub() {
         <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: "#4ade80", color: "#052e16", padding: "8px 20px", borderRadius: 10, fontSize: 12, fontWeight: 700, zIndex: 300, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", pointerEvents: "none" }}>{saveFeedback}</div>
       )}
 
+      {/* Interrupted-lecture resume banner — the tutor autosaves; offer to pick it back up */}
+      {pendingResume && (
+        <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(96vw, 560px)", background: "#1e293b", border: "1px solid #a78bfa60", borderRadius: 12, padding: "10px 12px", zIndex: 290, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>{"📖"}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{"Unfinished lecture: " + (pendingResume.topic || "session")}</div>
+            <div style={{ fontSize: 9, color: "#94a3b8" }}>{(pendingResume.lectureMode ? "Phase " + ((pendingResume.lecturePhase || 0) + 1) + "/" + LECTURE_PHASES.length + " · " : "") + (pendingResume.messages || []).filter(function(m) { return m.role !== "system"; }).length + " messages" + (pendingResume.upText ? " · 📄 chapter attached" : "")}</div>
+          </div>
+          <button onClick={resumeInterrupted} style={{ padding: "6px 12px", background: "linear-gradient(135deg,#a78bfa,#8b5cf6)", border: "none", borderRadius: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{"▶ Resume"}</button>
+          <button onClick={function() { var sess = pendingResume; setPendingResume(null); saveLectureSession(sess.topic, sess.messages, { sideMsgs: sess.sideMsgs || [], lecturePhase: sess.lecturePhase || 0, lectureMode: !!sess.lectureMode, upText: sess.upText || "" }); idbDel("activeSession").catch(function() {}); setSaveFeedback("Saved to 📚 Saved sessions"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "6px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 8, color: "#4ade80", fontSize: 10, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{"💾 Save"}</button>
+          <button onClick={function() { setPendingResume(null); idbDel("activeSession").catch(function() {}); }} title="Discard" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: 2 }}>{"✕"}</button>
+        </div>
+      )}
+
       {/* ═══ REORGANIZE SCHEDULE MODAL ═══ */}
       {showReorg && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 250, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }} onClick={function() { setShowReorg(false); }}>
@@ -9656,6 +9791,7 @@ export default function UroStudyHub() {
                 if (item.type === "session") {
                   var msgCount = item.messages ? item.messages.length : 0;
                   var phaseInfo = item.lecturePhase != null ? " · Phase " + (item.lecturePhase + 1) + "/" + LECTURE_PHASES.length : "";
+                  if (item.hasDoc) phaseInfo += " · 📄 chapter attached";
                   return (
                     <div key={item.id} style={{ marginBottom: 10, background: c.cd, borderRadius: 10, border: "1px solid #334155", overflow: "hidden" }}>
                       <div onClick={toggleExp} style={{ padding: "10px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
