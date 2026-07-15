@@ -1,46 +1,42 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-14 (late evening — shipped)
+**Updated:** 2026-07-14 (late night — shipped)
 **Tool:** Claude Code (Fable 5)
 
-## Done this session — lecture persistence (SHIPPED: commit `ca6960e` on origin/main, live on Pages)
+## Done this session — math typesets in the tutor (SHIPPED: commit `92c739f` on origin/main)
 
-Andrew's report: iPad PWA lost a 2/3-done uploaded lecture. Root cause: the
-in-progress tutor session (messages, phase, **uploaded chapter text**) lived only
-in React state; saving was manual, and even a manual save dropped the chapter doc.
-iPadOS kills suspended PWAs → cold relaunch → session gone.
+Andrew: math symbols/special characters don't format right in model answers.
+UroStudyHub got the real renderer (Nucleus surfaces got a plain-Unicode prompt
+rule instead — see `nucleus/STATUS.md`).
 
 Shipped in `UroStudyHub.html` (+ rebuilt `.min.html` via `build.py`):
-- **IndexedDB store** (`uroStudyHubDB`/kv inline helper) — chapter docs + session
-  checkpoints go to IDB (localStorage is ~5MB and already holds the progress blob).
-- **Continuous autosave**: debounced (700ms) checkpoint of the live tutor session
-  (msgs, side chat, phase, topic, chapter text, skills ctx) + immediate flush on
-  `visibilitychange→hidden`. An emptied session (Clear) deletes the checkpoint.
-- **Resume banner on relaunch**: "📖 Unfinished lecture: X — Phase n/9 · N messages ·
-  📄 chapter attached" → ▶ Resume (full restore incl. chapter, quizzing stays
-  grounded) / 💾 Save (archive to Saved library) / ✕ Discard.
-- **Saved sessions keep the chapter**: doc stored in IDB (`doc_<id>`, `hasDoc`);
-  library Resume reloads it; delete cleans it; rows show "📄 chapter attached".
-- **`navigator.storage.persist()`** on boot; **quota fallback** on the progress
-  write (transcripts slim before XP/streak/credit ever stops persisting).
-- Fixed latent bug: `resumeSavedSession` called undefined `toast()` (ReferenceError
-  on every library resume) → `setSaveFeedback`.
+- **KaTeX 0.16.9** (cdnjs, same CDN as React) — CSS + JS in the head.
+- **`renderMathText()`** (top-level helper): splits a message into text/math
+  segments — `\( \)` inline, `\[ \]` + `$$ $$` display, single-`$` only when
+  the span contains a LaTeX-ish char (`\ ^ _ {`) so "$50 vs $100" stays money —
+  and typesets via `katex.renderToString` (throwOnError:false; falls back to
+  raw text offline / on parse failure). Wired into ALL four model-output
+  surfaces: main tutor chat, Quick-Ask sidekick, saved-session viewer,
+  bookmarks.
+- **`MATH_FORMAT_RULE`** appended to the tutor sysContent (lecture / deep dive /
+  surgical) + a sidekick RULES line: write formulas as delimited LaTeX.
+  Deliberately NOT added globally in `callAI` — JSON-output generator calls
+  (anki cards etc.) must not be coaxed into emitting `\(` inside JSON strings.
 
 ## Verified
-Full loop on the BUILT min.html in the preview browser (:2036): upload → IDB
-checkpoint → cold reload → banner → Resume restores everything (Anki-Cards btn =
-upText proof) → manual Save writes `doc_<id>` → library resume/delete round-trips →
-Clear deletes checkpoint. Zero console errors (only pre-existing Babel notes).
-**Deployed:** merged to main, pushed (`ca6960e`), live build on
-chefboiandee.github.io/UroStudyHub re-fetched and confirmed carrying the new code.
+Built min.html on :2036 preview — app boots (only the pre-existing Babel size
+notes), `window.katex` 0.16.9 present. Deterministic render test: seeded a
+session + bookmark with LaTeX into `uroStudyHub_progress.savedLectures`,
+reloaded → inline FENa fraction, centered display CrCl fraction, `$E=mc^2$`
+typeset, "$50 vs $100" stays plain. Seed cleaned. Pushed `92c739f`; GitHub
+Pages redeploys on push.
 
 ## Next steps
-- Andrew: force-quit + relaunch the iPad PWA once so the network-first service
-  worker pulls the new build; then interrupted lectures survive and offer Resume.
+- Andrew: force-quit + relaunch the iPad PWA once so the network-first SW pulls
+  the new build (same drill as the persistence update).
 - Carry-forward (2026-07-09): local backup branches `tutor-sidekick-backup` /
-  `tutor-sidekick-premutback` — delete once happy; premium re-adds by cherry-picking
-  `5c2e1a4`. Untracked residue: `STONE_SQUADRON.md`, `URO_FPS.md`, README.docx
-  (Andrew to decide if they belong in the repo).
+  `tutor-sidekick-premutback` — delete once happy. Untracked residue:
+  `STONE_SQUADRON.md`, `URO_FPS.md`, README.docx (Andrew to decide).
 
 ## Open questions
 - None.
