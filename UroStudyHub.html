@@ -32,6 +32,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useRef, useMemo } = React;
@@ -341,6 +343,39 @@ var LECTURE_PHASES = [
   { id: "boards", name: "Board-Style Qs", icon: "📋", desc: "5 realistic board-style MCQs with full explanations and why wrong answers are wrong." },
   { id: "summary", name: "One-Page Summary", icon: "📄", desc: "Everything compressed to one rapid-review page you could read the morning of the exam." },
 ];
+
+// ═══ MATH RENDERING (KaTeX) ═══
+// Tutor answers write formulas in LaTeX; renderMathText() splits a message into
+// text/math segments and typesets the math with KaTeX. Used by every surface that
+// shows model output (main chat, sidekick, saved sessions, bookmarks). Falls back
+// to raw text when KaTeX didn't load (offline) or a segment won't parse.
+var MATH_FORMAT_RULE = "\n\nMATH & SYMBOLS: This app typesets LaTeX. Write any formula, equation, or ratio in LaTeX delimited with \\( \\) for inline math or \\[ \\] for display math, e.g. \\( FENa = \\frac{U_{Na} \\times P_{Cr}}{P_{Na} \\times U_{Cr}} \\times 100 \\). Never emit bare LaTeX commands outside those delimiters. Simple values in prose (doses, stages, percentages) stay plain text.";
+
+function renderMathText(text) {
+  if (text == null) return text;
+  var s = String(text);
+  // Fast path: no KaTeX or nothing math-shaped in the message.
+  if (!window.katex || (s.indexOf("\\(") === -1 && s.indexOf("\\[") === -1 && s.indexOf("$") === -1)) return s;
+  var re = /\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
+  var out = [], last = 0, k = 0, m;
+  while ((m = re.exec(s)) !== null) {
+    var tex = m[1] != null ? m[1] : m[2] != null ? m[2] : m[3] != null ? m[3] : m[4];
+    var display = m[1] != null || m[3] != null;
+    // Single-$ guard: "$50 and $100" is money, not math — require a LaTeX-ish
+    // char inside. On a miss, resume just past the opening $ so a real \(..\)
+    // or $..$ later in the message still matches.
+    if (m[4] != null && !/[\\^_{]/.test(m[4])) { re.lastIndex = m.index + 1; continue; }
+    if (m.index > last) out.push(s.slice(last, m.index));
+    var html = null;
+    try { html = window.katex.renderToString(tex.trim(), { throwOnError: false, displayMode: display }); } catch (e) {}
+    if (html) out.push(<span key={"kx" + (k++)} style={{ whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: html }} />);
+    else out.push(m[0]);
+    last = m.index + m[0].length;
+  }
+  if (k === 0) return s;
+  if (last < s.length) out.push(s.slice(last));
+  return out;
+}
 
 var SYSTEM_PROMPT_LECTURE = [
   "You are a urology attending running a one-on-one board prep session with a resident.",
@@ -3257,6 +3292,7 @@ export default function UroStudyHub() {
     } else {
       sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
     }
+    sysContent += MATH_FORMAT_RULE;
 
     callAI(sysContent, chatHistory, { temperature: 0.7 }, function(reply) {
       setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
@@ -3325,6 +3361,7 @@ export default function UroStudyHub() {
       "- Never deliver lecture phases, never say NEXT, never summarize whole sections unless explicitly asked.",
       "- If the lecture said something that conflicts with current guidelines, answer correctly and flag the discrepancy in one clause.",
       "- No medical-advice disclaimers. This is board prep between colleagues.",
+      "- Formulas in LaTeX delimited with \\( \\) (inline) or \\[ \\] (display) — the panel typesets them. Never bare LaTeX outside delimiters.",
     ];
     if (lectureTopic) lines.push("", "SESSION TOPIC: " + lectureTopic);
     if (skillsCtx && skillsCtx.id) {
@@ -9813,7 +9850,7 @@ export default function UroStudyHub() {
                               return (
                                 <div key={mi} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "90%" }}>
                                   <div style={{ background: m.role === "user" ? c.a + "25" : "#0f172a", borderRadius: 10, padding: "8px 12px", color: "#e2e8f0", fontSize: 11, lineHeight: 1.6, whiteSpace: "pre-wrap", border: "1px solid #334155" }}>
-                                    {m.content}
+                                    {renderMathText(m.content)}
                                   </div>
                                 </div>
                               );
@@ -9834,7 +9871,7 @@ export default function UroStudyHub() {
                           {item.phase && <span style={{ fontSize: 9, color: "#64748b", background: "#334155", padding: "1px 6px", borderRadius: 4 }}>{item.phase}</span>}
                         </div>
                         <div style={{ fontSize: 9, color: "#64748b", marginBottom: 6 }}>{dateStr}</div>
-                        <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: expanded ? "none" : 120, overflow: "hidden" }}>{item.content}</div>
+                        <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: expanded ? "none" : 120, overflow: "hidden" }}>{renderMathText(item.content)}</div>
                         {item.content && item.content.length > 300 && (
                           <button onClick={toggleExp} style={{ background: "none", border: "none", color: "#a78bfa", cursor: "pointer", fontSize: 10, marginTop: 4, padding: 0 }}>{expanded ? "Show less" : "Show more..."}</button>
                         )}
@@ -9900,7 +9937,7 @@ export default function UroStudyHub() {
               return (
                 <div key={i} style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", position: "relative" }}>
                   <div style={{ background: msg.role === "user" ? "linear-gradient(135deg," + c.a + "," + c.a2 + ")" : c.cd, borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "10px 14px", color: "#e2e8f0", fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid #334155" : "none" }}>
-                    {msg.content}
+                    {renderMathText(msg.content)}
                   </div>
                   {msg.role === "assistant" && (
                     <div style={{ position: "absolute", top: 4, right: -28, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -9971,7 +10008,7 @@ export default function UroStudyHub() {
                 {sideMsgs.map(function(m, i) {
                   return (
                     <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-                      <div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid #334155" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "#e2e8f0", fontSize: 11, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.content}</div>
+                      <div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid #334155" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "#e2e8f0", fontSize: 11, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}</div>
                     </div>
                   );
                 })}
