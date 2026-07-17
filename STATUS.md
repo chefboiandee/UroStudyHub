@@ -1,7 +1,26 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-16 (light mode shipped)
+**Updated:** 2026-07-16 (light mode + tutor pomodoro upgrade shipped — commits 8a77720, b076a3b)
 **Tool:** Claude Code (Fable 5)
+
+## Also this session — TUTOR POMODORO (Andrew: tiny on iPad; wanted a session counter + coins)
+
+- Tutor-tab timer: 10px chip → 40px-tall pill (big monospace time, 15/25/45m
+  chips, ▶ Start / ⏸ / ▶ resume / ✕, amber ×N session-completions badge).
+- Full work phase now pays COINS (duration-scaled 15m→9 / 25m→15 / 45m→27,
+  streak multiplier) on top of the existing +2 🪙 tokens; toast announces both;
+  `pomodorosToday`/`lastPomDate` now really tracked (hub card shows "N done
+  today" from the store).
+- New `pomoPaused` state — pause is resumable from tutor pill AND hub card
+  (was a one-way door on both surfaces).
+- FIXED en route: resume-path completion left the break frozen (no interval),
+  which also blocked the "done" transition that logs totalStudyMins —
+  countdown factored into shared `startBreakInterval()`.
+- Dev hook: load with `?pomodev=4` to shorten work+break to 4s for testing the
+  complete→reward cycle. Verified live both paths (straight run + pause/resume
+  mid-work): rewards exactly once per run, break ticks to done, ×N increments.
+  NOTE the real storage key is `uroStudyHub_progress` — the docs' uroStudyHub_v5
+  is stale.
 
 ## Done this session — LIGHT MODE (Andrew: unreadable on his Boox Go 7 e-ink reader — dark-only)
 
