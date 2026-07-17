@@ -1,9 +1,29 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-16 (light mode + tutor pomodoro upgrade shipped — commits 8a77720, b076a3b)
+**Updated:** 2026-07-17 (pomodoro alarm shipped — commit 4bb1a6b; earlier: light mode 8a77720, pomodoro upgrade b076a3b)
 **Tool:** Claude Code (Fable 5)
 
-## Also this session — TUTOR POMODORO (Andrew: tiny on iPad; wanted a session counter + coins)
+## Newest — THE TIMER GOES OFF (Andrew: "make it flashy / draw attention when it goes off")
+
+- **Work end:** rising 3-note chime (Web Audio, synthesized in-code — no asset)
+  + full-screen banner (dark backdrop, glowing card, wiggling 🍅, reward haul
+  "+2 🪙 · +15 💰") + tab-title flash "🍅 TIME'S UP!". **Break end:** softer
+  2-note chime + "Break's over" banner with **▶ Run it back** (starts the next
+  run). Banner renders globally (any tab), tap-anywhere dismiss, auto-clears
+  7s/9s. AudioContext is primed inside the start/resume TAP (iPad autoplay
+  policy — a gesture-primed context may play later without one). **🔔/🔕 on the
+  tutor pill** (localStorage `uroStudyHub_pomoSound`; unmute plays a preview
+  blip). Keyframes pomoRing/pomoGlowRed/pomoGlowGrn in the <style> block.
+- Verified on :2037 (?pomodev): both banners render with correct content
+  (screenshots), tap-dismiss + Run-it-back + auto-clear + bell persistence all
+  exercised, rewards once per run, min.html cycle banks rewards. ⚠️ Verify
+  lesson for future sessions: the preview pane THROTTLES page timers + CSS
+  animations between tool calls — banners "missing" in polls were sampling
+  after auto-clear, and screenshots catch mid-fade frames. Poll from INSIDE one
+  hot javascript_exec; don't trust cross-call timing. Chime is code-path
+  verified only (headless) — audible check is on-device.
+
+## Earlier this session — TUTOR POMODORO (Andrew: tiny on iPad; wanted a session counter + coins)
 
 - Tutor-tab timer: 10px chip → 40px-tall pill (big monospace time, 15/25/45m
   chips, ▶ Start / ⏸ / ▶ resume / ✕, amber ×N session-completions badge).
