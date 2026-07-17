@@ -1,42 +1,49 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-14 (late night — shipped)
+**Updated:** 2026-07-16 (light mode shipped)
 **Tool:** Claude Code (Fable 5)
 
-## Done this session — math typesets in the tutor (SHIPPED: commit `92c739f` on origin/main)
+## Done this session — LIGHT MODE (Andrew: unreadable on his Boox Go 7 e-ink reader — dark-only)
 
-Andrew: math symbols/special characters don't format right in model answers.
-UroStudyHub got the real renderer (Nucleus surfaces got a plain-Unicode prompt
-rule instead — see `nucleus/STATUS.md`).
-
-Shipped in `UroStudyHub.html` (+ rebuilt `.min.html` via `build.py`):
-- **KaTeX 0.16.9** (cdnjs, same CDN as React) — CSS + JS in the head.
-- **`renderMathText()`** (top-level helper): splits a message into text/math
-  segments — `\( \)` inline, `\[ \]` + `$$ $$` display, single-`$` only when
-  the span contains a LaTeX-ish char (`\ ^ _ {`) so "$50 vs $100" stays money —
-  and typesets via `katex.renderToString` (throwOnError:false; falls back to
-  raw text offline / on parse failure). Wired into ALL four model-output
-  surfaces: main tutor chat, Quick-Ask sidekick, saved-session viewer,
-  bookmarks.
-- **`MATH_FORMAT_RULE`** appended to the tutor sysContent (lecture / deep dive /
-  surgical) + a sidekick RULES line: write formulas as delimited LaTeX.
-  Deliberately NOT added globally in `callAI` — JSON-output generator calls
-  (anki cards etc.) must not be coaxed into emitting `\(` inside JSON strings.
+- **Theme tokens:** every hardcoded palette hex (~1,865 occurrences, 68 tokens)
+  swept to CSS variables (`--c-*` structural / `--a-*` accents) defined in the
+  `<style>` block. Dark values = the exact original hexes, so dark mode renders
+  byte-identical (verified via computed styles). `[data-theme="light"]` swaps
+  the whole palette: white cards on #f3f5f8, near-black text, and accents
+  shifted to darker Tailwind shades so colored text passes contrast on white
+  (the e-ink requirement).
+- **Sweep exclusions (IMPORTANT for future edits):** THEMES, TCOLOR, game data
+  `col:`/`color:` fields, feedback `.push({...color})`, and `(x || "#hex") + "aa"`
+  sites stay RAW HEX — those values get alpha suffixes string-concatenated
+  (`c.a + "33"`); a `var()` there breaks the CSS. Never sweep those. The two
+  Snap-Decision swipe-zone gradients stay hex for the same reason.
+- **THEMES:** each shop theme gained an `lc` (light counterpart — same accent
+  identity, light surfaces); resolution is `var c = (lightMode && th.lc) ? th.lc : th.c`.
+- **Toggle:** ☀️/🌙 button in the header next to ⚙. Persists in localStorage
+  `uroStudyHub_mode` (own key, not the s-blob); a `<head>` pre-paint script
+  applies it before first render (no flash) and swaps the theme-color meta.
+  Default stays dark — no behavior change for existing devices until toggled.
+- **Bug fixed en route:** the gradient wordmark used the `background` shorthand;
+  React re-render reset `-webkit-background-clip: text` → solid purple block on
+  theme change. Now `backgroundImage` (longhand doesn't reset clip).
 
 ## Verified
-Built min.html on :2036 preview — app boots (only the pre-existing Babel size
-notes), `window.katex` 0.16.9 present. Deterministic render test: seeded a
-session + bookmark with LaTeX into `uroStudyHub_progress.savedLectures`,
-reloaded → inline FENa fraction, centered display CrCl fraction, `$E=mc^2$`
-typeset, "$50 vs $100" stays plain. Seed cleaned. Pushed `92c739f`; GitHub
-Pages redeploys on push.
+Served on :2037 (launch.json gained `urostudyhub-2037`; :2036 was held by
+another session). Source + rebuilt min.html: dark default unchanged (computed
+styles = original hexes), toggle → light across Hub / Study Tracker / Tutor /
+Pocket Guide (BPH Meds card: dense clinical text + red warnings readable) /
+Arcade modal, reload persists light, toggle back restores dark + meta. Only
+pre-existing Babel size notes in console. Pushed to origin/main — GitHub Pages
+redeploys on push.
 
 ## Next steps
-- Andrew: force-quit + relaunch the iPad PWA once so the network-first SW pulls
-  the new build (same drill as the persistence update).
+- **Andrew:** on the Boox, load the site fresh (the SW is network-first — one
+  reload picks up the new build) and tap **☀️** in the header. It sticks
+  per-device. iPad PWA: force-quit + relaunch once if it looks stale.
 - Carry-forward (2026-07-09): local backup branches `tutor-sidekick-backup` /
   `tutor-sidekick-premutback` — delete once happy. Untracked residue:
   `STONE_SQUADRON.md`, `URO_FPS.md`, README.docx (Andrew to decide).
 
 ## Open questions
-- None.
+- None. (If any game screen shows a washed-out tint in light mode, it's one of
+  the deliberately-unswept concat sites — cosmetic, fix per-site.)
