@@ -84,6 +84,10 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  /* Pomodoro "goes off" banner */
+  @keyframes pomoRing { 0%, 100% { transform: rotate(0deg) scale(1); } 20% { transform: rotate(-14deg) scale(1.08); } 40% { transform: rotate(12deg) scale(1.12); } 60% { transform: rotate(-8deg) scale(1.08); } 80% { transform: rotate(6deg) scale(1.04); } }
+  @keyframes pomoGlowRed { 0%, 100% { box-shadow: 0 0 22px rgba(239,68,68,0.45); } 50% { box-shadow: 0 0 70px rgba(239,68,68,0.85); } }
+  @keyframes pomoGlowGrn { 0%, 100% { box-shadow: 0 0 22px rgba(74,222,128,0.45); } 50% { box-shadow: 0 0 70px rgba(74,222,128,0.85); } }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--c-br); border-radius: 4px; }
@@ -2472,6 +2476,104 @@ export default function UroStudyHub() {
     try { var v = new URLSearchParams(window.location.search).get("pomodev"); return v ? Math.max(2, parseInt(v, 10) || 0) : 0; } catch (e) { return 0; }
   }, []);
 
+  // ═══ POMODORO GOES OFF — chime + full-screen flash when a phase ends ═══
+  // pomoAlert: null | { kind: "work"|"done", n, tok, coins } — renders the
+  // global overlay banner. Chime is synthesized (Web Audio, no asset); the
+  // AudioContext is created/resumed inside the start/resume CLICK (iPad
+  // autoplay policy — a context primed by a gesture may play later without one).
+  var [pomoAlert, setPomoAlert] = useState(null);
+  var [pomoSound, setPomoSound] = useState(function () {
+    try { return localStorage.getItem("uroStudyHub_pomoSound") !== "off"; } catch (e) { return true; }
+  });
+  var pomoAudioRef = useRef(null);
+  var pomoAlertTimerRef = useRef(null);
+  var pomoTitleRef = useRef(null);
+
+  function primePomoAudio() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!pomoAudioRef.current) pomoAudioRef.current = new AC();
+      if (pomoAudioRef.current.state === "suspended") pomoAudioRef.current.resume().catch(function () {});
+    } catch (e) {}
+  }
+
+  function playPomoChime(kind) {
+    if (!pomoSound) return;
+    try {
+      var ctx = pomoAudioRef.current;
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(function () {});
+      var t0 = ctx.currentTime + 0.02;
+      // work done = rising E5→G5→C6 (celebration); break over = C5→G5 (back to it)
+      var notes = kind === "work" ? [[659.25, 0], [783.99, 0.14], [1046.5, 0.28]] : [[523.25, 0], [783.99, 0.16]];
+      notes.forEach(function (nf) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "triangle";
+        o.frequency.value = nf[0];
+        var st = t0 + nf[1];
+        g.gain.setValueAtTime(0.0001, st);
+        g.gain.exponentialRampToValueAtTime(0.3, st + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + 0.55);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(st); o.stop(st + 0.6);
+      });
+    } catch (e) {}
+  }
+
+  function flashPomoTitle(msg) {
+    try {
+      if (pomoTitleRef.current) { clearInterval(pomoTitleRef.current.iv); document.title = pomoTitleRef.current.orig; }
+      var orig = document.title, on = false, n = 0;
+      var iv = setInterval(function () {
+        on = !on; n++;
+        document.title = on ? msg : orig;
+        if (n > 10) { clearInterval(iv); document.title = orig; pomoTitleRef.current = null; }
+      }, 700);
+      pomoTitleRef.current = { iv: iv, orig: orig };
+    } catch (e) {}
+  }
+
+  function firePomoAlert(alert) {
+    setPomoAlert(alert);
+    playPomoChime(alert.kind);
+    flashPomoTitle(alert.kind === "work" ? "🍅 TIME'S UP!" : "🍅 BREAK'S OVER");
+    if (pomoAlertTimerRef.current) clearTimeout(pomoAlertTimerRef.current);
+    pomoAlertTimerRef.current = setTimeout(function () { setPomoAlert(null); }, alert.kind === "work" ? 7000 : 9000);
+  }
+
+  function dismissPomoAlert() {
+    if (pomoAlertTimerRef.current) { clearTimeout(pomoAlertTimerRef.current); pomoAlertTimerRef.current = null; }
+    if (pomoTitleRef.current) { try { clearInterval(pomoTitleRef.current.iv); document.title = pomoTitleRef.current.orig; } catch (e) {} pomoTitleRef.current = null; }
+    setPomoAlert(null);
+  }
+
+  function togglePomoSound() {
+    setPomoSound(function (prev) {
+      var next = !prev;
+      try { localStorage.setItem("uroStudyHub_pomoSound", next ? "on" : "off"); } catch (e) {}
+      if (next) {
+        // toggled on by a tap — prime and preview so he hears the volume now
+        primePomoAudio();
+        setTimeout(function () {
+          try {
+            var ctx = pomoAudioRef.current;
+            if (!ctx) return;
+            var o = ctx.createOscillator(), g = ctx.createGain();
+            o.type = "triangle"; o.frequency.value = 783.99;
+            var st = ctx.currentTime + 0.02;
+            g.gain.setValueAtTime(0.0001, st);
+            g.gain.exponentialRampToValueAtTime(0.25, st + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, st + 0.4);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(st); o.stop(st + 0.45);
+          } catch (e) {}
+        }, 50);
+      }
+      return next;
+    });
+  }
+
   // One completed WORK phase: bump the session counter, grant tokens AND coins.
   // Coins scale with the length you committed to (15m→9, 25m→15, 45m→27),
   // then ride the same streak multiplier the arcade uses.
@@ -2492,6 +2594,7 @@ export default function UroStudyHub() {
     });
     setTokenToast("🍅 Pomodoro #" + n + " done! +" + tok + " 🪙 · +" + shown + " 💰");
     setTimeout(function () { setTokenToast(""); }, 3000);
+    firePomoAlert({ kind: "work", n: n, tok: tok, coins: shown });
   }
 
   // Break countdown, shared by the start and resume paths (the resume path used
@@ -2504,6 +2607,7 @@ export default function UroStudyHub() {
           clearInterval(pomoRef.current);
           pomoRef.current = null;
           setPomoState("done");
+          firePomoAlert({ kind: "done" });
           return 0;
         }
         return t2 - 1;
@@ -2512,6 +2616,8 @@ export default function UroStudyHub() {
   }
 
   function startPomo() {
+    primePomoAudio(); // user gesture — unlock the chime for later
+    dismissPomoAlert();
     setPomoState("work");
     setPomoPaused(false);
     setPomoTime(pomoDevSecs || pomoDuration * 60);
@@ -2541,6 +2647,7 @@ export default function UroStudyHub() {
   function resumePomo() {
     if (pomoRef.current) return;
     setPomoPaused(false);
+    primePomoAudio();
     pomoRef.current = setInterval(function() {
       setPomoTime(function(t) {
         if (t <= 1) {
@@ -2553,6 +2660,7 @@ export default function UroStudyHub() {
             return 0;
           } else {
             setPomoState("done");
+            firePomoAlert({ kind: "done" });
             return 0;
           }
         }
@@ -2567,6 +2675,7 @@ export default function UroStudyHub() {
     setPomoState("idle");
     setPomoPaused(false);
     setPomoTime(pomoDuration * 60);
+    dismissPomoAlert();
   }
 
   // Gate question for locked games
@@ -8083,6 +8192,28 @@ export default function UroStudyHub() {
         </div>
       )}
 
+      {/* Pomodoro went off — unmissable full-screen flash (any tab). Tap anywhere to dismiss; auto-clears. */}
+      {pomoAlert && (
+        <div onClick={dismissPomoAlert} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", animation: "fadeIn 0.2s ease" }}>
+          <div style={{ background: "var(--c-cd)", border: "2.5px solid " + (pomoAlert.kind === "work" ? "var(--a-red)" : "var(--a-grn)"), borderRadius: 20, padding: "26px 36px", textAlign: "center", maxWidth: 340, margin: 16, animation: (pomoAlert.kind === "work" ? "slideUp 0.25s ease, pomoGlowRed 1.1s ease-in-out infinite" : "slideUp 0.25s ease, pomoGlowGrn 1.1s ease-in-out infinite") }}>
+            <div style={{ fontSize: 56, lineHeight: 1, animation: "pomoRing 0.7s ease-in-out infinite" }}>{"🍅"}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: pomoAlert.kind === "work" ? "var(--a-red)" : "var(--a-grn)", margin: "10px 0 4px" }}>{pomoAlert.kind === "work" ? "Time's up!" : "Break's over"}</div>
+            {pomoAlert.kind === "work" ? (
+              <div>
+                <div style={{ fontSize: 13, color: "var(--c-tx)", fontWeight: 700 }}>{"Pomodoro #" + pomoAlert.n + " in the books — break started"}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--a-am)", marginTop: 8 }}>{"+" + pomoAlert.tok + " 🪙 · +" + pomoAlert.coins + " 💰"}</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, color: "var(--c-tx)", fontWeight: 700 }}>Recharged. Eyes back on the prize.</div>
+                <button onClick={function(e) { e.stopPropagation(); dismissPomoAlert(); startPomo(); }} style={{ marginTop: 12, padding: "10px 24px", background: "linear-gradient(135deg, var(--a-grn2), var(--a-cy2))", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{"▶ Run it back"}</button>
+              </div>
+            )}
+            <div style={{ fontSize: 9, color: "#64748b", marginTop: 12 }}>tap anywhere to dismiss</div>
+          </div>
+        </div>
+      )}
+
       {/* Gate question modal */}
       {gateQ && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 250, padding: 20 }}>
@@ -9519,6 +9650,7 @@ export default function UroStudyHub() {
               {pomoState === "break" && <span style={{ fontSize: 11, color: "var(--a-grn)", fontWeight: 800 }}>Break!</span>}
               {pomoState === "done" && <button onClick={resetPomo} style={{ background: "var(--c-bg)", border: "1px solid " + c.a + "50", borderRadius: 6, color: c.a, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"↻ Reset"}</button>}
               {pomoCount > 0 && <span title={pomoCount + " pomodoro" + (pomoCount === 1 ? "" : "s") + " completed this session"} style={{ fontSize: 11, fontWeight: 800, color: "var(--a-am)", background: "#fbbf2415", border: "1px solid #fbbf2435", borderRadius: 6, padding: "3px 7px" }}>{"×" + pomoCount}</span>}
+              <button onClick={function(e) { e.stopPropagation(); togglePomoSound(); }} title={pomoSound ? "Chime on when the timer goes off — tap to mute" : "Chime muted — tap to unmute"} style={{ background: "transparent", border: "none", fontSize: 13, cursor: "pointer", padding: "2px 0 2px 2px", opacity: pomoSound ? 1 : 0.4, lineHeight: 1 }}>{pomoSound ? "🔔" : "🔕"}</button>
             </div>
             <div style={{ flex: 1 }} />
             <button onClick={function() { setAutoAnki(!autoAnki); }} style={{ background: autoAnki ? "#fb923c20" : c.cd, border: "1px solid " + (autoAnki ? "#fb923c60" : "var(--c-br)"), borderRadius: 6, padding: "3px 7px", cursor: "pointer", color: autoAnki ? "var(--a-or)" : "#64748b", fontSize: 8, fontWeight: autoAnki ? 700 : 400 }} title="Auto-generate Anki cards when uploading a topic">{"📇 " + (autoAnki ? "ON" : "off")}</button>
