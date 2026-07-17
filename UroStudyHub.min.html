@@ -2233,29 +2233,56 @@ var [pomoTime, setPomoTime] = useState(25 * 60); // seconds remaining
 var [pomoDuration, setPomoDuration] = useState(25); // minutes
 var [pomoBreak, setPomoBreak] = useState(5); // minutes
 var [pomoCount, setPomoCount] = useState(0); // completed this session
+var [pomoPaused, setPomoPaused] = useState(false);
 var pomoRef = useRef(null);
-function startPomo() {
-setPomoState("work");
-setPomoTime(pomoDuration * 60);
-if (pomoRef.current) clearInterval(pomoRef.current);
-pomoRef.current = setInterval(function() {
-setPomoTime(function(t) {
-if (t <= 1) {
-clearInterval(pomoRef.current);
-setPomoState("break");
-setPomoCount(function(c2) { return c2 + 1; });
-earnTokens("pomodoro", "Pomodoro #" + (pomoCount + 1));
-setPomoTime(pomoBreak * 60);
+var pomoCountRef = useRef(0); // mirrors pomoCount — interval closures capture stale state
+var pomoDevSecs = useMemo(function () {
+try { var v = new URLSearchParams(window.location.search).get("pomodev"); return v ? Math.max(2, parseInt(v, 10) || 0) : 0; } catch (e) { return 0; }
+}, []);
+function pomoWorkComplete() {
+pomoCountRef.current += 1;
+var n = pomoCountRef.current;
+setPomoCount(n);
+var base = Math.round((pomoDuration || 25) * 0.6);
+var tok = earnTokens("pomodoro", "Pomodoro #" + n);
+var shown = Math.ceil(base * getStreakMultiplier(s.streak || 0));
+setS(function (p) {
+var bonus = Math.ceil(base * getStreakMultiplier(p.streak || 0));
+return Object.assign({}, p, {
+coins: p.coins + bonus,
+pomodorosToday: (p.lastPomDate === today ? (p.pomodorosToday || 0) : 0) + 1,
+lastPomDate: today,
+});
+});
+setTokenToast("🍅 Pomodoro #" + n + " done! +" + tok + " 🪙 · +" + shown + " 💰");
+setTimeout(function () { setTokenToast(""); }, 3000);
+}
+function startBreakInterval() {
 pomoRef.current = setInterval(function() {
 setPomoTime(function(t2) {
 if (t2 <= 1) {
 clearInterval(pomoRef.current);
+pomoRef.current = null;
 setPomoState("done");
 return 0;
 }
 return t2 - 1;
 });
 }, 1000);
+}
+function startPomo() {
+setPomoState("work");
+setPomoPaused(false);
+setPomoTime(pomoDevSecs || pomoDuration * 60);
+if (pomoRef.current) clearInterval(pomoRef.current);
+pomoRef.current = setInterval(function() {
+setPomoTime(function(t) {
+if (t <= 1) {
+clearInterval(pomoRef.current);
+setPomoState("break");
+pomoWorkComplete();
+setPomoTime(pomoDevSecs || pomoBreak * 60);
+startBreakInterval();
 return 0;
 }
 return t - 1;
@@ -2265,18 +2292,20 @@ return t - 1;
 function pausePomo() {
 if (pomoRef.current) clearInterval(pomoRef.current);
 pomoRef.current = null;
+setPomoPaused(true);
 }
 function resumePomo() {
 if (pomoRef.current) return;
+setPomoPaused(false);
 pomoRef.current = setInterval(function() {
 setPomoTime(function(t) {
 if (t <= 1) {
 clearInterval(pomoRef.current);
 if (pomoState === "work") {
 setPomoState("break");
-setPomoCount(function(c2) { return c2 + 1; });
-earnTokens("pomodoro", "Pomodoro completed");
-setPomoTime(pomoBreak * 60);
+pomoWorkComplete();
+setPomoTime(pomoDevSecs || pomoBreak * 60);
+startBreakInterval();
 return 0;
 } else {
 setPomoState("done");
@@ -2291,6 +2320,7 @@ function resetPomo() {
 if (pomoRef.current) clearInterval(pomoRef.current);
 pomoRef.current = null;
 setPomoState("idle");
+setPomoPaused(false);
 setPomoTime(pomoDuration * 60);
 }
 var GATE_QUESTIONS = [
@@ -7267,17 +7297,19 @@ return <button key={m} onClick={function(e) { e.stopPropagation(); setPomoDurati
 )}
 {pomoState === "work" && (
 <div style={{ display: "flex", gap: 4 }}>
-<button onClick={pausePomo} style={{ flex: 1, padding: 4, background: "var(--c-br)", color: "var(--c-mut)", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 9 }}>Pause</button>
+{pomoPaused
+? <button onClick={resumePomo} style={{ flex: 1, padding: 4, background: "#4ade8025", color: "var(--a-grn)", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 9, fontWeight: 700 }}>Resume</button>
+: <button onClick={pausePomo} style={{ flex: 1, padding: 4, background: "var(--c-br)", color: "var(--c-mut)", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 9 }}>Pause</button>}
 <button onClick={resetPomo} style={{ flex: 1, padding: 4, background: "var(--c-cd)", color: "#64748b", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 9 }}>Reset</button>
 </div>
 )}
 {pomoState === "break" && (
-<div style={{ textAlign: "center", fontSize: 8, color: "var(--a-grn)" }}>Break time! +{TOKEN_REWARDS.pomodoro} 🪙</div>
+<div style={{ textAlign: "center", fontSize: 8, color: "var(--a-grn)" }}>Break time! +{TOKEN_REWARDS.pomodoro} 🪙 · 💰 banked</div>
 )}
 {pomoState === "done" && (
 <button onClick={function() { resetPomo(); }} style={{ width: "100%", padding: 4, background: c.a + "20", color: c.a, border: "1px solid " + c.a + "40", borderRadius: 5, cursor: "pointer", fontSize: 9 }}>Again</button>
 )}
-{pomoCount > 0 && <div style={{ fontSize: 7, color: "#64748b", textAlign: "center", marginTop: 3 }}>{pomoCount} done today</div>}
+{s.lastPomDate === today && (s.pomodorosToday || 0) > 0 && <div style={{ fontSize: 7, color: "#64748b", textAlign: "center", marginTop: 3 }}>{s.pomodorosToday} done today</div>}
 </div>
 <div style={{ background: c.cd, borderRadius: 10, padding: 12, border: "1px solid #fbbf2433", display: "flex", flexDirection: "column", gap: 5 }}>
 <div style={{ fontSize: 10, fontWeight: 700, color: "var(--a-am)" }}>{"🪙 Daily Check-in"}</div>
@@ -8401,16 +8433,22 @@ return <div key={ti} style={{ width: 11, height: 11, borderRadius: 2, background
 <div style={{ width: 6, height: 6, borderRadius: "50%", background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
 <span style={{ fontSize: 9, color: lm.on ? "var(--a-grn)" : "var(--a-red0)" }}>{lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + (lm.model || "").split("/").pop().substring(0, 20) : "Off"}</span>
 </div>
-<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 3, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1px solid " + (pomoState === "work" ? "#ef444440" : pomoState === "break" ? "#4ade8040" : "var(--c-br)"), borderRadius: 6, padding: "2px 6px", cursor: pomoState === "idle" ? "pointer" : "default" }}>
-<span style={{ fontSize: 9, color: pomoState === "work" ? "var(--a-red)" : pomoState === "break" ? "var(--a-grn)" : "#64748b" }}>{"🍅"}</span>
-<span style={{ fontSize: 10, fontWeight: 700, fontFamily: "monospace", color: pomoState !== "idle" ? "var(--c-tx)" : "#64748b", minWidth: 36 }}>
+<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 10, padding: "6px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40 }}>
+<span style={{ fontSize: 15 }}>{"🍅"}</span>
+<span style={{ fontSize: 16, fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
 {Math.floor(pomoTime / 60).toString().padStart(2, "0") + ":" + (pomoTime % 60).toString().padStart(2, "0")}
 </span>
-{pomoState === "idle" && <span style={{ fontSize: 8, color: "var(--a-red)", fontWeight: 700 }}>Go</span>}
-{pomoState === "work" && <button onClick={pausePomo} style={{ background: "none", border: "none", color: "#64748b", fontSize: 8, cursor: "pointer", padding: 0 }}>||</button>}
-{pomoState === "work" && <button onClick={resetPomo} style={{ background: "none", border: "none", color: "#64748b", fontSize: 8, cursor: "pointer", padding: 0 }}>x</button>}
-{pomoState === "break" && <span style={{ fontSize: 8, color: "var(--a-grn)" }}>Break!</span>}
-{pomoState === "done" && <button onClick={resetPomo} style={{ background: "none", border: "none", color: c.a, fontSize: 8, cursor: "pointer", padding: 0 }}>Reset</button>}
+{pomoState === "idle" && [15, 25, 45].map(function(m) {
+return <button key={m} onClick={function(e) { e.stopPropagation(); setPomoDuration(m); setPomoTime(m * 60); }} style={{ padding: "4px 8px", background: pomoDuration === m ? c.a + "30" : "transparent", border: "1px solid " + (pomoDuration === m ? c.a + "60" : "var(--c-br)"), borderRadius: 6, color: pomoDuration === m ? c.a : "#64748b", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>{m + "m"}</button>;
+})}
+{pomoState === "idle" && <span style={{ fontSize: 11, color: "var(--a-red)", fontWeight: 800 }}>{"▶ Start"}</span>}
+{pomoState === "work" && (pomoPaused
+? <button onClick={resumePomo} style={{ background: "var(--c-bg)", border: "1px solid #4ade8060", borderRadius: 6, color: "var(--a-grn)", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"▶"}</button>
+: <button onClick={pausePomo} style={{ background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 6, color: "var(--c-tx2)", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"⏸"}</button>)}
+{pomoState === "work" && <button onClick={resetPomo} style={{ background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 6, color: "var(--c-mut)", fontSize: 11, cursor: "pointer", padding: "4px 10px" }}>{"✕"}</button>}
+{pomoState === "break" && <span style={{ fontSize: 11, color: "var(--a-grn)", fontWeight: 800 }}>Break!</span>}
+{pomoState === "done" && <button onClick={resetPomo} style={{ background: "var(--c-bg)", border: "1px solid " + c.a + "50", borderRadius: 6, color: c.a, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"↻ Reset"}</button>}
+{pomoCount > 0 && <span title={pomoCount + " pomodoro" + (pomoCount === 1 ? "" : "s") + " completed this session"} style={{ fontSize: 11, fontWeight: 800, color: "var(--a-am)", background: "#fbbf2415", border: "1px solid #fbbf2435", borderRadius: 6, padding: "3px 7px" }}>{"×" + pomoCount}</span>}
 </div>
 <div style={{ flex: 1 }} />
 <button onClick={function() { setAutoAnki(!autoAnki); }} style={{ background: autoAnki ? "#fb923c20" : c.cd, border: "1px solid " + (autoAnki ? "#fb923c60" : "var(--c-br)"), borderRadius: 6, padding: "3px 7px", cursor: "pointer", color: autoAnki ? "var(--a-or)" : "#64748b", fontSize: 8, fontWeight: autoAnki ? 700 : 400 }} title="Auto-generate Anki cards when uploading a topic">{"📇 " + (autoAnki ? "ON" : "off")}</button>
