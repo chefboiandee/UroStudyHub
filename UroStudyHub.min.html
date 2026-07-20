@@ -336,6 +336,72 @@ var spreads = {
 };
 return spreads[n] || spreads[4];
 }
+var PDFJS_BASE = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+var pdfWorkerBlobUrl = null;
+function loadScriptOnce(src, id) {
+return new Promise(function (resolve, reject) {
+var existing = id && document.getElementById(id);
+if (existing) {
+if (existing.getAttribute("data-loaded") === "1") { resolve(); return; }
+existing.addEventListener("load", function () { resolve(); });
+existing.addEventListener("error", function () { reject(new Error("couldn't download " + src.split("/").pop() + " — check the connection")); });
+return;
+}
+var s = document.createElement("script");
+if (id) s.id = id;
+s.src = src;
+s.onload = function () { s.setAttribute("data-loaded", "1"); resolve(); };
+s.onerror = function () { reject(new Error("couldn't download " + src.split("/").pop() + " — check the connection")); };
+document.head.appendChild(s);
+});
+}
+function getPdfLib() {
+return loadScriptOnce(PDFJS_BASE + "pdf.min.js", "pdfjs-lib-script").then(function () {
+var lib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
+if (!lib) throw new Error("PDF engine didn't initialize");
+return lib;
+});
+}
+function pdfWorkerViaBlob(lib) {
+if (pdfWorkerBlobUrl) { lib.GlobalWorkerOptions.workerSrc = pdfWorkerBlobUrl; return Promise.resolve(); }
+return fetch(PDFJS_BASE + "pdf.worker.min.js").then(function (r) {
+if (!r.ok) throw new Error("worker download failed (" + r.status + ")");
+return r.text();
+}).then(function (code) {
+pdfWorkerBlobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+lib.GlobalWorkerOptions.workerSrc = pdfWorkerBlobUrl;
+});
+}
+function pdfExtractText(buf, onStatus) {
+return getPdfLib().then(function (lib) {
+function parse() { return lib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise; }
+return pdfWorkerViaBlob(lib).then(parse).catch(function (err1) {
+return loadScriptOnce(PDFJS_BASE + "pdf.worker.min.js", "pdfjs-worker-mainthread").then(function () {
+return parse();
+}).catch(function (err2) { throw (err2 && err2.message) ? err2 : err1; });
+}).then(function (pdf) {
+var pages = [], total = pdf.numPages;
+function next(n) {
+if (n > total) {
+if (!pages.length) throw new Error("no extractable text — this looks like a scanned/image-only PDF");
+return { pages: pages, total: total };
+}
+if (onStatus) onStatus("Extracting page " + n + " of " + total + "...");
+return pdf.getPage(n).then(function (page) { return page.getTextContent(); }).then(function (tc) {
+var text = tc.items.map(function (item) { return item.str; }).join(" ").replace(/\s{2,}/g, " ").trim();
+if (text) pages.push("## Page " + n + "\n\n" + text);
+return next(n + 1);
+});
+}
+return next(1);
+});
+});
+}
+function pdfErrMsg(err) {
+if (err && err.name === "PasswordException") return "this PDF is password-protected";
+var m = err && err.message ? String(err.message) : String(err || "unknown error");
+return m.slice(0, 90);
+}
 function detectDevice() {
 if (typeof window === "undefined") return "desktop";
 var hasTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
@@ -2738,54 +2804,24 @@ setConverting("Reading " + file.name + "...");
 if (!ankiBatchName) setAnkiBatchName(name);
 if (ext === "pdf") {
 setConverting("Loading PDF parser...");
-var script = document.createElement("script");
-script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-script.onload = function() {
-var pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
-if (!pdfjsLib) {
-setConverting(""); setAnkiBatchDoc("[Error: PDF.js failed to load]"); return;
-}
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 var reader = new FileReader();
+reader.onerror = function() {
+setConverting(""); setAnkiBatchDoc("[Error: couldn't read the file from storage — copy it into local Downloads and re-pick it]");
+};
 reader.onload = function(evt) {
 setConverting("Extracting text from PDF...");
-var arr = new Uint8Array(evt.target.result);
-pdfjsLib.getDocument({ data: arr }).promise.then(function(pdf) {
-var pages = [];
-var total = pdf.numPages;
-function extractPage(n) {
-if (n > total) {
-var fullText = pages.join("\n\n---\n\n");
-var mdText = "# " + name + "\n\n" + fullText;
-var cleaned = cleanMd(mdText);
+pdfExtractText(evt.target.result, setConverting).then(function(res) {
+var cleaned = cleanMd("# " + name + "\n\n" + res.pages.join("\n\n---\n\n"));
 setAnkiBatchDoc(cleaned.text);
-var msg = "Converted PDF (" + total + " pages) to Markdown";
+var msg = "Converted PDF (" + res.total + " pages) to Markdown";
 if (cleaned.stripped.refs || cleaned.stripped.contrib) msg += " — stripped " + (cleaned.stripped.lines + cleaned.stripped.contrib) + " lines of boilerplate";
 setConverting(msg);
 setTimeout(function() { setConverting(""); }, 4000);
-return;
-}
-setConverting("Extracting page " + n + " of " + total + "...");
-pdf.getPage(n).then(function(page) {
-page.getTextContent().then(function(tc) {
-var text = tc.items.map(function(item) { return item.str; }).join(" ");
-text = text.replace(/\s{2,}/g, " ").trim();
-if (text) pages.push("## Page " + n + "\n\n" + text);
-extractPage(n + 1);
-});
-});
-}
-extractPage(1);
 }).catch(function(err) {
-setConverting(""); setAnkiBatchDoc("[Error reading PDF: " + (err.message || err) + "]");
+setConverting(""); setAnkiBatchDoc("[Error reading PDF: " + pdfErrMsg(err) + "]");
 });
 };
 reader.readAsArrayBuffer(file);
-};
-script.onerror = function() {
-setConverting(""); setAnkiBatchDoc("[Error: Could not load PDF parser]");
-};
-document.head.appendChild(script);
 } else if (ext === "docx") {
 setConverting("Loading DOCX parser...");
 var script2 = document.createElement("script");
@@ -8602,41 +8638,21 @@ setShowAnkiPreGen(true);
 }
 if (ext === "pdf") {
 setConvertingChat("Loading PDF parser...");
-var script = document.createElement("script");
-script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-script.onload = function() {
-var pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
-if (!pdfjsLib) { setConvertingChat(""); return; }
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 var reader = new FileReader();
+reader.onerror = function() {
+setConvertingChat("Couldn't read the file from storage — copy it into local Downloads and re-pick it");
+setTimeout(function() { setConvertingChat(""); }, 7000);
+};
 reader.onload = function(evt) {
 setConvertingChat("Extracting text from PDF...");
-var arr = new Uint8Array(evt.target.result);
-pdfjsLib.getDocument({ data: arr }).promise.then(function(pdf) {
-var pages = [];
-var total = pdf.numPages;
-function extractPage(n) {
-if (n > total) {
-finishUpload("# " + fname.replace(/\.[^.]+$/, "") + "\n\n" + pages.join("\n\n---\n\n"));
-return;
-}
-setConvertingChat("Extracting page " + n + " of " + total + "...");
-pdf.getPage(n).then(function(page) {
-page.getTextContent().then(function(tc) {
-var text = tc.items.map(function(item) { return item.str; }).join(" ");
-text = text.replace(/\s{2,}/g, " ").trim();
-if (text) pages.push("## Page " + n + "\n\n" + text);
-extractPage(n + 1);
+pdfExtractText(evt.target.result, setConvertingChat).then(function(res) {
+finishUpload("# " + fname.replace(/\.[^.]+$/, "") + "\n\n" + res.pages.join("\n\n---\n\n"));
+}).catch(function(err) {
+setConvertingChat("PDF error: " + pdfErrMsg(err));
+setTimeout(function() { setConvertingChat(""); }, 7000);
 });
-});
-}
-extractPage(1);
-}).catch(function() { setConvertingChat("PDF read error"); setTimeout(function() { setConvertingChat(""); }, 3000); });
 };
 reader.readAsArrayBuffer(file);
-};
-script.onerror = function() { setConvertingChat(""); };
-document.head.appendChild(script);
 } else if (ext === "docx") {
 setConvertingChat("Loading DOCX parser...");
 var script2 = document.createElement("script");
