@@ -1,9 +1,31 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-17 (pomodoro alarm shipped — commit 4bb1a6b; earlier: light mode 8a77720, pomodoro upgrade b076a3b)
+**Updated:** 2026-07-19 (Boox PDF-upload fix 3314b89; earlier: pomodoro alarm 4bb1a6b, pomodoro upgrade b076a3b, light mode 8a77720)
 **Tool:** Claude Code (Fable 5)
 
-## Newest — THE TIMER GOES OFF (Andrew: "make it flashy / draw attention when it goes off")
+## Newest — PDF UPLOAD WORKS ON STRICT WEBVIEWS (Andrew: Boox says "PDF load error" picking a file; OR Skills = fine, so AI path OK)
+
+- Root cause: both PDF sites (tutor chapter upload + Anki converter) set
+  pdf.js `workerSrc` to the cdnjs URL — a CROSS-ORIGIN worker. Desktop browsers
+  recover through pdf.js's internal fake-worker; the Boox browser fails both
+  and getDocument rejected into a bare "PDF read error".
+- New shared `pdfExtractText()` (top-level, above DEVICE DETECTION): fetch the
+  worker script → same-origin Blob URL → real Worker; on any parse failure,
+  load the worker ON the page (main-thread mode) and retry once; each attempt
+  re-copies the bytes (pdf.js transfers the buffer — a detached buffer would
+  poison the retry). `loadScriptOnce` dedupes the engine script (was injected
+  per upload). Real error text now surfaces: password-protected / scanned
+  image-only (no text layer) / network / storage-read (FileReader.onerror —
+  Android pickers can hand over unreadable refs).
+- Verified on :2037: 2-page PyMuPDF-made PDF injected via DataTransfer into
+  the Anki converter → "Converted PDF (2 pages) to Markdown" on SOURCE and MIN
+  builds (blob-worker lane), AND with window.fetch poisoned for pdf.worker
+  (simulated Boox) → plan-B main-thread script engaged and still converted.
+  If the Boox STILL fails, the on-screen message now names the cause — get the
+  text from Andrew. Last resort: install Chrome from Play Store on the Boox
+  (note: fresh localStorage there — progress is per-browser).
+
+## Earlier — THE TIMER GOES OFF (Andrew: "make it flashy / draw attention when it goes off")
 
 - **Work end:** rising 3-note chime (Web Audio, synthesized in-code — no asset)
   + full-screen banner (dark backdrop, glowing card, wiggling 🍅, reward haul
