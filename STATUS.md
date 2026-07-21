@@ -1,29 +1,39 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-19 (Boox PDF-upload fix 3314b89; earlier: pomodoro alarm 4bb1a6b, pomodoro upgrade b076a3b, light mode 8a77720)
+**Updated:** 2026-07-21 (Boox PDF round 2: vendored legacy engine 945f790; earlier: worker ladder 3314b89, pomodoro alarm 4bb1a6b, light mode 8a77720)
 **Tool:** Claude Code (Fable 5)
 
-## Newest — PDF UPLOAD WORKS ON STRICT WEBVIEWS (Andrew: Boox says "PDF load error" picking a file; OR Skills = fine, so AI path OK)
+## Newest — PDF ENGINE NOW SHIPS WITH THE APP (Boox round 2: still "pdf load error" after 3314b89; laptop fine, OR Skills fine)
 
-- Root cause: both PDF sites (tutor chapter upload + Anki converter) set
-  pdf.js `workerSrc` to the cdnjs URL — a CROSS-ORIGIN worker. Desktop browsers
-  recover through pdf.js's internal fake-worker; the Boox browser fails both
-  and getDocument rejected into a bare "PDF read error".
-- New shared `pdfExtractText()` (top-level, above DEVICE DETECTION): fetch the
-  worker script → same-origin Blob URL → real Worker; on any parse failure,
-  load the worker ON the page (main-thread mode) and retry once; each attempt
-  re-copies the bytes (pdf.js transfers the buffer — a detached buffer would
-  poison the retry). `loadScriptOnce` dedupes the engine script (was injected
-  per upload). Real error text now surfaces: password-protected / scanned
-  image-only (no text layer) / network / storage-read (FileReader.onerror —
-  Android pickers can hand over unreadable refs).
-- Verified on :2037: 2-page PyMuPDF-made PDF injected via DataTransfer into
-  the Anki converter → "Converted PDF (2 pages) to Markdown" on SOURCE and MIN
-  builds (blob-worker lane), AND with window.fetch poisoned for pdf.worker
-  (simulated Boox) → plan-B main-thread script engaged and still converted.
-  If the Boox STILL fails, the on-screen message now names the cause — get the
-  text from Andrew. Last resort: install Chrome from Play Store on the Boox
-  (note: fresh localStorage there — progress is per-browser).
+- Why 3314b89 wasn't enough: it fixed the WORKER lanes but the ENGINE
+  (`pdf.min.js`) still came from cdnjs — and cdnjs hosts only pdf.js's
+  **modern** build. On an old engine (Boox NeoBrowser = dated Chromium) the
+  script can fail to parse / hit missing APIs: the tag still fires onload,
+  `pdfjsLib` never appears, and the upload dies BEFORE the ladder starts.
+  The app itself (ES5-ish React UMD off the same CDN) runs fine on the Boox,
+  which is why only PDF upload broke — and why laptop Chrome never showed it.
+- Fix (945f790): **pdf.js 3.11.174 LEGACY build (transpiled + polyfilled)
+  vendored same-origin in `pdfjs/`** — engine loads locally, `workerSrc`
+  points straight at `pdfjs/pdf.worker.min.js` (real worker, zero
+  CDN/CORS/blob). Fallback chain for standalone copies of the HTML: jsdelivr
+  legacy (`cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/`, blob-worker
+  route) → main-thread plan-B. Engine + worker MUST stay the SAME version
+  (worker wire protocol). `loadScriptOnce` now removes a dead script tag on
+  error so a later upload retries cleanly (used to hang forever).
+- Verified on :2037 (min build, the REAL tutor lecture input via DataTransfer):
+  rung 1 — both pdfjs/ files served same-origin, direct workerSrc, upload →
+  lecture mode Phase 1/9, both pages' text extracted; rung 2 — pdfjs/ hidden
+  (404) → jsdelivr legacy engine + blob worker converted in ~2s, dead local
+  tag removed; restored → rung 1 again clean. Only pre-existing Babel size
+  notes in console.
+- **Decision table if Andrew's Boox STILL fails** (message wording matters):
+  exact "PDF read error" = STALE pre-3314b89 code → clear NeoBrowser cache /
+  site data; "PDF error: <cause>" = new code, the cause names the real problem
+  — get the exact text. Last resort: install Chrome from Play Store on the
+  Boox (fresh localStorage there — progress is per-browser).
+- Known-separate: the Study-Plan builder's syllabus upload (~line 7854) still
+  uses a naive regex PDF extractor, not `pdfExtractText` — works shallowly,
+  untouched (not Andrew's complaint).
 
 ## Earlier — THE TIMER GOES OFF (Andrew: "make it flashy / draw attention when it goes off")
 
