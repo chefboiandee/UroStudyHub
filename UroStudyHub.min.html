@@ -336,7 +336,9 @@ var spreads = {
 };
 return spreads[n] || spreads[4];
 }
-var PDFJS_BASE = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+var PDFJS_LOCAL = "pdfjs/";
+var PDFJS_CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
+var pdfjsActiveBase = null; // whichever base actually delivered a working engine
 var pdfWorkerBlobUrl = null;
 function loadScriptOnce(src, id) {
 return new Promise(function (resolve, reject) {
@@ -351,20 +353,38 @@ var s = document.createElement("script");
 if (id) s.id = id;
 s.src = src;
 s.onload = function () { s.setAttribute("data-loaded", "1"); resolve(); };
-s.onerror = function () { reject(new Error("couldn't download " + src.split("/").pop() + " — check the connection")); };
+s.onerror = function () {
+if (s.parentNode) s.parentNode.removeChild(s); // drop the dead tag so a later attempt can retry
+reject(new Error("couldn't download " + src.split("/").pop() + " — check the connection"));
+};
 document.head.appendChild(s);
 });
 }
+function _pdfLibNow() { return window["pdfjs-dist/build/pdf"] || window.pdfjsLib; }
 function getPdfLib() {
-return loadScriptOnce(PDFJS_BASE + "pdf.min.js", "pdfjs-lib-script").then(function () {
-var lib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
+if (pdfjsActiveBase && _pdfLibNow()) return Promise.resolve(_pdfLibNow());
+return loadScriptOnce(PDFJS_LOCAL + "pdf.min.js", "pdfjs-lib-local").then(function () {
+var lib = _pdfLibNow();
 if (!lib) throw new Error("PDF engine didn't initialize");
+pdfjsActiveBase = PDFJS_LOCAL;
+return lib;
+}).catch(function (errLocal) {
+return loadScriptOnce(PDFJS_CDN + "pdf.min.js", "pdfjs-lib-cdn").then(function () {
+var lib = _pdfLibNow();
+if (!lib) throw new Error("PDF engine didn't initialize (" + (((errLocal && errLocal.message) || errLocal)) + ")");
+pdfjsActiveBase = PDFJS_CDN;
 return lib;
 });
+});
 }
-function pdfWorkerViaBlob(lib) {
+function pdfSetWorker(lib) {
+var base = pdfjsActiveBase || PDFJS_LOCAL;
+if (base.indexOf("https:") !== 0) {
+lib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js";
+return Promise.resolve();
+}
 if (pdfWorkerBlobUrl) { lib.GlobalWorkerOptions.workerSrc = pdfWorkerBlobUrl; return Promise.resolve(); }
-return fetch(PDFJS_BASE + "pdf.worker.min.js").then(function (r) {
+return fetch(base + "pdf.worker.min.js").then(function (r) {
 if (!r.ok) throw new Error("worker download failed (" + r.status + ")");
 return r.text();
 }).then(function (code) {
@@ -375,8 +395,9 @@ lib.GlobalWorkerOptions.workerSrc = pdfWorkerBlobUrl;
 function pdfExtractText(buf, onStatus) {
 return getPdfLib().then(function (lib) {
 function parse() { return lib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise; }
-return pdfWorkerViaBlob(lib).then(parse).catch(function (err1) {
-return loadScriptOnce(PDFJS_BASE + "pdf.worker.min.js", "pdfjs-worker-mainthread").then(function () {
+return pdfSetWorker(lib).then(parse).catch(function (err1) {
+var base = pdfjsActiveBase || PDFJS_LOCAL;
+return loadScriptOnce(base + "pdf.worker.min.js", "pdfjs-worker-mainthread").then(function () {
 return parse();
 }).catch(function (err2) { throw (err2 && err2.message) ? err2 : err1; });
 }).then(function (pdf) {
