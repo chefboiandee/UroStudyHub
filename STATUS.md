@@ -1,7 +1,29 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-21 (Boox PDF round 2: vendored legacy engine 945f790; earlier: worker ladder 3314b89, pomodoro alarm 4bb1a6b, light mode 8a77720)
+**Updated:** 2026-07-21 (Boox PDF round 3: pdf.js pinned to 2.16.105 legacy 24e5e59; round 2 vendored 3.11-legacy 945f790; earlier: worker ladder 3314b89, light mode 8a77720)
 **Tool:** Claude Code (Fable 5)
+
+## Round 3 (same day) — 3.11's WORKER won't execute on the Boox; pinned 2.16.105 legacy
+
+- Round 2 got the ENGINE running on the Boox (its error changed to pdf.js's
+  own "Setting up fake worker failed: Cannot read property
+  'WorkerMessageHandler' of undefined") — i.e. the 3.11-LEGACY **worker**
+  script loads but won't EXECUTE on NeoBrowser (old-V8 "property" phrasing ⇒
+  Chromium ≲92), in a real Worker AND main-thread, so `pdfjsWorker` never
+  materializes and every rung dies.
+- Fix (24e5e59): vendored files swapped to **pdf.js 2.16.105 legacy**
+  (ES5-grade — 1–2 stray `?.` tokens vs 165+ in 3.11-legacy; same extraction
+  API), CDN fallback moved to jsdelivr **2.16.105** legacy (engine+worker must
+  share a version), and plan B now throws "this browser can't run the PDF
+  engine — try uploading from another device" if `window.pdfjsWorker` didn't
+  materialize after a main-thread load (instead of re-failing cryptically).
+  **Do NOT bump the pdf.js version without re-testing upload on the Boox.**
+- Verified on :2037 (min build, real tutor lecture input, DataTransfer):
+  real-worker lane converts on 2.16.105 (version + same-origin workerSrc
+  confirmed in-page); **Boox emulation — `window.Worker = undefined` → pdf.js's
+  internal fake-worker lane executed the 2.16 worker main-thread
+  (`pdfjsWorker` = object, the exact 3.11 failure point) and still converted**
+  to lecture mode Phase 1/9. Only pre-existing Babel size notes in console.
 
 ## Newest — PDF ENGINE NOW SHIPS WITH THE APP (Boox round 2: still "pdf load error" after 3314b89; laptop fine, OR Skills fine)
 
