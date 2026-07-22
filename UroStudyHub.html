@@ -383,8 +383,13 @@ function getStudyDays(daysPerWeek) {
 //   3. on any parse failure: load the worker ON the page (pdf.js main-thread mode) and retry once
 //   4. still failing → reject with the REAL reason so the UI can show it
 // Engine and worker MUST stay the same pdf.js version (worker wire protocol).
+// Version note: 2.16.105 legacy ON PURPOSE (ES5-grade). The 3.11 "legacy"
+// build's WORKER still needs ~Chrome 93+ features — on the Boox (old-V8
+// "Cannot read property" phrasing = Chromium ≤92) it failed to execute in a
+// real Worker AND main-thread, killing every rung. 2.16 runs everywhere and
+// extracts text identically. Don't bump without re-testing on the Boox.
 var PDFJS_LOCAL = "pdfjs/";
-var PDFJS_CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
+var PDFJS_CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/legacy/build/";
 var pdfjsActiveBase = null; // whichever base actually delivered a working engine
 var pdfWorkerBlobUrl = null;
 
@@ -455,6 +460,9 @@ function pdfExtractText(buf, onStatus) {
       // Plan B: main-thread worker (window.pdfjsWorker) — no Worker() needed at all
       var base = pdfjsActiveBase || PDFJS_LOCAL;
       return loadScriptOnce(base + "pdf.worker.min.js", "pdfjs-worker-mainthread").then(function () {
+        // A too-old engine can "load" the script (onload fires) yet fail to run it —
+        // pdfjsWorker never gets defined and a retry would just re-fail cryptically.
+        if (!window.pdfjsWorker) throw new Error("this browser can't run the PDF engine — try uploading from another device");
         return parse();
       }).catch(function (err2) { throw (err2 && err2.message) ? err2 : err1; });
     }).then(function (pdf) {

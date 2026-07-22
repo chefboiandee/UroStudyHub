@@ -337,7 +337,7 @@ var spreads = {
 return spreads[n] || spreads[4];
 }
 var PDFJS_LOCAL = "pdfjs/";
-var PDFJS_CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
+var PDFJS_CDN = "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/legacy/build/";
 var pdfjsActiveBase = null; // whichever base actually delivered a working engine
 var pdfWorkerBlobUrl = null;
 function loadScriptOnce(src, id) {
@@ -398,6 +398,7 @@ function parse() { return lib.getDocument({ data: new Uint8Array(buf.slice(0)) }
 return pdfSetWorker(lib).then(parse).catch(function (err1) {
 var base = pdfjsActiveBase || PDFJS_LOCAL;
 return loadScriptOnce(base + "pdf.worker.min.js", "pdfjs-worker-mainthread").then(function () {
+if (!window.pdfjsWorker) throw new Error("this browser can't run the PDF engine — try uploading from another device");
 return parse();
 }).catch(function (err2) { throw (err2 && err2.message) ? err2 : err1; });
 }).then(function (pdf) {
