@@ -1,142 +1,57 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-21 (Boox PDF round 3: pdf.js pinned to 2.16.105 legacy 24e5e59; round 2 vendored 3.11-legacy 945f790; earlier: worker ladder 3314b89, light mode 8a77720)
+**Updated:** 2026-07-30 (upload retry fix 94763bf; prior: pdf.js pinned 2.16.105 legacy 24e5e59, light mode 8a77720)
 **Tool:** Claude Code (Fable 5)
 
-## Round 3 (same day) — 3.11's WORKER won't execute on the Boox; pinned 2.16.105 legacy
+## Done this session — dead uploader after failed upload + Clear (Andrew's report)
 
-- Round 2 got the ENGINE running on the Boox (its error changed to pdf.js's
-  own "Setting up fake worker failed: Cannot read property
-  'WorkerMessageHandler' of undefined") — i.e. the 3.11-LEGACY **worker**
-  script loads but won't EXECUTE on NeoBrowser (old-V8 "property" phrasing ⇒
-  Chromium ≲92), in a real Worker AND main-thread, so `pdfjsWorker` never
-  materializes and every rung dies.
-- Fix (24e5e59): vendored files swapped to **pdf.js 2.16.105 legacy**
-  (ES5-grade — 1–2 stray `?.` tokens vs 165+ in 3.11-legacy; same extraction
-  API), CDN fallback moved to jsdelivr **2.16.105** legacy (engine+worker must
-  share a version), and plan B now throws "this browser can't run the PDF
-  engine — try uploading from another device" if `window.pdfjsWorker` didn't
-  materialize after a main-thread load (instead of re-failing cryptically).
-  **Do NOT bump the pdf.js version without re-testing upload on the Boox.**
-- Verified on :2037 (min build, real tutor lecture input, DataTransfer):
-  real-worker lane converts on 2.16.105 (version + same-origin workerSrc
-  confirmed in-page); **Boox emulation — `window.Worker = undefined` → pdf.js's
-  internal fake-worker lane executed the 2.16 worker main-thread
-  (`pdfjsWorker` = object, the exact 3.11 failure point) and still converted**
-  to lecture mode Phase 1/9. Only pre-existing Babel size notes in console.
+- **Symptom:** first upload failed → he clicked Clear → picking a file again
+  did NOTHING until he switched to another app tab and came back.
+- **Root cause:** a browser `<input type="file">` fires `change` only when its
+  value CHANGES. None of the three ref-based file inputs ever reset `value`,
+  so after any pick (failed or successful) re-picking the SAME file fired no
+  event. The Clear buttons reset React state only — not the input element.
+  Tab-switching "fixed" it because React unmounts/remounts the subtree → fresh
+  empty input.
+- **Fix (94763bf):** all three inputs — tutor chapter upload (`fileRef`), Anki
+  batch (`ankiFileRef`), syllabus (`syllabusFileRef`) — now do
+  `e.target.value = ""` at the top of onChange, right after grabbing the File
+  (the File object stays valid after the reset). Covers every path: failed
+  upload retry, Clear-then-reupload, and re-uploading the same chapter after a
+  success. The two dynamically-created JSON-import inputs are immune (fresh
+  element per click) — untouched.
+- **Verified on :2037 (min build, real inputs via DataTransfer):** tutor —
+  corrupt PDF → Clear → same-file retry fires the handler ("Loading PDF
+  parser…" live) with value reset to "" after every pick; Anki — txt lands
+  (MARKDOWN PREVIEW + content) → Clear → same-file retry re-populates; only
+  the pre-existing Babel size notes in console. Pushed → Pages.
+- **Andrew:** reload the site once (or let the PWA update) and retry the
+  failed upload flow.
 
-## Newest — PDF ENGINE NOW SHIPS WITH THE APP (Boox round 2: still "pdf load error" after 3314b89; laptop fine, OR Skills fine)
+## Standing constraints (do not regress)
 
-- Why 3314b89 wasn't enough: it fixed the WORKER lanes but the ENGINE
-  (`pdf.min.js`) still came from cdnjs — and cdnjs hosts only pdf.js's
-  **modern** build. On an old engine (Boox NeoBrowser = dated Chromium) the
-  script can fail to parse / hit missing APIs: the tag still fires onload,
-  `pdfjsLib` never appears, and the upload dies BEFORE the ladder starts.
-  The app itself (ES5-ish React UMD off the same CDN) runs fine on the Boox,
-  which is why only PDF upload broke — and why laptop Chrome never showed it.
-- Fix (945f790): **pdf.js 3.11.174 LEGACY build (transpiled + polyfilled)
-  vendored same-origin in `pdfjs/`** — engine loads locally, `workerSrc`
-  points straight at `pdfjs/pdf.worker.min.js` (real worker, zero
-  CDN/CORS/blob). Fallback chain for standalone copies of the HTML: jsdelivr
-  legacy (`cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/`, blob-worker
-  route) → main-thread plan-B. Engine + worker MUST stay the SAME version
-  (worker wire protocol). `loadScriptOnce` now removes a dead script tag on
-  error so a later upload retries cleanly (used to hang forever).
-- Verified on :2037 (min build, the REAL tutor lecture input via DataTransfer):
-  rung 1 — both pdfjs/ files served same-origin, direct workerSrc, upload →
-  lecture mode Phase 1/9, both pages' text extracted; rung 2 — pdfjs/ hidden
-  (404) → jsdelivr legacy engine + blob worker converted in ~2s, dead local
-  tag removed; restored → rung 1 again clean. Only pre-existing Babel size
-  notes in console.
-- **Decision table if Andrew's Boox STILL fails** (message wording matters):
-  exact "PDF read error" = STALE pre-3314b89 code → clear NeoBrowser cache /
-  site data; "PDF error: <cause>" = new code, the cause names the real problem
-  — get the exact text. Last resort: install Chrome from Play Store on the
-  Boox (fresh localStorage there — progress is per-browser).
-- Known-separate: the Study-Plan builder's syllabus upload (~line 7854) still
-  uses a naive regex PDF extractor, not `pdfExtractText` — works shallowly,
-  untouched (not Andrew's complaint).
+- **pdf.js is PINNED to 2.16.105 legacy, vendored in `pdfjs/`** — the Boox Go 7
+  (NeoBrowser ≈ Chromium ≤92) can't execute newer workers. Do NOT bump without
+  re-testing upload on the Boox. Engine + worker must share a version; CDN
+  fallback is jsdelivr 2.16.105 legacy; plan B = main-thread worker.
+- **Light-mode sweep exclusions:** THEMES, TCOLOR, game data `col:`/`color:`,
+  and any `c.a + "33"` alpha-concat site stay RAW HEX — `var()` there breaks
+  the CSS. Never sweep those.
+- **Preview verify lesson:** the preview pane throttles page timers between
+  tool calls — transient UI (7s toasts, banners) will be missed by cross-call
+  polling; sample from inside one hot javascript_exec.
+- Real storage key is `uroStudyHub_progress` (docs' uroStudyHub_v5 is stale).
 
-## Earlier — THE TIMER GOES OFF (Andrew: "make it flashy / draw attention when it goes off")
+## Known-separate (not broken, just noted)
 
-- **Work end:** rising 3-note chime (Web Audio, synthesized in-code — no asset)
-  + full-screen banner (dark backdrop, glowing card, wiggling 🍅, reward haul
-  "+2 🪙 · +15 💰") + tab-title flash "🍅 TIME'S UP!". **Break end:** softer
-  2-note chime + "Break's over" banner with **▶ Run it back** (starts the next
-  run). Banner renders globally (any tab), tap-anywhere dismiss, auto-clears
-  7s/9s. AudioContext is primed inside the start/resume TAP (iPad autoplay
-  policy — a gesture-primed context may play later without one). **🔔/🔕 on the
-  tutor pill** (localStorage `uroStudyHub_pomoSound`; unmute plays a preview
-  blip). Keyframes pomoRing/pomoGlowRed/pomoGlowGrn in the <style> block.
-- Verified on :2037 (?pomodev): both banners render with correct content
-  (screenshots), tap-dismiss + Run-it-back + auto-clear + bell persistence all
-  exercised, rewards once per run, min.html cycle banks rewards. ⚠️ Verify
-  lesson for future sessions: the preview pane THROTTLES page timers + CSS
-  animations between tool calls — banners "missing" in polls were sampling
-  after auto-clear, and screenshots catch mid-fade frames. Poll from INSIDE one
-  hot javascript_exec; don't trust cross-call timing. Chime is code-path
-  verified only (headless) — audible check is on-device.
-
-## Earlier this session — TUTOR POMODORO (Andrew: tiny on iPad; wanted a session counter + coins)
-
-- Tutor-tab timer: 10px chip → 40px-tall pill (big monospace time, 15/25/45m
-  chips, ▶ Start / ⏸ / ▶ resume / ✕, amber ×N session-completions badge).
-- Full work phase now pays COINS (duration-scaled 15m→9 / 25m→15 / 45m→27,
-  streak multiplier) on top of the existing +2 🪙 tokens; toast announces both;
-  `pomodorosToday`/`lastPomDate` now really tracked (hub card shows "N done
-  today" from the store).
-- New `pomoPaused` state — pause is resumable from tutor pill AND hub card
-  (was a one-way door on both surfaces).
-- FIXED en route: resume-path completion left the break frozen (no interval),
-  which also blocked the "done" transition that logs totalStudyMins —
-  countdown factored into shared `startBreakInterval()`.
-- Dev hook: load with `?pomodev=4` to shorten work+break to 4s for testing the
-  complete→reward cycle. Verified live both paths (straight run + pause/resume
-  mid-work): rewards exactly once per run, break ticks to done, ×N increments.
-  NOTE the real storage key is `uroStudyHub_progress` — the docs' uroStudyHub_v5
-  is stale.
-
-## Done this session — LIGHT MODE (Andrew: unreadable on his Boox Go 7 e-ink reader — dark-only)
-
-- **Theme tokens:** every hardcoded palette hex (~1,865 occurrences, 68 tokens)
-  swept to CSS variables (`--c-*` structural / `--a-*` accents) defined in the
-  `<style>` block. Dark values = the exact original hexes, so dark mode renders
-  byte-identical (verified via computed styles). `[data-theme="light"]` swaps
-  the whole palette: white cards on #f3f5f8, near-black text, and accents
-  shifted to darker Tailwind shades so colored text passes contrast on white
-  (the e-ink requirement).
-- **Sweep exclusions (IMPORTANT for future edits):** THEMES, TCOLOR, game data
-  `col:`/`color:` fields, feedback `.push({...color})`, and `(x || "#hex") + "aa"`
-  sites stay RAW HEX — those values get alpha suffixes string-concatenated
-  (`c.a + "33"`); a `var()` there breaks the CSS. Never sweep those. The two
-  Snap-Decision swipe-zone gradients stay hex for the same reason.
-- **THEMES:** each shop theme gained an `lc` (light counterpart — same accent
-  identity, light surfaces); resolution is `var c = (lightMode && th.lc) ? th.lc : th.c`.
-- **Toggle:** ☀️/🌙 button in the header next to ⚙. Persists in localStorage
-  `uroStudyHub_mode` (own key, not the s-blob); a `<head>` pre-paint script
-  applies it before first render (no flash) and swaps the theme-color meta.
-  Default stays dark — no behavior change for existing devices until toggled.
-- **Bug fixed en route:** the gradient wordmark used the `background` shorthand;
-  React re-render reset `-webkit-background-clip: text` → solid purple block on
-  theme change. Now `backgroundImage` (longhand doesn't reset clip).
-
-## Verified
-Served on :2037 (launch.json gained `urostudyhub-2037`; :2036 was held by
-another session). Source + rebuilt min.html: dark default unchanged (computed
-styles = original hexes), toggle → light across Hub / Study Tracker / Tutor /
-Pocket Guide (BPH Meds card: dense clinical text + red warnings readable) /
-Arcade modal, reload persists light, toggle back restores dark + meta. Only
-pre-existing Babel size notes in console. Pushed to origin/main — GitHub Pages
-redeploys on push.
+- Study-Plan builder's syllabus upload still uses a naive regex PDF extractor
+  (~line 7900), not `pdfExtractText` — shallow but working; its input DOES get
+  the new value reset.
+- Pomodoro chime is code-path verified only (headless) — audible check
+  on-device.
 
 ## Next steps
-- **Andrew:** on the Boox, load the site fresh (the SW is network-first — one
-  reload picks up the new build) and tap **☀️** in the header. It sticks
-  per-device. iPad PWA: force-quit + relaunch once if it looks stale.
-- Carry-forward (2026-07-09): local backup branches `tutor-sidekick-backup` /
-  `tutor-sidekick-premutback` — delete once happy. Untracked residue:
-  `STONE_SQUADRON.md`, `URO_FPS.md`, README.docx (Andrew to decide).
 
-## Open questions
-- None. (If any game screen shows a washed-out tint in light mode, it's one of
-  the deliberately-unswept concat sites — cosmetic, fix per-site.)
+- None blocking. If Andrew reports the Boox PDF upload failing again, get the
+  exact error text — wording maps to cause (see 24e5e59 decision table in git
+  history).
