@@ -7890,6 +7890,7 @@ export default function UroStudyHub() {
                   <button onClick={function() { syllabusFileRef.current && syllabusFileRef.current.click(); }} style={{ flex: 1, padding: 12, background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 10, cursor: "pointer", color: c.a, fontSize: 12, fontWeight: 700 }}>{"📄 Upload File"}</button>
                   <input ref={syllabusFileRef} type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv" style={{ display: "none" }} onChange={function(e) {
                     var file = e.target.files && e.target.files[0];
+                    e.target.value = ""; // reset so re-picking the same file fires change again
                     if (!file) return;
                     if (!planBuilderName) setPlanBuilderName(file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
                     var ext = (file.name || "").split(".").pop().toLowerCase();
@@ -9747,6 +9748,7 @@ export default function UroStudyHub() {
             <button onClick={function() { fileRef.current && fileRef.current.click(); }} style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", color: "var(--c-mut)", fontSize: 9 }}>📄 Upload</button>
             <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.rtf" onChange={function(e) {
               var file = e.target.files && e.target.files[0];
+              e.target.value = ""; // reset so re-picking the same file fires change again (e.g. retry after a failed upload)
               if (!file) return;
               var ext = (file.name || "").split(".").pop().toLowerCase();
               var fname = file.name;
@@ -10439,6 +10441,7 @@ export default function UroStudyHub() {
                     </button>
                     <input ref={ankiFileRef} type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.rtf" onChange={function(e) {
                       var file = e.target.files && e.target.files[0];
+                      e.target.value = ""; // reset so re-picking the same file fires change again
                       if (!file) return;
                       convertFile(file);
                     }} style={{ display: "none" }} />
