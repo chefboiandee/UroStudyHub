@@ -5,3 +5,6 @@ AUA guidelines copy/
 __pycache__/
 *.pyc
 .claude/
+
+# stray SurgiLog snapshot — SurgiLog lives in its own repo (untracked 2026-08-19)
+caselog-extension-main/
