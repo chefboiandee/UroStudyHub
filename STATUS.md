@@ -1,9 +1,27 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-07-30 (upload retry fix 94763bf; prior: pdf.js pinned 2.16.105 legacy 24e5e59, light mode 8a77720)
+**Updated:** 2026-08-19
 **Tool:** Claude Code (Fable 5)
 
-## Done this session — dead uploader after failed upload + Clear (Andrew's report)
+## 2026-08-19 — independence formalized + 🚨 stray SurgiLog snapshot untracked
+
+- **`AGENTS.md` added** (`86bc5b8`): standalone-project ground rules — PUBLIC
+  repo warning, the Boox/Chromium≤92 constraint, pdf.js pinned 2.16.105,
+  never push. Any opencode/Claude session started in this folder now resolves
+  these rules instead of the parent Nucleus tree's.
+- **🚨 A stale 7/09 copy of the entire SurgiLog extension was TRACKED here —
+  and therefore PUBLISHED on the public Pages repo since ~July 9** (13 files
+  on origin/main; code only, no PHI or secrets). Untracked + gitignored in
+  `9f16813`. **Not yet un-published:** the public remote shows it until the
+  next push, and git history keeps it either way (full scrub = filter-repo +
+  force push — Andrew's call). The stale dir is still on disk; delete with
+  `rm -rf caselog-extension-main` when ready.
+- Deliberately NOT committed (public repo — Andrew's call):
+  `STONE_SQUADRON.md`, `URO_FPS.md`, `UroStudyHub_README.docx`. Also note
+  `UroStudyHub_CLAUDE.md` (the IP/patent strategy doc) is tracked and public —
+  worth deciding whether that should stay public.
+
+## 2026-07-30 (upload retry fix 94763bf; prior: pdf.js pinned 2.16.105 legacy 24e5e59, light mode 8a77720) — dead uploader after failed upload + Clear (Andrew's report)
 
 - **Symptom:** first upload failed → he clicked Clear → picking a file again
   did NOTHING until he switched to another app tab and came back.
