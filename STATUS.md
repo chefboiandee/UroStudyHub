@@ -1,50 +1,56 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-08-19
+**Updated:** 2026-08-24
 **Tool:** Claude Code (Fable 5)
 
-## 2026-08-19 — independence formalized + 🚨 stray SurgiLog snapshot untracked
+## 2026-08-24 — 🎯 Mastery Drill: third tutor mode (778434f)
 
-- **`AGENTS.md` added** (`86bc5b8`): standalone-project ground rules — PUBLIC
-  repo warning, the Boox/Chromium≤92 constraint, pdf.js pinned 2.16.105,
-  never push. Any opencode/Claude session started in this folder now resolves
-  these rules instead of the parent Nucleus tree's.
-- **🚨 A stale 7/09 copy of the entire SurgiLog extension was TRACKED here —
-  and therefore PUBLISHED on the public Pages repo since ~July 9** (13 files
-  on origin/main; code only, no PHI or secrets). Untracked + gitignored in
-  `9f16813`. **Not yet un-published:** the public remote shows it until the
-  next push, and git history keeps it either way (full scrub = filter-repo +
-  force push — Andrew's call). The stale dir is still on disk; delete with
-  `rm -rf caselog-extension-main` when ready.
-- Deliberately NOT committed (public repo — Andrew's call):
-  `STONE_SQUADRON.md`, `URO_FPS.md`, `UroStudyHub_README.docx`. Also note
-  `UroStudyHub_CLAUDE.md` (the IP/patent strategy doc) is tracked and public —
-  worth deciding whether that should stay public.
+Adapted from a Gemini-authored "Adaptive Micro-Step Tutor" skill Andrew brought
+in (provenance shaky — Gemini reconstructed a YouTube video it couldn't
+transcribe — but the pattern is sound mastery learning). Deliberate deltas from
+the skill: **no Mermaid** (Boox can't run v10+, ~1MB dep, and models emit a
+plain glyph map more reliably) and **SKIP is a sanctioned out** (marks the node
+⚠️ weak → revisit list) so a misjudged answer can't deadlock the session.
 
-## 2026-07-30 (upload retry fix 94763bf; prior: pdf.js pinned 2.16.105 legacy 24e5e59, light mode 8a77720) — dead uploader after failed upload + Clear (Andrew's report)
+- `SYSTEM_PROMPT_MASTERY` (after DEEPDIVE): probe edge (2-3 Qs, no teaching) →
+  🗺️ MAP of 4-8 atomic nodes (⬜ pending · 🔵 active · ✅ mastered · ⚠️ weak,
+  plain text — renders in the existing pre-wrap bubbles, zero client code) →
+  one node per message ≤200 words, mechanism-first → exactly one ❓ check
+  (cloze/short answer), hard-gated → fail = prerequisite node inserted as "2a"
+  → finish = mental models + ⚠️ revisit list. Commands: SKIP / HINT
+  (3-strikes) / MAP. Grounds in `upText` like the other modes.
+- **Wiring:** `masteryMode` state threaded through autosave snapshot + deps,
+  `resumeInterrupted`, `saveLectureSession`/`resumeSavedSession` (legacy saves
+  unaffected: `!!item.masteryMode`), pendingResume banner + its Save,
+  saved-list label ("🎯 Mastery" instead of bogus "Phase 1/9"), bookmark phase
+  label, `goStudyTopic`/skills-launch/Clear/upload all reset it. Prompt select
+  in `_sendFromMsgs`: mastery → lecture → deepdive.
+- **UI:** 4th topic-card button (amber gradient) + updated card copy; compact
+  mastery header (🎯 topic · "pass the check to advance" · 🗺️ Map · 💾 Save,
+  same earnTokens as lecture); 💡 Hint / 🗺️ Map / ⏭️ Skip quick row after
+  assistant replies; placeholder "Answer the check — or HINT / SKIP / MAP...".
+- **Verified live on :2036 (min build, real LM Studio qwen3.8-27b):** build
+  clean (only the known Babel size note), probe correctly refused to teach,
+  answer → per-probe honest grading → map in exact glyph format with the
+  flagged weakness as 🔵 and proven ground as ✅, single ❓ check, quick row
+  renders. Local turns run 1-5 min (qwen ~2k reasoning tok) — **usable but
+  slow; this mode is best on a cloud provider from Settings.** ES5-style
+  code only (var/function), no new deps — Boox-safe by construction.
+- Not exercised live (prompt-side, low risk): SKIP→⚠️, 2a insertion, finish
+  summary.
 
-- **Symptom:** first upload failed → he clicked Clear → picking a file again
-  did NOTHING until he switched to another app tab and came back.
-- **Root cause:** a browser `<input type="file">` fires `change` only when its
-  value CHANGES. None of the three ref-based file inputs ever reset `value`,
-  so after any pick (failed or successful) re-picking the SAME file fired no
-  event. The Clear buttons reset React state only — not the input element.
-  Tab-switching "fixed" it because React unmounts/remounts the subtree → fresh
-  empty input.
-- **Fix (94763bf):** all three inputs — tutor chapter upload (`fileRef`), Anki
-  batch (`ankiFileRef`), syllabus (`syllabusFileRef`) — now do
-  `e.target.value = ""` at the top of onChange, right after grabbing the File
-  (the File object stays valid after the reset). Covers every path: failed
-  upload retry, Clear-then-reupload, and re-uploading the same chapter after a
-  success. The two dynamically-created JSON-import inputs are immune (fresh
-  element per click) — untouched.
-- **Verified on :2037 (min build, real inputs via DataTransfer):** tutor —
-  corrupt PDF → Clear → same-file retry fires the handler ("Loading PDF
-  parser…" live) with value reset to "" after every pick; Anki — txt lands
-  (MARKDOWN PREVIEW + content) → Clear → same-file retry re-populates; only
-  the pre-existing Babel size notes in console. Pushed → Pages.
-- **Andrew:** reload the site once (or let the PWA update) and retry the
-  failed upload flow.
+## Next steps
+
+- **`TRAIL_TICKET.md` authored earlier today (separate session) — awaiting an
+  opencode run.** 🌌 Trail: constellation star-map of the learning path as a
+  new tracker sub-tab. The executing session should read AGENTS.md then the
+  ticket, work stage by stage, and overwrite this STATUS when done. Ticket
+  file stays uncommitted. (Mastery Drill landed after the ticket was written —
+  rebase mentally: both touch UroStudyHub.html but different surfaces.)
+- Andrew: try a real drill on a shaky topic (cloud provider recommended); the
+  natural feed-in is Deep Dive's "areas of uncertainty" summary → drill those.
+- If Andrew reports the Boox PDF upload failing again, get the exact error
+  text — wording maps to cause (see 24e5e59 decision table in git history).
 
 ## Standing constraints (do not regress)
 
@@ -57,7 +63,8 @@
   the CSS. Never sweep those.
 - **Preview verify lesson:** the preview pane throttles page timers between
   tool calls — transient UI (7s toasts, banners) will be missed by cross-call
-  polling; sample from inside one hot javascript_exec.
+  polling; sample from inside one hot javascript_exec. (Also: synthetic Enter
+  doesn't fire the React onKeyDown send — click the → button when driving.)
 - Real storage key is `uroStudyHub_progress` (docs' uroStudyHub_v5 is stale).
 
 ## Known-separate (not broken, just noted)
@@ -67,9 +74,3 @@
   the new value reset.
 - Pomodoro chime is code-path verified only (headless) — audible check
   on-device.
-
-## Next steps
-
-- None blocking. If Andrew reports the Boox PDF upload failing again, get the
-  exact error text — wording maps to cause (see 24e5e59 decision table in git
-  history).
