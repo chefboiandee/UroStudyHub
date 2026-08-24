@@ -41,12 +41,12 @@ plain glyph map more reliably) and **SKIP is a sanctioned out** (marks the node
 
 ## Next steps
 
-- **`TRAIL_TICKET.md` authored earlier today (separate session) — awaiting an
-  opencode run.** 🌌 Trail: constellation star-map of the learning path as a
-  new tracker sub-tab. The executing session should read AGENTS.md then the
-  ticket, work stage by stage, and overwrite this STATUS when done. Ticket
-  file stays uncommitted. (Mastery Drill landed after the ticket was written —
-  rebase mentally: both touch UroStudyHub.html but different surfaces.)
+- **🌌 Trail is PARKED (Andrew's call, 2026-08-24):** `TRAIL_TICKET.md`
+  deleted; the design + the engine-review findings (update:slow is Chrome
+  113+ → persist the 🐢 toggle; single-Babel-block syntax risk; monochrome
+  flattening) are preserved under "Parked: 🌌 Trail" in
+  `UroStudyHub_CLAUDE.md`'s Roadmap. Rebuild the ticket from there when
+  revived — re-verify all code anchors first.
 - Andrew: try a real drill on a shaky topic (cloud provider recommended); the
   natural feed-in is Deep Dive's "areas of uncertainty" summary → drill those.
 - If Andrew reports the Boox PDF upload failing again, get the exact error

@@ -442,6 +442,45 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - [ ] Touch-friendly Anki review (swipe gestures)
 - [ ] 44px minimum tap targets across non-game UI
 
+### Parked: 🌌 Trail — learning-constellation map (tracker sub-tab)
+
+Deferred 2026-08-24 (a full work-order ticket existed and was deliberately
+deleted; rebuild from this summary when picked back up — re-verify all code
+anchors, they drift).
+
+**Concept:** canvas-2D 3D star map of the learner's actual path through the
+study plan. Each completed topic = a star in its phase's constellation
+(constellation centers on a gentle spine, per-topic deterministic hash
+jitter); completion-order path threads them as a Catmull-Rom spline. Edge
+classification by replaying completion order against the plan: `advance`
+(exactly the next planned topic), `drift` (skipping within the phase), `jump`
+(leapt to a later phase with an earlier one unfinished — drawn as a raised
+pink arc), `return` (back to an open branch — same pink, dashed). Ghost stars
+for planned-but-undone topics. Stats strip (on-rail %, jumps, peak parallel
+phases) + a signature badge (Railrunner / Wayfinder / Comet by jump ratio).
+Camera: fly mode (ease along spline, drag-orbit, pinch-dolly) and **step
+mode** — zero rAF, one full draw per interaction, ‹ › node stepping.
+
+**Data model:** `trailLog: []` appended in `markDone` (`{k,t,p,d,ts}`, cap
+1500, shed to last 300 on localStorage quota), entries removed in
+`unmarkDone`. Pure top-level functions (`buildTrail` / `layoutTrail` /
+`catmullRom`) — deterministic, no `Date.now()`/`Math.random()` inside.
+
+**Boox rules (load-bearing, from the 8/24 engine review):**
+- Step mode is first-class, not a fallback. **`matchMedia("(update: slow)")`
+  is Chrome 113+ — it silently never matches on NeoBrowser (≈Chromium ≤92)**,
+  so auto-detection cannot carry the Boox: **persist the 🚀/🐢 toggle in
+  localStorage** so one tap settles it permanently.
+- Light theme must draw on a light canvas (dark bg = full-black e-ink
+  rectangle). Dual palette, raw hex in JS (canvas can't read CSS vars; exempt
+  from any var() sweep).
+- No `shadowBlur` (fake glow via cached radial-gradient sprites), clamp DPR
+  ≤ 2, stop the rAF loop when idle/hidden, ship nothing newer than ES2020 —
+  one too-new token kills the ENTIRE single Babel script block at load, so
+  smoke-test on the physical Boox before pushing.
+- Go 7 is monochrome: phase colors flatten to gray — semantics must also live
+  in geometry (raised arcs, dashes, labels), never color alone.
+
 ### Planned Game Sessions
 
 #### Session B: On Call — Roguelike "Next Best Step" gauntlet
