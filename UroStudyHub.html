@@ -695,6 +695,49 @@ var SYSTEM_PROMPT_DEEPDIVE = [
   "- No medical advice disclaimers. This is board prep between colleagues.",
 ].join("\n");
 
+var SYSTEM_PROMPT_MASTERY = [
+  "You are a urology attending running a MASTERY DRILL: a strict, adaptive, micro-step tutoring loop for board prep. You do not lecture. You map the learner's knowledge, teach one atomic concept at a time, and gate every advance behind a comprehension check. The learner is a urology resident — talk to them like a colleague.",
+  "",
+  "OUTPUT FORMAT — the app renders raw text: plain text only. No markdown headers, no bold/italic markers, no tables, no code fences. Short paragraphs and simple '- ' bullets are fine. The only special notation is the map glyphs and '____' cloze blanks described below.",
+  "",
+  "THE LOOP:",
+  "",
+  "1) PROBE (your first message — and only then): Do not teach anything yet. Ask 2-3 rapid, targeted questions that locate the learner's exact edge of understanding on this topic — pitched to separate 'knows it cold' from 'shaky'. One line each, answerable in a sentence. Then stop and wait.",
+  "",
+  "2) MAP: From their answers (and the uploaded curriculum content when present), build a learning path of 4-8 atomic nodes, ordered so each builds on the previous. Start AT the edge — no nodes for things they just proved they know. Node titles are 3-6 words. Show the map in exactly this format:",
+  "",
+  "🗺️ MAP — <topic>",
+  "✅ 1. <already solid — include only if it orients the path>",
+  "🔵 2. <the active node>",
+  "⬜ 3. <pending>",
+  "⬜ 4. <pending>",
+  "",
+  "Glyphs: ⬜ pending · 🔵 active (exactly ONE node is 🔵 at any time) · ✅ mastered · ⚠️ weak (skipped or barely passed). After first showing the map, immediately teach the active node in the same message.",
+  "",
+  "3) MICRO-STEP: Teach ONLY the active node. Under 200 words. Mechanism first, then the clinical fact that follows from it — board-level precision (numbers, stages, doses, AUA guideline cutoffs). One concept per message, never two.",
+  "",
+  "4) CHECK: End every teaching message with exactly ONE check question on a line starting with '❓'. Use a cloze ('First-line therapy for ____ is ____.') or a single short-answer application question — application beats pure recall when the node allows it. Never multiple choice, never a question stack. Never include or hint at the answer in your teaching text. Then stop and wait.",
+  "",
+  "5) GATE: Grade their answer honestly and strictly — vague or half-right does not pass.",
+  "- PASS: say so in one line, mark the node ✅, promote the next node to 🔵, re-print the full updated map, and teach the new active node (loop to step 3).",
+  "- PARTIAL: name exactly what's missing in one line and ask ONE sharper follow-up on the gap. A second partial counts as a fail.",
+  "- FAIL or confusion: do NOT re-explain the same way. Diagnose the underlying gap. If it's a missing foundation, INSERT a new prerequisite node directly before the active one (number it like 2a so existing numbers don't shift), re-print the map with one line naming the detour, and teach the inserted node first. If it's not foundational, re-teach the same node from a different angle (different mechanism framing, or a concrete case), then ask a NEW check question.",
+  "",
+  "6) FINISH: When every node is ✅ or ⚠️: give the 2-3 core mental models from the session (principles, not fact lists), list the ⚠️ nodes as a 'revisit list', and offer a fresh drill on just those.",
+  "",
+  "COMMANDS (accept these at any point):",
+  "- SKIP: mark the active node ⚠️, advance to the next, re-print the map. Don't argue, don't re-quiz it this session.",
+  "- HINT: give ONE scaffolding hint that narrows the search space — never the answer. A second HINT on the same question gives a stronger hint; a third reveals the answer, marks the node ⚠️, and moves on.",
+  "- MAP: re-print the current map with statuses, nothing else.",
+  "- Any other question: answer it fully, then re-print the pending ❓ check question and wait.",
+  "",
+  "HARD RULES:",
+  "- Never teach two nodes in one message. Never advance past an unanswered check question except via SKIP.",
+  "- Re-print the FULL map every time any node's status changes — it is the session's shared state. Keep statuses consistent with everything already established.",
+  "- When curriculum content is attached, derive nodes and check questions from it and cite its specifics precisely.",
+  "- No filler, no 'great question', no medical-advice disclaimers. This is board prep between colleagues.",
+].join("\n");
+
 var TUTOR_STYLES = {
   engaging: {
     label: "Engaging",
@@ -2154,6 +2197,7 @@ export default function UroStudyHub() {
   var [showGame, setShowGame] = useState(""); // "", "select", "blaster", "clinic", "consults", "drugmatch", "buzzer"
   var [convertingChat, setConvertingChat] = useState("");
   var [lectureMode, setLectureMode] = useState(false);
+  var [masteryMode, setMasteryMode] = useState(false); // third tutor mode: micro-step mastery drill
   var [lecturePhase, setLecturePhase] = useState(0);
   var [lectureTopic, setLectureTopic] = useState("");
   // Quick Ask sidekick — a side chat that rides along the lecture without touching it
@@ -2191,7 +2235,7 @@ export default function UroStudyHub() {
       setPendingResume(function(p) { return p ? null : p; }); // a live session supersedes the resume offer
       idbSet("activeSession", {
         topic: lectureTopic, messages: chatMsgs, sideMsgs: sideMsgs,
-        lectureMode: lectureMode, lecturePhase: lecturePhase,
+        lectureMode: lectureMode, lecturePhase: lecturePhase, masteryMode: masteryMode,
         upText: upText, skillsCtx: skillsCtx,
         date: new Date().toISOString(),
       }).catch(function() {});
@@ -2201,7 +2245,7 @@ export default function UroStudyHub() {
     function onHide() { if (document.visibilityState === "hidden") { if (autosaveT.current) clearTimeout(autosaveT.current); snapshot(); } }
     document.addEventListener("visibilitychange", onHide);
     return function() { document.removeEventListener("visibilitychange", onHide); };
-  }, [chatMsgs, sideMsgs, upText, lectureTopic, lectureMode, lecturePhase, skillsCtx]);
+  }, [chatMsgs, sideMsgs, upText, lectureTopic, lectureMode, lecturePhase, masteryMode, skillsCtx]);
 
   // Restore an interrupted session from the resume banner — everything comes back,
   // including the uploaded chapter, so quizzing/explaining stays grounded in the source.
@@ -2213,6 +2257,7 @@ export default function UroStudyHub() {
     setSideMsgs(sess.sideMsgs || []);
     setSideOpen(false); setSideIn("");
     setLectureMode(!!sess.lectureMode);
+    setMasteryMode(!!sess.masteryMode);
     setLecturePhase(sess.lecturePhase || 0);
     setUpText(sess.upText || "");
     if (sess.skillsCtx) { setSkillsCtx(sess.skillsCtx); try { sessionStorage.setItem("uroStudyHub_skillsCtx", JSON.stringify(sess.skillsCtx)); } catch (e) {} }
@@ -2423,6 +2468,7 @@ export default function UroStudyHub() {
   function goStudyTopic(topicLabel) {
     setLectureTopic(topicLabel);
     setLectureMode(false);
+    setMasteryMode(false);
     setLecturePhase(0);
     setPage("chat");
     setChatView("chat");
@@ -2948,6 +2994,7 @@ export default function UroStudyHub() {
       sideMsgs: opts.sideMsgs !== undefined ? opts.sideMsgs : sideMsgs,
       lecturePhase: opts.lecturePhase !== undefined ? opts.lecturePhase : (lecturePhase || 0),
       lectureMode: opts.lectureMode !== undefined ? opts.lectureMode : (lectureMode || false),
+      masteryMode: opts.masteryMode !== undefined ? opts.masteryMode : (masteryMode || false),
       hasDoc: !!doc,
       date: new Date().toISOString(),
     };
@@ -2964,7 +3011,8 @@ export default function UroStudyHub() {
     setSideMsgs(item.sideMsgs || []);
     setSideOpen(false);
     setSideIn("");
-    setLectureMode(item.lectureMode !== false);
+    setLectureMode(item.masteryMode ? false : item.lectureMode !== false);
+    setMasteryMode(!!item.masteryMode);
     setLecturePhase(item.lecturePhase || 0);
     setUpText(""); // legacy saves have no stored doc; replaced below when one exists
     if (item.hasDoc) idbGet("doc_" + item.id).then(function(doc) { if (doc) setUpText(doc); }).catch(function() {});
@@ -3620,7 +3668,7 @@ export default function UroStudyHub() {
         : "\n\nCURRENT MODE: TEACH. Teach this module conversationally, then quiz at the end.";
       sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject + (_ref ? "\n\nMODULE REFERENCE (your factual backbone — expand on it, do not contradict it):\n\n" + _ref : "");
     } else {
-      sysContent = (lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
+      sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
     }
     sysContent += MATH_FORMAT_RULE;
 
@@ -3741,7 +3789,7 @@ export default function UroStudyHub() {
     var ctx = { id: mod.id, mode: mode || "teach" };
     setSkillsCtx(ctx);
     try { sessionStorage.setItem("uroStudyHub_skillsCtx", JSON.stringify(ctx)); } catch(e) {}
-    setLectureMode(false); setLecturePhase(0); setUpText("");
+    setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setUpText("");
     resetSidekick();
     setChatView("chat");
     setPage("chat");
@@ -7645,10 +7693,10 @@ export default function UroStudyHub() {
           <span style={{ fontSize: 18 }}>{"📖"}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--c-tx)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{"Unfinished lecture: " + (pendingResume.topic || "session")}</div>
-            <div style={{ fontSize: 9, color: "var(--c-mut)" }}>{(pendingResume.lectureMode ? "Phase " + ((pendingResume.lecturePhase || 0) + 1) + "/" + LECTURE_PHASES.length + " · " : "") + (pendingResume.messages || []).filter(function(m) { return m.role !== "system"; }).length + " messages" + (pendingResume.upText ? " · 📄 chapter attached" : "")}</div>
+            <div style={{ fontSize: 9, color: "var(--c-mut)" }}>{(pendingResume.masteryMode ? "🎯 Mastery · " : pendingResume.lectureMode ? "Phase " + ((pendingResume.lecturePhase || 0) + 1) + "/" + LECTURE_PHASES.length + " · " : "") + (pendingResume.messages || []).filter(function(m) { return m.role !== "system"; }).length + " messages" + (pendingResume.upText ? " · 📄 chapter attached" : "")}</div>
           </div>
           <button onClick={resumeInterrupted} style={{ padding: "6px 12px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 8, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{"▶ Resume"}</button>
-          <button onClick={function() { var sess = pendingResume; setPendingResume(null); saveLectureSession(sess.topic, sess.messages, { sideMsgs: sess.sideMsgs || [], lecturePhase: sess.lecturePhase || 0, lectureMode: !!sess.lectureMode, upText: sess.upText || "" }); idbDel("activeSession").catch(function() {}); setSaveFeedback("Saved to 📚 Saved sessions"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "6px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 8, color: "var(--a-grn)", fontSize: 10, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{"💾 Save"}</button>
+          <button onClick={function() { var sess = pendingResume; setPendingResume(null); saveLectureSession(sess.topic, sess.messages, { sideMsgs: sess.sideMsgs || [], lecturePhase: sess.lecturePhase || 0, lectureMode: !!sess.lectureMode, masteryMode: !!sess.masteryMode, upText: sess.upText || "" }); idbDel("activeSession").catch(function() {}); setSaveFeedback("Saved to 📚 Saved sessions"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "6px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 8, color: "var(--a-grn)", fontSize: 10, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{"💾 Save"}</button>
           <button onClick={function() { setPendingResume(null); idbDel("activeSession").catch(function() {}); }} title="Discard" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: 2 }}>{"✕"}</button>
         </div>
       )}
@@ -9759,6 +9807,7 @@ export default function UroStudyHub() {
                 var topicName = fname.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
                 setLectureTopic(topicName);
                 setLectureMode(true);
+                setMasteryMode(false);
                 setLecturePhase(0);
                 var msg = "📚 Loaded: " + topicName + " (" + (cleaned.text.length / 1000).toFixed(1) + "k chars";
                 if (cleaned.stripped.refs || cleaned.stripped.contrib) msg += ", stripped " + (cleaned.stripped.lines + cleaned.stripped.contrib) + " lines boilerplate";
@@ -9834,7 +9883,7 @@ export default function UroStudyHub() {
             }} style={{ display: "none" }} />
             <button onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={{ background: chatView === "skills" ? "#f9731620" : c.cd, border: "1px solid " + (chatView === "skills" ? "#f9731680" : "var(--c-br)"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "skills" ? "var(--a-or)" : "var(--c-mut)", fontSize: 10, fontWeight: chatView === "skills" ? 700 : 400 }}>{"🔪 OR Skills"}</button>
             <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={{ background: chatView === "saved" ? "#a78bfa20" : c.cd, border: "1px solid " + (chatView === "saved" ? "#a78bfa60" : "var(--c-br)"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "saved" ? "var(--a-vio)" : "var(--c-mut)", fontSize: 10, fontWeight: chatView === "saved" ? 700 : 400 }}>{"📚 Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
-            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "var(--c-mut)", fontSize: 10 }}>Clear</button>
+            <button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "var(--c-mut)", fontSize: 10 }}>Clear</button>
           </div>
           {/* Tutor style picker */}
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, overflowX: "auto" }}>
@@ -9887,6 +9936,19 @@ export default function UroStudyHub() {
             <div style={{ padding: "4px 12px", borderBottom: "1px solid #fb923c30", background: "#fb923c10", display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--a-or)", animation: "pulse 1s infinite" }} />
               <span style={{ fontSize: 9, color: "var(--a-or)", fontWeight: 600 }}>{ankiProgress || "Generating Anki cards..."}</span>
+            </div>
+          )}
+          {masteryMode && (
+            <div style={{ borderBottom: "1px solid " + c.cd, background: c.cd + "60", padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: c.a, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "45%" }}>{"🎯 " + (lectureTopic || "Mastery Drill")}</span>
+              <span style={{ fontSize: 9, color: "var(--c-br2)", flex: 1 }}>pass the check to advance</span>
+              <button onClick={function() { sendChat("MAP"); }} disabled={chatLoad} style={{ background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 5, padding: "2px 8px", cursor: chatLoad ? "default" : "pointer", color: c.a, fontSize: 9, fontWeight: 600 }}>{"🗺️ Map"}</button>
+              <button onClick={function() {
+                saveLectureSession(lectureTopic, chatMsgs);
+                earnTokens("lecture", lectureTopic || "Mastery drill");
+                setSaveFeedback("Session saved! +3 tokens");
+                setTimeout(function() { setSaveFeedback(""); }, 2000);
+              }} style={{ background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 5, padding: "2px 8px", cursor: "pointer", color: "var(--a-grn)", fontSize: 9, fontWeight: 600 }}>{"💾 Save"}</button>
             </div>
           )}
           {lectureMode && (function() {
@@ -10173,7 +10235,7 @@ export default function UroStudyHub() {
                 function toggleExp() { setExpandedSaved(function(p) { var n = Object.assign({}, p); n[item.id] = !n[item.id]; return n; }); }
                 if (item.type === "session") {
                   var msgCount = item.messages ? item.messages.length : 0;
-                  var phaseInfo = item.lecturePhase != null ? " · Phase " + (item.lecturePhase + 1) + "/" + LECTURE_PHASES.length : "";
+                  var phaseInfo = item.masteryMode ? " · 🎯 Mastery" : (item.lecturePhase != null ? " · Phase " + (item.lecturePhase + 1) + "/" + LECTURE_PHASES.length : "");
                   if (item.hasDoc) phaseInfo += " · 📄 chapter attached";
                   return (
                     <div key={item.id} style={{ marginBottom: 10, background: c.cd, borderRadius: 10, border: "1px solid var(--c-br)", overflow: "hidden" }}>
@@ -10243,11 +10305,12 @@ export default function UroStudyHub() {
                 {lectureTopic ? (
                   <div style={{ background: c.a + "10", border: "1px solid " + c.a + "25", borderRadius: 12, padding: 16, margin: "0 auto 16px", maxWidth: 360 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: c.a, marginBottom: 8 }}>{lectureTopic}</div>
-                    <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--c-mut)", margin: "0 0 12px" }}>Upload the chapter for a structured lecture, kick off a no-doc lecture, or do a mechanism-first Deep Dive.</p>
+                    <p style={{ fontSize: 11, lineHeight: 1.6, color: "var(--c-mut)", margin: "0 0 12px" }}>Upload the chapter for a structured lecture, kick off a no-doc lecture, do a mechanism-first Deep Dive, or run a Mastery Drill that quizzes you forward one step at a time.</p>
                     <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
                       <button onClick={function() { fileRef.current && fileRef.current.click(); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Upload chapter PDF/doc — auto-starts a 9-phase lecture">{"📄 Upload Chapter"}</button>
-                      <button onClick={function() { setLectureMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setTimeout(function() { sendChat("Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
-                      <button onClick={function() { setLectureMode(true); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setTimeout(function() { sendChat("Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 8, color: c.a, fontSize: 11, fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
+                      <button onClick={function() { setLectureMode(false); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setTimeout(function() { sendChat("Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
+                      <button onClick={function() { setLectureMode(false); setMasteryMode(true); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting mastery drill: " + lectureTopic }]); setTimeout(function() { sendChat("Mastery drill on: " + lectureTopic + ". Probe my edge of understanding first — don't teach yet."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,#f59e0b,#f97316)", border: "none", borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }} title="Adaptive micro-step drill — probes your edge, builds a learning map, and gates every step behind a check question. Best for shaky topics.">{"🎯 Mastery Drill"}</button>
+                      <button onClick={function() { setLectureMode(true); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setTimeout(function() { sendChat("Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 8, color: c.a, fontSize: 11, fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
                     </div>
                   </div>
                 ) : (
@@ -10288,7 +10351,7 @@ export default function UroStudyHub() {
                   {msg.role === "assistant" && (
                     <div style={{ position: "absolute", top: 4, right: -28, display: "flex", flexDirection: "column", gap: 2 }}>
                       <button onClick={function() {
-                        var phase = lectureMode && LECTURE_PHASES[lecturePhase] ? LECTURE_PHASES[lecturePhase].name : "";
+                        var phase = masteryMode ? "Mastery Drill" : (lectureMode && LECTURE_PHASES[lecturePhase] ? LECTURE_PHASES[lecturePhase].name : "");
                         bookmarkMessage(lectureTopic || "Deep Dive", msg, phase);
                         setSaveFeedback("Bookmarked!");
                         setTimeout(function() { setSaveFeedback(""); }, 1500);
@@ -10308,6 +10371,14 @@ export default function UroStudyHub() {
                 <button onClick={function() { sendChat("Go deeper into this section. Give me more detail, more examples, more board-relevant nuance."); }} style={{ padding: "9px 14px", background: "#4ade8018", border: "1px solid #4ade8044", borderRadius: 11, color: "var(--a-grn)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{"Go deeper"}</button>
               </div>
             )}
+            {/* Mastery quick actions — the gate lives in the model; these are the sanctioned outs */}
+            {masteryMode && !chatLoad && chatMsgs.length > 0 && chatMsgs[chatMsgs.length - 1].role === "assistant" && (
+              <div style={{ alignSelf: "flex-start", display: "flex", gap: 6, marginTop: 2, marginBottom: 4, flexWrap: "wrap" }}>
+                <button onClick={function() { sendChat("HINT"); }} style={{ padding: "9px 14px", background: "#4ade8018", border: "1px solid #4ade8044", borderRadius: 11, color: "var(--a-grn)", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="One scaffolding hint — never the answer">{"💡 Hint"}</button>
+                <button onClick={function() { sendChat("MAP"); }} style={{ padding: "9px 14px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 11, color: "var(--c-mut)", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Re-show the learning map">{"🗺️ Map"}</button>
+                <button onClick={function() { sendChat("SKIP"); }} style={{ padding: "9px 14px", background: "transparent", border: "1px solid var(--c-br)", borderRadius: 11, color: "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Skip this node — it's marked ⚠️ weak and lands on the revisit list">{"⏭️ Skip"}</button>
+              </div>
+            )}
             {chatLoad && (
               <div style={{ alignSelf: "flex-start" }}>
                 <div style={{ background: c.cd, borderRadius: "14px 14px 14px 2px", padding: "12px 16px", border: "1px solid var(--c-br)", color: "#64748b", fontSize: 12 }}>Thinking...</div>
@@ -10318,7 +10389,7 @@ export default function UroStudyHub() {
           {chatView !== "skills" && <div style={{ padding: "10px 12px 68px", borderTop: "1px solid " + c.cd, background: c.bg }}>
             {upText && !lectureMode && !skillsCtx && <div style={{ fontSize: 10, color: c.a, marginBottom: 6 }}>📄 Content loaded <button onClick={function() { setUpText(""); }} style={{ background: "none", border: "none", color: "var(--a-red0)", cursor: "pointer", fontSize: 10 }}>x Remove</button></div>}
             <div style={{ display: "flex", gap: 6 }}>
-              <input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : (lectureMode ? "Ask a question, or type/tap NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 12, color: "var(--c-tx)", fontSize: 12, outline: "none" }} />
+              <input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : masteryMode ? "Answer the check — or HINT / SKIP / MAP..." : (lectureMode ? "Ask a question, or type/tap NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, padding: "10px 14px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 12, color: "var(--c-tx)", fontSize: 12, outline: "none" }} />
               <button onClick={function() { sendChat(chatIn); }} disabled={chatLoad || !chatIn.trim()} style={{ background: (chatLoad || !chatIn.trim()) ? "var(--c-br)" : "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 12, padding: "0 16px", cursor: (chatLoad || !chatIn.trim()) ? "default" : "pointer", color: "white", fontSize: 14 }}>
                 {"->"}
               </button>
