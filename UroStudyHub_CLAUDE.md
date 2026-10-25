@@ -70,7 +70,7 @@ The user/creator is Andrew, a urology trainee.
 - **Claude API** — `claude-sonnet-4-20250514` via Anthropic REST with `anthropic-dangerous-direct-browser-access` header
 - **Gemini API** — via Google's OpenAI-compatible endpoint
 - **OpenAI API** — direct
-- **OpenRouter** — access to hundreds of models with one key
+- **OpenRouter** — one key, every model: Settings → Router loads the live catalog (`openrouter.ai/api/v1/models`, public) into a searchable list with $/1M prices and a FREE pill, and checks the key via `GET /api/v1/key` (warns when no credits were ever bought). Catalog cached in `uroStudyHub_orModels` (survives the Settings modal remounting). `:batch` ids, audio and image-generator models are filtered out. Default model `openrouter/auto` (`OR_DEFAULT_MODEL`).
 - **LM Studio** — local model, OpenAI-compatible endpoint
 
 Provider config stored in localStorage as `uroStudyHub_lmSettings`.
@@ -400,7 +400,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
   claudeKey: "", claudeModel: "claude-sonnet-4-20250514",
   geminiKey: "", geminiModel: "gemini-2.5-flash",
   openaiKey: "", openaiModel: "gpt-4o",
-  openrouterKey: "", openrouterModel: "google/gemini-2.5-flash:free",
+  openrouterKey: "", openrouterModel: "openrouter/auto",   // OR_DEFAULT_MODEL; picked from the live list
 }
 ```
 

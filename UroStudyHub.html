@@ -258,6 +258,51 @@ function saveActivePlan(id) {
   try { localStorage.setItem("uroStudyHub_activePlan", id); } catch(e) { /* ignore */ }
 }
 
+// ═══ OPENROUTER MODEL CATALOG ═══
+// Live list from openrouter.ai/api/v1/models (public, no key needed). Cached so the
+// picker is filled on the next visit and survives the Settings modal remounting.
+var OR_DEFAULT_MODEL = "openrouter/auto";
+function orParseModels(data) {
+  return ((data && data.data) || []).filter(function(m) {
+    // :batch ids are the Batch API (answers within 24h) — never usable for live chat
+    if (/:batch$/.test(m.id)) return false;
+    var out = (m.architecture && m.architecture.output_modalities) || ["text"];
+    if (out.indexOf("text") < 0 || out.indexOf("audio") >= 0) return false;
+    // image generators are useless for tutoring; OpenRouter's own routers list image output too
+    if (out.indexOf("image") >= 0 && m.id.indexOf("openrouter/") !== 0) return false;
+    return true;
+  }).map(function(m) {
+    var p = m.pricing || {};
+    var pin = parseFloat(p.prompt), pout = parseFloat(p.completion);
+    return { id: m.id, name: m.name || m.id, ctx: m.context_length || 0, created: m.created || 0,
+      free: pin === 0 && pout === 0, inM: pin * 1e6, outM: pout * 1e6 };
+  }).sort(function(a, b) { return b.created - a.created; });
+}
+function orPriceLabel(m) {
+  if (m.free) return "FREE";
+  if (!(m.inM >= 0) || !(m.outM >= 0)) return "varies";
+  function f(n) { return String(+n.toFixed(n < 1 ? 3 : 2)); }
+  return "$" + f(m.inM) + " / $" + f(m.outM);
+}
+function loadOrModels() {
+  try { var v = localStorage.getItem("uroStudyHub_orModels"); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+}
+function saveOrModels(models) {
+  try { localStorage.setItem("uroStudyHub_orModels", JSON.stringify({ ts: Date.now(), models: models })); } catch(e) { /* ignore */ }
+}
+// Turn a GET /api/v1/key result into one status line for the Settings panel
+function orDescribeKey(res) {
+  if (!res) return null;
+  if (res.status === 401 || res.status === 403) return { ok: false, text: "Key rejected — copy it again from openrouter.ai/keys" };
+  var d = res.data && res.data.data;
+  if (!d) return { ok: false, text: "Couldn't check the key" + (res.status ? " (HTTP " + res.status + ")" : " (network error)") };
+  var bits = ["Key works"];
+  if (typeof d.limit_remaining === "number") bits.push("$" + d.limit_remaining.toFixed(2) + " left on this key");
+  if (typeof d.usage === "number") bits.push("$" + d.usage.toFixed(2) + " used");
+  var warn = d.is_free_tier ? "No credits bought yet — paid models will fail until you add credits at openrouter.ai/settings/credits." : "";
+  return { ok: true, text: bits.join(" · "), warn: warn };
+}
+
 // AI prompt for syllabus parsing
 var SYLLABUS_PARSE_PROMPT = [
   "You are a study plan generator. The user will provide a syllabus, textbook table of contents, chapter guide, or course outline.",
@@ -1466,7 +1511,7 @@ export default function UroStudyHub() {
       claudeKey: "", claudeModel: "claude-sonnet-4-20250514",
       geminiKey: "", geminiModel: "gemini-2.5-flash",
       openaiKey: "", openaiModel: "gpt-4o",
-      openrouterKey: "", openrouterModel: "google/gemini-2.5-flash:free",
+      openrouterKey: "", openrouterModel: OR_DEFAULT_MODEL,
     };
     try {
       var saved = localStorage.getItem("uroStudyHub_lmSettings");
@@ -3583,7 +3628,7 @@ export default function UroStudyHub() {
       callOpenAICompat(
         "https://openrouter.ai/api/v1/chat/completions",
         lm.openrouterKey,
-        lm.openrouterModel || "google/gemini-2.5-flash:free",
+        lm.openrouterModel || OR_DEFAULT_MODEL,
         { "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" }
       );
 
@@ -7301,7 +7346,12 @@ export default function UroStudyHub() {
     var [oKey, setOKey] = useState(lm.openaiKey || "");
     var [oModel, setOModel] = useState(lm.openaiModel || "gpt-4o");
     var [orKey, setOrKey] = useState(lm.openrouterKey || "");
-    var [orModel, setOrModel] = useState(lm.openrouterModel || "google/gemini-2.5-flash:free");
+    var [orModel, setOrModel] = useState(lm.openrouterModel || OR_DEFAULT_MODEL);
+    var [orCatalog, setOrCatalog] = useState(loadOrModels);
+    var [orFetchErr, setOrFetchErr] = useState("");
+    var [orKeyInfo, setOrKeyInfo] = useState(null);
+    var [orSearch, setOrSearch] = useState("");
+    var [orFreeOnly, setOrFreeOnly] = useState(false);
     var [lmModels, setLmModels] = useState([]);
     var [selectedLmModel, setSelectedLmModel] = useState(lm.model || "");
     var [lmFetchErr, setLmFetchErr] = useState("");
@@ -7326,6 +7376,27 @@ export default function UroStudyHub() {
           setTesting(false);
         })
         .catch(function(err) { setGFetchErr("Failed: " + (err.message || "Network error")); setTesting(false); });
+    }
+
+    // Load every OpenRouter model (public list) and, with a key, check the key in parallel
+    function fetchOrModels() {
+      setTesting(true); setOrFetchErr(""); setOrKeyInfo(null);
+      var list = fetch("https://openrouter.ai/api/v1/models")
+        .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+      var keyCheck = !orKey ? Promise.resolve(null) :
+        fetch("https://openrouter.ai/api/v1/key", { headers: { "Authorization": "Bearer " + orKey.trim() } })
+          .then(function(r) { return r.json().catch(function() { return null; }).then(function(d) { return { status: r.status, data: d }; }); })
+          .catch(function() { return { status: 0, data: null }; });
+      Promise.all([list, keyCheck])
+        .then(function(res) {
+          var models = orParseModels(res[0]);
+          if (models.length === 0) { setOrFetchErr("OpenRouter returned no models"); return; }
+          saveOrModels(models);
+          setOrCatalog({ ts: Date.now(), models: models });
+          setOrKeyInfo(orDescribeKey(res[1]));
+        })
+        .catch(function(err) { setOrFetchErr("Couldn't load the model list: " + (err.message || "Network error")); })
+        .then(function() { setTesting(false); });
     }
 
     function fetchLmModels() {
@@ -7365,7 +7436,9 @@ export default function UroStudyHub() {
             else if (provName === "openrouter") { updates.openrouterKey = key; updates.openrouterModel = model; }
             setLm(function(p) { return Object.assign({}, p, updates); });
           } else {
-            setTestMsg("Error: " + (data.error ? data.error.message : "Invalid response"));
+            var errMsg = "Error: " + (data.error ? data.error.message : "Invalid response");
+            if (provName === "openrouter" && data.error && data.error.code === 402) errMsg += " — add credits at openrouter.ai/settings/credits, or pick a FREE model.";
+            setTestMsg(errMsg);
           }
           setTesting(false);
         })
@@ -7389,6 +7462,17 @@ export default function UroStudyHub() {
         })
         .catch(function(err) { setTestMsg("Failed: " + (err.message || "Network error")); setTesting(false); });
     }
+
+    var orModels = (orCatalog && orCatalog.models) || [];
+    var orQ = orSearch.trim().toLowerCase();
+    var orShown = orModels.filter(function(m) {
+      if (orFreeOnly && !m.free) return false;
+      return !orQ || m.id.toLowerCase().indexOf(orQ) >= 0 || m.name.toLowerCase().indexOf(orQ) >= 0;
+    });
+    var orFreeCount = orModels.filter(function(m) { return m.free; }).length;
+    var orPicked = orModels.find(function(m) { return m.id === orModel; });
+    var orHrs = orCatalog && orCatalog.ts ? Math.round((Date.now() - orCatalog.ts) / 36e5) : 0;
+    var orAge = orHrs < 1 ? "just now" : orHrs < 48 ? orHrs + "h ago" : Math.round(orHrs / 24) + "d ago";
 
     var isConnected = lm.on && lm.provider === prov;
     var statusDot = { width: 8, height: 8, borderRadius: "50%", background: isConnected ? "var(--a-grn)" : "#64748b" };
@@ -7508,27 +7592,52 @@ export default function UroStudyHub() {
           {prov === "openrouter" && (
             <div>
               <label style={{ fontSize: 11, color: "var(--c-mut)", marginBottom: 4, display: "block" }}>OpenRouter API Key</label>
-              <input value={orKey} onChange={function(e) { setOrKey(e.target.value); }} type="password" placeholder="sk-or-..." style={inputStyle} />
-              <label style={{ fontSize: 11, color: "var(--c-mut)", marginBottom: 4, display: "block" }}>Model (any model on OpenRouter)</label>
-              <select value={orModel} onChange={function(e) { setOrModel(e.target.value); }} style={selectStyle}>
-                <optgroup label="Free Models">
-                  <option value="google/gemini-2.5-flash:free">Gemini 2.5 Flash (free)</option>
-                  <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (free)</option>
-                  <option value="deepseek/deepseek-r1:free">DeepSeek R1 (free, reasoning)</option>
-                  <option value="meta-llama/llama-4-maverick:free">Llama 4 Maverick (free)</option>
-                  <option value="qwen/qwen3-235b-a22b:free">Qwen 3 235B (free)</option>
-                </optgroup>
-                <optgroup label="Premium Models">
-                  <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
-                  <option value="openai/gpt-4o">GPT-4o</option>
-                  <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-                  <option value="deepseek/deepseek-r1">DeepSeek R1</option>
-                </optgroup>
-              </select>
-              <input value={orModel} onChange={function(e) { setOrModel(e.target.value); }} placeholder="Or type any model ID..." style={Object.assign({}, inputStyle, { fontSize: 10, marginBottom: 12 })} />
-              <button onClick={function() { testApiKey("openrouter", "https://openrouter.ai/api/v1/chat/completions", orKey, orModel, { "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" }); }} disabled={!orKey || testing} style={{ width: "100%", padding: 10, background: !orKey ? "var(--c-br)" : "linear-gradient(135deg, var(--a-or2), #ea580c)", color: "#fff", border: "none", borderRadius: 10, cursor: !orKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect via OpenRouter"}</button>
+              <input value={orKey} onChange={function(e) { setOrKey(e.target.value.trim()); }} type="password" placeholder="sk-or-..." style={inputStyle} />
+              <button onClick={fetchOrModels} disabled={testing} style={{ width: "100%", padding: 8, marginBottom: 10, background: "#9a3412", color: "#fff", border: "none", borderRadius: 8, cursor: testing ? "default" : "pointer", fontWeight: 600, fontSize: 11, opacity: testing ? 0.6 : 1 }}>{testing ? "Loading..." : (orKey ? "Check Key & Load Models" : "Load Models")}</button>
+              {orKeyInfo && (
+                <div style={{ fontSize: 10, color: orKeyInfo.ok ? "var(--a-grn)" : "var(--a-red0)", padding: "6px 10px", background: orKeyInfo.ok ? "#4ade8010" : "#f8717110", borderRadius: 6, marginBottom: 8 }}>
+                  {(orKeyInfo.ok ? "✓ " : "✗ ") + orKeyInfo.text}
+                  {orKeyInfo.warn && <div style={{ color: "var(--a-or2)", marginTop: 3 }}>{orKeyInfo.warn}</div>}
+                </div>
+              )}
+              {orFetchErr && <div style={{ fontSize: 10, color: "var(--a-red0)", marginBottom: 8 }}>{orFetchErr}</div>}
+              {orModels.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                    <label style={{ fontSize: 11, color: "var(--c-mut)" }}>{"Model — " + orModels.length + " available, " + orFreeCount + " free"}</label>
+                    <span style={{ fontSize: 9, color: "#64748b" }}>{"list updated " + orAge}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                    <input value={orSearch} onChange={function(e) { setOrSearch(e.target.value); }} placeholder="Search (claude, gemini, qwen...)" style={Object.assign({}, inputStyle, { marginBottom: 0, flex: 1, padding: "8px 12px" })} />
+                    <button onClick={function() { setOrFreeOnly(!orFreeOnly); }} style={{ padding: "0 10px", borderRadius: 10, border: "1px solid " + (orFreeOnly ? "#4ade8060" : "var(--c-br)"), background: orFreeOnly ? "#4ade8020" : "transparent", color: orFreeOnly ? "var(--a-grn)" : "var(--c-mut)", fontSize: 10, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{(orFreeOnly ? "✓ " : "") + "Free only"}</button>
+                  </div>
+                  <div style={{ maxHeight: 240, overflowY: "auto", border: "1px solid var(--c-br)", borderRadius: 10 }}>
+                    {orShown.slice(0, 200).map(function(m) {
+                      var sel = m.id === orModel;
+                      return (
+                        <div key={m.id} onClick={function() { setOrModel(m.id); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", borderBottom: "1px solid var(--c-br)", borderLeft: "3px solid " + (sel ? "var(--a-or2)" : "transparent"), background: sel ? "#f9731620" : "transparent" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: sel ? 700 : 500, color: "var(--c-tx)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(sel ? "✓ " : "") + m.name}</div>
+                            <div style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.id}</div>
+                          </div>
+                          {m.free
+                            ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--a-grn)", background: "#4ade8020", border: "1px solid #4ade8060", borderRadius: 6, padding: "2px 6px", flexShrink: 0 }}>FREE</span>
+                            : <span style={{ fontSize: 9, color: "var(--c-mut)", whiteSpace: "nowrap", flexShrink: 0 }}>{orPriceLabel(m)}</span>}
+                        </div>
+                      );
+                    })}
+                    {orShown.length === 0 && <div style={{ padding: 12, fontSize: 10, color: "#64748b", textAlign: "center" }}>No models match</div>}
+                    {orShown.length > 200 && <div style={{ padding: 8, fontSize: 9, color: "#64748b", textAlign: "center" }}>{(orShown.length - 200) + " more — narrow the search"}</div>}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#64748b", marginTop: 4 }}>Price = $ per 1M tokens, input / output.</div>
+                </div>
+              )}
+              {orModels.length > 0 && orModel && !orPicked && <div style={{ fontSize: 10, color: "var(--a-or2)", marginBottom: 6 }}>{"⚠ “" + orModel + "” isn't in OpenRouter's current list — pick one above."}</div>}
+              <label style={{ fontSize: 11, color: "var(--c-mut)", marginBottom: 4, display: "block" }}>{orModels.length > 0 ? "Selected model ID (or type any)" : "Model ID — load models above, or type one"}</label>
+              <input value={orModel} onChange={function(e) { setOrModel(e.target.value.trim()); }} placeholder={OR_DEFAULT_MODEL} style={Object.assign({}, inputStyle, { fontSize: 10, marginBottom: 12 })} />
+              <button onClick={function() { testApiKey("openrouter", "https://openrouter.ai/api/v1/chat/completions", orKey, orModel, { "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" }); }} disabled={!orKey || !orModel || testing} style={{ width: "100%", padding: 10, background: !orKey || !orModel ? "var(--c-br)" : "linear-gradient(135deg, var(--a-or2), #ea580c)", color: "#fff", border: "none", borderRadius: 10, cursor: !orKey || !orModel ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect via OpenRouter"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
-                <strong style={{ color: "var(--c-mut)" }}>Get a key:</strong> openrouter.ai/keys — Access 200+ models including free options. One key for everything.
+                <strong style={{ color: "var(--c-mut)" }}>Get a key:</strong> openrouter.ai/keys — paste it, load models, pick one, connect. <code>openrouter/auto</code> picks a model for you. FREE models need no credits but are rate-limited (~50 requests/day until you've bought $10 of credits) and may log your prompts.
               </div>
             </div>
           )}
