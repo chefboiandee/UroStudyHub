@@ -252,6 +252,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 |------|----|-------------|--------------------------|
 | 🪨 Stone Crusher | `blaster` | Click falling kidney stones before they hit bottom | Urology-specific — would need specialty variants (e.g. catch arrhythmias for cardiology, identify lesions for derm) |
 | 🏥 Uro Clinic Rush | `clinic` | Top-down doctor sim — WASD movement, diagnose patients | **Highly adaptable** — swap patient scenarios for any specialty (EM triage, ortho clinic, peds, etc.) |
+| 🛂 Pre-Op, Please | `preop` | Papers, Please-style pre-op desk: check each patient's papers against a policy binder that grows by day (identity, labs, culture, consent/side → blood-thinner holds per drug + β-hCG → infected-obstructed ESCALATE + the pre-op antibiotic order from the last 3 culture susceptibilities). Own page `games/preop-please.html` hosted in a frame (postMessage claim/exit); harness `tools/preop-please.drive.mjs` | **Highly adaptable** — rules + flaws are data; any "check the chart before the case" specialty |
 | 🚨 Inpatient Consults | `consults` | Inpatient variant of Clinic Rush | **Highly adaptable** — same engine, just swap consult scenarios per specialty |
 | 💊 Drug Match | `drugmatch` | Conveyor belt — catch pills in correct drug class bucket | **Universal** — works for any specialty by swapping drug categories (abx classes, psych meds, chemo regimens, etc.) |
 | 🔔 Buzzer Rounds | `buzzer` | Rapid-fire Q&A with timer | **Universal** — content-agnostic, just swap question banks |
