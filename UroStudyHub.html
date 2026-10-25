@@ -7356,7 +7356,7 @@ export default function UroStudyHub() {
     if (showGame === "imgrec") return React.createElement(VisualDxGame, null);
     if (showGame === "snap") return React.createElement(SnapDecisionGame, null);
     return null;
-  }, [showGame]);
+  }, [showGame, showGame === "select" ? gameTab : null, showGame === "select" ? s : null]);
 
   function SettingsModal() {
     var [ep, setEp] = useState(lm.ep);

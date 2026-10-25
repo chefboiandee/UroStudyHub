@@ -3,6 +3,16 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-25 (late) — 🛒 Fix: Arcade Play/Shop tabs didn't switch (iPhone)
+
+**Done:** `gameOverlay` useMemo was keyed on `[showGame]` only, so the Arcade select
+screen rendered stale state — tab taps set `gameTab` but nothing re-rendered until
+reopen. Deps now also include `gameTab` and `s` while the select screen is open
+(other games still don't remount on parent updates). Rebuilt `UroStudyHub.min.html`.
+**Same bug class fixed:** the "All games / fit" toggle and coin/token counts in that screen.
+**Next steps:** confirm on the iPhone after Andrew pushes. Not pushed, not browser-tested here.
+**Open questions:** none.
+
 ## 2026-10-25 (night) — 📦 This repo moved to `~/Desktop/UroStudyHub` + its own Claude setup
 
 Andrew: "can we have a whole repo just for urostudyhub instead of working on it
