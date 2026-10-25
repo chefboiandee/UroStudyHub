@@ -2306,6 +2306,14 @@ function isGameUnlocked(gameId) {
 if (isAdmin) return true;
 return !!(s.unlockedGames || {})[gameId];
 }
+function noteProg(id, v) {
+setS(function(p) {
+var gp = p.gameProg || {};
+if ((gp[id] || 1) >= v) return p;
+var n = {}; n[id] = v;
+return Object.assign({}, p, { gameProg: Object.assign({}, gp, n) });
+});
+}
 function gameReward(coins, xp) {
 var sm = getStreakMultiplier(s.streak || 0);
 var bc = Math.ceil(coins * sm);
@@ -3910,15 +3918,16 @@ var arr = CLINIC_PATIENTS.filter(function(p) { return p.diff <= maxDiff; }).slic
 for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
 return arr;
 }
-function startClinic() {
+function startClinic(w0) {
+w0 = w0 || 1;
 var rooms = CLINIC_ROOMS.map(function() { return { pat: null }; });
 CG.current = {
 doc: { x: W / 2, y: H - 50, vx: 0, vy: 0 },
-rooms: rooms, queue: shufflePats(1), seen: 0, score: 0, lives: 3, wave: 1,
+rooms: rooms, queue: shufflePats(w0), seen: w0 === 3 ? 8 : w0 === 2 ? 4 : 0, score: 0, lives: 3, wave: w0,
 spawnCD: 60, streak: 0, nearRoom: -1, feedbacks: [], newActions: null
 };
 cKeysRef.current = {};
-setCScore(0); setCLives(3); setCWave(1); setCSeen(0); setCRwd(null);
+setCScore(0); setCLives(3); setCWave(w0); setCSeen(CG.current.seen); setCRwd(null);
 setCgs("playing");
 }
 function endClinic() {
@@ -4020,7 +4029,7 @@ var oldWave = g.wave;
 if (g.seen >= 8 && g.wave < 3) { g.wave = 3; g.queue = shufflePats(3); }
 else if (g.seen >= 4 && g.wave < 2) { g.wave = 2; g.queue = shufflePats(2); }
 if (g.wave !== oldWave) {
-setCWave(g.wave);
+setCWave(g.wave); noteProg("clinic", g.wave);
 var newActs = CLINIC_ACTIONS.filter(function(a) { return a.wave === g.wave; }).map(function(a) { return a.name; });
 if (newActs.length > 0) g.newActions = { text: "NEW: " + newActs.join(", ") + " unlocked!", life: 90 };
 }
@@ -4119,7 +4128,8 @@ return (
 <div style={{ fontSize: 10, color: "var(--c-br2)", textAlign: "center", lineHeight: 1.8 }}>
 <b style={{ color: "var(--c-mut)" }}>WASD</b> move &nbsp; <b style={{ color: "var(--c-mut)" }}>Click</b> or <b style={{ color: "var(--c-mut)" }}>1-9</b> pick order
 </div>
-<button onClick={startClinic} style={{ padding: "12px 36px", background: "linear-gradient(135deg, var(--a-sky), var(--a-ind))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Open Clinic</button>
+<button onClick={function() { startClinic(1); }} style={{ padding: "12px 36px", background: "linear-gradient(135deg, var(--a-sky), var(--a-ind))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Open Clinic</button>
+{((s.gameProg || {}).clinic || 1) > 1 && <button onClick={function() { startClinic(s.gameProg.clinic); }} style={{ padding: "8px 24px", background: "var(--c-cd)", border: "1px solid var(--a-sky)", borderRadius: 10, color: "var(--a-sky)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{"Continue — Wave " + s.gameProg.clinic}</button>}
 </div>
 )}
 {cgs === "playing" && (
@@ -4246,7 +4256,7 @@ return { key: "num" + (ai + 1), label: act.icon + " " + (ai + 1), color: act.col
 </div>
 <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
 <button onClick={function() { gameReward(cRwd.coins, cRwd.xp); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg, var(--a-sky), var(--a-ind))", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-<button onClick={startClinic} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
+<button onClick={function() { startClinic(1); }} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
 </div>
 </div>
 )}
@@ -4328,15 +4338,16 @@ var arr = CONSULT_PATIENTS.filter(function(p) { return p.diff <= maxDiff; }).sli
 for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
 return arr;
 }
-function startConsults() {
+function startConsults(w0) {
+w0 = w0 || 1;
 var rooms = CONSULT_ROOMS.map(function() { return { pat: null }; });
 IG.current = {
 doc: { x: W / 2, y: H - 50, vx: 0, vy: 0 },
-rooms: rooms, queue: shuffleIPats(1), seen: 0, score: 0, lives: 3, wave: 1,
+rooms: rooms, queue: shuffleIPats(w0), seen: w0 === 3 ? 9 : w0 === 2 ? 5 : 0, score: 0, lives: 3, wave: w0,
 spawnCD: 60, streak: 0, nearRoom: -1, feedbacks: [], newActions: null
 };
 iKeysRef.current = {};
-setIScore(0); setILives(3); setIWave(1); setISeen(0); setIRwd(null);
+setIScore(0); setILives(3); setIWave(w0); setISeen(IG.current.seen); setIRwd(null);
 setIgs("playing");
 }
 function endConsults() {
@@ -4449,7 +4460,7 @@ var oldWave = g.wave;
 if (g.seen >= 9 && g.wave < 3) { g.wave = 3; g.queue = shuffleIPats(3); }
 else if (g.seen >= 5 && g.wave < 2) { g.wave = 2; g.queue = shuffleIPats(2); }
 if (g.wave !== oldWave) {
-setIWave(g.wave);
+setIWave(g.wave); noteProg("consults", g.wave);
 var newActs = CONSULT_ACTIONS.filter(function(a) { return a.wave === g.wave; }).map(function(a) { return a.name; });
 if (newActs.length > 0) g.newActions = { text: "NEW: " + newActs.join(", "), life: 90 };
 }
@@ -4522,7 +4533,8 @@ return (
 <div style={{ fontSize: 10, color: "var(--c-br2)", textAlign: "center", lineHeight: 1.8 }}>
 <b style={{ color: "var(--c-mut)" }}>WASD</b> move &nbsp; <b style={{ color: "var(--c-mut)" }}>Click</b> or <b style={{ color: "var(--c-mut)" }}>1-9</b> pick order
 </div>
-<button onClick={startConsults} style={{ padding: "12px 36px", background: "linear-gradient(135deg, " + TCOLOR + ", var(--a-red))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Start Call</button>
+<button onClick={function() { startConsults(1); }} style={{ padding: "12px 36px", background: "linear-gradient(135deg, " + TCOLOR + ", var(--a-red))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Start Call</button>
+{((s.gameProg || {}).consults || 1) > 1 && <button onClick={function() { startConsults(s.gameProg.consults); }} style={{ padding: "8px 24px", background: "var(--c-cd)", border: "1px solid " + TCOLOR, borderRadius: 10, color: TCOLOR, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{"Continue — Wave " + s.gameProg.consults}</button>}
 </div>
 )}
 {igs === "playing" && (
@@ -4651,7 +4663,7 @@ return { key: "num" + (ai + 1), label: act.icon + " " + (ai + 1), color: act.col
 </div>
 <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
 <button onClick={function() { gameReward(iRwd.coins, iRwd.xp); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg, " + TCOLOR + ", var(--a-red))", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-<button onClick={startConsults} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
+<button onClick={function() { startConsults(1); }} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
 </div>
 </div>
 )}

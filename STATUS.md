@@ -3,6 +3,18 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-25 (cloud) — Games remember progress
+
+**Done:** Pre-Op, Please saves the furthest day (`localStorage` `pp_day`) and Day 1's bulletin
+offers "Continue — Day N". Clinic Rush + Inpatient Consults save the furthest wave in app state
+(`s.gameProg.clinic` / `.consults`, via `noteProg()` next to `gameReward`); the ready screen
+offers "Continue — Wave N" (starts with that wave's patients/actions; Again/Open = Wave 1).
+Rebuilt `UroStudyHub.min.html`; built page loads clean, Pre-Op continue verified headless.
+**Not done:** Stone Squadron — the 3D prototype (`prototypes/squadron3d.html`) has no waves/levels
+yet, and the 2D bullet-hell isn't in this checkout. Reuse `noteProg(id, level)` when it lands.
+**Open:** Clinic/Consults Continue button reads app state captured at mount, so a wave reached
+this session shows on the next open. Not pushed.
+
 ## 2026-10-25 (late 2) — ⚙️ Fix: AI Provider modal snapped back to Gemini
 
 **Done:** `SettingsModal` is an inner component rendered as `<SettingsModal />`, so any

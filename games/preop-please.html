@@ -864,8 +864,11 @@ function headlineFor(day) {
   return [h.replace('{P}', worst.proc.toUpperCase()), `${worst.name}, ${worst.proc}. ${s}${bad.length > 1 ? ` (+${bad.length - 1} more incident${bad.length > 2 ? 's' : ''})` : ''}`];
 }
 function overlay(html) { $('#ovp').innerHTML = html; $('#ov').hidden = false; $('#ovp').scrollTop = 0; }
+const bestDay = () => { try { return Math.min(LAST_DAY, Math.max(1, +localStorage.getItem('pp_day') || 1)); } catch (e) { return 1; } };
 function showBulletin() {
   G.state = 'bulletin';
+  const saved = bestDay();
+  try { if (G.day > saved) localStorage.setItem('pp_day', G.day); } catch (e) {}
   const [h, s] = headlineFor(G.day);
   const rules = RULES.filter(r => r.day === G.day);
   overlay(`<div class="mast">The Daily Rounds</div><div class="masts">Vol. ${G.day} · ${dayName(G.day)} ${fmt(today(G.day))} · Dept. of Perioperative Services</div>
@@ -878,8 +881,10 @@ function showBulletin() {
     ${G.day === 3 ? `<div class="box"><h3>NEW TODAY: THE ORDER SHEET</h3><div class="r">After <b style="color:var(--green)">CLEARED</b> the papers make way for the antibiotic order: the last 3 urine cultures as an S/R grid. Tick the drug column(s) — or No antibiotic — and SEND. Binder R8 says what's right.</div></div>` : ''}
     <div class="box"><h3>NEW POLICY — EFFECTIVE TODAY</h3>${rules.map(r => `<div class="r"><b>${r.id} · ${r.t}.</b> ${r.x}</div>`).join('')}</div>
     <div class="box"><h3>ON YOUR DESK</h3><div class="r">${NEWDOCS[G.day]}</div></div>
-    <button class="go" id="startBtn">Start shift — 08:00</button>`);
+    <button class="go" id="startBtn">Start shift — 08:00</button>
+    ${G.day === 1 && saved > 1 && !G.hist.length ? `<button class="go" id="contBtn">Continue — Day ${saved}</button>` : ''}`);
   $('#startBtn').onclick = startShift;
+  if ($('#contBtn')) $('#contBtn').onclick = () => { G.day = saved; renderBar(); showBulletin(); };
 }
 function startShift() {
   $('#ov').hidden = true;
