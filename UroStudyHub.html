@@ -7757,6 +7757,12 @@ export default function UroStudyHub() {
     );
   }
 
+  // Memoized so parent re-renders (lecture timers, tutor updates) do not remount the modal
+  // and reset its provider tab / typed API key.
+  var settingsOverlay = useMemo(function() {
+    return showSet ? React.createElement(SettingsModal, null) : null;
+  }, [showSet, lm]);
+
   // ═══ HEADER ═══
   var header = (
     <div style={{ padding: "14px 14px 10px", background: "linear-gradient(180deg," + c.cd + "," + c.bg + ")", borderBottom: "1px solid " + c.cd }}>
@@ -8047,7 +8053,7 @@ export default function UroStudyHub() {
         </div>
       )}
 
-      {showSet && <SettingsModal />}
+      {settingsOverlay}
       {/* ═══ PLAN BUILDER MODAL ═══ */}
       {showPlanBuilder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={function() { setShowPlanBuilder(false); }}>

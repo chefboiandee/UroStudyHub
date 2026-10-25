@@ -6837,6 +6837,9 @@ setTestMsg("Error: " + err.message);
 </div>
 );
 }
+var settingsOverlay = useMemo(function() {
+return showSet ? React.createElement(SettingsModal, null) : null;
+}, [showSet, lm]);
 var header = (
 <div style={{ padding: "14px 14px 10px", background: "linear-gradient(180deg," + c.cd + "," + c.bg + ")", borderBottom: "1px solid " + c.cd }}>
 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -7084,7 +7087,7 @@ input.click();
 </div>
 </div>
 )}
-{showSet && <SettingsModal />}
+{settingsOverlay}
 {showPlanBuilder && (
 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={function() { setShowPlanBuilder(false); }}>
 <div style={{ background: c.bg, borderRadius: 16, width: "100%", maxWidth: 480, maxHeight: "90vh", overflow: "auto", border: "1px solid " + c.a + "33" }} onClick={function(e) { e.stopPropagation(); }}>

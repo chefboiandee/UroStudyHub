@@ -3,6 +3,15 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-25 (late 2) — ⚙️ Fix: AI Provider modal snapped back to Gemini
+
+**Done:** `SettingsModal` is an inner component rendered as `<SettingsModal />`, so any
+parent re-render (lecture/tutor updates) remounted it and reset `prov` (and typed keys).
+Now rendered via a memoized `settingsOverlay` (`[showSet, lm]`). Rebuilt min.html.
+**Next steps:** confirm on device in a lecture's tutor menu. Not pushed; app couldn't fully
+render in the sandbox (CDN blocked), only a no-SyntaxError check ran.
+**Open questions:** other inner-component modals likely have the same remount issue.
+
 ## 2026-10-25 (late) — 🛒 Fix: Arcade Play/Shop tabs didn't switch (iPhone)
 
 **Done:** `gameOverlay` useMemo was keyed on `[showGame]` only, so the Arcade select
