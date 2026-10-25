@@ -32,7 +32,7 @@ could only reach dead models. Now (`UroStudyHub.html`, Settings → Router):
   Console: only the known Babel size note + pre-existing connection-refused.
   ES5-style code, no new deps.
 - NOT verified: a real chat with Andrew's own key; the Boox render.
-- NOT committed — Andrew's call.
+- Committed `0397c9b` and pushed to GitHub at Andrew's ask (2026-10-25) — live on Pages.
 
 ## Next steps
 
