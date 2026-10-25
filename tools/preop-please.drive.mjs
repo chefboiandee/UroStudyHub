@@ -1,5 +1,5 @@
 // Headless-Chrome drive of Pre-Op, Please (games/preop-please.html): iPad viewport, real touch events, screenshots.
-// Needs a static server on the repo root (e.g. python3 -m http.server 2048). Run: node tools/preop-please.drive.mjs  (screenshots → $OUT or a temp dir)
+// Needs a static server on the repo root (launch config "urostudyhub", or python3 -m http.server 2043). Run: node tools/preop-please.drive.mjs  (screenshots → $OUT or a temp dir)
 import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 
 const OUT = process.env.OUT || (await mkdtemp(join(tmpdir(), 'preop-')));
-const BASE = process.env.PP_URL || 'http://localhost:2048/games/preop-please.html';
+const BASE = process.env.PP_URL || 'http://localhost:2043/games/preop-please.html';
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const pause = ms => new Promise(r => setTimeout(r, ms));
 async function freePort() { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; }

@@ -274,7 +274,10 @@ const PROCS = {
   bx: { name: 'Prostate biopsy (TP)', short: 'prostate biopsy', sided: false, trauma: false, bleed: true, anesth: false, stone: false, male: true, ages: [50, 78],
     ind: () => `PSA ${(ri(45, 140) / 10).toFixed(1)} · PI-RADS ${pick([4, 4, 5])}` },
 };
-const WRONG_PROC = { cysto: 'TURBT', urs: 'Cysto + stent', turbt: 'Office cystoscopy', pcnl: 'Ureteroscopy + laser', bx: 'Prostate biopsy (TR)' };
+// Consents are written out in full — no abbreviations on a consent. The booking slip keeps the scheduling shorthand.
+const FULL = { cysto: 'Flexible cystoscopy', urs: 'Ureteroscopy with laser lithotripsy', turbt: 'Transurethral resection of bladder tumor', pcnl: 'Percutaneous nephrolithotomy', bx: 'Transperineal prostate biopsy' };
+const WRONG_PROC = { cysto: 'Transurethral resection of bladder tumor', urs: 'Cystoscopy with ureteral stent placement', turbt: 'Flexible cystoscopy', pcnl: 'Ureteroscopy with laser lithotripsy', bx: 'Transrectal prostate biopsy' };
+const ABBREV = { cysto: () => 'Flex cysto', urs: p => (p.side === 'Left' ? 'L' : 'R') + ' URS/LL', turbt: () => 'TURBT', pcnl: p => (p.side === 'Left' ? 'L' : 'R') + ' PCNL', bx: () => 'TP prostate bx' };
 // Full days held before a bleeding-risk case (TURBT / PCNL / prostate biopsy). Dabigatran is renally cleared: ≥4 days if eGFR 30–49.
 const AC = {
   warfarin: { name: 'Warfarin (Coumadin)', dose: '5 mg', need: 5 }, clopidogrel: { name: 'Clopidogrel (Plavix)', dose: '75 mg', need: 5 },
@@ -302,14 +305,14 @@ const RULES = [
   { id: 'R1', day: 1, t: 'Right patient', x: 'Name <b>and</b> date of birth must match the ID band exactly on every document.' },
   { id: 'R2', day: 1, t: 'Fresh labs', x: 'Pre-procedure labs must be collected within <b>30 days</b> of the procedure date.' },
   { id: 'R3', day: 1, t: 'Clean urine', x: '<b>URS, PCNL, TURBT</b> cause mucosal trauma: the urine culture must be negative, or a positive culture already treated. Office cystoscopy: asymptomatic bacteriuria needs no treatment.' },
-  { id: 'R4', day: 1, t: 'Consent & side', x: 'Consent must be <b>signed</b>, and its procedure and side must match the booking slip — and the CT, once CT reports reach the desk.' },
+  { id: 'R4', day: 1, t: 'Consent & side', x: 'Consent must be <b>signed</b>, with the procedure <b>written out in full — no abbreviations</b>. Its procedure and side must match the booking slip (which may use shorthand: TURBT, PCNL, URS) — and the CT, once CT reports reach the desk.' },
   { id: 'R5', day: 2, t: 'Blood thinners', x: 'Before <b>TURBT, PCNL, prostate biopsy</b>, full days held (count from “held since”): warfarin (Coumadin) ≥5 <i>and</i> INR ≤1.5 · clopidogrel (Plavix) ≥5 · ticagrelor (Brilinta) ≥5 · <b>prasugrel (Effient) ≥7</b> · apixaban (Eliquis), rivaroxaban (Xarelto), edoxaban ≥2 · <b>dabigatran (Pradaxa) ≥2, or ≥4 if eGFR 30–49</b>. Aspirin 81 may continue. Office cystoscopy: no hold.' },
   { id: 'R6', day: 2, t: 'Pregnancy test', x: 'Females <b>12–50</b> need a negative β-hCG within <b>3 days</b> before URS, PCNL or TURBT (anesthesia / fluoroscopy). Office cystoscopy: not required.' },
   { id: 'R7', day: 3, t: 'Infected + obstructed', x: 'Fever <b>≥38.0 °C</b> with hydronephrosis from a stone → urgent decompression (stent / nephrostomy). Stamp <b>ESCALATE</b>. Never home, never lithotripsy today.' },
   { id: 'R8', day: 3, t: 'Pre-op antibiotic', x: 'CLEARED opens the order. Office cysto: <b>none</b>. Prostate biopsy (TP): none or cefazolin. URS / TURBT / PCNL with no positive culture in the last 3: <b>cefazolin (Ancef)</b> — <b>Downtown</b> campus: cefazolin + gentamicin for URS and TURBT. Any positive culture in the last 3: cover <b>every</b> organism (S) — no 🔒 ID-approval drug unless nothing else covers, then the <b>fewest</b> drugs, then the narrowest (CFZ, AMP · GEN, CRO · CIP · FEP, TZP · 🔒 ETP, MEM).' },
 ];
 const REACT = { R1: "That's... not me.", R2: 'Those were the only labs I had.', R3: 'Nobody told me about a culture.', R4: 'I just signed what they handed me.', R5: 'I thought that was long enough.', R6: "Oh. I... didn't think of that.", R7: 'I just want this over with...' };
-const SHORT = { name: 'name ≠ ID band', dob: 'DOB ≠ ID band', stale: 'labs > 30 days', ucx: 'culture not clean', unsigned: 'consent unsigned', cproc: 'consent ≠ booking', side: 'side mismatch', ac: 'blood thinner not held long enough', inr: 'INR > 1.5', sepsis: 'febrile + obstructed', hcgmiss: 'no β-hCG', hcgold: 'β-hCG > 3 days', hcgpos: 'β-hCG positive' };
+const SHORT = { name: 'name ≠ ID band', dob: 'DOB ≠ ID band', stale: 'labs > 30 days', ucx: 'culture not clean', unsigned: 'consent unsigned', cabbrev: 'abbreviation on consent', cproc: 'consent ≠ booking', side: 'side mismatch', ac: 'blood thinner not held long enough', inr: 'INR > 1.5', sepsis: 'febrile + obstructed', hcgmiss: 'no β-hCG', hcgold: 'β-hCG > 3 days', hcgpos: 'β-hCG positive' };
 
 // ── patient generation ─────────────────────────────────────────────
 function lookFor(p) {
@@ -339,11 +342,11 @@ function basePatient(d, pk, o = {}) {
   if (pk === 'bx' && chance(.5)) lines.push('Tamsulosin 0.4 mg nightly');
   p.docs = {
     id: { name, dob, sex },
-    booking: { name, dob, proc: P.name, side, date: T, ind: P.ind(), campus: chance(.4) ? 'Downtown' : 'Main' },
+    booking: { name, dob, proc: P.name, procKey: pk, side, date: T, ind: P.ind(), campus: chance(.4) ? 'Downtown' : 'Main' },
     labs: { name, dob, date: T - ri(1, 21) * DAYMS, cr: (ri(70, 115) / 100).toFixed(2), egfr: 0, inr: (ri(98, 110) / 100).toFixed(1),
       ucx: { status: 'neg', text: pick(['No growth', 'No growth', '<10,000 CFU/mL mixed flora']) }, hcg: null },
     meds: { name, lines: [...new Set(lines)], ac: null, asa: false },
-    consent: { name, proc: P.name, side, signed: true, date: T - ri(3, 20) * DAYMS },
+    consent: { name, proc: FULL[pk], procKey: pk, side, signed: true, date: T - ri(3, 20) * DAYMS },
     vitals: { t: (ri(363, 375) / 10).toFixed(1), hr: ri(62, 92), bp: `${ri(112, 148)}/${ri(68, 90)}`, spo2: ri(95, 99) },
     img: null,
   };
@@ -394,7 +397,8 @@ const FLAWS = [
   { k: 'staleLabs', day: 1, w: 3, go: p => { p.docs.labs.date = today(p.day) - ri(34, 80) * DAYMS; p.react.R2 = 'Those are from my last visit. Still good, right?'; } },
   { k: 'posUcx', day: 1, w: 3, ok: p => p.P.trauma, go: p => { const o = pick(ORGS); p.docs.labs.ucx = { status: 'pos', text: `${o} >100K CFU/mL`, bug: ORG_BUG[o] }; p.docs.micro[0].bug = ORG_BUG[o]; if (chance(.5)) p.say.push("It's been burning a little this week, but I'm fine."); } },
   { k: 'consentSide', day: 1, w: 3, ok: p => p.P.sided, go: p => { p.docs.consent.side = other(p.side); p.react.R4 = `Wait — it's my ${p.side.toLowerCase()} side. Isn't it?`; } },
-  { k: 'consentProc', day: 1, w: 2, go: p => { p.docs.consent.proc = WRONG_PROC[p.pk]; } },
+  { k: 'consentProc', day: 1, w: 2, go: p => { p.docs.consent.proc = WRONG_PROC[p.pk]; p.docs.consent.procKey = 'other'; } },
+  { k: 'consentAbbrev', day: 1, w: 2, go: p => { p.docs.consent.proc = ABBREV[p.pk](p); p.docs.consent.abbrev = true; p.react.R4 = 'The resident wrote it out quick — is that a problem?'; } },
   { k: 'unsigned', day: 1, w: 2, go: p => { p.docs.consent.signed = false; p.react.R4 = 'Nobody asked me to sign anything.'; } },
   { k: 'acShort', day: 2, w: 4, ok: p => p.P.bleed, go: p => { const dr = pick(Object.keys(AC)); addAC(p, dr, chance(.3) ? null : ri(1, holdNeed(p, dr) - 1)); if (chance(.4)) p.say.push('I stopped my blood thinner... a few days ago? Or was it yesterday.'); p.react.R5 = 'Oh. I took it by habit.'; } },
   { k: 'inrHigh', day: 2, w: 2, ok: p => p.P.bleed, go: p => { addAC(p, 'warfarin', ri(5, 7)); p.docs.labs.inr = (ri(17, 23) / 10).toFixed(1); p.react.R5 = 'But I stopped it when they told me to!'; } },
@@ -476,7 +480,7 @@ function presentFields(p) {
 const VAL = { 'id.name': D => D.id.name, 'booking.name': D => D.booking.name, 'labs.name': D => D.labs.name, 'meds.name': D => D.meds.name, 'consent.name': D => D.consent.name,
   'id.dob': D => D.id.dob, 'booking.dob': D => D.booking.dob, 'labs.dob': D => D.labs.dob,
   'booking.side': D => D.booking.side, 'consent.side': D => D.consent.side, 'img.side': D => D.img && D.img.side,
-  'booking.proc': D => D.booking.proc, 'consent.proc': D => D.consent.proc };
+  'booking.proc': D => D.booking.procKey, 'consent.proc': D => D.consent.abbrev ? 'abbrev' : D.consent.procKey };   // same procedure, not same text
 const GROUPS = [['id.name', 'booking.name', 'labs.name', 'meds.name', 'consent.name'], ['id.dob', 'booking.dob', 'labs.dob'], ['booking.side', 'consent.side', 'img.side'], ['booking.proc', 'consent.proc']];
 const DOCNAME = { id: 'ID band', booking: 'Booking slip', labs: 'Labs', meds: 'Med list', consent: 'Consent', img: 'CT', vitals: 'Vitals' };
 const docOf = f => DOCNAME[f.split('.')[0]];
@@ -508,7 +512,9 @@ function evaluate(p) {
   {
     // R4 — consent & side
     if (!D.consent.signed) vio.push(V('R4', 'unsigned', ['consent.sig'], [], 'Consent is unsigned.'));
-    if (D.consent.proc !== D.booking.proc) vio.push(V('R4', 'cproc', ['consent.proc'], ['booking.proc'], `Consent is for “${D.consent.proc}”; booking is “${D.booking.proc}”.`));
+    if (D.consent.abbrev) vio.push(V('R4', 'cabbrev', ['consent.proc'], ['booking.proc'], `Consent says “${D.consent.proc}” — a consent spells the procedure out in full, no abbreviations. Redo it.`));
+    else if (D.consent.procKey !== D.booking.procKey) vio.push(V('R4', 'cproc', ['consent.proc'], ['booking.proc'], `Consent is for “${D.consent.proc}”; booking is ${D.booking.proc} (${FULL[p.pk].toLowerCase()}).`));
+    else her.push(H('R4', ['consent.proc'], ['booking.proc'], `Same procedure — ${D.booking.proc} written out in full, as a consent should be.`));
     const sf = GROUPS[2].filter(f => has.has(f)).map(f => [f, val(f)]);
     const distinct = [...new Set(sf.map(x => x[1]))];
     if (distinct.length > 1) {
@@ -828,7 +834,7 @@ function drawLine(e1, e2, kind) {
 }
 
 // ── day screens ────────────────────────────────────────────────────
-const PRIO = ['sepsis-deny', 'sepsis-approve', 'side', 'ac', 'inr', 'ucx', 'abxMiss', 'hcgpos', 'hcgmiss', 'hcgold', 'name', 'dob', 'cproc', 'unsigned', 'stale', 'abxId', 'abx', 'esc', 'falsedeny'];
+const PRIO = ['sepsis-deny', 'sepsis-approve', 'side', 'ac', 'inr', 'ucx', 'abxMiss', 'hcgpos', 'hcgmiss', 'hcgold', 'name', 'dob', 'cproc', 'cabbrev', 'unsigned', 'stale', 'abxId', 'abx', 'esc', 'falsedeny'];
 const HEAD = {
   'sepsis-deny': ['SENT HOME FEBRILE — BACK BY EMS IN SEPTIC SHOCK', 'Infected obstructed kidneys get drained today. They do not get a follow-up appointment.'],
   'sepsis-approve': ['LASER ON AN INFECTED KIDNEY: STONE PATIENT CRASHES IN PACU', 'Pressurized irrigation into infected urine. Drain first, treat the stone later.'],
@@ -843,7 +849,7 @@ const HEAD = {
   hcgmiss: ['FLUOROSCOPY IN AN UNTESTED PREGNANCY — RISK MANAGEMENT CALLED', '“I’m definitely not pregnant” is not a lab value.'],
   hcgold: ['STALE PREGNANCY TEST WAVED THROUGH', 'Three days means three days.'],
   name: ['CASE RAN ON SOMEONE ELSE’S LABS', 'Two identifiers, every document, every time.'], dob: ['CASE RAN ON SOMEONE ELSE’S LABS', 'Two identifiers, every document, every time.'],
-  cproc: ['CONSENT DIDN’T MATCH THE CASE — OR HALTED', 'Anesthesia had already induced.'], unsigned: ['UNSIGNED CONSENT — OR HALTED AT 7:30', 'The whole room waited 40 minutes for a signature.'],
+  cproc: ['CONSENT DIDN’T MATCH THE CASE — OR HALTED', 'Anesthesia had already induced.'], cabbrev: ['CONSENT WITH AN ABBREVIATION — OR HALTED FOR A NEW ONE', '“TURBT” is shorthand, not consent. Spell it out.'], unsigned: ['UNSIGNED CONSENT — OR HALTED AT 7:30', 'The whole room waited 40 minutes for a signature.'],
   stale: ['7 AM CANCELLATION: LABS OUT OF DATE', 'Pre-op caught what the desk missed. The OR sat empty.'],
   esc: ['ED BOARDS A PATIENT WHO DIDN’T NEED IT', 'The ED would like a word.'], falsedeny: ['CLEARED PATIENT SENT HOME — WAITS SIX MORE WEEKS', 'Their packet was perfect. Their referring doctor is furious.'],
 };
