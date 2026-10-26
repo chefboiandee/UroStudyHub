@@ -3,6 +3,19 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-26 — 🛩️ Stone Squadron added to the Arcade
+
+**Done:** `games/stone-squadron.html` = copy of `prototypes/squadron3d.html` + `?embed=1` mode
+(no fullscreen request, "Back to Arcade" button on brief/end screens, one `squadron:claim`
+{coins, xp} per run + `squadron:exit` by postMessage). App: Arcade tile (🛩️, 250 coins,
+touch) + `StoneSquadron` frame host like Pre-Op, Please; app clamps rewards to 150 coins / 80 xp.
+Rebuilt `UroStudyHub.min.html`. The tester prototype in `prototypes/` is untouched.
+**Not verified:** sandbox blocks the CDN (three.js from jsdelivr), so only no-SyntaxError
+and "no page errors" were checked; the game did not render here. Needs a real iPad run.
+**Next steps:** push (Andrew), play from the Arcade on the iPad; tune coin/xp payout and
+unlock cost; the copy in `games/` will drift from `prototypes/` (sync or retire the prototype).
+**Open questions:** needs internet (three.js CDN) — vendor it for offline/Boox?
+
 ## 2026-10-25 (late 2) — ⚙️ Fix: AI Provider modal snapped back to Gemini
 
 **Done:** `SettingsModal` is an inner component rendered as `<SettingsModal />`, so any

@@ -1,0 +1,1872 @@
+<!doctype html>
+<!--
+  PROTOTYPE — THROWAWAY. Stone Squadron 3D feel test (2026-10-25).
+  Question it answers: is an on-rails 3D ureteroscopy run (dust vs fragment,
+  irrigation/pressure trade-off, touch controls) fun on the iPad?
+  NOT part of UroStudyHub.html. Fold the verdict into the real game, then delete.
+  Debug: ?debug (fps + state), ?touch (force touch UI), ?lq (low quality), ?seed=N
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<title>Stone Squadron 3D — prototype</title>
+<style>
+:root{--g:#4ade80;--a:#fbbf24;--r:#f87171;--t:#efe9e6;--m:#a8a09c;--card:rgba(14,8,10,.62);--line:rgba(255,255,255,.10)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:var(--t);font:14px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body{position:fixed;inset:0}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hidden{display:none!important}
+b{font-variant-numeric:tabular-nums}
+#scopeMask{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 44vmin,rgba(0,0,0,.94) 50vmin,#000 58vmin)}
+#hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(200,0,0,.55) 100%)}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:2} /* above #touch: its tappable bits (MOVE ON, laser panel) beat the joystick zone */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 10px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#lcol{position:absolute;left:calc(env(safe-area-inset-left) + 12px);top:calc(env(safe-area-inset-top) + 10px);width:184px;display:flex;flex-direction:column;gap:8px}
+#tr{position:absolute;right:calc(env(safe-area-inset-right) + 12px);top:calc(env(safe-area-inset-top) + 10px);width:176px}
+#tc{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 10px);width:min(40vw,420px);text-align:center}
+#gauge{width:100%;height:auto;display:block}
+.row{display:flex;align-items:baseline;justify-content:space-between;gap:6px;font-size:12px;color:var(--m)}
+.row b{color:var(--t);font-size:15px}
+.lbl{font-size:10px;letter-spacing:.12em;color:var(--m);margin:6px 0 3px}
+.bar{height:7px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:5px;background:var(--g);transition:background .2s}
+.btns{display:flex;gap:6px;margin-top:8px;pointer-events:auto}
+.btns button{flex:1;height:34px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--t);font-size:16px}
+#prog{position:relative;height:8px;border-radius:5px;background:rgba(255,255,255,.12);margin:4px 6px 0}
+#progMe{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff;transform:translateX(-2px)}
+.pm{position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;transform:translateX(-7px);border:2px solid #000;background:#888}
+.pm.alive{background:var(--a)}.pm.cleanup{background:#60a5fa}.pm.done{background:var(--g)}.pm.mig{background:var(--r)}
+.pupj{position:absolute;top:-6px;width:2px;height:20px;background:rgba(255,255,255,.5)}
+#stage{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--m);margin-top:9px}
+#target{margin:8px auto 0;display:inline-block;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
+#target.lock{border-color:rgba(74,222,128,.6);box-shadow:0 0 14px rgba(74,222,128,.25)}
+#target.blind{border-color:rgba(248,113,113,.6);color:var(--r)}
+#toasts{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 112px);width:clamp(200px,calc(100vw - 440px),min(70vw,520px));display:flex;flex-direction:column;align-items:center;gap:6px}
+.toast{background:rgba(10,6,8,.78);border:1px solid var(--line);border-radius:12px;padding:7px 12px;font-size:14px;text-align:center;transition:opacity .45s,transform .45s}
+.toast.good{border-color:rgba(74,222,128,.55)}.toast.warn{border-color:rgba(251,191,36,.6)}.toast.bad{border-color:rgba(248,113,113,.7)}
+.toast.out{opacity:0;transform:translateY(-8px)}
+#banner{position:absolute;left:50%;top:31%;transform:translateX(-50%);font-weight:800;letter-spacing:.16em;font-size:18px;color:var(--a);text-shadow:0 0 12px rgba(0,0,0,.9);opacity:0;transition:opacity .2s;text-align:center;white-space:nowrap}
+#banner.on{opacity:1;animation:pulse .5s infinite alternate}
+#banner.red{color:var(--r)}
+@keyframes pulse{to{transform:translateX(-50%) scale(1.06)}}
+#mode{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 14px);font-weight:800;letter-spacing:.1em;font-size:13px;padding:7px 14px;border-radius:999px;background:var(--card);border:1px solid var(--g);color:var(--g)}
+#mode.frag{border-color:var(--a);color:var(--a)}
+#moveOn{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 58px);pointer-events:auto;font:800 16px/1 system-ui;letter-spacing:.08em;padding:13px 22px;border-radius:999px;border:1px solid rgba(96,165,250,.8);background:rgba(30,58,138,.75);color:#fff}
+#fps{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 48px);transform:translateX(-50%);font:11px ui-monospace,monospace;color:#9f9;white-space:pre;text-align:center}
+#touch{position:fixed;inset:0;pointer-events:none;z-index:1}
+#joyZone{position:absolute;left:0;bottom:0;width:46%;height:72%;pointer-events:auto}
+#joyBase{position:absolute;width:132px;height:132px;margin:-66px 0 0 -66px;border-radius:50%;border:2px solid rgba(255,255,255,.22);background:rgba(255,255,255,.05);left:150px;bottom:auto;top:calc(100% - 150px);pointer-events:none;transition:opacity .2s}
+#joyBase.idle{opacity:.45}
+#joyKnob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;background:rgba(255,255,255,.28);border:2px solid rgba(255,255,255,.4)}
+.tb{position:absolute;pointer-events:auto;border-radius:50%;border:2px solid rgba(255,255,255,.25);background:rgba(20,12,14,.55);color:#fff;font:800 13px/1 system-ui;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px}
+.tb small{font-size:9px;font-weight:600;opacity:.75;letter-spacing:.02em}
+.tb.on{transform:scale(.94);filter:brightness(1.5)}
+#bPedB{right:calc(env(safe-area-inset-right) + 22px);bottom:calc(env(safe-area-inset-bottom) + 22px)}
+#bPedA{right:calc(env(safe-area-inset-right) + 144px);bottom:calc(env(safe-area-inset-bottom) + 22px)}
+.tb.ped{border-radius:22px;width:112px;height:124px;font-size:16px;border-width:3px}
+.ped.dust{border-color:var(--g);box-shadow:0 0 22px rgba(74,222,128,.22) inset}
+.ped.frag{border-color:var(--a);box-shadow:0 0 22px rgba(251,191,36,.22) inset}
+.ped.mixed{border-color:#93c5fd;box-shadow:0 0 22px rgba(147,197,253,.22) inset}
+.ped.act{outline:2px solid rgba(255,255,255,.4);outline-offset:3px}
+.ped.standby{border-color:#6b7280;box-shadow:none;opacity:.55}
+#bBasket{right:calc(env(safe-area-inset-right) + 158px);bottom:calc(env(safe-area-inset-bottom) + 160px);width:84px;height:84px}
+#bLaser{right:calc(env(safe-area-inset-right) + 252px);bottom:calc(env(safe-area-inset-bottom) + 166px);width:72px;height:72px}
+#bBack{left:calc(env(safe-area-inset-left) + 22px);bottom:calc(env(safe-area-inset-bottom) + 236px);width:84px;height:84px}
+#flowTrack{position:absolute;right:calc(env(safe-area-inset-right) + 48px);bottom:calc(env(safe-area-inset-bottom) + 166px);width:60px;height:210px;border-radius:16px;border:2px solid rgba(96,165,250,.55);background:rgba(10,20,40,.5);pointer-events:auto;overflow:hidden}
+#flowFill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,rgba(59,130,246,.65),rgba(147,197,253,.5))}
+#flowTrack span{position:absolute;left:0;right:0;top:8px;text-align:center;font:800 10px/1 system-ui;letter-spacing:.12em;color:#bfdbfe;text-shadow:0 1px 3px #000}
+#flowTrack em{position:absolute;left:0;right:0;bottom:8px;text-align:center;font:800 15px/1 system-ui;font-style:normal;color:#fff;text-shadow:0 1px 3px #000}
+#flowTrack .z{position:absolute;left:0;right:0;border-top:1px dashed rgba(248,113,113,.8)}
+#screen{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);background:radial-gradient(ellipse at center,rgba(0,0,0,.35),rgba(0,0,0,.82));overflow:auto;touch-action:pan-y}
+.panel{width:min(820px,100%);max-height:100%;overflow:auto;background:rgba(14,8,10,.86);border:1px solid var(--line);border-radius:20px;padding:22px 24px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.panel h1{margin:0;font-size:30px;letter-spacing:.14em;font-weight:900}
+.panel h1 span{color:var(--a)}
+.panel h1 .tag,.tag{display:inline-block;font-size:11px;letter-spacing:.14em;font-weight:800;color:#000;background:var(--a);border-radius:6px;padding:3px 7px;vertical-align:middle;margin-left:8px}
+.panel h2{font-size:12px;letter-spacing:.16em;color:var(--m);margin:18px 0 8px;font-weight:800}
+.panel p{margin:6px 0;color:#d9d1cd}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tool{border:1px solid var(--line);border-radius:12px;padding:10px;font-size:13px;color:#d9d1cd}
+.tool b{display:block;font-size:13px;letter-spacing:.08em;margin-bottom:4px}
+.go{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.go button{font:800 17px/1 system-ui;letter-spacing:.1em;padding:16px 26px;border-radius:14px;border:0;background:var(--g);color:#032;cursor:pointer}
+.go button.alt{background:rgba(255,255,255,.1);color:var(--t);border:1px solid var(--line)}
+.go.stick{position:sticky;bottom:-22px;margin:14px -24px -22px;padding:14px 24px 18px;background:linear-gradient(to bottom,rgba(14,8,10,0),rgba(14,8,10,.97) 35%)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.stat small{display:block;font-size:10px;letter-spacing:.12em;color:var(--m)}
+.stat b{font-size:20px}
+.sc{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.sc .h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:700}
+.ok{color:var(--g)}.wn{color:var(--a)}.bd{color:var(--r)}
+.keys{font-size:12px;color:var(--m)}
+.fb textarea{width:100%;min-height:76px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--t);font:14px/1.4 -apple-system,system-ui,sans-serif;padding:10px 12px;-webkit-user-select:text;user-select:text;touch-action:auto;resize:vertical}
+.fb .go{align-items:center;margin-top:8px}.fb .go button{font-size:14px;padding:12px 18px}
+#fbOut{margin-top:8px;min-height:140px;font:12px/1.4 ui-monospace,monospace}
+#err{color:var(--r);font-weight:700}
+#fluoro{position:relative;padding:6px}
+#flc{display:block;width:100%;height:auto;border-radius:50%}
+#fluoro .fl-tag{position:absolute;left:10px;top:8px;font:800 9px/1 system-ui;letter-spacing:.14em;color:#e5e5e5;text-shadow:0 1px 2px #000}
+#fluoro .fl-u{position:absolute;right:10px;top:8px;font:700 9px/1 ui-monospace,monospace;color:#d4d4d4;text-shadow:0 1px 2px #000}
+#mode.mixed{border-color:#93c5fd;color:#93c5fd}
+#mode.standby{border-color:#9ca3af;color:#d1d5db;animation:blink .6s infinite alternate}
+@keyframes blink{to{opacity:.5}}
+#laserPanel{position:absolute;right:calc(env(safe-area-inset-right) + 160px);bottom:calc(env(safe-area-inset-bottom) + 256px);width:226px;pointer-events:auto;padding:8px 10px;transition:transform .2s ease,opacity .2s ease;transform-origin:bottom right}
+#laserPanel.away{transform:translate(24px,24px) scale(.9);opacity:0;pointer-events:none}
+.lp-row{display:flex;align-items:center;gap:6px;margin:4px 0}
+.lp-row span{width:48px;font:800 9px/1 system-ui;letter-spacing:.12em;color:var(--m)}
+.lp-row b{flex:1;text-align:center;font-size:16px}
+.lp-row button{min-width:42px;height:42px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--t);font:800 17px/1 system-ui}
+.lp-row button.wide{flex:1;font-size:12px;letter-spacing:.06em}
+.lp-row button.apply{background:var(--g);color:#032}
+.lp-row button[data-w].on{background:rgba(147,197,253,.22);border-color:#93c5fd}
+.lp-info{text-align:center;font-size:12px;color:var(--m);letter-spacing:.04em}
+.sets{display:grid;gap:10px}
+.set{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.set>span{width:96px;font-size:11px;letter-spacing:.12em;color:var(--m);font-weight:800}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.seg button{font:700 14px/1 system-ui;padding:12px 15px;border:0;background:rgba(255,255,255,.05);color:var(--t);cursor:pointer}
+.seg button.on{background:var(--g);color:#032}
+.set small{color:var(--m);font-size:12px}
+@media (max-height:560px){
+.tb.ped{width:92px;height:100px}#bPedA{right:calc(env(safe-area-inset-right) + 122px)}
+#bBasket{width:70px;height:70px;right:calc(env(safe-area-inset-right) + 132px);bottom:calc(env(safe-area-inset-bottom) + 130px)}
+#bLaser{width:62px;height:62px;right:calc(env(safe-area-inset-right) + 210px);bottom:calc(env(safe-area-inset-bottom) + 134px)}
+#flowTrack{height:140px;bottom:calc(env(safe-area-inset-bottom) + 134px)}
+#bBack{width:64px;height:64px;left:calc(env(safe-area-inset-left) + 14px);bottom:calc(env(safe-area-inset-bottom) + 14px)}
+#joyBase{left:200px;top:calc(100% - 104px)}
+#lcol,#tr{transform:scale(.8);transform-origin:top left}#tr{transform-origin:top right}
+#fluoro{width:124px;padding:4px}#fluoro .fl-tag,#fluoro .fl-u{font-size:8px;top:5px}
+#toasts{top:calc(env(safe-area-inset-top) + 90px);width:min(46vw,400px)}.toast{font-size:12px;padding:5px 10px}
+#banner{font-size:14px;top:25%}#target{font-size:12px;padding:4px 10px;margin-top:4px}#stage{margin-top:5px;font-size:10px}
+#mode{font-size:11px;padding:5px 11px}#moveOn{font-size:13px;padding:10px 16px;bottom:calc(env(safe-area-inset-bottom) + 46px)}
+#laserPanel{right:calc(env(safe-area-inset-right) + 228px);bottom:calc(env(safe-area-inset-bottom) + 8px);scale:.84}
+}
+#rotate{display:none;position:fixed;inset:0;z-index:60;background:radial-gradient(ellipse at center,#1d0808,#000);color:var(--t);align-items:center;justify-content:center;text-align:center;padding:24px}
+#rotate .ph{font-size:56px;display:inline-block;animation:tilt 1.8s ease-in-out infinite}
+@keyframes tilt{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+#rotate b{display:block;font-size:20px;letter-spacing:.06em;margin:18px 0 6px}#rotate small{color:var(--m);font-size:13px}
+@media (orientation:portrait) and (max-width:600px){body.ingame #rotate{display:flex}}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="scopeMask" class="hidden"></div>
+<div id="hurt"></div>
+
+<div id="hud" class="hidden">
+  <div id="lcol"><div id="tl" class="card">
+    <svg id="gauge" viewBox="0 0 160 96">
+      <path id="gG" fill="none" stroke="#22c55e" stroke-width="11"/>
+      <path id="gA" fill="none" stroke="#f59e0b" stroke-width="11"/>
+      <path id="gR" fill="none" stroke="#ef4444" stroke-width="11"/>
+      <text x="14" y="94" fill="#a8a09c" font-size="9">0</text>
+      <text x="141" y="94" fill="#a8a09c" font-size="9">60</text>
+      <text x="80" y="62" fill="#efe9e6" font-size="20" font-weight="800" text-anchor="middle" id="gVal">0</text>
+      <text x="80" y="74" fill="#a8a09c" font-size="8" text-anchor="middle" letter-spacing="1">IRP mmHg</text>
+      <line id="needle" x1="80" y1="84" x2="80" y2="30" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="80" cy="84" r="5" fill="#fff"/>
+    </svg>
+    <div class="row"><span>FLOW</span><b id="flowV">35%</b><span>TEMP</span><b id="tempV">37.0°</b></div>
+    <div class="lbl">SEPSIS RISK</div><div class="bar"><i id="sepBar"></i></div>
+  </div>
+  <div id="fluoro" class="card"><canvas id="flc" width="344" height="344"></canvas><span class="fl-tag">FLUORO</span><span class="fl-u">AP</span></div></div>
+  <div id="tc">
+    <div id="prog"><div id="progMe"></div></div>
+    <div id="stage">Distal ureter</div>
+    <div id="target" class="hidden"></div>
+  </div>
+  <div id="tr" class="card">
+    <div class="lbl" style="margin-top:0">URETER INTEGRITY</div><div class="bar"><i id="hpBar"></i></div>
+    <div class="row" style="margin-top:7px"><span>VIEW</span><b id="visV">100%</b><span>SCORE</span><b id="scoreV">0</b></div>
+    <div class="row" style="margin-top:4px"><span>OR TIME</span><b id="orT">0:00</b></div>
+    <div class="btns"><button id="bCam" title="Camera (C)">📷</button><button id="bMute" title="Sound">🔊</button><button id="bPause" title="Pause (P)">⏸</button></div>
+  </div>
+  <div id="toasts"></div>
+  <div id="banner"></div>
+  <button id="moveOn" class="hidden">MOVE ON ▸</button>
+  <div id="mode">DUST · 0.4 J × 80 Hz</div>
+  <div id="fps" class="hidden"></div>
+  <div id="laserPanel" class="card away">
+    <div class="lp-row"><button class="wide" data-w="a">LEFT PEDAL</button><button class="wide" data-w="b">RIGHT PEDAL</button></div>
+    <div class="lp-row"><span>ENERGY</span><button data-d="J-">−</button><b id="lpJ">0.4 J</b><button data-d="J+">+</button></div>
+    <div class="lp-row"><span>FREQ</span><button data-d="H-">−</button><b id="lpH">80 Hz</b><button data-d="H+">+</button></div>
+    <div class="lp-info" id="lpInfo">32 W · DUST</div>
+    <div class="lp-row"><button class="wide" data-p="dust">DUST 0.4×80</button><button class="wide" data-p="frag">FRAG 1.5×8</button></div>
+    <div class="lp-row"><button class="wide apply" id="lpApply">APPLY</button><button class="wide" id="lpClose">✕</button></div>
+  </div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="joyZone"></div>
+  <div id="joyBase" class="idle"><div id="joyKnob"></div></div>
+  <div id="flowTrack"><div id="flowFill"></div><div class="z" id="flowZone"></div><span>FLOW</span><em id="flowTxt">35</em></div>
+  <button class="tb" id="bBack">◀<small>PULL BACK</small></button>
+  <button class="tb hidden" id="bLaser">⚙<small>LASER</small></button>
+  <button class="tb" id="bBasket">BASKET<small>2–4 mm</small></button>
+  <button class="tb ped dust" id="bPedA">DUST<small>0.4 J × 80 Hz</small></button>
+  <button class="tb ped frag" id="bPedB">FRAG<small>1.5 J × 8 Hz</small></button>
+</div>
+
+<div id="rotate"><div><span class="ph">📱</span><b>Turn your phone sideways</b><small>Stone Squadron plays in landscape — the run is paused.</small></div></div>
+
+<div id="screen"><div class="panel"><h1>STONE <span>SQUADRON</span><span class="tag">3D PROTOTYPE</span></h1><p id="err">Loading the 3D engine…</p></div></div>
+
+<script>
+// If the module never boots (old Safari / offline CDN), say so instead of a black screen.
+setTimeout(function(){ if(!window.__sqBooted){ var e=document.getElementById('err'); if(e) e.textContent='3D engine did not load — needs internet (jsdelivr) and Safari 16.4+.'; } }, 9000);
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const BUILD = '2026-10-25 16:22'; // bump on every push so testers can say which build they played
+const params = new URLSearchParams(location.search);
+// Hosted in UroStudyHub's arcade (?embed=1): the app takes back {type:'squadron:claim', coins, xp} / {type:'squadron:exit'} by postMessage.
+const EMBED = params.has('embed') && window.parent !== window;
+const toApp = m => { try { window.parent.postMessage(m, location.origin); } catch (_) {} };
+const DEBUG = params.has('debug');
+const $ = id => document.getElementById(id);
+const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets' };
+const SETTINGS = (() => { try { return Object.assign({}, SET_DEF, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (_) { return Object.assign({}, SET_DEF); } })();
+function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch (_) {} }
+
+// ───────────────────────── utils
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const bump = (s, c, w) => Math.exp(-(((s - c) / w) ** 2));
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rng = mulberry32(1);
+const rand = (a = 0, b = 1) => a + (b - a) * rng();
+const mr = (a, b) => a + (b - a) * Math.random();
+
+// ───────────────────────── tuning
+const UPJ_S = 268, END_S = 285;
+const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
+const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.38;
+const PRESETS = { dust: { J: 0.4, Hz: 80 }, frag: { J: 1.5, Hz: 8 } }, STANDBY_S = 2.5;
+const HZ_STEPS = [5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 70, 80, 100];
+const WITHDRAW_V = 22, RETURN_V = 26, PINCH_V = 3.2, PINCH_TRIP_V = 7, MAX_W = 120, BACK_V = 3, SLIP_P = 0.07; // ~1 slipped fragment every other fragmented stone // 120 W ≈ top-end holmium generator
+// One laser model for both levels: presets are just two points on it.
+// f = how far into the fragmenting regime the pulse energy is (0 = pure dusting, 1 = pure fragmenting).
+const fragFrac = J => smooth(0.6, 1.2, J);
+const modeName = J => { const f = fragFrac(J); return f < 0.35 ? 'DUST' : f > 0.65 ? 'FRAG' : 'MIXED'; };
+function laserNums(J, Hz) {
+  const f = fragFrac(J), W = J * Hz, kickHz = f > 0.3 ? Math.min(Hz, 10) * 0.5 : 0;
+  return {
+    J, Hz, f, W, kickHz,
+    dustRate: DUST_RATE * (1 - f) * (W / 32),                              // mm³/s, × stone's dust factor
+    fragRate: FRAG_V * FRAG_HZ * f * Math.pow(J / 1.5, 1.5) * (Hz / 8),    // mm³/s into the crack bank, × frag factor
+    kickPush: kickHz ? Math.pow(J / 1.5, 3) * (Hz / 8) * 4 / kickHz : 0, // retropulsion: per-pulse energy³ × pulse count
+  };
+}
+const TYPES = {
+  UA:  { name: 'Uric acid', hu: [360, 480], col: 0xb36a26, rough: 0.66, emis: 0x0d0500, dust: 1.0, frag: 1.0, retro: 1.7, sand: 0.55, look: 'smooth orange-amber',
+         pearl: 'Soft, low HU (<500), radiolucent on KUB. Dusts in seconds — no reason to chase it with high-energy pulses. Medical option: alkalinize urine to pH 6.5–7.' },
+  COD: { name: 'Calcium oxalate dihydrate', alt: 'weddellite', hu: [880, 1150], col: 0xe8dfb8, rough: 0.55, emis: 0x14120a, dust: 0.6, frag: 1.6, retro: 1.0, sand: 0.4, look: 'pale, spiky bipyramidal crystals',
+         pearl: 'Spiky pale bipyramids — brittle, so it fragments readily. Associated with hypercalciuria.' },
+  COM: { name: 'Calcium oxalate monohydrate', alt: 'whewellite', hu: [1350, 1650], col: 0x4a3020, rough: 0.36, emis: 0x000000, dust: 0.15, frag: 1.0, retro: 0.8, sand: 0.4, look: 'dark brown, smooth, mammillated',
+         pearl: 'Dark, smooth, mammillated, >1,200 HU — hard and slow to dust. Fragment, basket, send a piece. Think hyperoxaluria and low urine volume.' },
+  CYS: { name: 'Cystine', hu: [680, 900], col: 0xc9b65a, rough: 0.22, emis: 0x140f02, dust: 0.12, frag: 0.65, retro: 0.9, sand: 0.3, look: 'waxy yellow, ground-glass',
+         pearl: 'Waxy yellow with only moderate HU — but laser- and SWL-resistant. Basket the fragments. Cystinuria: high fluids, alkalinize to pH ≥7, tiopronin.' },
+};
+const SLOTS = [
+  { s: 62, loc: 'Distal ureter' },
+  { s: 152, loc: 'Proximal ureter (above the iliac crossing)' },
+  { s: 247, loc: 'Proximal ureter, just below the UPJ' },
+];
+const rOf = o => o.d * MMR;
+
+// ───────────────────────── renderer / scene
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+const PHONE = Math.min(window.screen.width, window.screen.height) < 600; // window.screen: the module's own `screen` is the overlay element
+const Q = { pr: Math.min(devicePixelRatio || 1, params.has('lq') ? 1 : PHONE ? 1.25 : 1.5), bloom: !params.has('lq') && !params.has('nobloom'), dropped: false };
+renderer.setPixelRatio(Q.pr);
+const scene = new THREE.Scene();
+const BASE_FOG = new THREE.Color(0x1d0707), DUST_FOG = new THREE.Color(0xb3ab9c), BLOOD_FOG = new THREE.Color(0x5c0505);
+scene.fog = new THREE.FogExp2(BASE_FOG.clone(), 0.04);
+scene.background = scene.fog.color; // same Color object: tinting the fog tints the void too
+const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.05, 220);
+scene.add(camera);
+
+// ───────────────────────── track (arc-length sampled, parallel-transport frames)
+const CTRL = [[0,0,0],[2,-1,-25],[8,-3,-50],[12,0,-75],[9,4,-100],[2,7,-125],[-5,6,-150],[-9,2,-175],[-8,-2,-200],[-3,-3,-225],[3,-1,-250],[6,2,-272],[7,3,-292],[7.5,3,-318]];
+const curve = new THREE.CatmullRomCurve3(CTRL.map(a => new THREE.Vector3(a[0], a[1], a[2])), false, 'centripetal');
+const LEN = curve.getLength();
+const NS = Math.ceil(LEN * 5);
+const TP = [], TT = [], TU = [], TR = [];
+for (let i = 0; i <= NS; i++) { const u = i / NS; TP.push(curve.getPointAt(u)); TT.push(curve.getTangentAt(u).normalize()); }
+{ let up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i <= NS; i++) { const t = TT[i]; up = up.clone().addScaledVector(t, -up.dot(t)).normalize(); TU.push(up); TR.push(new THREE.Vector3().crossVectors(t, up).normalize()); } }
+const mkF = () => ({ p: new THREE.Vector3(), t: new THREE.Vector3(), u: new THREE.Vector3(), r: new THREE.Vector3() });
+function frameAt(s, f) {
+  const x = clamp(s, 0, LEN) / LEN * NS, i = Math.min(NS - 1, Math.floor(x)), k = x - i;
+  f.p.lerpVectors(TP[i], TP[i + 1], k); f.t.lerpVectors(TT[i], TT[i + 1], k).normalize();
+  f.u.lerpVectors(TU[i], TU[i + 1], k).normalize(); f.r.lerpVectors(TR[i], TR[i + 1], k).normalize();
+  return f;
+}
+const FW = mkF();
+function worldAt(s, x, y, out) { frameAt(s, FW); return out.copy(FW.p).addScaledVector(FW.r, x).addScaledVector(FW.u, y); }
+// the three physiological narrowings — where stones lodge, and where the scope has to thread the needle
+const PINCHES = [
+  { s: 12, w: 2.6, r: 1.05, name: 'UVJ', short: 'UVJ' },
+  { s: 118, w: 3.0, r: 1.1, name: 'ILIAC CROSSING', short: 'ILIAC' },
+  { s: UPJ_S, w: 2.6, r: 1.05, name: 'UPJ', short: 'UPJ' },
+];
+function baseR(s) {
+  let r = 2.6 + 1.2 * (1 - smooth(0, 7, s)) + 5.5 * smooth(UPJ_S + 1, UPJ_S + 24, s);
+  for (const k of PINCHES) r -= (2.6 - k.r) * bump(s, k.s, k.w);
+  return r;
+}
+function pinchNear(s) {
+  let best = null;
+  for (const k of PINCHES) { const d = k.s - s; if (d > -4 && d < 22 && (!best || Math.abs(d) < Math.abs(best.d))) best = { k, d }; }
+  return best;
+}
+function squeeze(s) {
+  if (!G || !G.wave.on) return 1;
+  return 1 - WAVE_AMP * bump(s, G.wave.s, 5) * (1 - smooth(UPJ_S - 6, UPJ_S, s));
+}
+function stageName(s) {
+  if (s < 16) return 'Ureterovesical junction';
+  if (s < 72) return 'Distal ureter';
+  if (s < 104) return 'Mid ureter';
+  if (s < 132) return 'Iliac vessel crossing';
+  if (s < UPJ_S - 6) return 'Proximal ureter';
+  if (s < UPJ_S + 6) return 'Ureteropelvic junction';
+  return 'Renal pelvis';
+}
+
+// ───────────────────────── textures
+function mucosaTexture() {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c4675f'; g.fillRect(0, 0, N, N);
+  for (let i = 0; i < 2600; i++) {
+    const x = Math.random() * N, y = Math.random() * N, r = mr(3, 18);
+    g.fillStyle = `rgba(${(mr(185, 235)) | 0},${(mr(80, 125)) | 0},${(mr(80, 115)) | 0},0.07)`;
+    for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) { g.beginPath(); g.arc(x + ox, y + oy, r, 0, 6.283); g.fill(); }
+  }
+  function vessel(x, y, ang, w, len, depth) {
+    g.lineCap = 'round';
+    for (let i = 0; i < len; i++) {
+      const nx = x + Math.cos(ang) * 6, ny = y + Math.sin(ang) * 6;
+      g.strokeStyle = `rgba(118,14,24,${0.25 + w * 0.09})`; g.lineWidth = w;
+      for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) { g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(nx + ox, ny + oy); g.stroke(); }
+      x = nx; y = ny; ang += mr(-0.45, 0.45); w = Math.max(0.6, w * 0.985);
+      if (depth < 3 && Math.random() < 0.06) vessel(x, y, ang + mr(-1.2, 1.2), w * 0.7, len * 0.6 | 0, depth + 1);
+    }
+  }
+  for (let i = 0; i < 16; i++) vessel(Math.random() * N, Math.random() * N, Math.random() * 6.28, mr(1.5, 3.2), 40 + Math.random() * 40 | 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+function glowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.22, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+const GLOW = glowTexture();
+
+// ───────────────────────── the ureter (one mesh; peristalsis in the vertex shader)
+const UNI = { waveS: { value: -999 }, waveAmp: { value: WAVE_AMP }, time: { value: 0 }, upj: { value: UPJ_S } };
+function buildTube() {
+  const RINGS = Math.ceil(LEN * 2.2), SEG = 44, W = SEG + 1, n = (RINGS + 1) * W;
+  const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), aS = new Float32Array(n), aDir = new Float32Array(n * 3), aR = new Float32Array(n);
+  const f = mkF(), d = new THREE.Vector3();
+  for (let i = 0; i <= RINGS; i++) {
+    const s = i / RINGS * LEN; frameAt(s, f);
+    const br = baseR(s), fold = 1 - smooth(UPJ_S, UPJ_S + 10, s);
+    for (let j = 0; j <= SEG; j++) {
+      const th = j / SEG * Math.PI * 2;
+      d.copy(f.r).multiplyScalar(Math.cos(th)).addScaledVector(f.u, Math.sin(th));
+      const r = br * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th));
+      const k = i * W + j;
+      pos[k * 3] = f.p.x + d.x * r; pos[k * 3 + 1] = f.p.y + d.y * r; pos[k * 3 + 2] = f.p.z + d.z * r;
+      aDir[k * 3] = d.x; aDir[k * 3 + 1] = d.y; aDir[k * 3 + 2] = d.z;
+      aR[k] = r; aS[k] = s; uv[k * 2] = j / SEG * 2; uv[k * 2 + 1] = s / 9;
+    }
+  }
+  const idx = [];
+  for (let i = 0; i < RINGS; i++) for (let j = 0; j < SEG; j++) { const a = i * W + j, b = a + W; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  const g = new THREE.BufferGeometry();
+  g.setIndex(idx);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('aS', new THREE.BufferAttribute(aS, 1));
+  g.setAttribute('aDir', new THREE.BufferAttribute(aDir, 3));
+  g.setAttribute('aR', new THREE.BufferAttribute(aR, 1));
+  g.computeVertexNormals();
+  const nr = g.attributes.normal; // weld the uv seam's normals
+  for (let i = 0; i <= RINGS; i++) {
+    const a = i * W, b = a + SEG;
+    const x = (nr.getX(a) + nr.getX(b)) / 2, y = (nr.getY(a) + nr.getY(b)) / 2, z = (nr.getZ(a) + nr.getZ(b)) / 2;
+    nr.setXYZ(a, x, y, z); nr.setXYZ(b, x, y, z);
+  }
+  const tex = mucosaTexture();
+  const mat = new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 2.2, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWaveS = UNI.waveS; sh.uniforms.uWaveAmp = UNI.waveAmp; sh.uniforms.uTime = UNI.time; sh.uniforms.uUpj = UNI.upj;
+    sh.vertexShader = 'uniform float uWaveS, uWaveAmp, uTime, uUpj;\nattribute float aS;\nattribute vec3 aDir;\nattribute float aR;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', `
+        vec3 transformed = vec3(position);
+        float wv = uWaveAmp * exp(-pow((aS - uWaveS) / 5.0, 2.0)) * (1.0 - smoothstep(uUpj - 6.0, uUpj, aS));
+        float br = 0.022 * sin(aS * 0.9 - uTime * 1.7);
+        transformed -= aDir * aR * (wv - br);`);
+  };
+  const m = new THREE.Mesh(g, mat);
+  m.frustumCulled = false;
+  return m;
+}
+scene.add(buildTube());
+
+// ───────────────────────── lights
+const spot = new THREE.SpotLight(0xfff1e2, 26, 0, 0.95, 0.65, 1.6);
+const fill = new THREE.PointLight(0xffe2d8, 1.3, 0, 2);
+const hitLight = new THREE.PointLight(0xfff0dc, 0, 0, 2);
+scene.add(spot, spot.target, fill, hitLight, new THREE.HemisphereLight(0x6a4040, 0x140404, 0.35));
+
+// ───────────────────────── stone + fragment geometry
+function nz(v, k, ph) { return Math.sin(v.x * k * ph[0] + ph[3]) * Math.sin(v.y * k * ph[1] + ph[4]) * Math.sin(v.z * k * ph[2] + ph[5]); }
+const phs = () => [mr(0.8, 1.3), mr(0.8, 1.3), mr(0.8, 1.3), mr(0, 6.28), mr(0, 6.28), mr(0, 6.28)];
+function stoneGeo(type) {
+  let g = new THREE.IcosahedronGeometry(1, 4); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g);
+  const p = g.attributes.position, v = new THREE.Vector3(), a = phs(), b = phs();
+  const bumps = Array.from({ length: 15 }, () => new THREE.Vector3(mr(-1, 1), mr(-1, 1), mr(-1, 1)).normalize());
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize(); let r = 1;
+    if (type === 'UA') r += 0.1 * nz(v, 1.9, a) + 0.05 * nz(v, 5, b) + 0.022 * nz(v, 12, a);
+    if (type === 'COD') r += 0.09 * nz(v, 2.4, a) + 0.05 * nz(v, 6, b);
+    if (type === 'COM') { r += 0.035 * nz(v, 2, a); for (const q of bumps) { const d = v.dot(q); if (d > 0.82) r += 0.12 * ((d - 0.82) / 0.18) ** 1.4; } }
+    if (type === 'CYS') r += 0.05 * nz(v, 1.3, a) + 0.015 * nz(v, 9, b);
+    v.multiplyScalar(r); if (type === 'CYS') { v.x *= 1.12; v.y *= 0.94; }
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const MAT_FRAG = {}, FRAG_GEOS = {};
+const crystalMat = new THREE.MeshStandardMaterial({ color: 0xfff6d4, roughness: 0.22, metalness: 0.05, emissive: 0x2a2614 });
+const crystalGeo = new THREE.OctahedronGeometry(0.3, 0);
+for (const k in TYPES) {
+  const T = TYPES[k];
+  MAT_FRAG[k] = new THREE.MeshStandardMaterial({ color: T.col, roughness: T.rough + 0.1, metalness: 0.04, emissive: T.emis, flatShading: true });
+  FRAG_GEOS[k] = [0, 1, 2, 3].map(() => {
+    const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position, v = new THREE.Vector3(), a = phs();
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const r = 1 + 0.32 * nz(v, 3, a); v.multiplyScalar(r); v.y *= 0.8; p.setXYZ(i, v.x, v.y, v.z); }
+    g.computeVertexNormals(); return g;
+  });
+}
+function makeStoneMesh(type) {
+  const T = TYPES[type];
+  const mat = new THREE.MeshStandardMaterial({ color: T.col, roughness: T.rough, metalness: 0.04, emissive: T.emis });
+  const m = new THREE.Mesh(stoneGeo(type), mat);
+  if (type === 'COD') {
+    for (let i = 0; i < 11; i++) {
+      const c = new THREE.Mesh(crystalGeo, crystalMat), n = new THREE.Vector3(mr(-1, 1), mr(-1, 1), mr(-1, 1)).normalize();
+      c.position.copy(n).multiplyScalar(0.92); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+      c.scale.set(0.7, mr(1.2, 1.9), 0.7); m.add(c);
+    }
+  }
+  return { mesh: m, mat };
+}
+
+// ───────────────────────── particles (per-particle alpha + size)
+const PS_VS = `attribute float aAlpha; attribute float aSize; attribute vec3 aColor; uniform float uScale; varying float vA; varying vec3 vC;
+void main(){ vA = aAlpha; vC = aColor; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = aSize * uScale / max(0.1, -mv.z); gl_Position = projectionMatrix * mv; }`;
+const PS_FS = `varying float vA; varying vec3 vC;
+void main(){ vec2 d = gl_PointCoord - 0.5; float r = 1.0 - dot(d, d) * 4.0; if (r <= 0.0) discard; gl_FragColor = vec4(vC, vA * r * r);
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
+}`;
+class Particles {
+  constructor(n, blending) {
+    this.n = n; this.i = 0;
+    const F = k => new Float32Array(n * k);
+    Object.assign(this, { pos: F(3), vel: F(3), col: F(3), al: F(1), a0: F(1), sz: F(1), life: F(1), max: F(1), drag: F(1), grow: F(1) });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aColor', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aAlpha', new THREE.BufferAttribute(this.al, 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aSize', new THREE.BufferAttribute(this.sz, 1).setUsage(THREE.DynamicDrawUsage));
+    this.g = g;
+    this.mat = new THREE.ShaderMaterial({ uniforms: { uScale: { value: 600 } }, vertexShader: PS_VS, fragmentShader: PS_FS, transparent: true, depthWrite: false, blending });
+    this.pts = new THREE.Points(g, this.mat); this.pts.frustumCulled = false; scene.add(this.pts);
+  }
+  emit(p, v, c, size, life, alpha, drag = 1.5, grow = 0) {
+    const i = this.i; this.i = (i + 1) % this.n;
+    this.pos[i * 3] = p.x; this.pos[i * 3 + 1] = p.y; this.pos[i * 3 + 2] = p.z;
+    this.vel[i * 3] = v.x; this.vel[i * 3 + 1] = v.y; this.vel[i * 3 + 2] = v.z;
+    this.col[i * 3] = c[0]; this.col[i * 3 + 1] = c[1]; this.col[i * 3 + 2] = c[2];
+    this.sz[i] = size; this.life[i] = this.max[i] = life; this.a0[i] = alpha; this.drag[i] = drag; this.grow[i] = grow;
+  }
+  update(dt, fx, fy, fz) {
+    for (let i = 0; i < this.n; i++) {
+      if (this.life[i] <= 0) { this.al[i] = 0; continue; }
+      this.life[i] -= dt;
+      const k = Math.exp(-this.drag[i] * dt), j = i * 3;
+      this.vel[j] *= k; this.vel[j + 1] *= k; this.vel[j + 2] *= k;
+      this.pos[j] += (this.vel[j] + fx) * dt; this.pos[j + 1] += (this.vel[j + 1] + fy) * dt; this.pos[j + 2] += (this.vel[j + 2] + fz) * dt;
+      this.sz[i] += this.grow[i] * dt;
+      const lf = Math.max(0, this.life[i]) / this.max[i];
+      this.al[i] = this.a0[i] * Math.min(1, lf * 1.6) * Math.min(1, (1 - lf) * this.max[i] * 10);
+    }
+    for (const k of ['position', 'aColor', 'aAlpha', 'aSize']) this.g.attributes[k].needsUpdate = true;
+  }
+  clear() { this.life.fill(0); this.al.fill(0); }
+}
+const dustPS = new Particles(900, THREE.AdditiveBlending);
+const bloodPS = new Particles(260, THREE.NormalBlending);
+
+// ───────────────────────── the ureteroscope
+const scope = new THREE.Group();
+function tissueEnv() {
+  // fake surroundings for the chrome to reflect: dark lumen with a warm pink band and a few highlights
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
+  gr.addColorStop(0, '#2a0808'); gr.addColorStop(0.42, '#c86a62'); gr.addColorStop(0.5, '#f2c2b6'); gr.addColorStop(0.58, '#a4483f'); gr.addColorStop(1, '#1a0505');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+  g.fillStyle = 'rgba(255,245,235,.9)'; for (const x of [40, 120, 200]) { g.beginPath(); g.ellipse(x, 52, 14, 6, 0, 0, 6.283); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const ENV = tissueEnv(), SCOPE_MATS = [];
+{
+  const metal = new THREE.MeshStandardMaterial({ color: 0xc9d1d8, metalness: 0.9, roughness: 0.22, envMap: ENV, envMapIntensity: 1.1, transparent: true });
+  const black = new THREE.MeshStandardMaterial({ color: 0x4a5058, metalness: 0.6, roughness: 0.38, envMap: ENV, envMapIntensity: 0.7, transparent: true });
+  SCOPE_MATS.push(metal, black);
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(SCOPE_R, SCOPE_R, 0.7, 28), metal); tip.rotation.x = Math.PI / 2; tip.position.z = 0.35;
+  const fc = document.createElement('canvas'); fc.width = 4; fc.height = 64;
+  const fg = fc.getContext('2d'), fgr = fg.createLinearGradient(0, 0, 0, 64); fgr.addColorStop(0, '#000'); fgr.addColorStop(1, '#fff');
+  fg.fillStyle = fgr; fg.fillRect(0, 0, 4, 64);
+  const shaftMat = black.clone(); shaftMat.alphaMap = new THREE.CanvasTexture(fc); SCOPE_MATS.push(shaftMat);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(SCOPE_R * 0.96, SCOPE_R * 0.96, 3, 20, 1, true), shaftMat); shaft.rotation.x = Math.PI / 2; shaft.position.z = 2.2;
+  const face = new THREE.Mesh(new THREE.CircleGeometry(SCOPE_R, 28), new THREE.MeshStandardMaterial({ color: 0x050608, metalness: 0.5, roughness: 0.1 })); face.rotation.y = Math.PI; face.position.z = -0.001;
+  const emiss = c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.09, 20), emiss(new THREE.Color(0.25, 0.4, 0.9))); lens.rotation.y = Math.PI; lens.position.set(-0.07, 0.07, -0.004);
+  const l1 = new THREE.Mesh(new THREE.CircleGeometry(0.05, 14), emiss(new THREE.Color(3, 2.9, 2.6))); l1.rotation.y = Math.PI; l1.position.set(0.13, 0.11, -0.004);
+  const l2 = l1.clone(); l2.position.set(-0.15, -0.09, -0.004);
+  const fiber = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.34, 10), emiss(new THREE.Color(0.9, 1.6, 1.0))); fiber.rotation.x = Math.PI / 2; fiber.position.set(0.12, -0.12, -0.15);
+  scope.add(tip, shaft, face, lens, l1, l2, fiber);
+}
+const tipGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(0.5, 2.2, 0.8), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
+tipGlow.scale.setScalar(0.35); tipGlow.position.set(0.12, -0.12, -0.33); scope.add(tipGlow);
+const rim = new THREE.PointLight(0xffe8e0, 2.5, 2.4, 1.5); // lights the scope from the camera side, too short to reach the walls
+scene.add(scope, rim);
+// first-person: the fiber poking in from 5 o'clock, like a real URS view
+const fpFiber = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.7, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.82, 0.8) }));
+fpFiber.rotation.x = Math.PI / 2; fpFiber.position.set(0.16, -0.14, -0.9); fpFiber.visible = false;
+const fpTip = new THREE.Sprite(tipGlow.material); fpTip.scale.setScalar(0.05); fpTip.position.set(0.16, -0.14, -1.25); fpTip.visible = false;
+camera.add(fpFiber, fpTip);
+
+// beams: green aiming beam always on; treatment beam only while lasing
+const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true); beamGeo.translate(0, 0.5, 0);
+const addMat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+const aimBeam = new THREE.Mesh(beamGeo, addMat(new THREE.Color(0.1, 0.9, 0.3), 0.35));
+const beamCore = new THREE.Mesh(beamGeo, addMat(new THREE.Color(1.4, 5, 2), 0.95));
+const beamGlow = new THREE.Mesh(beamGeo, addMat(new THREE.Color(0.25, 1.4, 0.5), 0.3));
+const aimDot = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(0.3, 2.4, 0.7), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
+const hitGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(3, 3.2, 2.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0, toneMapped: false }));
+for (const m of [aimBeam, beamCore, beamGlow]) m.frustumCulled = false;
+scene.add(aimBeam, beamCore, beamGlow, aimDot, hitGlow);
+const YAX = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
+function setBeam(m, a, b, w) { _d.subVectors(b, a); const L = _d.length(); m.position.copy(a); m.quaternion.setFromUnitVectors(YAX, _d.divideScalar(L || 1)); m.scale.set(w, L, w); }
+
+// shockwave rings for fragmenting pulses
+const rings = [0, 1, 2, 3].map(() => {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.6, 2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  m.visible = false; scene.add(m); return { m, t: 1 };
+});
+const pinchRings = PINCHES.map(k => {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, 8, 72), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 2.2, 0.6), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  const f = mkF(); frameAt(k.s, f); m.position.copy(f.p); m.lookAt(new THREE.Vector3().copy(f.p).add(f.t));
+  m.scale.setScalar((k.r - SCOPE_R) * 0.85); m.visible = false; scene.add(m); return m;
+});
+function ringAt(p, n) { const r = rings.find(r => r.t >= 1) || rings[0]; r.t = 0; r.m.position.copy(p); r.m.lookAt(_d.copy(p).add(n)); r.m.visible = true; }
+
+// nitinol basket: 4 wires on a unit cage, scaled to the target
+const basket = new THREE.Group();
+{
+  const wm = new THREE.LineBasicMaterial({ color: new THREE.Color(1.6, 1.7, 1.8), toneMapped: false });
+  for (let k = 0; k < 4; k++) {
+    const ph = k / 4 * Math.PI, pts = [];
+    for (let a = 0; a <= 24; a++) { const t = a / 24, rad = Math.sin(Math.PI * t); pts.push(new THREE.Vector3(Math.cos(ph) * rad, Math.sin(ph) * rad, 1.1 - 2.2 * t)); }
+    for (let a = 0; a <= 24; a++) { const t = a / 24, rad = Math.sin(Math.PI * t); pts.push(new THREE.Vector3(-Math.cos(ph) * rad, -Math.sin(ph) * rad, -1.1 + 2.2 * t)); }
+    basket.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wm));
+  }
+  basket.visible = false; scene.add(basket);
+}
+const bkLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xcfd8e0 }));
+bkLine.frustumCulled = false; bkLine.visible = false; scene.add(bkLine);
+
+// ───────────────────────── mucosal injury marks: laser burns, thermal blanching, abrasions stay on the wall for the run
+function markTex(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const rad = stops => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 62); for (const [o, col] of stops) gr.addColorStop(o, col); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); };
+  if (kind === 'burn') { // charred centre, blanched halo, hyperaemic rim
+    rad([[0, 'rgba(14,6,4,1)'], [0.26, 'rgba(38,16,10,0.97)'], [0.36, 'rgba(150,128,118,0.92)'], [0.58, 'rgba(146,112,104,0.65)'], [0.78, 'rgba(120,14,20,0.6)'], [1, 'rgba(120,14,20,0)']]);
+    for (let i = 0; i < 12; i++) { g.fillStyle = 'rgba(20,8,6,0.85)'; g.beginPath(); g.arc(64 + mr(-18, 18), 64 + mr(-18, 18), mr(2, 7), 0, 6.283); g.fill(); }
+  } else if (kind === 'thermal') { // pale, oedematous blanching
+    rad([[0, 'rgba(168,150,142,0.8)'], [0.45, 'rgba(160,136,128,0.5)'], [0.8, 'rgba(150,110,104,0.18)'], [1, 'rgba(150,110,104,0)']]);
+  } else { // abrasion: haemorrhagic streak along the wall
+    rad([[0, 'rgba(84,14,16,0.8)'], [0.5, 'rgba(96,22,22,0.5)'], [1, 'rgba(96,22,22,0)']]);
+    g.strokeStyle = 'rgba(52,6,8,0.65)'; g.lineWidth = 2;
+    for (let i = 0; i < 6; i++) { const x = mr(40, 88); g.beginPath(); g.moveTo(x, 14); g.lineTo(x + mr(-6, 6), 114); g.stroke(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const MARK_GEO = new THREE.PlaneGeometry(1, 1), marks = [];
+const MARK_MATS = Object.fromEntries(['burn', 'thermal', 'scrape'].map(k => [k, new THREE.MeshStandardMaterial({ map: markTex(k), transparent: true, depthWrite: false, alphaTest: 0.02, roughness: 0.95, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })]));
+// the tube's actual inner radius at (s, θ) — same folds as buildTube()
+function wallR(s, th) { const fold = 1 - smooth(UPJ_S, UPJ_S + 10, s); return baseR(s) * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)); }
+const FMK = mkF(), MK_M = new THREE.Matrix4(), MK_D = new THREE.Vector3(), MK_X = new THREE.Vector3(), MK_Z = new THREE.Vector3();
+const angGap = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+// one lesion site = one decal; repeat hits on the same spot deepen it (bigger, and can upgrade its depth) instead of stacking new ones
+function addMark(kind, s, th, size, depth) {
+  for (const m of marks) {
+    const u = m.userData;
+    if (u.kind === kind && Math.abs(u.s - s) < 0.6 && angGap(u.th, th) * u.R < 0.6) {
+      u.n++; if (kind === 'burn' && u.n >= 4) depth = Math.max(depth, 2); // ~1 s of fiber contact on one spot: through the mucosa
+      u.depth = Math.max(u.depth, depth); const g = Math.min(1.6, 1 + 0.08 * u.n);
+      m.scale.set(u.size * g, u.size * u.stretch * g, 1);
+      return { site: u, isNew: false };
+    }
+  }
+  if (marks.length >= 90) scene.remove(marks.shift());
+  frameAt(s, FMK);
+  MK_D.copy(FMK.r).multiplyScalar(Math.cos(th)).addScaledVector(FMK.u, Math.sin(th)); // outward, toward the wall
+  const m = new THREE.Mesh(MARK_GEO, MARK_MATS[kind]);
+  const R = wallR(s, th), slope = (wallR(s + 0.05, th) - wallR(s - 0.05, th)) / 0.1;
+  MK_Z.copy(MK_D).negate(); MK_X.crossVectors(FMK.t, MK_Z).normalize();
+  MK_M.makeBasis(MK_X, FMK.t, MK_Z); m.quaternion.setFromRotationMatrix(MK_M); // faces the lumen, long axis along the ureter
+  m.rotateX(Math.atan(-slope)); // lie flat on a narrowing / flare instead of floating or sinking at one end
+  m.rotateZ(mr(-0.25, 0.25));
+  // side walls are seen almost edge-on, which squashes a decal along the ureter — stretch it that way (less on steep walls)
+  const stretch = Math.abs(slope) > 0.2 ? 1.3 : kind === 'scrape' ? 3 : kind === 'thermal' ? 2 : 2.2;
+  m.scale.set(size, size * stretch, 1);
+  m.renderOrder = -1; // marks are on the wall, behind everything in the lumen (dust, blood, rings)
+  // a flat decal on a curved wall: inset by its own sagitta; it then rides the wall's breathing + peristalsis each frame
+  m.userData = { kind, s, th, R, size, stretch, n: 1, depth, inset: 0.02 + (size * 0.5) ** 2 / (2 * R), c: FMK.p.clone(), d: MK_D.clone() };
+  placeMark(m);
+  scene.add(m); marks.push(m);
+  return { site: m.userData, isNew: true };
+}
+function placeMark(m) {
+  const u = m.userData, wv = UNI.waveAmp.value * Math.exp(-(((u.s - UNI.waveS.value) / 5) ** 2)) * (1 - smooth(UPJ_S - 6, UPJ_S, u.s));
+  const br = 0.022 * Math.sin(u.s * 0.9 - UNI.time.value * 1.7); // same motion as the tube's vertex shader
+  m.position.copy(u.c).addScaledVector(u.d, u.R * (1 - wv + br) - u.inset);
+}
+function injure(kind, s, th, size, gap, depth = 1) {
+  if (G.lastMark[kind] != null && G.t - G.lastMark[kind] < gap) return;
+  G.lastMark[kind] = G.t;
+  const r = addMark(kind, s, th, size, depth);
+  if (r.isNew) G.injury[kind]++; // distinct lesion sites, not seconds of contact
+  G.worstDepth = Math.max(G.worstDepth || 0, r.site.depth);
+}
+// where a fiber held against the wall actually burns it: a little ahead, where the beam meets the mucosa (inside the scope circle)
+const burnS = p => p.s + clamp(1.8 * (wallR(p.s, Math.atan2(p.y, p.x)) - Math.hypot(p.x, p.y)), 1.2, 2.5);
+// Post-Ureteroscopic Lesion Scale (draft mapping — Andrew to vet): 0 none · 1 superficial · 2 submucosal · ≥3 perforation
+// graded by the worst lesion, not by total integrity: blanching/abrasion/brief contact = 1, frag-energy or sustained burn / stuck basket = 2,
+// perforation only when focal damage took integrity to zero
+function pulsGrade(reason) {
+  const d = G.worstDepth || 0;
+  return reason === 'perf' ? ['≥3', 'perforation', 'bd'] : d >= 2 ? ['2', 'submucosal injury', 'bd'] : d >= 1 ? ['1', 'superficial mucosal injury / oedema', 'wn'] : ['0', 'no lesion', 'ok'];
+}
+function injuryCard(reason) {
+  const inj = G.injury, g = pulsGrade(reason);
+  return `<div class="sc"><div class="h"><span>On the way out</span><span class="${g[2]}">PULS ${g[0]} — ${g[1]}</span></div>
+    <div class="keys">${inj.burn} laser-burn spot${inj.burn === 1 ? '' : 's'} · ${inj.thermal} thermal patch${inj.thermal === 1 ? '' : 'es'} · ${inj.scrape} abrasion${inj.scrape === 1 ? '' : 's'} · lowest integrity ${Math.max(0, Math.round(G.minHp))}%</div></div>`;
+}
+
+// ───────────────────────── audio (procedural, no files)
+const AU = { ctx: null, master: null, muted: false };
+function audioInit() {
+  if (AU.ctx) { AU.ctx.resume && AU.ctx.resume(); return; }
+  try {
+    const C = window.AudioContext || window.webkitAudioContext, ctx = new C(); AU.ctx = ctx;
+    AU.master = ctx.createGain(); AU.master.gain.value = 0.45; AU.master.connect(ctx.destination);
+    const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), ch = nb.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    AU.noise = nb;
+    const loopNoise = (type, freq) => { const s = ctx.createBufferSource(); s.buffer = nb; s.loop = true; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; const g = ctx.createGain(); g.gain.value = 0; s.connect(f); f.connect(g); g.connect(AU.master); s.start(); return g; };
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(); o1.type = 'square'; o2.type = 'sawtooth'; o1.frequency.value = 160; o2.frequency.value = 241;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.8;
+    AU.buzz = ctx.createGain(); AU.buzz.gain.value = 0; o1.connect(bp); o2.connect(bp); bp.connect(AU.buzz); AU.buzz.connect(AU.master); o1.start(); o2.start();
+    AU.crack = loopNoise('highpass', 2600);
+    AU.scrape = loopNoise('lowpass', 420);
+    AU.flow = loopNoise('bandpass', 700);
+  } catch (e) { AU.ctx = null; }
+}
+function level(g, v) { if (AU.ctx && g) g.gain.setTargetAtTime(AU.muted ? 0 : v, AU.ctx.currentTime, 0.04); }
+function blip(freq, dur, type = 'sine', vol = 0.25, to = null, delay = 0) {
+  if (!AU.ctx || AU.muted) return;
+  const t = AU.ctx.currentTime + delay, o = AU.ctx.createOscillator(), g = AU.ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(AU.master); o.start(t); o.stop(t + dur + 0.02);
+}
+function burst(dur, vol, freq) {
+  if (!AU.ctx || AU.muted) return;
+  const t = AU.ctx.currentTime, s = AU.ctx.createBufferSource(), f = AU.ctx.createBiquadFilter(), g = AU.ctx.createGain();
+  s.buffer = AU.noise; f.type = 'lowpass'; f.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  s.connect(f); f.connect(g); g.connect(AU.master); s.start(t); s.stop(t + dur + 0.02);
+}
+const SFX = {
+  pulse() { burst(0.16, 0.55, 2000); blip(120, 0.2, 'sine', 0.55, 38); },
+  basket() { blip(1400, 0.05, 'square', 0.1); blip(900, 0.08, 'square', 0.08, null, 0.06); },
+  clear() { [660, 880, 1320].forEach((f, i) => blip(f, 0.2, 'triangle', 0.16, null, i * 0.08)); },
+  alarm() { blip(920, 0.12, 'square', 0.1); },
+  warn() { blip(300, 0.25, 'sawtooth', 0.12, 190); },
+  stuck() { blip(170, 0.45, 'sawtooth', 0.22, 85); },
+  pop() { burst(0.25, 0.3, 900); blip(540, 0.15, 'triangle', 0.16, 260); },
+};
+
+// ───────────────────────── game state
+let G = null;
+let state = 'brief'; // brief | play | paused | end
+let camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase';
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function newRun(seed, fixed) {
+  if (G) { for (const st of G.stones) if (st.mesh.parent) scene.remove(st.mesh); for (const f of G.frags) scene.remove(f.mesh); }
+  for (const m of marks) scene.remove(m); marks.length = 0;
+  dustPS.clear(); bloodPS.clear();
+  rng = mulberry32(seed);
+  const types = fixed ? ['UA', 'COM', 'CYS'] : shuffle(['UA', 'COD', 'COM', 'CYS']).slice(0, 3);
+  const sizes = fixed ? [7, 9, 8] : types.map(() => Math.round(rand(6, 10) * 2) / 2);
+  G = {
+    seed, fixed, t: 0, p: { s: 1, x: 0, y: 0, vx: 0, vy: 0, v: 0 },
+    flow: 0.35, P: 18, sepsis: 0, temp: 37, dust: 0, blood: 0, hp: 100, mode: 'dust', fragCD: 0,
+    stones: [], frags: [], wave: { on: false, s: -999, next: 5 }, bk: { state: 'idle', t: 0, target: null, cap: false },
+    // two pedals (left = a, right = b), each with its own program; G.las is whichever pedal is selected
+    ped: { a: { ...PRESETS.dust }, b: { ...PRESETS.frag } }, act: 'a', get las() { return this.ped[this.act]; },
+    pend: null, L: laserNums(PRESETS.dust.J, PRESETS.dust.Hz), firing: false, rateObj: null, backed: false, slips: 0,
+    injury: { burn: 0, thermal: 0, scrape: 0 }, lastMark: {},
+    trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })),
+    residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
+  };
+  G.stones = SLOTS.map((sl, i) => {
+    const type = types[i], d = sizes[i], T = TYPES[type], { mesh, mat } = makeStoneMesh(type);
+    scene.add(mesh);
+    const hx = rand(-0.45, 0.45), hy = rand(-0.35, 0.35);
+    return { i, type, d0: d, d, V0: d ** 3, V: d ** 3, s0: sl.s, s: sl.s, x: hx, y: hy, hx, hy, vs: 0, vx: 0, vy: 0, loc: sl.loc,
+      hu: Math.round(rand(T.hu[0], T.hu[1]) / 10) * 10, phase: 'alive', how: null, cracked: 0, crackV: 0, pulses: 0, dustT: 0, specimens: 0, lastS: sl.s, clearT: 0,
+      mesh, mat, spin: new THREE.Vector3(rand(-0.3, 0.3), rand(-0.3, 0.3), rand(-0.3, 0.3)), flash: 0, isFrag: false, held: false };
+  });
+  buildProgress();
+}
+
+// ───────────────────────── input
+const keys = {};
+const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+const input = { fire: false, pa: false, pb: false, back: false, last: 'a' };
+addEventListener('keydown', e => {
+  if (e.repeat || (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName))) return; // typing feedback ≠ game keys
+  keys[e.code] = true;
+  if (e.code === 'KeyJ') input.last = 'a';
+  if (e.code === 'KeyK') input.last = 'b';
+  if (state === 'play') {
+    if (e.code === 'KeyQ' || e.code === 'Tab') toggleMode();
+    if (e.code === 'Digit1') setMode('dust');
+    if (e.code === 'Digit2') setMode('frag');
+    if (e.code === 'BracketLeft') nudgeLaser(-0.1, 0);
+    if (e.code === 'BracketRight') nudgeLaser(0.1, 0);
+    if (e.code === 'Minus') nudgeLaser(0, -1);
+    if (e.code === 'Equal') nudgeLaser(0, 1);
+    if (e.code === 'KeyE') basketPress();
+    if (e.code === 'Enter') moveOn();
+  }
+  if (e.code === 'KeyC') toggleCam();
+  if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
+  if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.fire = input.pa = input.pb = input.back = false; });
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('dblclick', e => e.preventDefault());
+
+const joyZone = $('joyZone'), joyBase = $('joyBase'), joyKnob = $('joyKnob');
+joyZone.addEventListener('pointerdown', e => {
+  if (joy.id !== null) return;
+  joy.id = e.pointerId; joyZone.setPointerCapture(e.pointerId);
+  joy.ox = e.clientX; joy.oy = e.clientY;
+  joyBase.style.left = e.clientX + 'px'; joyBase.style.top = e.clientY + 'px'; joyBase.classList.remove('idle');
+  e.preventDefault();
+});
+joyZone.addEventListener('pointermove', e => {
+  if (e.pointerId !== joy.id) return;
+  let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy; const m = Math.hypot(dx, dy), R = 62;
+  if (m > R) { dx *= R / m; dy *= R / m; }
+  joy.x = dx / R; joy.y = -dy / R;
+  joyKnob.style.transform = `translate(${dx}px,${dy}px)`;
+});
+const joyEnd = e => {
+  if (e.pointerId !== joy.id) return;
+  joy.id = null; joy.x = joy.y = 0; joyKnob.style.transform = '';
+  joyBase.classList.add('idle'); joyBase.style.left = ''; joyBase.style.top = '';
+};
+joyZone.addEventListener('pointerup', joyEnd); joyZone.addEventListener('pointercancel', joyEnd);
+
+function holdButton(el, down, up) {
+  el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {} el.classList.add('on'); down && down(); });
+  const off = () => { el.classList.remove('on'); up && up(); };
+  el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off);
+}
+holdButton($('bPedA'), () => { input.pa = true; input.last = 'a'; }, () => { input.pa = false; });
+holdButton($('bPedB'), () => { input.pb = true; input.last = 'b'; }, () => { input.pb = false; });
+holdButton($('bBack'), () => { input.back = true; }, () => { input.back = false; });
+holdButton($('bLaser'), () => { if (LP.open) closeLaserPanel(true); else openLaserPanel(); });
+holdButton($('bBasket'), () => basketPress());
+const flowTrack = $('flowTrack');
+let flowId = null;
+function flowFromY(y) { const r = flowTrack.getBoundingClientRect(); G.flow = clamp(1 - (y - r.top) / r.height, 0, 1); }
+flowTrack.addEventListener('pointerdown', e => { if (!G) return; flowId = e.pointerId; flowTrack.setPointerCapture(e.pointerId); flowFromY(e.clientY); e.preventDefault(); });
+flowTrack.addEventListener('pointermove', e => { if (e.pointerId === flowId) flowFromY(e.clientY); });
+flowTrack.addEventListener('pointerup', () => { flowId = null; }); flowTrack.addEventListener('pointercancel', () => { flowId = null; });
+$('moveOn').addEventListener('pointerdown', e => { e.preventDefault(); moveOn(); });
+$('bCam').addEventListener('click', () => toggleCam());
+$('bPause').addEventListener('click', () => togglePause());
+$('bMute').addEventListener('click', () => { AU.muted = !AU.muted; $('bMute').textContent = AU.muted ? '🔇' : '🔊'; if (AU.muted) for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); });
+
+function readStick() {
+  let x = joy.x + ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
+  let y = joy.y + (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  if (SETTINGS.invert) y = -y; // lever-style deflection: push up, tip goes down
+  const m = Math.hypot(x, y);
+  if (m < 0.12) return [0, 0];
+  if (m > 1) { x /= m; y /= m; }
+  return [x, y];
+}
+// two pedals, like the OR footswitch: switching between them is free — only reprogramming a pedal costs time
+function selectPedal(w) {
+  if (!G || G.act === w) return;
+  G.act = w; G.mode = modeName(G.las.J).toLowerCase(); // pulse timer keeps running: tapping between pedals can't beat the programmed rate
+  if (state === 'play' && engaged()) G.pedSwitches++;
+  renderMode(); blip(fragFrac(G.las.J) >= 0.5 ? 330 : 660, 0.06, 'square', 0.08);
+}
+function setMode(m) { if (G) selectPedal(m === 'frag' ? 'b' : 'a'); }
+function toggleMode() { if (G) selectPedal(G.act === 'a' ? 'b' : 'a'); }
+function nudgeHz(Hz, d) { let i = HZ_STEPS.indexOf(Hz); if (i < 0) i = Math.max(0, HZ_STEPS.findIndex(h => h >= Hz)); return HZ_STEPS[clamp(i + d, 0, HZ_STEPS.length - 1)]; }
+function capHz(J, Hz) { while (J * Hz > MAX_W + 1e-6 && Hz > HZ_STEPS[0]) Hz = nudgeHz(Hz, -1); return Hz; }
+const progOf = w => (G.pend && G.pend.which === w) ? G.pend : G.ped[w]; // what a pedal is (or is about to be) programmed to
+function nudgeLaser(dJ, dI) { if (!G || SETTINGS.level !== 'advanced') return; const cur = progOf(G.act); requestSettings(cur.J + dJ, nudgeHz(cur.Hz, dI), G.act); }
+// at the stone = the current (first unresolved) stone is right ahead; reprogramming there costs a standby
+function engaged() {
+  const st = G.stones.find(s => s.phase !== 'done'); if (!st) return false;
+  const ds = (st.phase === 'alive' ? st.s : st.lastS) - G.p.s;
+  return ds < 12 && ds > -3;
+}
+function requestSettings(J, Hz, which) {
+  if (!G) return;
+  which = which || G.act;
+  J = clamp(Math.round(J * 10) / 10, 0.2, 2.0); Hz = capHz(J, clamp(Math.round(Hz), 5, 100));
+  const cur = progOf(which);
+  if (Math.abs(cur.J - J) < 1e-6 && cur.Hz === Hz) return;
+  const side = which === 'a' ? 'left' : 'right';
+  if (state === 'play' && !G.trip && engaged()) {
+    if (G.pend && G.pend.which !== which) G.ped[G.pend.which] = { J: G.pend.J, Hz: G.pend.Hz }; // one standby at a time
+    G.pend = { which, J, Hz, until: G.t + STANDBY_S }; G.reprograms++;
+    toast(`Laser STANDBY — reprogramming the ${side} pedal to ${modeName(J)} ${J.toFixed(1)} J × ${Hz} Hz`, 'warn', 'stby', 1);
+    blip(260, 0.15, 'square', 0.1);
+  } else {
+    G.ped[which] = { J, Hz }; if (G.pend && G.pend.which === which) G.pend = null;
+    G.mode = modeName(G.las.J).toLowerCase(); G.fragCD = 0.12;
+    blip(fragFrac(J) >= 0.5 ? 330 : 660, 0.08, 'square', 0.1);
+  }
+  renderMode();
+}
+function renderMode() {
+  const { J, Hz } = G.las, nm = modeName(J), sb = G.pend;
+  const m = $('mode');
+  m.className = sb ? 'standby' : nm === 'FRAG' ? 'frag' : nm === 'MIXED' ? 'mixed' : '';
+  m.textContent = sb ? `STANDBY · REPROGRAMMING ${sb.which === 'a' ? 'LEFT' : 'RIGHT'}` : `${G.act === 'a' ? 'LEFT' : 'RIGHT'} · ${nm} ${J.toFixed(1)} J × ${Hz} Hz`;
+  for (const w of ['a', 'b']) {
+    const el = $(w === 'a' ? 'bPedA' : 'bPedB'), pr = progOf(w), n = modeName(pr.J), on = el.classList.contains('on');
+    el.innerHTML = `${n}<small>${pr.J.toFixed(1)} J × ${pr.Hz} Hz</small>`;
+    el.className = `tb ped ${n.toLowerCase()}${G.act === w ? ' act' : ''}${sb ? ' standby' : ''}${on ? ' on' : ''}`;
+  }
+  $('bLaser').classList.toggle('hidden', SETTINGS.level !== 'advanced');
+}
+// the panel pops up for a change and gets out of the way: APPLY, a tap anywhere else, or 6 s idle closes it
+const LP = { st: { a: null, b: null }, which: 'a', open: false, timer: 0 }; // staged programs, one per pedal
+const lpEl = $('laserPanel');
+const lpChanged = w => { const c = progOf(w), t = LP.st[w]; return !!t && (Math.abs(c.J - t.J) > 1e-6 || c.Hz !== t.Hz); };
+function lpIdle() { clearTimeout(LP.timer); LP.timer = setTimeout(() => closeLaserPanel(true), 6000); }
+function lpLoad() { for (const w of ['a', 'b']) { const pr = progOf(w); LP.st[w] = { J: pr.J, Hz: pr.Hz }; } }
+function openLaserPanel() { if (!G) return; LP.which = G.act; lpLoad(); renderLP(); lpEl.classList.remove('away'); LP.open = true; lpIdle(); }
+function closeLaserPanel(note) {
+  clearTimeout(LP.timer);
+  if (note && LP.open && G && (lpChanged('a') || lpChanged('b'))) toast('Laser panel closed — settings not changed', '', 'lpx', 0);
+  lpEl.classList.add('away'); LP.open = false;
+}
+document.addEventListener('pointerdown', e => { if (LP.open && !lpEl.contains(e.target) && !$('bLaser').contains(e.target)) closeLaserPanel(true); }, true);
+function renderLP() {
+  const t = LP.st[LP.which], f = fragFrac(t.J);
+  lpEl.querySelectorAll('[data-w]').forEach(x => { x.classList.toggle('on', x.dataset.w === LP.which); x.textContent = (x.dataset.w === 'a' ? 'LEFT' : 'RIGHT') + ' PEDAL' + (lpChanged(x.dataset.w) ? ' •' : ''); });
+  $('lpJ').textContent = t.J.toFixed(1) + ' J'; $('lpH').textContent = t.Hz + ' Hz';
+  $('lpInfo').textContent = `${Math.round(t.J * t.Hz)} W${t.J * nudgeHz(t.Hz, 1) > MAX_W ? ' (max)' : ''} · ${modeName(t.J)}` + (f > 0.3 ? ` · retropulsion ${t.J >= 1.3 ? 'high' : t.J >= 0.9 ? 'moderate' : 'low'}` : '');
+}
+$('laserPanel').addEventListener('pointerdown', e => {
+  const b = e.target.closest('button'); if (!b) return; e.preventDefault(); lpIdle();
+  const t = LP.st[LP.which];
+  if (b.dataset.w) { LP.which = b.dataset.w; renderLP(); } // staged edits on the other pedal are kept (• marks them)
+  else if (b.dataset.d) {
+    if (b.dataset.d[0] === 'J') t.J = clamp(Math.round((t.J + (b.dataset.d === 'J+' ? 0.1 : -0.1)) * 10) / 10, 0.2, 2.0);
+    else t.Hz = nudgeHz(t.Hz, b.dataset.d === 'H+' ? 1 : -1);
+    t.Hz = capHz(t.J, t.Hz);
+    renderLP();
+  } else if (b.dataset.p) { t.J = PRESETS[b.dataset.p].J; t.Hz = PRESETS[b.dataset.p].Hz; renderLP(); }
+  else if (b.id === 'lpApply') { for (const w of ['a', 'b']) if (lpChanged(w)) requestSettings(LP.st[w].J, LP.st[w].Hz, w); closeLaserPanel(); }
+  else if (b.id === 'lpClose') closeLaserPanel(true);
+});
+function toggleCam() { camMode = camMode === 'chase' ? 'scope' : 'chase'; applyCam(); }
+function applyCam() {
+  const fp = camMode === 'scope';
+  $('scopeMask').classList.toggle('hidden', !fp || state === 'brief');
+  scope.visible = !fp; fpFiber.visible = fpTip.visible = fp;
+  camera.fov = fp ? 78 : 68; camera.updateProjectionMatrix(); updateScale();
+}
+// phones held upright: the rotate screen covers the game; pause, and resume by themselves when turned back
+const PORTRAIT_PHONE = matchMedia('(orientation: portrait) and (max-width: 600px)');
+let rotPaused = false;
+function onOrient() {
+  if (PORTRAIT_PHONE.matches && state === 'play') { togglePause(); rotPaused = true; }
+  else if (!PORTRAIT_PHONE.matches && rotPaused && state === 'paused') { rotPaused = false; togglePause(); }
+}
+if (PORTRAIT_PHONE.addEventListener) PORTRAIT_PHONE.addEventListener('change', onOrient); else PORTRAIT_PHONE.addListener(onOrient);
+function togglePause() {
+  if (state === 'play') { state = 'paused'; showPause(); quiet(); }
+  else if (state === 'paused') { state = 'play'; rotPaused = false; hideScreen(); }
+}
+
+// ───────────────────────── toasts / banner
+const toastsEl = $('toasts'), lastToast = {};
+function toast(msg, cls = '', key = msg, gap = 3.5) {
+  const now = performance.now() / 1000;
+  if (lastToast[key] && now - lastToast[key] < gap) return;
+  lastToast[key] = now; (window.__toasts = window.__toasts || []).push(msg); if (window.__toasts.length > 60) window.__toasts.shift();
+  const d = document.createElement('div'); d.className = 'toast ' + cls; d.textContent = msg;
+  toastsEl.appendChild(d);
+  while (toastsEl.children.length > 3) toastsEl.firstChild.remove();
+  setTimeout(() => d.classList.add('out'), 2700); setTimeout(() => d.remove(), 3200);
+}
+
+// ───────────────────────── gameplay helpers
+const F1 = mkF(), F2 = mkF(), F3 = mkF();
+const V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3(), tipW = new THREE.Vector3(), hitW = new THREE.Vector3();
+function liveTargets() { return G.stones.filter(s => s.phase === 'alive' && !s.held).concat(G.frags.filter(f => !f.gone && !f.left && !f.held)); }
+function findTarget(extraLat = 0.18, maxDs = BEAM_RANGE) {
+  const p = G.p; let best = null;
+  for (const o of liveTargets()) {
+    const R = rOf(o), ds = o.s - p.s;
+    if (ds < 0.2 || ds - R > maxDs) continue;
+    const lat = Math.hypot(o.x - p.x, o.y - p.y);
+    if (lat < R + extraLat && (!best || ds < best.ds)) best = { o, ds, lat };
+  }
+  return best;
+}
+function spawnFrag(owner, V, s, x, y, vs, vx, vy) {
+  const d = Math.cbrt(V);
+  if (d < 2) return null; // <2 mm = insignificant, passes on its own
+  const mesh = new THREE.Mesh(FRAG_GEOS[owner.type][(Math.random() * 4) | 0], MAT_FRAG[owner.type]);
+  mesh.rotation.set(mr(0, 6), mr(0, 6), mr(0, 6)); scene.add(mesh);
+  const f = { owner: owner.i, type: owner.type, V, d, s, x, y, vs, vx, vy, isFrag: true, mesh, gone: false, left: false, held: false, bob: Math.random() * 6,
+    spin: new THREE.Vector3(mr(-2, 2), mr(-2, 2), mr(-2, 2)) };
+  G.frags.push(f); return f;
+}
+function killFrag(f, puff) {
+  if (f.gone) return;
+  f.gone = true; scene.remove(f.mesh);
+  if (puff) { worldAt(f.s, f.x, f.y, V1); for (let i = 0; i < 14; i++) dustPS.emit(V1, V2.set(mr(-1, 1), mr(-1, 1), mr(-1, 1)), [0.9, 0.86, 0.78], mr(0.08, 0.2), mr(0.5, 1.1), 0.7, 2); }
+}
+function splitOff(st, vol, pushS) {
+  const usable = vol * (1 - TYPES[st.type].sand);
+  const n = usable > 90 ? 3 : usable > 30 ? 2 : 1;
+  const w = Array.from({ length: n }, () => mr(0.6, 1.4)), sum = w.reduce((a, b) => a + b, 0);
+  const R = rOf(st);
+  for (const k of w) {
+    const a = mr(0, 6.28), V = usable * k / sum;
+    if (Math.random() < SLIP_P) { // shoots distally along the wall, past the scope
+      const lim = Math.max(0.3, baseR(st.s) - Math.cbrt(V) * MMR - 0.15);
+      const sf = spawnFrag(st, V, st.s - R * 0.6, Math.cos(a) * lim, Math.sin(a) * lim, -mr(7, 10), 0, 0);
+      if (sf) sf.slip = true; // counted + announced once it's actually behind the tip
+      continue;
+    }
+    spawnFrag(st, usable * k / sum, st.s - R * 0.6 + mr(-0.2, 0.3), st.x + Math.cos(a) * R * 0.7, st.y + Math.sin(a) * R * 0.7, pushS + mr(0.5, 2.5), Math.cos(a) * mr(0.8, 2), Math.sin(a) * mr(0.8, 2));
+  }
+}
+function finishStone(st, how) {
+  st.phase = 'cleanup'; st.how = how; st.lastS = st.s;
+  scene.remove(st.mesh);
+  worldAt(st.s, st.x, st.y, V1);
+  for (let i = 0; i < 40; i++) dustPS.emit(V1, V2.set(mr(-2, 2), mr(-2, 2), mr(-2, 2)), [1, 0.95, 0.85], mr(0.08, 0.3), mr(0.6, 1.6), 0.8, 2.2);
+  SFX.pop();
+  if (how === 'dusted') toast('Stone dusted ✓  Fine particles will pass', 'good');
+  else if (how === 'basketed') toast('Basketed intact ✓  Specimen in the jar', 'good');
+  else toast('Broken up — clear fragments ≥2 mm (basket or dust)', 'warn');
+}
+function migrateStone(st) {
+  st.phase = 'done'; st.how = 'migrated'; scene.remove(st.mesh);
+  for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left && !f.held) { f.left = true; G.residual++; }
+  toast('⚠ Retropulsed into the kidney — that one needs flexible URS later', 'bad', 'mig', 0);
+  SFX.warn(); G.shake = 0.25;
+}
+function moveOn() {
+  if (!G || state !== 'play' || G.trip || G.bk.state !== 'idle') return;
+  const st = G.stones.find(s => s.phase !== 'done');
+  if (!st || st.phase !== 'cleanup') return;
+  let n = 0;
+  for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left) { f.left = true; n++; }
+  G.residual += n; st.phase = 'done';
+  toast(`Moved on — ${n} residual fragment${n === 1 ? '' : 's'} left behind`, n ? 'warn' : 'good', 'mo', 0);
+}
+// something in beam range that the rails would otherwise drive past (the gate's own target doesn't count — the gate already stops short of it)
+function workAhead(gate) { const p = G.p; return liveTargets().some(o => { const ds = o.s - p.s; return ds > 0.2 && ds - rOf(o) < BEAM_RANGE && o.s - rOf(o) - WORK_DIST < gate - 0.3; }); }
+function gateS() {
+  for (const st of G.stones) {
+    if (st.phase === 'done') continue;
+    if (st.phase === 'alive') return st.s - rOf(st) - WORK_DIST;
+    let m = Infinity;
+    for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left) m = Math.min(m, f.s - rOf(f));
+    return (m === Infinity ? st.lastS : m) - WORK_DIST;
+  }
+  return END_S + 40;
+}
+function basketPress() {
+  if (!G || state !== 'play' || G.bk.state !== 'idle' || G.trip) return;
+  const t = findTarget(0.9, 6);
+  if (!t) { toast('Nothing in reach — line the basket up on a fragment', '', 'bkno', 2); blip(200, 0.08, 'square', 0.08); return; }
+  Object.assign(G.bk, { state: 'out', t: 0, target: t.o, cap: false, os: t.o.s, ox: t.o.x, oy: t.o.y });
+  t.o.held = true; SFX.basket();
+}
+function capture(o) {
+  const st = G.stones[o.isFrag ? o.owner : o.i];
+  st.specimens++;
+  if (o.isFrag) { killFrag(o, false); toast(`Basketed ${o.d.toFixed(1)} mm fragment → specimen jar`, 'good', 'bk' + Math.random(), 0); }
+  else finishStone(o, 'basketed');
+  SFX.basket();
+}
+
+// ───────────────────────── the simulation step
+function update(dt) {
+  const p = G.p; G.t += dt;
+  const bk = G.bk, busy = bk.state !== 'idle', trip = G.trip;
+  // laser standby ends → the new settings go live
+  if (G.pend && G.t >= G.pend.until) {
+    const w = G.pend.which, np = G.ped[w] = { J: G.pend.J, Hz: G.pend.Hz }; G.pend = null; G.mode = modeName(G.las.J).toLowerCase(); G.fragCD = 0;
+    renderMode(); toast(`Laser READY — ${w === 'a' ? 'left' : 'right'} pedal ${modeName(np.J)} ${np.J.toFixed(1)} J × ${np.Hz} Hz`, 'good', 'ready', 0); blip(880, 0.1, 'square', 0.1);
+  }
+  // whichever pedal is down fires its own program; both down → the last one pressed wins
+  const pa = input.pa || keys.KeyJ, pb = input.pb || keys.KeyK;
+  const want = pa && pb ? input.last : pa ? 'a' : pb ? 'b' : null;
+  if (want && want !== G.act) selectPedal(want);
+  const L = G.L = laserNums(G.las.J, G.las.Hz);
+  // steer (auto-centred while riding out/in with the basket)
+  const [ix, iy] = readStick(), maxV = busy ? 1.2 : 3.4;
+  if (trip) { const k = Math.min(1, dt * 4); p.x -= p.x * k; p.y -= p.y * k; p.vx = p.vy = 0; }
+  else {
+    p.vx += (ix * maxV - p.vx) * Math.min(1, dt * 8); p.vy += (iy * maxV - p.vy) * Math.min(1, dt * 8);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+  // flow keys
+  if (keys.ArrowUp) G.flow = clamp(G.flow + 0.5 * dt, 0, 1);
+  if (keys.ArrowDown) G.flow = clamp(G.flow - 0.5 * dt, 0, 1);
+  // pinch points slow you down, both ways
+  const pn = pinchNear(p.s), slowK = pn ? smooth(3, 8, Math.abs(pn.d)) : 1;
+  let gap = 0;
+  if (trip) {
+    // no access sheath: the basketed piece rides all the way out to the bladder, then you drive back up
+    let dmin = Infinity; for (const k of PINCHES) dmin = Math.min(dmin, Math.abs(k.s - p.s));
+    const tripK = smooth(3, 8, dmin), ease = Math.min(1, dt * 6); // symmetric: brake before a pinch whichever way you travel
+    if (trip.phase === 'out') {
+      p.v += (lerp(PINCH_TRIP_V, WITHDRAW_V, tripK) - p.v) * ease; p.s = Math.max(0.6, p.s - p.v * dt);
+      if (p.s <= 0.6) { capture(bk.target); bk.state = 'idle'; bk.target = null; trip.phase = 'in'; }
+    } else {
+      const target = Math.min(trip.back, gateS());
+      p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
+      if (p.s >= target - 0.01) {
+        const tt = G.t - trip.t0; G.tripTime += tt; G.trips++; G.trip = null; p.v = 0;
+        toast(`Back at the stone — that basket trip cost ${Math.round(tt)} s of anesthesia`, 'warn', 'tripback', 0);
+      }
+    }
+  } else {
+    const gate = gateS(); gap = gate - p.s;
+    if (input.back || keys.KeyB) {
+      // PULL BACK: back the scope down to reach a fragment that slipped behind it
+      const floor = Math.max(1, gate - 25);
+      p.v = 0; if (p.s > floor) { p.s = Math.max(floor, p.s - BACK_V * dt); G.backed = true; }
+    } else {
+      // ride the rails up to the next obstacle — after a pull-back: slowly, and hold while there's work in front of you
+      let tv = gap <= 0 ? 0 : Math.min(lerp(PINCH_V, CRUISE, slowK), gap * 2 + 0.3);
+      if (G.backed) { if (gap <= 0.05) G.backed = false; else { tv = Math.min(tv, 5); if (workAhead(gate)) tv = 0; } }
+      p.v += (tv - p.v) * Math.min(1, dt * 3);
+      if (gap > 0) p.s += Math.min(p.v * dt, gap); else p.v = 0;
+    }
+  }
+  // peristalsis: a contraction ring rolls down toward you between stones
+  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && gap > 66) { G.wave.on = true; G.wave.s = p.s + 62; }
+  if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(4, 7); } }
+  UNI.waveS.value = G.wave.on ? G.wave.s : -999;
+  // walls
+  const rEff = Math.max(0.6, baseR(p.s) * squeeze(p.s) - SCOPE_R), m = Math.hypot(p.x, p.y);
+  let scraping = false;
+  if (m > rEff) {
+    const over = m - rEff; p.x *= rEff / m; p.y *= rEff / m; p.vx *= 0.4; p.vy *= 0.4;
+    const outward = (ix * p.x + iy * p.y) / (rEff || 1);
+    if (!trip && (outward > 0.25 || over > 0.01)) {
+      scraping = true;
+      G.hp -= (6 + over * 120) * dt; G.lastLoss = 'scrape'; G.blood = Math.min(100, G.blood + 32 * dt); G.hurt = 1;
+      worldAt(p.s + 0.4, p.x * 1.1, p.y * 1.1, V1);
+      if (Math.random() < 0.5) bloodPS.emit(V1, V2.set(mr(-0.4, 0.4), mr(-0.4, 0.4), mr(-0.4, 0.4)), [0.55, 0.03, 0.03], mr(0.4, 0.8), mr(1.4, 2.4), 0.4, 1, 0.5);
+      toast('Scraping mucosa — stay off the wall', 'bad', 'scr', 5);
+      injure('scrape', p.s + 0.25, Math.atan2(p.y, p.x), mr(0.6, 0.8), 0.22);
+    }
+  }
+  level(AU.scrape, scraping ? 0.35 : 0);
+  // clean pass through a pinch point = bonus
+  PINCHES.forEach((k, i) => {
+    const pf = G.pinch[i];
+    if (scraping && Math.abs(p.s - k.s) < 3) pf.scraped = true;
+    if (!pf.passed && p.s > k.s + 3) {
+      pf.passed = true;
+      if (!pf.scraped) { G.bonus += 100; G.cleanPasses++; toast(`Clean pass through the ${k.name} ✓ +100`, 'good', 'pinch' + i, 0); }
+    }
+  });
+  // irrigation → pressure, sepsis
+  const Ptarget = 6 + G.flow * 54;
+  G.P += (Ptarget - G.P) * Math.min(1, dt * 1.6);
+  G.peakP = Math.max(G.peakP, G.P);
+  if (G.P > 40) { G.sepsis += (G.P - 40) * 0.9 * dt; G.timeOver40 += dt; } else if (G.P < 30) G.sepsis = Math.max(0, G.sepsis - 2 * dt);
+  level(AU.flow, 0.03 + G.flow * 0.12);
+  // lasing
+  const firing = !!(want || input.fire || keys.Space);
+  const canFire = firing && !busy && !G.pend && !trip;
+  G.firing = canFire;
+  const tgt = trip ? null : findTarget();
+  G.tgt = tgt;
+  const vis = clamp(1 - (G.dust * 0.7 + G.blood * 0.8) / 100, 0, 1);
+  G.vis = vis; G.lock = !!tgt && vis > 0.35;
+  // assist: gently drift onto a nearly-aligned target when the stick is idle (thumbs are imprecise)
+  if (!busy && !trip && Math.hypot(ix, iy) < 0.3) {
+    let soft = findTarget(0.75);
+    if (!soft) {
+      const st = G.stones.find(s => s.phase === 'alive' && !s.held);
+      if (st) { const ds = st.s - p.s, lat = Math.hypot(st.x - p.x, st.y - p.y); if (ds > 0.2 && ds - rOf(st) < BEAM_RANGE && lat < rOf(st) + 1.6) soft = { o: st }; }
+    }
+    if (soft) { p.x += (soft.o.x - p.x) * Math.min(1, dt * 1.6); p.y += (soft.o.y - p.y) * Math.min(1, dt * 1.6); }
+  }
+  let power = 0, hitting = false;
+  const nearWall = m > rEff - 0.5;
+  G.fragCD -= dt;
+  if (canFire) {
+    power = L.W;
+    if (tgt) {
+      const o = tgt.o, T = TYPES[o.type];
+      G.dust = Math.min(100, G.dust + 22 * (1 - L.f) * (L.W / 32) * dt); // stone dust only when the beam is on stone
+      if (L.dustRate > 0) {
+        hitting = true;
+        o.V = Math.max(0, o.V - L.dustRate * T.dust * (o.isFrag ? 1.3 : 1) * dt);
+        if (!o.isFrag && L.f < 0.5) o.dustT += dt;
+      }
+      if (L.fragRate > 0 && !o.isFrag) { const dV = Math.min(o.V, L.fragRate * T.frag * dt); o.V -= dV; o.cracked += dV; o.crackV += dV; }
+      o.d = Math.cbrt(Math.max(o.V, 0)); o.flash = Math.max(o.flash || 0, 1);
+      // live ablation rate — the "is this working?" readout
+      if (G.rateObj === o && o.prevD != null) o.rate = lerp(o.rate || 0, (o.prevD - o.d) / dt, Math.min(1, dt * 3));
+      else o.rate = 0;
+      G.rateObj = o; o.prevD = o.d;
+      if (!o.isFrag) {
+        const pushS = 0.75 * T.retro * Math.pow(8 / Math.max(o.d, 2), 1.5) * Math.max(L.kickPush, 0.2); // fragment launch, as round 1 (push × 0.25)
+        while (o.cracked >= o.V0 * 0.25) { o.cracked -= o.V0 * 0.25; splitOff(o, o.V0 * 0.25, pushS); }
+        // hint from the model's true dusting rate (dd/dt = dV/dt ÷ 3d²), not the smoothed readout that restarts every burst
+        if (SETTINGS.level !== 'advanced' && L.f < 0.5 && o.dustT > 3.5 && L.dustRate * T.dust / (3 * o.d * o.d) < 0.15) toast('Barely touching it — hard stone? Try the FRAG pedal', 'warn', 'slow' + o.i, 25);
+        if (o.V < 2.5 ** 3) {
+          const fragging = L.f >= 0.5 || o.crackV > 0.5 * (o.V0 - Math.max(0, o.V)), left = Math.max(0, o.V) + o.cracked;
+          G.rateObj = null; finishStone(o, fragging ? 'fragmented' : 'dusted');
+          if (left > 8 && (fragging || o.cracked > 8)) splitOff(o, left, pushS);
+        }
+      } else if (o.d < 2) { G.rateObj = null; killFrag(o, true); }
+    } else {
+      G.rateObj = null;
+      if (nearWall && L.f < 0.5) {
+        G.hp -= 7 * (1 - L.f) * dt; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 25 * dt); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4);
+        injure('burn', burnS(p), Math.atan2(p.y, p.x), mr(0.5, 0.65), 0.3, 1);
+      }
+    }
+    if (L.kickHz > 0 && G.fragCD <= 0) {
+      G.fragCD = 1 / L.kickHz;
+      const kt = tgt && (tgt.o.isFrag ? !tgt.o.gone : tgt.o.phase === 'alive') ? tgt : null;
+      kick(kt, nearWall, L);
+    }
+  } else G.rateObj = null;
+  level(AU.buzz, canFire && L.f < 0.5 ? 0.22 : 0);
+  level(AU.crack, hitting ? 0.18 : 0);
+  // heat: total watts cook the lumen unless irrigation carries it away
+  G.temp += (power * 0.09 - (G.temp - 37) * (0.08 + G.flow * 0.9)) * dt;
+  if (G.temp > 43) {
+    G.hp -= (G.temp - 43) * 1.8 * dt; G.lastLoss = 'thermal'; G.hurt = Math.max(G.hurt, 0.5); toast('Thermal injury >43 °C — more flow or pause', 'bad', 'heat', 5);
+    // blanching builds by thermal dose (doubles per °C over 43) and shows down the lumen, inside the scope view
+    G.thermDose = (G.thermDose || 0) + Math.pow(2, G.temp - 43) * dt;
+    while (G.thermDose >= 1.5) { G.thermDose -= 1.5; injure('thermal', p.s + mr(3.5, 6), mr(0, 6.28), mr(1.0, 1.4), 0, G.temp > 46 ? 2 : 1); }
+  }
+  // visibility clears with flow
+  G.dust = Math.max(0, G.dust - G.dust * (0.12 + G.flow * 1.1) * dt);
+  G.blood = Math.max(0, G.blood - G.blood * (0.08 + G.flow * 0.8) * dt);
+  // stones: retropulsion, settle back, migration
+  for (const st of G.stones) {
+    if (st.phase !== 'alive' || st.held) continue;
+    st.vs *= Math.exp(-3.2 * dt); st.s += st.vs * dt;
+    if (Math.abs(st.vs) < 0.3 && st.s > st.s0) st.s = Math.max(st.s0, st.s - 0.45 * dt);
+    st.s = Math.max(st.s, p.s + rOf(st) + 1.0);
+    st.vx *= Math.exp(-3 * dt); st.vy *= Math.exp(-3 * dt);
+    st.x += (st.vx + (st.hx - st.x) * 0.4 + Math.sin(G.t * 0.7 + st.i) * 0.05) * dt;
+    st.y += (st.vy + (st.hy - st.y) * 0.4 + Math.cos(G.t * 0.6 + st.i) * 0.05) * dt;
+    st.flash *= Math.exp(-dt * 8);
+    if (st.s > UPJ_S - 0.5) migrateStone(st);
+  }
+  // fragments float, drift up with the irrigant, can wash into the kidney
+  for (const f of G.frags) {
+    if (f.gone || f.held) continue;
+    f.vs *= Math.exp(-2.5 * dt); f.vx *= Math.exp(-3 * dt); f.vy *= Math.exp(-3 * dt); f.bob += dt;
+    const behind = f.s < p.s - 0.3;
+    if (!behind) f.lodge = null; else if (f.lodge == null) f.lodge = f.s - mr(2, 5);
+    // ahead: the irrigant carries it up; behind the tip: the outflow around the scope carries it down until it lodges
+    f.s += (f.vs + (behind ? (f.s > f.lodge ? -(0.25 + G.flow * 0.4) : 0) : G.flow * 0.3)) * dt;
+    if (f.s < 0.8) { killFrag(f, false); continue; } // washed into the bladder — it'll pass
+    f.x += (f.vx + Math.sin(f.bob * 0.9) * 0.08) * dt; f.y += (f.vy + Math.cos(f.bob * 0.7) * 0.08) * dt;
+    const lim = Math.max(0.05, baseR(f.s) * squeeze(f.s) - rOf(f) - 0.05), fm = Math.hypot(f.x, f.y);
+    if (fm > lim) { f.x *= lim / fm; f.y *= lim / fm; f.vx *= -0.5; f.vy *= -0.5; }
+    if (f.left) { if (f.s < p.s - 1.5) killFrag(f, false); continue; }
+    const fr = rOf(f), ahead = f.s - p.s;
+    if (f.slip) {
+      // a slipped piece shoots past along the wall; it only bumps off the tip if it's squarely in the scope's way
+      if (ahead < -0.3 && !f.slipSeen) { f.slipSeen = true; G.slips++; toast("A fragment slipped past the scope — it's behind you (check the fluoro)", 'warn', 'slip', 6); }
+      if (ahead > 0.3 && f.slipSeen) f.slip = false; // back in front after a pull-back: normal rules again
+      else if (ahead > -0.4 && ahead < fr + 0.6 && Math.hypot(f.x - p.x, f.y - p.y) < SCOPE_R + fr + 0.1) { f.s = p.s + fr + 0.6; f.vs = Math.max(f.vs, 0); }
+    } else if (f.s < p.s + fr + 0.6) { f.s = p.s + fr + 0.6; f.vs = Math.max(f.vs, 0); } // everything else is pushed ahead of the tip
+    if (f.s > UPJ_S + 2 || f.s > G.stones[f.owner].s0 + 26) {
+      G.residual++; G.migFrags++; killFrag(f, false);
+      toast('A fragment washed up toward the kidney (residual)', 'warn', 'fmig', 3);
+    }
+  }
+  // basket state machine
+  if (bk.state !== 'idle') {
+    bk.t += dt; const o = bk.target;
+    if (bk.state === 'out' && bk.t >= 0.45) {
+      if (o.d >= 4) { bk.state = 'stuck'; bk.t = 0; SFX.stuck(); toast(`${o.d.toFixed(1)} mm won't come down the ureter — releasing`, 'bad', 'stuck', 0); }
+      else { bk.state = 'retract'; bk.t = 0; bk.cap = true; }
+    } else if (bk.state === 'stuck') {
+      G.hp -= 10 * dt; G.lastLoss = 'basket'; G.hurt = 1; G.shake = Math.max(G.shake, 0.06);
+      injure('scrape', bk.os, Math.atan2(bk.oy, bk.ox), 0.7, 0.3, 2);
+      if (bk.t >= 0.9) { o.held = false; bk.state = 'retract'; bk.t = 0; bk.cap = false; toast('Never drag what won\'t pass — break it smaller (avulsion risk)', 'warn', 'avul', 0); }
+    } else if (bk.state === 'retract' && bk.t >= 0.6) {
+      if (bk.cap) {
+        bk.state = 'carry'; G.trip = { phase: 'out', back: p.s, t0: G.t };
+        toast(G.trips ? 'Withdrawing with the basket…' : 'No access sheath: every basketed piece rides out to the bladder and back. The anesthesia clock keeps running.', 'warn', 'trip', G.trips ? 3 : 0);
+      } else { bk.state = 'idle'; bk.target = null; }
+    }
+  }
+  // zone clear?
+  for (const st of G.stones) {
+    if (st.phase !== 'cleanup') continue;
+    const n = G.frags.filter(f => !f.gone && f.owner === st.i && !f.left).length;
+    if (n === 0) { st.clearT += dt; if (st.clearT > 0.6) { st.phase = 'done'; toast('Zone clear ✓', 'good', 'zc' + st.i, 0); SFX.clear(); } }
+    else st.clearT = 0;
+  }
+  G.frags = G.frags.filter(f => !f.gone);
+  // alarms + fail / win
+  if (G.P > 40) { G.alarmT -= dt; if (G.alarmT <= 0) { SFX.alarm(); G.alarmT = 0.7; } }
+  G.hp = Math.min(100, G.hp); G.minHp = Math.min(G.minHp, G.hp);
+  G.hurt = Math.max(0, G.hurt - dt * 2.5);
+  if (G.hp <= 0) return endRun(G.lastLoss === 'thermal' ? 'thermal' : 'perf');
+  if (G.sepsis >= 100) return endRun('sepsis');
+  if (p.s >= END_S) return endRun('done');
+}
+// one visible laser pulse in the fragmenting regime: flash, shockwave, retropulsion; breaks fragments
+function kick(tgt, nearWall, L) {
+  SFX.pulse(); G.shake = Math.max(G.shake, 0.09 * Math.min(1, L.J / 1.5)); G.dust = Math.min(100, G.dust + 2.5 * L.f);
+  if (!tgt) {
+    if (nearWall) { G.hp -= 3 * L.f; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 8); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4); injure('burn', burnS(G.p), Math.atan2(G.p.y, G.p.x), mr(0.65, 0.8), 0, L.J >= 0.9 ? 2 : 1); }
+    return;
+  }
+  const o = tgt.o, T = TYPES[o.type];
+  worldAt(o.s - rOf(o) * 0.8, o.x, o.y, hitW); frameAt(o.s, F3);
+  if (L.J >= 0.9) ringAt(hitW, F3.t);
+  hitLight.position.copy(hitW); hitLight.intensity = 40 * L.f; o.flash = 1.4;
+  for (let i = 0; i < 18; i++) dustPS.emit(hitW, V2.set(mr(-3, 3), mr(-3, 3), mr(-3, 3)), [1, 0.92, 0.7], mr(0.05, 0.14), mr(0.2, 0.5), 1, 3);
+  const push = 3.0 * T.retro * Math.pow(8 / Math.max(o.d, 2), 1.5) * L.kickPush;
+  if (!o.isFrag) { o.vs += push; o.pulses++; o.vx += mr(-0.5, 0.5) * L.f; o.vy += mr(-0.5, 0.5) * L.f; }
+  else {
+    o.vs += push * 1.4;
+    if (L.f > 0.5) {
+      if (o.d >= 3) {
+        const usable = o.V * (1 - T.sand);
+        for (let k = 0; k < 2; k++) { const a = mr(0, 6.28); spawnFrag(G.stones[o.owner], usable / 2, o.s, o.x + Math.cos(a) * 0.2, o.y + Math.sin(a) * 0.2, push * 0.4, Math.cos(a) * 1.5, Math.sin(a) * 1.5); }
+      }
+      if (G.rateObj === o) G.rateObj = null;
+      killFrag(o, true);
+    }
+  }
+}
+
+// ───────────────────────── visuals
+const scopeQ = new THREE.Quaternion(), rollQ = new THREE.Quaternion(), M4 = new THREE.Matrix4(), ZAX = new THREE.Vector3(0, 0, 1), negT = new THREE.Vector3();
+const FLASH_C = new THREE.Color(1, 0.85, 0.6);
+const camLook = new THREE.Vector3(), camWant = new THREE.Vector3(), lookWant = new THREE.Vector3();
+function placeObjects(dt) {
+  for (const st of G.stones) {
+    if (st.phase !== 'alive') continue;
+    worldAt(st.s, st.x, st.y, st.mesh.position);
+    st.mesh.scale.setScalar(rOf(st));
+    st.mesh.rotation.x += st.spin.x * dt; st.mesh.rotation.y += st.spin.y * dt; st.mesh.rotation.z += st.spin.z * dt;
+    st.mat.emissive.setHex(TYPES[st.type].emis).lerp(FLASH_C, Math.min(0.35, st.flash * 0.3));
+  }
+  for (const f of G.frags) {
+    worldAt(f.s, f.x, f.y, f.mesh.position);
+    f.mesh.scale.setScalar(rOf(f));
+    f.mesh.rotation.x += f.spin.x * dt; f.mesh.rotation.y += f.spin.y * dt;
+  }
+}
+function updateScene(dt) {
+  const p = G.p;
+  frameAt(p.s, F1);
+  worldAt(p.s, p.x, p.y, V1); // scope tip
+  // scope pose: forward = track tangent, rolled by lateral velocity (banking)
+  negT.copy(F1.t).negate();
+  M4.makeBasis(F1.r, F1.u, negT); scopeQ.setFromRotationMatrix(M4);
+  rollQ.setFromAxisAngle(ZAX, -p.vx * 0.12); scopeQ.multiply(rollQ);
+  rollQ.setFromEuler(new THREE.Euler(p.vy * 0.05, -p.vx * 0.05, 0)); scopeQ.multiply(rollQ);
+  scope.position.copy(V1); scope.quaternion.copy(scopeQ);
+  scope.updateMatrixWorld(); tipW.set(0.12, -0.12, -0.33).applyMatrix4(scope.matrixWorld);
+  // camera
+  if (camMode === 'chase') {
+    G.eng = lerp(G.eng || 0, p.v < 1.5 ? 1 : 0, Math.min(1, dt * 2));
+    const e = G.eng, cs = Math.max(0, p.s - lerp(5.2, 3.7, e)); frameAt(cs, F2);
+    let ox = p.x * 0.55, oy = p.y * 0.55 + lerp(1.2, 1.65, e); const lim = baseR(cs) * squeeze(cs) - 0.45, mm = Math.hypot(ox, oy);
+    if (mm > lim) { ox *= lim / mm; oy *= lim / mm; }
+    camWant.copy(F2.p).addScaledVector(F2.r, ox).addScaledVector(F2.u, oy);
+    frameAt(p.s + lerp(7, 5.5, e), F3); lookWant.copy(F3.p).addScaledVector(F3.r, p.x * 0.75).addScaledVector(F3.u, p.y * 0.75 + lerp(0.45, 0.25, e));
+    camera.up.copy(F2.u);
+  } else {
+    camWant.copy(V1).addScaledVector(F1.t, -0.05);
+    frameAt(p.s + 6, F3); lookWant.copy(F3.p).addScaledVector(F3.r, p.x).addScaledVector(F3.u, p.y);
+    camera.up.copy(F1.u);
+  }
+  const k = 1 - Math.exp(-dt * (10 + p.v * 2.5));
+  camera.position.lerp(camWant, k); camLook.lerp(lookWant, k);
+  camera.lookAt(camLook);
+  if (G.shake > 0.002) { camera.position.add(V2.set(mr(-1, 1), mr(-1, 1), mr(-1, 1)).multiplyScalar(G.shake)); G.shake *= Math.exp(-dt * 9); }
+  // lights ride the scope
+  spot.position.copy(V1).addScaledVector(F1.u, 0.5).addScaledVector(F1.r, 0.3); spot.target.position.copy(V1).addScaledVector(F1.t, 8); fill.position.copy(V1).addScaledVector(F1.t, 0.6);
+  rim.position.copy(V1).addScaledVector(F1.t, -1.6).addScaledVector(F1.u, 0.9);
+  // ghost the scope while a target is locked so the impact stays visible
+  const op = lerp(SCOPE_MATS[0].opacity, G.lock ? 0.4 : 1, Math.min(1, dt * 8));
+  for (const m of SCOPE_MATS) m.opacity = op;
+  hitLight.intensity *= Math.exp(-dt * 14);
+  placeObjects(dt);
+  // beams
+  const tgt = G.tgt;
+  const hitDs = tgt ? tgt.ds - rOf(tgt.o) * 0.85 : BEAM_RANGE;
+  worldAt(p.s + Math.max(0.3, hitDs), tgt ? lerp(p.x, tgt.o.x, 0.6) : p.x, tgt ? lerp(p.y, tgt.o.y, 0.6) : p.y, hitW);
+  const L = G.L || laserNums(G.las.J, G.las.Hz);
+  const firing = !!(input.pa || input.pb || keys.KeyJ || keys.KeyK || input.fire || keys.Space) && G.bk.state === 'idle' && state === 'play' && !G.pend && !G.trip;
+  aimBeam.visible = aimDot.visible = !G.pend && !G.trip; // the aiming beam drops out in standby
+  setBeam(aimBeam, tipW, hitW, 0.012);
+  aimDot.position.copy(hitW); aimDot.scale.setScalar(G.lock ? 0.5 : 0.28);
+  aimDot.material.color.setRGB(G.lock ? 0.4 : 1.6, G.lock ? 3 : 0.4, G.lock ? 0.9 : 0.3);
+  const dustBeam = firing && L.f < 0.5, fragFlash = firing && L.kickHz > 0 && G.fragCD > 1 / L.kickHz - 0.06;
+  beamCore.visible = beamGlow.visible = !!(dustBeam || fragFlash); // three.js only skips visible === false
+  if (beamCore.visible) {
+    const w = fragFlash ? 0.06 : 0.025 * mr(0.6, 1.3);
+    setBeam(beamCore, tipW, hitW, w); setBeam(beamGlow, tipW, hitW, w * 4);
+  }
+  hitGlow.position.copy(hitW);
+  hitGlow.material.opacity = tgt && (dustBeam || fragFlash) ? (fragFlash ? 1 : mr(0.5, 1)) : 0;
+  hitGlow.scale.setScalar(fragFlash ? 1.6 : mr(0.5, 0.9));
+  if (tgt && dustBeam) {
+    hitLight.position.copy(hitW).addScaledVector(F1.t, -0.4); hitLight.intensity = Math.max(hitLight.intensity, mr(3, 6));
+    for (let i = 0; i < 3; i++) dustPS.emit(hitW, V2.set(mr(-1.2, 1.2), mr(-1.2, 1.2), mr(-1.2, 1.2)).addScaledVector(F1.t, -mr(0.5, 1.5)), [0.86, 0.83, 0.76], mr(0.12, 0.34), mr(1.2, 2.4), 0.45, 1.2, 0.1);
+    if (Math.random() < 0.6) dustPS.emit(hitW, V2.set(mr(-3, 3), mr(-3, 3), mr(-3, 3)), [1, 0.95, 0.75], mr(0.03, 0.07), mr(0.1, 0.25), 1, 2);
+  }
+  // haze: ambient motes thicken with the dust level
+  if (G.dust > 4) { const n = G.dust / 30; for (let i = 0; i < n; i++) { worldAt(p.s + mr(0.5, 7), mr(-2, 2), mr(-2, 2), V3); dustPS.emit(V3, V2.set(mr(-0.2, 0.2), mr(-0.2, 0.2), mr(-0.2, 0.2)), [0.8, 0.77, 0.7], mr(0.15, 0.35), mr(1, 2), 0.25, 1); } }
+  // basket
+  const bk = G.bk;
+  basket.visible = bkLine.visible = bk.state !== 'idle';
+  if (basket.visible) {
+    const o = bk.target, R = Math.max(0.32, rOf(o) * 1.15);
+    worldAt(bk.os, bk.ox, bk.oy, V2);
+    let ext = bk.state === 'out' ? Math.min(1, bk.t / 0.45) : bk.state === 'stuck' ? 1 : bk.state === 'carry' ? 0 : 1 - Math.min(1, bk.t / 0.6);
+    V3.lerpVectors(tipW, V2, ext).addScaledVector(F1.t, R * 1.15 * (1 - ext));
+    basket.position.copy(V3); basket.quaternion.copy(scopeQ);
+    const open = bk.state === 'out' ? 1.25 : 0.92;
+    basket.scale.set(R * open, R * open, R);
+    if (bk.state === 'stuck') basket.position.add(V2.set(mr(-0.04, 0.04), mr(-0.04, 0.04), 0));
+    if ((bk.state === 'retract' && bk.cap) || bk.state === 'stuck' || bk.state === 'carry') o.mesh.position.copy(basket.position); // the held stone rides inside the basket
+    const lp = bkLine.geometry.attributes.position; lp.setXYZ(0, tipW.x, tipW.y, tipW.z);
+    V2.copy(F1.t).multiplyScalar(R * 1.1); lp.setXYZ(1, V3.x - V2.x, V3.y - V2.y, V3.z - V2.z); lp.needsUpdate = true;
+  }
+  // pinch-point guide rings: green while you're centred enough to pass clean
+  const m0 = Math.hypot(p.x, p.y);
+  PINCHES.forEach((k, i) => {
+    const r = pinchRings[i], d = k.s - p.s, fade = smooth(45, 22, d) * smooth(-1, 1.5, d);
+    r.visible = fade > 0.01;
+    if (!r.visible) return;
+    const inside = m0 < (k.r - SCOPE_R) * 0.8;
+    r.material.color.setRGB(inside ? 0.3 : 2.4, inside ? 2.2 : 1.3, inside ? 0.6 : 0.2);
+    r.material.opacity = 0.85 * fade * (G.trip ? 0.3 : 1);
+  });
+  for (const m of marks) placeMark(m);
+  // shockwaves
+  for (const r of rings) if (r.t < 1) { r.t += dt / 0.35; r.m.scale.setScalar(0.25 + r.t * 1.7); r.m.material.opacity = Math.max(0, 1 - r.t) * 0.45; if (r.t >= 1) r.m.visible = false; }
+  // fog: dust whitens it, blood reddens it
+  scene.fog.color.copy(BASE_FOG).lerp(DUST_FOG, G.dust / 100 * 0.75).lerp(BLOOD_FOG, G.blood / 100 * 0.7);
+  scene.fog.density = 0.04 + G.dust * 0.0022 + G.blood * 0.0016;
+  // particles drift with the irrigant (away from the scope)
+  const fl = G.flow * 3;
+  dustPS.update(dt, F1.t.x * fl, F1.t.y * fl, F1.t.z * fl);
+  bloodPS.update(dt, F1.t.x * fl * 0.6, F1.t.y * fl * 0.6, F1.t.z * fl * 0.6);
+}
+function attract(dt, t) {
+  // title-screen fly-through
+  const s = 8 + (t * 5) % 230;
+  frameAt(s, F1); frameAt(s + 6, F3);
+  camera.position.copy(F1.p).addScaledVector(F1.u, 0.3); camera.up.copy(F1.u); camera.lookAt(F3.p);
+  spot.position.copy(camera.position); spot.target.position.copy(F3.p); fill.position.copy(camera.position);
+  scope.visible = false; for (const m of [aimBeam, beamCore, beamGlow, aimDot, hitGlow, basket, bkLine, ...pinchRings]) m.visible = false;
+}
+
+// ───────────────────────── fake fluoro run map (C-arm AP; radiopaque = dark, like the OR monitor)
+const RADIO = { UA: 0, COD: 0.9, COM: 0.95, CYS: 0.4 }; // uric acid is radiolucent; cystine faint
+const FL = { c: $('flc'), bg: null, noise: null };
+FL.g = FL.c.getContext('2d');
+// ureter course on the AP image as keyframes [s/END_S, x, y]: UVJ low and medial, out into the pelvis, over the pelvic brim, up the psoas to the UPJ
+const FL_KEYS = [[0, 0.34, 0.93], [12 / END_S, 0.39, 0.89], [0.12, 0.49, 0.86], [0.22, 0.53, 0.80], [0.33, 0.47, 0.72], [118 / END_S, 0.39, 0.66],
+  [0.52, 0.38, 0.55], [0.68, 0.40, 0.40], [0.86, 0.47, 0.26], [UPJ_S / END_S, 0.60, 0.18], [1, 0.67, 0.13]]; // over the TP tips, medial at the SI joint, bows laterally in the true pelvis
+const flCurve = new THREE.CatmullRomCurve3(FL_KEYS.map(k => new THREE.Vector3(k[1], k[2], 0)));
+function flPoint(s) {
+  const u = clamp(s / END_S, 0, 1); let k = 0;
+  while (k < FL_KEYS.length - 2 && u > FL_KEYS[k + 1][0]) k++;
+  const loc = clamp((u - FL_KEYS[k][0]) / (FL_KEYS[k + 1][0] - FL_KEYS[k][0]), 0, 1);
+  return flCurve.getPoint((k + loc) / (FL_KEYS.length - 1));
+}
+function flBackground() {
+  const S = FL.c.width, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), X = v => v * S;
+  g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
+  g.save(); g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, 6.283); g.clip();
+  const gr = g.createRadialGradient(S / 2, S / 2, S * 0.1, S / 2, S / 2, S / 2);
+  gr.addColorStop(0, '#c6c6c6'); gr.addColorStop(0.75, '#a9a9a9'); gr.addColorStop(1, '#6c6c6c');
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(238,238,238,0.18)'; g.beginPath(); g.ellipse(X(mr(0.3, 0.95)), X(mr(0.25, 0.75)), X(mr(0.03, 0.07)), X(mr(0.02, 0.05)), mr(0, 3), 0, 6.283); g.fill(); } // bowel gas
+  g.fillStyle = 'rgba(80,80,80,0.12)'; g.beginPath(); g.moveTo(X(0.3), X(0.15)); g.lineTo(X(0.42), X(0.15)); g.lineTo(X(0.62), X(0.6)); g.lineTo(X(0.46), X(0.62)); g.closePath(); g.fill(); // psoas
+  g.save(); g.translate(X(0.74), X(0.15)); g.rotate(-0.3); g.fillStyle = 'rgba(70,70,70,0.16)'; g.beginPath(); g.ellipse(0, 0, X(0.1), X(0.16), 0, 0, 6.283); g.fill(); g.restore(); // kidney
+  g.fillStyle = 'rgba(55,55,55,0.42)';
+  for (let i = 0; i < 5; i++) { // L1–L5
+    const y = 0.04 + i * 0.115; g.beginPath();
+    if (g.roundRect) g.roundRect(X(0.1), X(y), X(0.2), X(0.09), X(0.02)); else g.rect(X(0.1), X(y), X(0.2), X(0.09));
+    g.fill(); g.fillRect(X(0.3), X(y + 0.03), X(0.07), X(0.025)); // transverse process
+  }
+  g.beginPath(); g.moveTo(X(0.08), X(0.62)); g.lineTo(X(0.34), X(0.62)); g.lineTo(X(0.26), X(0.84)); g.lineTo(X(0.14), X(0.84)); g.closePath(); g.fill(); // sacrum
+  g.strokeStyle = 'rgba(55,55,55,0.42)'; g.lineCap = 'round';
+  g.lineWidth = X(0.05); g.beginPath(); g.moveTo(X(0.3), X(0.66)); g.quadraticCurveTo(X(0.55), X(0.42), X(0.92), X(0.5)); g.stroke(); // iliac wing
+  g.lineWidth = X(0.025); g.beginPath(); g.moveTo(X(0.32), X(0.7)); g.quadraticCurveTo(X(0.72), X(0.72), X(0.6), X(1.0)); g.stroke(); // pelvic inlet
+  g.lineWidth = X(0.02); g.beginPath(); g.moveTo(X(0.3), X(0.06)); g.quadraticCurveTo(X(0.6), X(0.1), X(0.85), X(0.22)); g.stroke(); // 12th rib
+  g.fillStyle = 'rgba(80,80,80,0.12)'; g.beginPath(); g.ellipse(X(0.3), X(0.95), X(0.16), X(0.1), 0, 0, 6.283); g.fill(); // bladder
+  g.strokeStyle = 'rgba(55,55,55,0.22)'; g.lineWidth = X(0.022); g.beginPath(); // residual contrast in the ureter
+  for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); i ? g.lineTo(X(q.x), X(q.y)) : g.moveTo(X(q.x), X(q.y)); }
+  g.stroke();
+  g.strokeStyle = 'rgba(22,22,22,0.75)'; g.lineWidth = X(0.006); g.beginPath(); g.moveTo(X(0.375), X(1.02)); // safety wire, coiled in the pelvis
+  for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); g.lineTo(X(q.x + 0.008), X(q.y)); }
+  g.arc(X(0.71), X(0.13), X(0.035), Math.PI, Math.PI * 2.8); g.stroke();
+  g.font = `700 ${X(0.045)}px system-ui`; g.fillStyle = 'rgba(255,255,255,0.8)'; g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = X(0.006);
+  for (const k of PINCHES) { const q = flPoint(k.s); g.beginPath(); g.moveTo(X(q.x + 0.03), X(q.y)); g.lineTo(X(q.x + 0.07), X(q.y)); g.stroke(); g.fillText(k.short, X(q.x + 0.08), X(q.y + 0.016)); }
+  g.restore();
+  g.strokeStyle = 'rgba(255,255,255,0.15)'; g.lineWidth = 2; g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, 6.283); g.stroke();
+  return c;
+}
+function flNoise() {
+  const c = document.createElement('canvas'); c.width = c.height = 96;
+  const g = c.getContext('2d'), im = g.createImageData(96, 96);
+  for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+  g.putImageData(im, 0, 0); return c;
+}
+function drawFluoro() {
+  const g = FL.g, S = FL.c.width, X = v => v * S, p = G.p;
+  if (!FL.bg) { FL.bg = flBackground(); FL.noise = flNoise(); }
+  g.globalAlpha = 1; g.drawImage(FL.bg, 0, 0);
+  g.save(); g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, 6.283); g.clip();
+  // the scope: radiopaque shaft from the bladder up to the tip
+  g.strokeStyle = 'rgba(16,16,16,0.92)'; g.lineWidth = X(0.022); g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(X(0.36), X(1.02));
+  const n = Math.max(2, Math.ceil(p.s / 3));
+  for (let i = 0; i <= n; i++) { const q = flPoint(i / n * p.s); g.lineTo(X(q.x), X(q.y)); }
+  g.stroke();
+  const tip = flPoint(p.s);
+  g.fillStyle = '#080808'; g.beginPath(); g.arc(X(tip.x), X(tip.y), X(0.013), 0, 6.283); g.fill();
+  // stones over the scope (a faint rim keeps them readable where they overlap the tip); uric acid stays invisible
+  const dot = (q, d, a) => { if (a <= 0) return; g.beginPath(); g.arc(X(q.x + 0.004), X(q.y), Math.max(1.6, d * 0.7), 0, 6.283); g.fillStyle = `rgba(18,18,18,${a})`; g.fill(); g.strokeStyle = 'rgba(235,235,235,0.45)'; g.lineWidth = 1.2; g.stroke(); };
+  for (const st of G.stones) if (st.phase === 'alive' && !st.held) dot(flPoint(st.s), st.d, RADIO[st.type]);
+  for (const f of G.frags) if (!f.gone && !f.held) dot(flPoint(f.s), f.d, RADIO[f.type]);
+  let mi = 0; // a stone pushed into the kidney still shows — that's how migration is confirmed
+  for (const st of G.stones) if (st.how === 'migrated') dot({ x: 0.70 + (mi++) * 0.03, y: 0.21 }, st.d, RADIO[st.type]);
+  if (G.bk.state === 'carry') { g.strokeStyle = 'rgba(10,10,10,0.9)'; g.lineWidth = X(0.008); g.beginPath(); g.arc(X(tip.x), X(tip.y - 0.035), X(0.022), 0, 6.283); g.stroke(); }
+  g.globalAlpha = 0.09; g.drawImage(FL.noise, -mr(0, 24), -mr(0, 24), S + 24, S + 24); g.globalAlpha = 1; // quantum mottle
+  g.restore();
+}
+
+// ───────────────────────── HUD
+const el = id => $(id);
+const HUD = { irp: el('gVal'), needle: el('needle'), flowV: el('flowV'), tempV: el('tempV'), sep: el('sepBar'), hp: el('hpBar'), vis: el('visV'), score: el('scoreV'), stage: el('stage'), target: el('target'), me: el('progMe'), banner: el('banner'), moveOn: el('moveOn'), hurt: el('hurt'), fill: el('flowFill'), ftxt: el('flowTxt'), fps: el('fps'), orT: el('orT') };
+const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const cache = new Map();
+function setT(e, v) { if (cache.get(e) !== v) { cache.set(e, v); e.textContent = v; } }
+function setS(e, k, v) { const key = e.id + k; if (cache.get(key) !== v) { cache.set(key, v); e.style[k] = v; } }
+function arcPath(v0, v1) {
+  const R = 62, cx = 80, cy = 84, a0 = Math.PI - v0 / 60 * Math.PI, a1 = Math.PI - v1 / 60 * Math.PI;
+  return `M ${cx + R * Math.cos(a0)} ${cy - R * Math.sin(a0)} A ${R} ${R} 0 0 1 ${cx + R * Math.cos(a1)} ${cy - R * Math.sin(a1)}`;
+}
+el('gG').setAttribute('d', arcPath(0, 30)); el('gA').setAttribute('d', arcPath(30.6, 40)); el('gR').setAttribute('d', arcPath(40.6, 60));
+el('flowZone').style.bottom = ((40 - 6) / 54 * 100) + '%'; // where flow tips IRP past 40
+function buildProgress() {
+  const bar = el('prog');
+  bar.querySelectorAll('.pm,.pupj').forEach(n => n.remove());
+  const u = document.createElement('div'); u.className = 'pupj'; u.style.left = (UPJ_S / END_S * 100) + '%'; bar.appendChild(u);
+  G.stones.forEach(st => { const d = document.createElement('div'); d.className = 'pm alive'; d.style.left = (st.s0 / END_S * 100) + '%'; st.pm = d; bar.appendChild(d); });
+}
+function score() {
+  let sc = 0;
+  for (const st of G.stones) {
+    if (st.phase === 'done' && st.how !== 'migrated') sc += 600;
+    if (st.how === 'migrated') sc -= 600;
+    if (st.specimens) sc += 250;
+  }
+  return Math.round(sc - G.residual * 200 + G.bonus);
+}
+function updateHUD() {
+  const p = G.p;
+  setT(HUD.irp, Math.round(G.P) + '');
+  HUD.needle.setAttribute('transform', `rotate(${(clamp(G.P, 0, 60) / 60 * 180 - 90).toFixed(1)} 80 84)`);
+  HUD.irp.setAttribute('fill', G.P > 40 ? '#f87171' : G.P > 30 ? '#fbbf24' : '#efe9e6');
+  setT(HUD.flowV, Math.round(G.flow * 100) + '%');
+  setT(HUD.tempV, G.temp.toFixed(1) + '°');
+  HUD.tempV.style.color = G.temp > 43 ? '#f87171' : G.temp > 41 ? '#fbbf24' : '';
+  setS(HUD.sep, 'width', clamp(G.sepsis, 0, 100).toFixed(0) + '%');
+  setS(HUD.sep, 'background', G.sepsis > 60 ? '#ef4444' : G.sepsis > 25 ? '#f59e0b' : '#22c55e');
+  setS(HUD.hp, 'width', clamp(G.hp, 0, 100).toFixed(0) + '%');
+  setS(HUD.hp, 'background', G.hp < 35 ? '#ef4444' : G.hp < 65 ? '#f59e0b' : '#22c55e');
+  setT(HUD.vis, Math.round(G.vis * 100) + '%');
+  setT(HUD.score, score() + '');
+  setT(HUD.stage, stageName(p.s));
+  setS(HUD.me, 'left', clamp(p.s / END_S * 100, 0, 100).toFixed(1) + '%');
+  setS(HUD.fill, 'height', (G.flow * 100).toFixed(0) + '%');
+  setT(HUD.ftxt, Math.round(G.flow * 100) + '');
+  setT(HUD.orT, fmtT(G.t)); HUD.orT.style.color = G.t > 240 ? '#f87171' : G.t > 180 ? '#fbbf24' : '';
+  drawFluoro();
+  for (const st of G.stones) st.pm.className = 'pm ' + (st.how === 'migrated' ? 'mig' : st.phase);
+  // target readout
+  let txt = '', cls = '';
+  const near = G.stones.find(s => s.phase === 'alive' && s.s - p.s < 14);
+  if (G.vis <= 0.35 && (G.tgt || near)) { txt = 'VISIBILITY LOST — more flow'; cls = 'blind'; }
+  else if (G.tgt) {
+    const o = G.tgt.o;
+    if (o.isFrag) txt = `FRAGMENT · ${o.d.toFixed(1)} mm · ${o.d >= 4 ? 'too big to basket' : 'basketable'}`;
+    else txt = `STONE ${o.i + 1} · ${o.d.toFixed(1)} mm · ${o.hu.toLocaleString()} HU`;
+    if (G.firing && G.rateObj === o && o.rate > 0.005) txt += ` · −${o.rate.toFixed(2)} mm/s`;
+    cls = 'lock';
+  } else if (near) txt = `STONE ${near.i + 1} ahead · ${near.d.toFixed(1)} mm · ${near.hu.toLocaleString()} HU — line up the aiming beam`;
+  const tcls = cls + (txt ? '' : ' hidden');
+  if (HUD.target.dataset.c !== tcls) { HUD.target.className = tcls; HUD.target.dataset.c = tcls; }
+  setT(HUD.target, txt);
+  // banner
+  let b = '', red = false;
+  const pn = pinchNear(p.s), nearUpj = G.stones.some(s => s.phase === 'alive' && s.s > UPJ_S - 9);
+  const curSt = G.stones.find(s => s.phase !== 'done');
+  const behindF = !!curSt && G.frags.some(f => !f.gone && !f.left && !f.held && f.owner === curSt.i && f.s < p.s - 0.3);
+  if (G.P > 40) { b = 'IRP > 40 mmHg — PYELOVENOUS BACKFLOW'; red = true; }
+  else if (G.bk.state === 'stuck') { b = 'BASKET STUCK'; red = true; }
+  else if (G.trip) b = G.trip.phase === 'out' ? 'WITHDRAWING WITH THE BASKET ↓' : 'RE-ENTERING ↑  BACK UP TO THE STONE';
+  else if (nearUpj) { b = 'STONE AT THE UPJ — EASE OFF THE PULSES'; red = true; }
+  else if (G.pend) b = 'LASER STANDBY';
+  else if (input.back || keys.KeyB) b = 'PULLING BACK ↓';
+  else if (behindF) b = '⬇ FRAGMENT BEHIND THE SCOPE — HOLD PULL BACK';
+  else if (pn && pn.d > 0 && pn.d < 18) b = `PINCH POINT · ${pn.k.name} — CENTER THE SCOPE`;
+  else if (G.wave.on && G.wave.s > p.s && G.wave.s - p.s < 24) b = 'PERISTALSIS ↓  CENTER THE SCOPE';
+  setT(HUD.banner, b); HUD.banner.classList.toggle('on', !!b); HUD.banner.classList.toggle('red', red);
+  const cur = G.stones.find(s => s.phase !== 'done');
+  HUD.moveOn.classList.toggle('hidden', !(cur && cur.phase === 'cleanup' && !G.trip && G.bk.state === 'idle' && G.frags.some(f => f.owner === cur.i && !f.left && !f.held)));
+  setS(HUD.hurt, 'opacity', Math.max(G.hurt, G.blood / 250).toFixed(2));
+}
+
+// ───────────────────────── screens
+const screen = $('screen');
+function hideScreen() { screen.classList.add('hidden'); }
+const defHint = () => SETTINGS.invert ? 'push up → tip goes down (lever-style)' : 'push up → tip goes up';
+const segHTML = (k, opts) => `<div class="seg" data-k="${k}">${opts.map(([v, label]) => `<button data-v="${v}" class="${String(SETTINGS[k]) === String(v) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
+function toolsHTML() {
+  const laser = SETTINGS.level === 'advanced'
+    ? `<div class="tool" style="grid-column:span 2"><b style="color:#93c5fd">TWO PEDALS · ENERGY × FREQUENCY</b>Program each pedal yourself (⚙ LASER). Low energy at high frequency dusts; from ~1.2 J it fragments. Retropulsion climbs steeply with pulse energy, heat with total watts (J × Hz). Max 120 W.</div>`
+    : `<div class="tool"><b style="color:var(--g)">LEFT PEDAL · DUST 0.4 J × 80 Hz</b>Continuous beam that grinds the stone to dust. No retropulsion, but it clouds the view and heats the lumen.</div>
+       <div class="tool"><b style="color:var(--a)">RIGHT PEDAL · FRAG 1.5 J × 8 Hz</b>Heavy pulses that break hard stones fast. Retropulsion pushes the stone up (past the UPJ = lost to the kidney). Leaves fragments — some slip behind the scope.</div>`;
+  return laser + `<div class="tool"><b style="color:#93c5fd">IRRIGATION</b>Flow clears dust and blood and cools the tip. It also raises intrarenal pressure. Above 40 mmHg, sepsis risk climbs.</div>
+    <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won't come down safely.</div>`;
+}
+function wireSegs(root, after) {
+  root.querySelectorAll('.seg').forEach(sg => sg.addEventListener('click', e => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    const raw = btn.dataset.v; SETTINGS[sg.dataset.k] = raw === 'true' ? true : raw === 'false' ? false : raw; saveSettings();
+    sg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === btn));
+    after && after(sg.dataset.k);
+  }));
+}
+function showBrief() {
+  state = 'brief'; closeLaserPanel(); document.body.classList.remove('ingame');
+  $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('scopeMask').classList.add('hidden');
+  const rows = G.stones.map(st => `<tr><td>${st.i + 1}</td><td>${st.loc}</td><td><b>${st.d0} mm</b></td><td><b>${st.hu.toLocaleString()} HU</b></td></tr>`).join('');
+  screen.innerHTML = `<div class="panel">
+    <h1>STONE <span>SQUADRON</span><span class="tag">3D PROTOTYPE</span></h1>
+    <p class="keys" style="margin:4px 0 0">build ${BUILD} · a work in progress — things may break</p>
+    <p>Fly the ureteroscope from the UVJ to the renal pelvis. Clear every stone on the way. Goal: <b>stone-free</b>, ureter intact, intrarenal pressure under control.</p>
+    <h2>PRE-OP NCCT</h2>
+    <table><tr><th>#</th><th>LOCATION</th><th>SIZE</th><th>DENSITY</th></tr>${rows}</table>
+    <p class="keys">Composition is unknown. Read the HU and how the stone looks on camera. Basket a fragment to confirm it.</p>
+    <h2>RUN SETTINGS</h2>
+    <div class="sets">
+      <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}<small id="defHint">${defHint()}</small></div>
+      <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
+      <div class="set"><span>LASER</span>${segHTML('level', [['presets', 'Presets'], ['advanced', 'Advanced J × Hz']])}</div>
+    </div>
+    <h2>YOUR TOOLS</h2>
+    <div class="tools" id="toolsBox">${toolsHTML()}</div>
+    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (UVJ, iliac crossing, UPJ) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>.</p>
+    <h2>CONTROLS</h2>
+    <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
+    Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
+    ${PHONE ? '<p class="keys">📱 Play in landscape. On iPhone, Share → <b>Add to Home Screen</b> and launch from the icon for full screen.</p>' : ''}
+    <div class="go stick"><button id="goBtn">SCRUB IN ▸</button>${G.fixed ? '' : '<button class="alt" id="firstBtn">Starter stones</button>'}${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
+  </div>`;
+  screen.classList.remove('hidden');
+  wireSegs(screen, () => { $('defHint').textContent = defHint(); $('toolsBox').innerHTML = toolsHTML(); });
+  $('goBtn').addEventListener('click', startPlay);
+  if (EMBED) $('exitBtn').addEventListener('click', () => toApp({ type: 'squadron:exit' }));
+  const fb = $('firstBtn'); if (fb) fb.addEventListener('click', () => { newRun(1, true); showBrief(); });
+}
+function startPlay() {
+  audioInit();
+  if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
+  hideScreen();
+  $('hud').classList.remove('hidden');
+  if (useTouch) $('touch').classList.remove('hidden');
+  camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase';
+  const fpv = camMode === 'scope';
+  $('scopeMask').classList.toggle('hidden', !fpv);
+  scope.visible = !fpv; fpFiber.visible = fpTip.visible = fpv;
+  camera.fov = fpv ? 78 : 68; camera.updateProjectionMatrix(); updateScale();
+  aimBeam.visible = aimDot.visible = hitGlow.visible = true; closeLaserPanel();
+  renderMode();
+  // snap camera behind the scope
+  frameAt(Math.max(0, G.p.s - 5.2), F2); camera.position.copy(F2.p).addScaledVector(F2.u, 1.2);
+  frameAt(G.p.s + 7, F3); camLook.copy(F3.p);
+  const warm = [basket, bkLine, beamCore, beamGlow, ...rings.map(r => r.m)];
+  const dummies = Object.keys(MAT_FRAG).map(k => { const m = new THREE.Mesh(FRAG_GEOS[k][0], MAT_FRAG[k]); worldAt(G.p.s + 3, 0, 0, m.position); m.scale.setScalar(0.001); scene.add(m); return m; });
+  for (const o of warm) o.visible = true;
+  try { renderer.compile(scene, camera); } catch (_) {}
+  for (const o of warm) o.visible = false; for (const m of dummies) scene.remove(m);
+  state = 'play'; fpsReset(); document.body.classList.add('ingame');
+  if (PORTRAIT_PHONE.matches) { togglePause(); rotPaused = true; } // started upright: wait for the turn
+  toast('Line up the green aiming beam on the stone, then fire', '', 'hint1', 0);
+}
+function quiet() { for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); input.fire = input.pa = input.pb = input.back = false; }
+function showPause() {
+  closeLaserPanel();
+  screen.innerHTML = `<div class="panel" style="width:min(480px,100%)"><h1 style="font-size:22px">PAUSED</h1>
+    <div class="sets" style="margin-top:14px">
+      <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}</div>
+      <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
+    </div>
+    <p class="keys">Graphics: ${Q.bloom ? 'bloom on' : 'bloom off'} · ${Q.pr.toFixed(2)}× resolution</p>
+    <div class="go"><button id="resBtn">RESUME</button><button class="alt" id="gfxBtn">${Q.bloom ? 'Bloom off' : 'Bloom on'}</button><button class="alt" id="quitBtn">Abort run</button></div></div>`;
+  screen.classList.remove('hidden');
+  wireSegs(screen, k => { if (k === 'cam') { camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase'; applyCam(); } });
+  $('resBtn').addEventListener('click', togglePause);
+  $('gfxBtn').addEventListener('click', () => { Q.bloom = !Q.bloom; if (Q.bloom && !composer) setupBloom(); showPause(); });
+  $('quitBtn').addEventListener('click', () => { state = 'play'; endRun('quit'); });
+}
+function endRun(reason) {
+  state = 'end'; quiet(); document.body.classList.remove('ingame'); rotPaused = false;
+  G.end = reason;
+  if (G.trip) { G.tripTime += G.t - G.trip.t0; G.trips++; if (G.bk.state === 'carry' && G.bk.target) capture(G.bk.target); G.trip = null; }
+  const aborted = reason !== 'done';
+  const migrated = G.stones.filter(s => s.how === 'migrated').length;
+  const stoneFree = !aborted && G.residual === 0 && migrated === 0;
+  let sc = score() + Math.round(G.minHp * 5) + Math.max(0, Math.round((240 - G.t) * 3)) - Math.round(G.timeOver40 * 20);
+  if (aborted) sc = Math.round(sc * 0.5);
+  sc = Math.max(0, sc);
+  const head = reason === 'perf' ? ['<span class="bd">ABORTED — URETERAL PERFORATION</span>', 'Integrity hit zero. Stop, place a stent, come back another day.']
+    : reason === 'thermal' ? ['<span class="bd">ABORTED — THERMAL INJURY</span>', 'The lumen stayed above 43 °C too long. Stop, place a stent — and watch for a stricture.']
+    : reason === 'sepsis' ? ['<span class="bd">ABORTED — UROSEPSIS</span>', 'Intrarenal pressure stayed above 40 mmHg too long. Stop, decompress, culture, antibiotics.']
+    : reason === 'quit' ? ['<span class="wn">RUN ABORTED</span>', '']
+    : stoneFree ? ['<span class="ok">STONE-FREE ✓</span>', 'Every stone cleared, nothing left behind.']
+    : ['<span class="wn">RESIDUAL STONE BURDEN</span>', `${G.residual} fragment${G.residual === 1 ? '' : 's'} ≥2 mm left${migrated ? ` · ${migrated} stone${migrated === 1 ? '' : 's'} pushed into the kidney` : ''}.`];
+  const how = st => st.how === 'dusted' ? 'Dusted' : st.how === 'fragmented' ? 'Fragmented' : st.how === 'basketed' ? 'Basketed whole' : st.how === 'migrated' ? '<span class="bd">Migrated to kidney</span>' : '<span class="wn">Not treated</span>';
+  const cards = G.stones.map(st => {
+    const T = TYPES[st.type];
+    const conf = st.specimens ? `<span class="ok">confirmed by specimen ✓ (${st.specimens})</span>` : '<span class="wn">unconfirmed — no specimen sent</span>';
+    return `<div class="sc"><div class="h"><span>Stone ${st.i + 1} · ${st.d0} mm · ${st.hu.toLocaleString()} HU — ${T.name}${T.alt ? ' (' + T.alt + ')' : ''}</span><span>${how(st)}</span></div>
+      <div class="keys">${st.loc} · ${conf} · ${st.pulses} frag pulses · ${st.dustT.toFixed(1)} s dusting · looks ${T.look}</div>
+      <p>${T.pearl}</p></div>`;
+  }).join('');
+  screen.innerHTML = `<div class="panel">
+    <h1 style="font-size:24px">${head[0]}</h1><p>${head[1]}</p>
+    <div class="stats">
+      <div class="stat"><small>SCORE</small><b>${sc.toLocaleString()}</b></div>
+      <div class="stat"><small>OR TIME</small><b>${fmtT(G.t)}</b></div>
+      <div class="stat"><small>BASKET TRIPS</small><b>${G.trips}${G.trips ? ` · ${Math.round(G.tripTime)} s` : ''}</b></div>
+      <div class="stat"><small>CLEAN PINCH PASSES</small><b>${G.cleanPasses}/${PINCHES.length}</b></div>
+      <div class="stat"><small>PEDAL SWITCHES · REPROGRAMS</small><b>${G.pedSwitches} · ${G.reprograms}</b></div>
+      <div class="stat"><small>RESIDUAL ≥2 MM</small><b>${G.residual}</b></div>
+      <div class="stat"><small>PEAK IRP</small><b class="${G.peakP > 40 ? 'bd' : G.peakP > 30 ? 'wn' : 'ok'}">${Math.round(G.peakP)}</b></div>
+      <div class="stat"><small>TIME &gt;40 MMHG</small><b>${G.timeOver40.toFixed(1)} s</b></div>
+      <div class="stat"><small>MIN INTEGRITY</small><b>${Math.max(0, Math.round(G.minHp))}%</b></div>
+    </div>
+    <h2>URETER</h2>${injuryCard(reason)}
+    <h2>STONE ANALYSIS</h2>${cards}
+    <h2>FEEDBACK</h2>
+    <div class="fb"><textarea id="fbNotes" placeholder="What felt off, confusing or fun? (optional) — then share or copy the report and text it over"></textarea>
+      <div class="go">${navigator.share ? '<button id="shareBtn">SHARE REPORT</button>' : ''}<button class="alt" id="copyBtn">Copy report</button><span id="fbMsg" class="keys"></span></div>
+      <textarea id="fbOut" class="hidden" readonly></textarea></div>
+    <div class="go"><button id="againBtn">NEW STONES ▸</button><button class="alt" id="sameBtn">Same stones</button>${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
+  </div>`;
+  if (EMBED) {
+    // one claim per run; the app clamps it again (150 coins / 80 xp)
+    toApp({ type: 'squadron:claim', coins: aborted ? 5 : Math.min(150, 20 + Math.round(sc / 25)), xp: aborted ? 2 : stoneFree ? 60 : 30 });
+    $('exitBtn').addEventListener('click', () => toApp({ type: 'squadron:exit' }));
+  }
+  G.endInfo = { sc, head: head[0].replace(/<[^>]+>/g, '') };
+  $('copyBtn').addEventListener('click', copyReport);
+  if ($('shareBtn')) $('shareBtn').addEventListener('click', shareReport);
+  screen.classList.remove('hidden');
+  $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); closeLaserPanel();
+  $('againBtn').addEventListener('click', () => { newRun((Math.random() * 1e9) | 0, false); showBrief(); });
+  $('sameBtn').addEventListener('click', () => { newRun(G.seed, G.fixed); showBrief(); });
+}
+
+// ───────────────────────── tester run report (share sheet / clipboard — no backend)
+function runReport() {
+  const ua = (navigator.userAgent.match(/iPhone|iPad|Android|Macintosh|Windows|Linux/) || ['?'])[0];
+  const inj = G.injury, g = pulsGrade(G.end), e = G.endInfo || { head: G.end || '?', sc: score() };
+  const notes = (($('fbNotes') && $('fbNotes').value) || '').trim() || '—';
+  return [
+    `Stone Squadron 3D — run report · build ${BUILD}`,
+    `Device: ${PHONE ? 'phone' : useTouch ? 'tablet' : 'desktop'} (${ua}) · ${innerWidth}×${innerHeight}`,
+    `Settings: deflection ${SETTINGS.invert ? 'inverted' : 'standard'} · ${camMode === 'scope' ? 'scope view' : 'chase cam'} · laser ${SETTINGS.level}`,
+    `Run: ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · OR time ${fmtT(G.t)}`,
+    `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
+    `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${Math.round(G.tripTime)} s) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
+    `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
+    `Notes: ${notes}`,
+  ].join('\n');
+}
+function fbSay(t) { const m = $('fbMsg'); if (m) m.textContent = t; }
+async function copyReport() {
+  const text = runReport();
+  try { await navigator.clipboard.writeText(text); fbSay('Copied — paste it in a text'); return; } catch (_) {}
+  const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+  document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (_) {} ta.remove();
+  if (ok) { fbSay('Copied — paste it in a text'); return; }
+  const box = $('fbOut'); box.value = text; box.classList.remove('hidden'); box.focus(); box.select(); fbSay('Select all + copy from the box below');
+}
+async function shareReport() {
+  try { await navigator.share({ title: 'Stone Squadron 3D run report', text: runReport() }); fbSay('Shared — thanks!'); }
+  catch (err) { if (!err || err.name !== 'AbortError') copyReport(); }
+}
+
+// ───────────────────────── bloom (optional; falls back to plain render)
+let composer = null, bloomPass = null;
+async function setupBloom() {
+  try {
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'), import('three/addons/postprocessing/OutputPass.js')]);
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.75, 0.45, 1.0);
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
+    resize();
+  } catch (e) { composer = null; Q.bloom = false; console.warn('bloom unavailable', e); }
+}
+
+// ───────────────────────── loop
+const useTouch = params.has('touch') || ('ontouchstart' in window) || matchMedia('(pointer: coarse)').matches;
+function updateScale() { const v = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); dustPS.mat.uniforms.uScale.value = v; bloodPS.mat.uniforms.uScale.value = v; }
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setPixelRatio(Q.pr); renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (composer) { composer.setPixelRatio(Q.pr); composer.setSize(w, h); }
+  updateScale();
+}
+addEventListener('resize', resize);
+let fpsFrames = 0, fpsTime = 0, fpsShown = 0, fpsWin = 0, fpsSlow = 0;
+function fpsReset() { fpsFrames = 0; fpsTime = 0; fpsWin = 0; fpsSlow = 0; }
+let last = performance.now(), tAll = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const raw = (now - last) / 1000; last = now;
+  const dt = Math.min(0.05, raw); tAll += dt;
+  UNI.time.value = tAll;
+  if (state === 'play') { update(dt); }
+  if (state === 'brief') attract(dt, tAll);
+  else if (G && state !== 'brief') { if (state === 'play') { updateScene(dt); updateHUD(); } }
+  if (Q.bloom && composer) composer.render(); else renderer.render(scene, camera);
+  // auto quality: drop resolution + bloom if the device can't hold ~42 fps
+  if (state === 'play') {
+    fpsFrames++; fpsTime += raw;
+    if (fpsTime > 3) {
+      fpsShown = fpsFrames / fpsTime; fpsWin++;
+      fpsSlow = fpsWin > 1 && fpsShown < 40 ? fpsSlow + 1 : 0;
+      if (fpsSlow >= 2 && !Q.dropped) { Q.dropped = true; Q.pr = 1; Q.bloom = false; resize(); toast('Low-power graphics on', '', 'lq', 0); }
+      fpsFrames = 0; fpsTime = 0;
+    }
+    if (DEBUG) setT(HUD.fps, `${fpsShown.toFixed(0)} fps · s ${G.p.s.toFixed(1)} · frags ${G.frags.length} · dust ${G.dust.toFixed(0)} · P ${G.P.toFixed(0)}`);
+  }
+}
+if (DEBUG) HUD.fps.classList.remove('hidden');
+resize();
+newRun(params.has('seed') ? +params.get('seed') : 1, !params.has('seed'));
+showBrief();
+if (Q.bloom) setupBloom();
+requestAnimationFrame(frame);
+window.__sqBooted = true;
+// test hook (headless checks): read state, drive input, advance the sim without rAF
+window.__sq = {
+  get G() { return G; }, get state() { return state; }, input, keys, joy, Q,
+  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera,
+  step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) update(dt); if (state === 'play') { updateScene(dt); updateHUD(); } },
+};
+</script>
+</body>
+</html>
