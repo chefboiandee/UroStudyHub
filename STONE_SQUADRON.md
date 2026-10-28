@@ -27,12 +27,20 @@ intel you read should change what the right play is.
   - Pre-op antibiotic order. The verdict (`ABX_FX`) scales sepsis build-up and its starting
     value, and the debrief explains the call.
 
+- **OR chatter** (`CREW`, `say`, `chatter`): Star Fox-style comms box with cartoon portraits
+  and gibberish voice blips. The crew is Dr. Hawke (attending: coaching, reminders), Remy (scrub
+  tech: what the room sees) and Dr. Vance (anesthesia: pressure and the patient). Lines react to
+  the prep (antibiotic verdict, targets missed), each stone's HU or calyx, pinch points,
+  pressure, heat, visibility, the wall, retropulsion at the UPJ and fragments behind the scope.
+  The debrief opens with the attending's verdict. Can be turned off in settings (OR CHATTER).
+  Andrew likes it as a mental prep exercise for juniors.
+
 ## Roadmap (Andrew's list, roughly in order)
 
 1. **Debrief with medals.** Bronze, silver, gold and S rank, plus bonus objectives (stone-free,
    PULS 0, IRP never >40, specimen sent, time).
 2. **Music and sound design.** A score, plus better cues for the existing procedural SFX.
-3. **Radio chatter.** The attending and scrub tech as "wingmen" calling pressure, fragments, wins.
+3. ~~Radio chatter~~ — done (first pass). More lines per case type as cases are added.
 4. **Harder CT reading.** More stones across the stack, decoys (phleboliths, vascular
    calcification), and decisions such as whether to also treat kidney stones in a ureteral case.
 5. **Semirigid cases.** A semirigid scope in the distal ureter: different handling, no deflection.

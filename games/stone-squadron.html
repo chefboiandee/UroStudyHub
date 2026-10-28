@@ -137,6 +137,19 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 .seg button{font:700 14px/1 system-ui;padding:12px 15px;border:0;background:rgba(255,255,255,.05);color:var(--t);cursor:pointer}
 .seg button.on{background:var(--g);color:#032}
 .prep{width:min(1060px,100%)}
+#comms{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 106px);transform:translate(-50%,12px);width:min(460px,46vw);display:flex;gap:10px;align-items:center;padding:7px 12px 7px 7px;border-radius:14px;background:rgba(6,10,22,.84);border:1px solid var(--cc,#60a5fa);box-shadow:0 0 18px rgba(0,0,0,.6);opacity:0;transition:opacity .22s,transform .22s;pointer-events:none}
+#comms.on{opacity:1;transform:translate(-50%,0)}
+#comms .face{width:54px;height:54px;flex:none;border-radius:10px;overflow:hidden;border:2px solid var(--cc,#60a5fa);background:#0c1c33}
+#comms .face svg{display:block;width:100%;height:100%}
+#comms .who{font:800 10px/1 system-ui;letter-spacing:.14em;color:var(--cc,#60a5fa)}
+#comms .say{font:600 14px/1.3 system-ui;color:#fff;margin-top:4px}
+#comms.talk .mo{animation:flap .12s infinite alternate}
+@keyframes flap{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+.mo{transform-box:fill-box;transform-origin:center}
+.quote{display:flex;gap:10px;align-items:center;margin:10px 0 4px;padding:8px;border:1px solid var(--line);border-radius:12px;background:rgba(6,10,22,.6)}
+.quote .face{width:46px;height:46px;flex:none;border-radius:9px;overflow:hidden;border:2px solid #60a5fa}.quote .face svg{display:block;width:100%;height:100%}
+.quote p{margin:0}
+@media (max-height:500px){#comms{bottom:calc(env(safe-area-inset-bottom) + 84px);width:min(380px,44vw);padding:5px 9px 5px 5px}#comms .face{width:40px;height:40px}#comms .say{font-size:12px}}
 .prepgrid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:16px;margin-top:12px}
 @media (max-width:760px){.prepgrid{grid-template-columns:1fr}}
 #ctc{display:block;width:100%;max-width:min(420px,72vh);aspect-ratio:1;border-radius:10px;background:#000;touch-action:none;cursor:ns-resize;margin:0 auto}
@@ -211,6 +224,7 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
     <div class="btns"><button id="bCam" title="Camera (C)">📷</button><button id="bMute" title="Sound">🔊</button><button id="bPause" title="Pause (P)">⏸</button></div>
   </div>
   <div id="toasts"></div>
+  <div id="comms"><div class="face"></div><div><div class="who"></div><div class="say"></div></div></div>
   <div id="banner"></div>
   <button id="moveOn" class="hidden">MOVE ON ▸</button>
   <div id="mode">DUST · 0.4 J × 80 Hz</div>
@@ -257,7 +271,7 @@ const EMBED = params.has('embed') && window.parent !== window;
 const toApp = m => { try { window.parent.postMessage(m, location.origin); } catch (_) {} };
 const DEBUG = params.has('debug');
 const $ = id => document.getElementById(id);
-const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets' };
+const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets', chatter: true };
 const SETTINGS = (() => { try { return Object.assign({}, SET_DEF, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (_) { return Object.assign({}, SET_DEF); } })();
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch (_) {} }
 // cases unlock in order: finishing one opens the next (kept per device)
@@ -817,6 +831,18 @@ function pulsGrade(reason) {
   const d = G.worstDepth || 0;
   return reason === 'perf' ? ['≥3', 'perforation', 'bd'] : d >= 2 ? ['2', 'submucosal injury', 'bd'] : d >= 1 ? ['1', 'superficial mucosal injury / oedema', 'wn'] : ['0', 'no lesion', 'ok'];
 }
+// the attending's one-line verdict on the run
+function attQuote(reason, stoneFree) {
+  const [v] = abxVerdict(), g = pulsGrade(reason)[0];
+  if (reason === 'perf') return '"We stop when the ureter says stop. Stent it, let it heal, come back."';
+  if (reason === 'thermal') return '"You cooked it. Watts plus no flow equals heat. Remember that one."';
+  if (reason === 'sepsis') return v === 'wrong' || v === 'none' ? '"Septic. And it started in pre-op: the culture told you what grew."' : '"Septic. High pressure pushes bacteria into the bloodstream. Watch the gauge."';
+  if (reason === 'quit') return '"Live to fight another day."';
+  if (stoneFree && g === '0' && (v === 'best' || v === 'ok') && G.prep.found.size === G.stones.length) return '"Textbook. Prep, antibiotics, stone-free, no injury. I\'d let you do that one again."';
+  if (stoneFree) return v === 'wrong' ? '"Stone-free, but you got lucky with that antibiotic. Read the sensitivities."' : '"Stone-free. Now do it cleaner and faster."';
+  if (G.stones.some(st => st.how === 'migrated')) return '"You pushed it into the kidney. Near the UPJ, dust. Frag pulses mean retropulsion."';
+  return G.residual ? `"${G.residual} fragment${G.residual === 1 ? '' : 's'} left. Post-op CT will find ${G.residual === 1 ? 'it' : 'them'}, and so will the patient."` : '"Not bad. Not done, either."';
+}
 function prepCard() {
   const [v, why] = abxVerdict(), name = (ABX.find(a => a[0] === (G.prep.abx || 'none')) || ABX[0])[1];
   const lab = { best: 'Right call ✓', ok: 'Acceptable', weak: 'Not ideal', none: 'No prophylaxis', wrong: 'Doesn\'t cover it ✗' }[v];
@@ -1089,7 +1115,7 @@ function onOrient() {
 }
 if (PORTRAIT_PHONE.addEventListener) PORTRAIT_PHONE.addEventListener('change', onOrient); else PORTRAIT_PHONE.addListener(onOrient);
 function togglePause() {
-  if (state === 'play') { state = 'paused'; showPause(); quiet(); }
+  if (state === 'play') { state = 'paused'; showPause(); quiet(); commsEl.classList.remove('on', 'talk'); if (COMMS.cur) { COMMS.q.unshift(COMMS.cur); COMMS.cur = null; } }
   else if (state === 'paused') { state = 'play'; rotPaused = false; hideScreen(); }
 }
 
@@ -1103,6 +1129,91 @@ function toast(msg, cls = '', key = msg, gap = 3.5) {
   toastsEl.appendChild(d);
   while (toastsEl.children.length > 3) toastsEl.firstChild.remove();
   setTimeout(() => d.classList.add('out'), 2700); setTimeout(() => d.remove(), 3200);
+}
+
+// ───────────────────────── OR chatter: the crew on comms, Star Fox wingmate style (fictional characters)
+// attending = coaching + reminders, scrub tech = the room's eyes, anesthesia = pressure and the patient
+const CREW = {
+  att: { name: 'DR. HAWKE · ATTENDING', c: '#60a5fa', pitch: 140 },
+  tech: { name: 'REMY · SCRUB TECH', c: '#4ade80', pitch: 250 },
+  gas: { name: 'DR. VANCE · ANESTHESIA', c: '#c084fc', pitch: 195 },
+};
+function faceSVG(who) {
+  const skin = { att: '#e0b48a', tech: '#8d5a3b', gas: '#f1c9a5' }[who];
+  const cap = who === 'att' ? '<path d="M10 26 Q12 6 30 6 Q48 6 50 26 Z" fill="#2563eb"/><path d="M10 26 H50" stroke="#1e40af" stroke-width="3"/>'
+    : who === 'tech' ? '<path d="M10 25 Q12 7 30 7 Q48 7 50 25 Z" fill="#16a34a"/><circle cx="20" cy="15" r="2" fill="#86efac"/><circle cx="34" cy="12" r="2" fill="#86efac"/><circle cx="42" cy="19" r="2" fill="#86efac"/>'
+    : '<path d="M6 27 Q4 2 30 3 Q56 2 54 27 Q46 18 30 19 Q14 18 6 27 Z" fill="#9333ea"/><circle cx="16" cy="12" r="2.4" fill="#f0abfc"/><circle cx="29" cy="8" r="2.4" fill="#f0abfc"/><circle cx="42" cy="12" r="2.4" fill="#f0abfc"/>';
+  const eyes = who === 'att' ? '<circle cx="23" cy="32" r="5.5" fill="none" stroke="#111" stroke-width="2"/><circle cx="37" cy="32" r="5.5" fill="none" stroke="#111" stroke-width="2"/><path d="M28.5 32 H31.5" stroke="#111" stroke-width="2"/><circle cx="23" cy="32" r="1.8" fill="#111"/><circle cx="37" cy="32" r="1.8" fill="#111"/><path d="M17 24 L28 26 M43 24 L32 26" stroke="#3b2a1a" stroke-width="2.4" stroke-linecap="round"/>'
+    : '<ellipse cx="23" cy="32" rx="2.6" ry="3.2" fill="#111"/><ellipse cx="37" cy="32" rx="2.6" ry="3.2" fill="#111"/><path d="M18 26 Q23 24 27 26 M33 26 Q37 24 42 26" stroke="#2a1a10" stroke-width="2" fill="none" stroke-linecap="round"/>';
+  const mouth = who === 'tech' ? '<path d="M14 38 Q30 34 46 38 L44 52 Q30 56 16 52 Z" fill="#7dd3fc"/><path class="mo" d="M22 44 Q30 48 38 44" stroke="#0369a1" stroke-width="2" fill="none"/>' // mask: the pleats move
+    : `<ellipse class="mo" cx="30" cy="46" rx="6" ry="3.6" fill="#5b1a1a"/>`;
+  return `<svg viewBox="0 0 60 60"><rect width="60" height="60" fill="#0c1c33"/><path d="M8 60 Q30 46 52 60 Z" fill="${who === 'att' ? '#1e3a8a' : who === 'tech' ? '#166534' : '#6b21a8'}"/><ellipse cx="30" cy="34" rx="20" ry="22" fill="${skin}"/>${cap}${eyes}${mouth}</svg>`;
+}
+const COMMS = { q: [], cur: null, t: 0, last: {}, once: {} };
+const commsEl = $('comms');
+const pick = a => a[(Math.random() * a.length) | 0];
+function commsReset() { COMMS.q = []; COMMS.cur = null; COMMS.t = 0; COMMS.last = {}; COMMS.once = {}; commsEl.classList.remove('on', 'talk'); }
+// queue a line; key + cd stop repeats (cd = Infinity: once per run); pri 2 = urgent, jumps the queue
+function say(who, text, key = text, cd = 12, pri = 1) {
+  if (!SETTINGS.chatter || !G || state !== 'play' || (pri < 2 && COMMS.q.length >= 2)) return; // full queue: a routine line waits its turn
+  if (cd === Infinity) { if (COMMS.once[key]) return; COMMS.once[key] = true; }
+  else { if (COMMS.last[key] != null && G.t - COMMS.last[key] < cd) return; COMMS.last[key] = G.t; }
+  if (pri >= 2) { COMMS.q = COMMS.q.filter(x => x.pri >= 2); COMMS.q.unshift({ who, text, pri }); if (COMMS.cur && COMMS.cur.pri < 2) COMMS.t = Math.min(COMMS.t, 0.15); }
+  else COMMS.q.push({ who, text, pri });
+}
+function commsTick(dt) {
+  if (COMMS.cur) { COMMS.t -= dt; if (COMMS.t > 0) return; COMMS.cur = null; commsEl.classList.remove('on', 'talk'); COMMS.gap = 0.35; return; }
+  if ((COMMS.gap = (COMMS.gap || 0) - dt) > 0) return;
+  const n = COMMS.q.shift(); if (!n) return;
+  const c = CREW[n.who]; COMMS.cur = n; COMMS.t = clamp(1.6 + n.text.length * 0.05, 2.6, 6);
+  commsEl.style.setProperty('--cc', c.c);
+  commsEl.querySelector('.face').innerHTML = faceSVG(n.who);
+  commsEl.querySelector('.who').textContent = c.name; commsEl.querySelector('.say').textContent = n.text;
+  commsEl.classList.add('on', 'talk');
+  // gibberish voice, a blip per syllable-ish, like the old wingmates
+  const syl = clamp(Math.round(n.text.length / 7), 3, 9);
+  for (let k = 0; k < syl; k++) blip(c.pitch * (0.8 + Math.random() * 0.5), 0.07, 'square', 0.045, c.pitch * (0.7 + Math.random() * 0.6), k * 0.09);
+  clearTimeout(COMMS.flap); COMMS.flap = setTimeout(() => commsEl.classList.remove('talk'), syl * 90 + 120);
+}
+// state-driven lines, checked every frame
+function chatter() {
+  const p = G.p, pr = PREP[LV.id], n = G.stones.length;
+  if (G.t > 0.8) say('att', { 1: 'Straightforward one to start. No sheath, so every basket trip goes all the way out. Make them count.', 2: 'Stent\'s out, sheath\'s in. Ride it up, the stones sit high.', 3: 'Into the kidney today. Deflect into each calyx. The lower pole is the tough one.' }[LV.id], 'open', Infinity);
+  if (G.t > 5) {
+    const [v] = abxVerdict(), drug = (ABX.find(a => a[0] === G.prep.abx) || ABX[0])[1].split(' ')[0];
+    if (v === 'best') say('att', pick(['Good antibiotic call. You actually read the culture.', 'Nice. Culture-directed antibiotics, like a grown-up.']), 'abx', Infinity);
+    else if (v === 'ok') say('att', `${drug} covers it. Next time pick the narrowest thing that does.`, 'abx', Infinity);
+    else if (v === 'weak') say('gas', `About that ${drug}... not my first pick. I'll be watching the pressures.`, 'abx', Infinity);
+    else if (v === 'none') say('gas', 'No antibiotics on board. Keep that pressure down for me.', 'abx', Infinity);
+    else say('gas', `Heads up: ${drug === 'None' ? 'no antibiotic' : drug} doesn't cover what grew. Keep the pressure LOW.`, 'abx', Infinity, 2);
+  }
+  if (G.t > 10 && G.prep.found.size < n) say('att', `You marked ${G.prep.found.size} of ${n} stones on the CT. Read the films before you scrub. Every time.`, 'films', Infinity);
+  // approaching each stone: a reminder that fits it
+  for (const st of G.stones) {
+    if (st.phase !== 'alive' || st.s - p.s > APPROACH_D + 4) continue;
+    const sl = LV.slots[st.i];
+    say('att', sl.ct === 'upper' ? 'Upper-pole stone. Deflect up into the calyx and the rails will follow you in.'
+      : sl.ct === 'lower' ? 'Lower pole. Max deflection, take it slow, don\'t fight the wall.'
+      : st.hu > 1200 ? `Stone ${st.i + 1}: ${st.hu.toLocaleString()} HU. That\'s hard. Dusting will crawl, think fragmenting.`
+      : st.hu < 550 ? `Stone ${st.i + 1} is low HU, probably uric acid. It\'ll dust in seconds.`
+      : `Stone ${st.i + 1} ahead. Line up the green beam, then fire.`, 'st' + st.i, Infinity);
+    break;
+  }
+  const pn = pinchNear(p.s);
+  if (pn && pn.d > 0 && pn.d < 16) say('att', { UVJ: 'UVJ, the tightest spot. Center up and let it come to you.', ILIAC: 'Iliac crossing. Stay centered over the vessels.', UPJ: 'UPJ coming up. Center it.' }[pn.k.short], 'pinch' + pn.k.short, Infinity);
+  if (LV.sheath && p.s > LV.sheath + 1) say('tech', 'Out the end of the sheath. Real mucosa from here.', 'sheathout', Infinity);
+  if (G.wave.on && G.wave.s > p.s && G.wave.s - p.s < 22) say('att', 'Peristalsis. Center up and ride it out.', 'wave', 30);
+  if (G.P > 40) say('gas', pick(['We\'re over 40! Flow down, now!', 'Pressure\'s over 40! Back off the irrigation!']), 'p40', 9, 2);
+  else if (G.P > 34) say('gas', 'Pressure\'s creeping up. Ease the flow.', 'p34', 16);
+  if (G.temp > 42) say('tech', 'Tip\'s cooking. More flow, or let off the pedal.', 'hot', 14);
+  if (G.vis < 0.45 && G.firing) say('tech', 'Can\'t see a thing on the monitor. Bump the flow for a sec.', 'vis', 15);
+  const curSt = G.stones.find(s => s.phase !== 'done');
+  if (curSt && G.frags.some(f => !f.gone && !f.left && !f.held && f.owner === curSt.i && f.s < p.s - 0.3)) say('tech', 'A piece slipped behind you. Hold pull back.', 'behind', 15);
+  if (G.firing && fragFrac(G.las.J) > 0.5 && G.stones.some(s => s.phase === 'alive' && s.s0 < UPJ_S && s.s > UPJ_S - 9)) say('att', 'It\'s sitting at the UPJ. Frag pulses will kick it into the kidney. Dust it!', 'upjfrag', 14, 2);
+  if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) say('tech', 'Come back out to the pelvis first, then over to the next one.', 'wallhold', 14);
+  if (G.sepsis > 50) say('gas', abxVerdict()[0] === 'wrong' ? 'Heart rate\'s up, pressure\'s soft. That\'s the antibiotic catching up with us.' : 'Heart rate\'s up, pressure\'s soft. Let\'s not be long.', 'sep', 30, 2);
+  if (G.hp < 45) say('att', 'That ureter\'s taking a beating. Gentle, or we stent and stop.', 'hp', 30, 2);
+  if (G.t > 200) say('gas', 'Clock\'s running, doc.', 'clock', Infinity);
 }
 
 // ───────────────────────── gameplay helpers
@@ -1155,6 +1266,7 @@ function finishStone(st, how) {
   worldAt(st.s, st.x, st.y, V1);
   for (let i = 0; i < 40; i++) dustPS.emit(V1, V2.set(mr(-2, 2), mr(-2, 2), mr(-2, 2)), [1, 0.95, 0.85], mr(0.08, 0.3), mr(0.6, 1.6), 0.8, 2.2);
   SFX.pop();
+  say(how === 'dusted' ? 'tech' : 'att', how === 'dusted' ? pick(['Nice, that\'s dust.', 'Beautiful. Dust.', 'Gone. Nice.']) : how === 'basketed' ? 'Whole stone in the basket. Clean.' : 'Broken up. Clear the big pieces before you move on.', 'fin' + st.i, Infinity);
   if (how === 'dusted') toast('Stone dusted ✓  Fine particles will pass', 'good');
   else if (how === 'basketed') toast('Basketed intact ✓  Specimen in the jar', 'good');
   else toast('Broken up — clear fragments ≥2 mm (basket or dust)', 'warn');
@@ -1163,6 +1275,7 @@ function migrateStone(st) {
   st.phase = 'done'; st.how = 'migrated'; scene.remove(st.mesh);
   for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left && !f.held) { f.left = true; G.residual++; }
   toast('⚠ Retropulsed into the kidney — that one needs flexible URS later', 'bad', 'mig', 0);
+  say('att', 'And... it\'s in the kidney. That\'s a flexible case another day.', 'mig' + st.i, Infinity, 2);
   SFX.warn(); G.shake = 0.25;
 }
 function moveOn() {
@@ -1173,6 +1286,7 @@ function moveOn() {
   for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left) { f.left = true; n++; }
   G.residual += n; st.phase = 'done';
   toast(`Moved on — ${n} residual fragment${n === 1 ? '' : 's'} left behind`, n ? 'warn' : 'good', 'mo', 0);
+  if (n) say('att', 'Leaving fragments. That shows up on the post-op CT.', 'mo' + st.i, Infinity);
 }
 // something in beam range that the rails would otherwise drive past (the gate's own target doesn't count — the gate already stops short of it)
 function workAhead(gate) { const p = G.p; return liveTargets().some(o => { const ds = o.s - p.s; return ds > 0.2 && ds - rOf(o) < BEAM_RANGE && o.s - rOf(o) - WORK_DIST < gate - 0.3; }); }
@@ -1282,6 +1396,7 @@ function update(dt) {
       worldAt(p.s + 0.4, p.x * 1.1, p.y * 1.1, V1);
       if (Math.random() < 0.5) bloodPS.emit(V1, V2.set(mr(-0.4, 0.4), mr(-0.4, 0.4), mr(-0.4, 0.4)), [0.55, 0.03, 0.03], mr(0.4, 0.8), mr(1.4, 2.4), 0.4, 1, 0.5);
       toast('Scraping mucosa — stay off the wall', 'bad', 'scr', 5);
+      say('att', pick(['Easy! You\'re on the wall!', 'Off the wall, off the wall!']), 'scr', 9, 2);
       injure('scrape', p.s + 0.25, Math.atan2(p.y, p.x), mr(0.6, 0.8), 0.22);
     }
   }
@@ -1352,6 +1467,7 @@ function update(dt) {
     } else {
       G.rateObj = null;
       if (nearWall && L.f < 0.5) {
+        say('att', 'Don\'t fire at what you can\'t see!', 'burn', 9, 2);
         G.hp -= 7 * (1 - L.f) * dt; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 25 * dt); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4);
         injure('burn', burnS(p), Math.atan2(p.y, p.x), mr(0.5, 0.65), 0.3, 1);
       }
@@ -1419,7 +1535,7 @@ function update(dt) {
   if (bk.state !== 'idle') {
     bk.t += dt; const o = bk.target;
     if (bk.state === 'out' && bk.t >= 0.45) {
-      if (o.d >= 4) { bk.state = 'stuck'; bk.t = 0; SFX.stuck(); toast(`${o.d.toFixed(1)} mm won't ${LV.sheath ? 'fit through the sheath' : 'come down the ureter'} — releasing`, 'bad', 'stuck', 0); }
+      if (o.d >= 4) { bk.state = 'stuck'; bk.t = 0; SFX.stuck(); say('att', 'Let it go! Never drag what won\'t pass.', 'stuck', 10, 2); toast(`${o.d.toFixed(1)} mm won't ${LV.sheath ? 'fit through the sheath' : 'come down the ureter'} — releasing`, 'bad', 'stuck', 0); }
       else { bk.state = 'retract'; bk.t = 0; bk.cap = true; }
     } else if (bk.state === 'stuck') {
       G.hp -= 10 * dt; G.lastLoss = 'basket'; G.hurt = 1; G.shake = Math.max(G.shake, 0.06);
@@ -1428,6 +1544,7 @@ function update(dt) {
     } else if (bk.state === 'retract' && bk.t >= 0.6) {
       if (bk.cap) {
         bk.state = 'carry'; G.trip = { phase: 'out', back: p.s, t0: G.t };
+        if (!G.trips) say(LV.sheath ? 'tech' : 'att', LV.sheath ? 'Out through the sheath. I\'ll take the specimen.' : 'No sheath, so that\'s a full trip out. Basket the ones worth it.', 'trip1', Infinity);
         toast(G.trips ? 'Withdrawing with the basket…' : LV.sheath ? 'Out through the sheath and straight back in — quick, but still on the clock.' : 'No access sheath: every basketed piece rides out to the bladder and back. The anesthesia clock keeps running.', 'warn', 'trip', G.trips ? 3 : 0);
       } else { bk.state = 'idle'; bk.target = null; }
     }
@@ -1436,7 +1553,7 @@ function update(dt) {
   for (const st of G.stones) {
     if (st.phase !== 'cleanup') continue;
     const n = G.frags.filter(f => !f.gone && f.owner === st.i && !f.left).length;
-    if (n === 0) { st.clearT += dt; if (st.clearT > 0.6) { st.phase = 'done'; toast('Zone clear ✓', 'good', 'zc' + st.i, 0); SFX.clear(); } }
+    if (n === 0) { st.clearT += dt; if (st.clearT > 0.6) { st.phase = 'done'; toast('Zone clear ✓', 'good', 'zc' + st.i, 0); SFX.clear(); say('att', G.stones.every(x => x.phase === 'done') ? 'That\'s the last of them. Nice case.' : pick(['Zone clear. Move up.', 'Clean. On to the next one.']), 'zc' + st.i, Infinity); } }
     else st.clearT = 0;
   }
   G.frags = G.frags.filter(f => !f.gone);
@@ -1823,6 +1940,7 @@ function showBrief() {
       <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}<small id="defHint">${defHint()}</small></div>
       <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
       <div class="set"><span>LASER</span>${segHTML('level', [['presets', 'Presets'], ['advanced', 'Advanced J × Hz']])}</div>
+      <div class="set"><span>OR CHATTER</span>${segHTML('chatter', [[true, 'On'], [false, 'Off']])}</div>
     </div>
     <h2>YOUR TOOLS</h2>
     <div class="tools" id="toolsBox">${toolsHTML()}</div>
@@ -1942,7 +2060,7 @@ function showPrep() {
 }
 function startPlay() {
   audioInit();
-  const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0;
+  const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0; commsReset();
   if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
   hideScreen();
   $('hud').classList.remove('hidden');
@@ -1973,6 +2091,7 @@ function showPause() {
     <div class="sets" style="margin-top:14px">
       <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}</div>
       <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
+      <div class="set"><span>OR CHATTER</span>${segHTML('chatter', [[true, 'On'], [false, 'Off']])}</div>
     </div>
     <p class="keys">Graphics: ${Q.bloom ? 'bloom on' : 'bloom off'} · ${Q.pr.toFixed(2)}× resolution</p>
     <div class="go"><button id="resBtn">RESUME</button><button class="alt" id="gfxBtn">${Q.bloom ? 'Bloom off' : 'Bloom on'}</button><button class="alt" id="quitBtn">Abort run</button></div></div>`;
@@ -1983,7 +2102,7 @@ function showPause() {
   $('quitBtn').addEventListener('click', () => { state = 'play'; endRun('quit'); });
 }
 function endRun(reason) {
-  state = 'end'; quiet(); document.body.classList.remove('ingame'); rotPaused = false;
+  state = 'end'; quiet(); commsReset(); document.body.classList.remove('ingame'); rotPaused = false;
   G.end = reason;
   if (G.trip) { G.tripTime += G.t - G.trip.t0; G.trips++; if (G.bk.state === 'carry' && G.bk.target) capture(G.bk.target); G.trip = null; }
   const aborted = reason !== 'done';
@@ -2010,6 +2129,7 @@ function endRun(reason) {
   }).join('');
   screen.innerHTML = `<div class="panel">
     <h1 style="font-size:24px">${head[0]}</h1><p>${head[1]}</p>
+    <div class="quote"><div class="face">${faceSVG('att')}</div><p><b style="color:#60a5fa;font-size:11px;letter-spacing:.12em">DR. HAWKE</b><br>${attQuote(reason, stoneFree)}</p></div>
     <p class="keys">${LV.tag} · ${LV.name}${next && next.id === unlocked && !G.wasUnlocked ? ` — <b class="ok">${next.tag} unlocked: ${next.name}</b>` : ''}</p>
     <div class="stats">
       <div class="stat"><small>SCORE</small><b>${sc.toLocaleString()}</b></div>
@@ -2112,7 +2232,7 @@ function frame(now) {
   const raw = (now - last) / 1000; last = now;
   const dt = Math.min(0.05, raw); tAll += dt;
   UNI.time.value = tAll;
-  if (state === 'play') { update(dt); }
+  if (state === 'play') { update(dt); if (state === 'play') { chatter(); commsTick(dt); } }
   if (state === 'brief') attract(dt, tAll);
   else if (G && state !== 'brief') { if (state === 'play') { updateScene(dt); updateHUD(); } }
   if (Q.bloom && composer) composer.render(); else renderer.render(scene, camera);
@@ -2140,8 +2260,8 @@ window.__sqBooted = true;
 // test hook (headless checks): read state, drive input, advance the sim without rAF
 window.__sq = {
   get G() { return G; }, get state() { return state; }, input, keys, joy, Q,
-  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt,
-  step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) update(dt); if (state === 'play') { updateScene(dt); updateHUD(); } },
+  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt, say, get comms() { return COMMS; },
+  step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) { update(dt); if (state === 'play') { chatter(); commsTick(dt); } } if (state === 'play') { updateScene(dt); updateHUD(); } },
 };
 </script>
 </body>

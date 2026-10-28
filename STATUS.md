@@ -3,6 +3,30 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-28 (late) — 🛩️ Stone Squadron: OR chatter (attending as Star Fox wingmate)
+
+Andrew likes cartoonish attending comments like Star Fox wingmates, good for reminders, and likes
+the game as a mental prep exercise for juniors.
+
+**Done:**
+- A comms box (bottom centre) with cartoon SVG portraits whose mouths flap, plus gibberish voice blips.
+- The crew: Dr. Hawke (attending), Remy (scrub tech), Dr. Vance (anesthesia).
+- About 30 lines:
+  - The case opener and a reaction to the pre-op antibiotic and to any CT targets you missed.
+  - A per-stone heads-up (hard stone → think frag; low HU → dust; calyx → deflect).
+  - Pinch points, leaving the sheath, peristalsis.
+  - IRP >34 and >40, tip heat, lost view, on the wall, lasing blind.
+  - Frag pulses at the UPJ, a fragment behind the scope, a stuck basket, the first basket trip.
+  - Stone cleared, zone clear, migration, moving on with residual, sepsis, low integrity, the clock.
+- Cooldowns and once-per-run keys stop repeats; urgent lines jump the queue.
+- The debrief opens with the attending's one-line verdict.
+- Settings: OR CHATTER On/Off (brief + pause).
+
+**Verified:** headless: a scripted Case 2 run with the wrong antibiotic produced a sensible line
+sequence with no spam; screenshots of the box and the debrief quote; all cases still play through.
+**Not verified:** on device; how the voice blips sound on the iPad. Not pushed.
+**Next steps:** medals (roadmap #1); Andrew to vet the lines' tone and clinical content.
+
 ## 2026-10-28 (later) — 🛩️ Stone Squadron: mission prep (generated CT, chart, antibiotic order)
 
 Andrew wants the game to teach case prep: CT images showing the targets, op notes and imaging
