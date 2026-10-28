@@ -43,6 +43,7 @@ b{font-variant-numeric:tabular-nums}
 .pm{position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;transform:translateX(-7px);border:2px solid #000;background:#888}
 .pm.alive{background:var(--a)}.pm.cleanup{background:#60a5fa}.pm.done{background:var(--g)}.pm.mig{background:var(--r)}
 .pupj{position:absolute;top:-6px;width:2px;height:20px;background:rgba(255,255,255,.5)}
+.psh{position:absolute;left:0;top:0;height:100%;border-radius:5px;background:rgba(120,140,170,.45)}
 #stage{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--m);margin-top:9px}
 #target{margin:8px auto 0;display:inline-block;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
 #target.lock{border-color:rgba(74,222,128,.6);box-shadow:0 0 14px rgba(74,222,128,.25)}
@@ -135,6 +136,7 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .seg button{font:700 14px/1 system-ui;padding:12px 15px;border:0;background:rgba(255,255,255,.05);color:var(--t);cursor:pointer}
 .seg button.on{background:var(--g);color:#032}
+.seg.cases{display:flex;flex-wrap:wrap;margin-top:6px}.seg.cases button{flex:1 1 180px}.seg.cases button:disabled{opacity:.45;cursor:default}
 .set small{color:var(--m);font-size:12px}
 @media (max-height:560px){
 .tb.ped{width:92px;height:100px}#bPedA{right:calc(env(safe-area-inset-right) + 122px)}
@@ -235,7 +237,7 @@ setTimeout(function(){ if(!window.__sqBooted){ var e=document.getElementById('er
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const BUILD = '2026-10-25 16:22'; // bump on every push so testers can say which build they played
+const BUILD = '2026-10-28 12:00'; // bump on every push so testers can say which build they played
 const params = new URLSearchParams(location.search);
 // Hosted in UroStudyHub's arcade (?embed=1): the app takes back {type:'squadron:claim', coins, xp} / {type:'squadron:exit'} by postMessage.
 const EMBED = params.has('embed') && window.parent !== window;
@@ -245,6 +247,10 @@ const $ = id => document.getElementById(id);
 const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets' };
 const SETTINGS = (() => { try { return Object.assign({}, SET_DEF, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (_) { return Object.assign({}, SET_DEF); } })();
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch (_) {} }
+// cases unlock in order: finishing one opens the next (kept per device)
+const CASE_KEY = 'sq3d_cases';
+let unlocked = (() => { try { return Math.max(1, +localStorage.getItem(CASE_KEY) || 1); } catch (_) { return 1; } })();
+function unlockCase(n) { if (n <= unlocked) return; unlocked = n; try { localStorage.setItem(CASE_KEY, String(n)); } catch (_) {} }
 
 // ───────────────────────── utils
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -257,7 +263,8 @@ const rand = (a = 0, b = 1) => a + (b - a) * rng();
 const mr = (a, b) => a + (b - a) * Math.random();
 
 // ───────────────────────── tuning
-const UPJ_S = 268, END_S = 285;
+const UPJ_S = 268, END_S = 285; // END_S: where the ureter run ends (and the fluoro map's scale); a case can end further on (LV.end)
+const APPROACH_D = 26, APPROACH_V = 2.6; // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
 const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
 const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.38;
 const PRESETS = { dust: { J: 0.4, Hz: 80 }, frag: { J: 1.5, Hz: 8 } }, STANDBY_S = 2.5;
@@ -292,6 +299,39 @@ const SLOTS = [
   { s: 247, loc: 'Proximal ureter, just below the UPJ' },
 ];
 const rOf = o => o.d * MMR;
+// cases, unlocked in order: each one adds kit or anatomy. sheath = where the access sheath's tip sits (0 = none);
+// pk = how much of the irrigation becomes intrarenal pressure (outflow up the sheath lowers it); calyces = side pockets off the renal pelvis
+const SHEATH_R = 1.3, SHEATH_V = 2.2; // sheath lumen; rides in and out of it this much faster
+const LEVELS = [
+  { id: 1, name: 'Ureter, no sheath', tag: 'CASE 1', pk: 1, sheath: 0, end: END_S, slots: SLOTS,
+    blurb: 'Semirigid-style run from the UVJ to the renal pelvis. No access sheath: every basketed piece rides out to the bladder and back.' },
+  { id: 2, name: 'Ureteral access sheath', tag: 'CASE 2', pk: 0.66, sheath: 186, end: END_S,
+    slots: [{ s: 204, loc: 'Proximal ureter, just past the sheath tip' }, { s: 228, loc: 'Proximal ureter' }, { s: 252, loc: 'Proximal ureter, just below the UPJ' }],
+    blurb: 'A 12/14 Fr access sheath is in, its tip in the proximal ureter. Basket trips are quick through it, and outflow up the sheath keeps the pressure down — but the stones sit high, close to the UPJ.' },
+  { id: 3, name: 'Renal pelvis & calyces', tag: 'CASE 3', pk: 0.74, sheath: 236, end: 318, kidney: true,
+    calyces: [{ s: 296, th: 1.65, name: 'Upper-pole calyx' }, { s: 304, th: -0.25, name: 'Interpolar calyx' }, { s: 311, th: -1.95, name: 'Lower-pole calyx' }],
+    slots: [{ s: 281, loc: 'Renal pelvis', pelvis: true }, { s: 296, loc: 'Upper-pole calyx', cx: 0 }, { s: 311, loc: 'Lower-pole calyx', cx: 2 }],
+    blurb: 'Flexible URS through a sheath into the kidney. One stone floats in the renal pelvis; the others sit in calyces — deflect into each one to reach it. The lower pole needs the most deflection.' },
+];
+const CX_DEPTH = 5.4, CX_WS = 6, CX_WT = 0.42; // calyx pocket: how far it bulges out of the pelvis, its length along the track, its angular width
+let LV = LEVELS[0];
+// extra wall radius where a calyx bulges out of the pelvis at (s, θ)
+function pocketR(s, th) {
+  if (!LV.calyces) return 0;
+  let r = 0;
+  for (const c of LV.calyces) { const a = Math.atan2(Math.sin(th - c.th), Math.cos(th - c.th)); r += CX_DEPTH * bump(s, c.s, CX_WS) * Math.exp(-((a / CX_WT) ** 2)); }
+  return r;
+}
+// which calyx (if any) the point (s, x, y) is inside
+function calyxAt(s, x, y) {
+  if (!LV.calyces || Math.hypot(x, y) < baseR(s) - 0.3) return null;
+  const th = Math.atan2(y, x);
+  for (const c of LV.calyces) if (pocketR(s, th) > 1.2 && Math.abs(s - c.s) < CX_WS * 1.2 && angGap(th, c.th) < CX_WT * 1.6) return c;
+  return null;
+}
+const inSheath = s => LV.sheath > 0 && s < LV.sheath;
+// the open lumen at (s, θ): ureter (squeezed by peristalsis) + any calyx pocket — or the sheath's own bore inside it
+const lumR = (s, th) => inSheath(s) ? SHEATH_R : baseR(s) * squeeze(s) + pocketR(s, th);
 
 // ───────────────────────── renderer / scene
 const canvas = $('c');
@@ -309,7 +349,7 @@ const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.05, 2
 scene.add(camera);
 
 // ───────────────────────── track (arc-length sampled, parallel-transport frames)
-const CTRL = [[0,0,0],[2,-1,-25],[8,-3,-50],[12,0,-75],[9,4,-100],[2,7,-125],[-5,6,-150],[-9,2,-175],[-8,-2,-200],[-3,-3,-225],[3,-1,-250],[6,2,-272],[7,3,-292],[7.5,3,-318]];
+const CTRL = [[0,0,0],[2,-1,-25],[8,-3,-50],[12,0,-75],[9,4,-100],[2,7,-125],[-5,6,-150],[-9,2,-175],[-8,-2,-200],[-3,-3,-225],[3,-1,-250],[6,2,-272],[7,3,-292],[7.5,3,-318],[7.5,3,-345]]; // last point: room for the kidney case
 const curve = new THREE.CatmullRomCurve3(CTRL.map(a => new THREE.Vector3(a[0], a[1], a[2])), false, 'centripetal');
 const LEN = curve.getLength();
 const NS = Math.ceil(LEN * 5);
@@ -335,11 +375,13 @@ const PINCHES = [
 function baseR(s) {
   let r = 2.6 + 1.2 * (1 - smooth(0, 7, s)) + 5.5 * smooth(UPJ_S + 1, UPJ_S + 24, s);
   for (const k of PINCHES) r -= (2.6 - k.r) * bump(s, k.s, k.w);
-  return r;
+  if (LV.sheath) r = Math.max(r, lerp(SHEATH_R + 0.3, 0, smooth(LV.sheath, LV.sheath + 3, s))); // the sheath holds the ureter open around it
+  return r * Math.sqrt(1 - smooth(LEN - 22, LEN - 1, s) * 0.97); // the far end of the pelvis is a closed sac, not a hole
 }
+const livePinch = k => !inSheath(k.s + 3); // inside the sheath a narrowing is already dilated: no slowdown, no ring, no bonus
 function pinchNear(s) {
   let best = null;
-  for (const k of PINCHES) { const d = k.s - s; if (d > -4 && d < 22 && (!best || Math.abs(d) < Math.abs(best.d))) best = { k, d }; }
+  for (const k of PINCHES) { if (!livePinch(k)) continue; const d = k.s - s; if (d > -4 && d < 22 && (!best || Math.abs(d) < Math.abs(best.d))) best = { k, d }; }
   return best;
 }
 function squeeze(s) {
@@ -347,13 +389,15 @@ function squeeze(s) {
   return 1 - WAVE_AMP * bump(s, G.wave.s, 5) * (1 - smooth(UPJ_S - 6, UPJ_S, s));
 }
 function stageName(s) {
+  if (inSheath(s)) return 'In the access sheath';
   if (s < 16) return 'Ureterovesical junction';
   if (s < 72) return 'Distal ureter';
   if (s < 104) return 'Mid ureter';
   if (s < 132) return 'Iliac vessel crossing';
   if (s < UPJ_S - 6) return 'Proximal ureter';
   if (s < UPJ_S + 6) return 'Ureteropelvic junction';
-  return 'Renal pelvis';
+  const c = G && calyxAt(s, G.p.x, G.p.y);
+  return c ? c.name : 'Renal pelvis';
 }
 
 // ───────────────────────── textures
@@ -393,7 +437,7 @@ const GLOW = glowTexture();
 // ───────────────────────── the ureter (one mesh; peristalsis in the vertex shader)
 const UNI = { waveS: { value: -999 }, waveAmp: { value: WAVE_AMP }, time: { value: 0 }, upj: { value: UPJ_S } };
 function buildTube() {
-  const RINGS = Math.ceil(LEN * 2.2), SEG = 44, W = SEG + 1, n = (RINGS + 1) * W;
+  const RINGS = Math.ceil(LEN * 2.2), SEG = LV.calyces ? 72 : 44, W = SEG + 1, n = (RINGS + 1) * W; // calyces need more segments around
   const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), aS = new Float32Array(n), aDir = new Float32Array(n * 3), aR = new Float32Array(n);
   const f = mkF(), d = new THREE.Vector3();
   for (let i = 0; i <= RINGS; i++) {
@@ -402,7 +446,7 @@ function buildTube() {
     for (let j = 0; j <= SEG; j++) {
       const th = j / SEG * Math.PI * 2;
       d.copy(f.r).multiplyScalar(Math.cos(th)).addScaledVector(f.u, Math.sin(th));
-      const r = br * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th));
+      const r = br * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th);
       const k = i * W + j;
       pos[k * 3] = f.p.x + d.x * r; pos[k * 3 + 1] = f.p.y + d.y * r; pos[k * 3 + 2] = f.p.z + d.z * r;
       aDir[k * 3] = d.x; aDir[k * 3 + 1] = d.y; aDir[k * 3 + 2] = d.z;
@@ -440,7 +484,32 @@ function buildTube() {
   m.frustumCulled = false;
   return m;
 }
-scene.add(buildTube());
+// the access sheath: a dark plastic bore from the bladder to its tip, with a radiopaque marker band at the tip
+function buildSheath() {
+  const end = LV.sheath, RINGS = Math.ceil(end * 1.2), SEG = 28, f = mkF(), pts = [], idx = [];
+  for (let i = 0; i <= RINGS; i++) {
+    frameAt(i / RINGS * end, f);
+    for (let j = 0; j <= SEG; j++) { const th = j / SEG * Math.PI * 2; pts.push(f.p.x + (f.r.x * Math.cos(th) + f.u.x * Math.sin(th)) * SHEATH_R, f.p.y + (f.r.y * Math.cos(th) + f.u.y * Math.sin(th)) * SHEATH_R, f.p.z + (f.r.z * Math.cos(th) + f.u.z * Math.sin(th)) * SHEATH_R); }
+  }
+  for (let i = 0; i < RINGS; i++) for (let j = 0; j < SEG; j++) { const a = i * (SEG + 1) + j, b = a + SEG + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  const g = new THREE.BufferGeometry(); g.setIndex(idx); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g.computeVertexNormals();
+  const grp = new THREE.Group();
+  const bore = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x46566a, roughness: 0.28, metalness: 0.1, side: THREE.DoubleSide, transparent: true, opacity: 0.88 }));
+  bore.frustumCulled = false; grp.add(bore);
+  frameAt(end - 0.3, f);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(SHEATH_R, 0.07, 8, 40), new THREE.MeshStandardMaterial({ color: 0xd8dee6, roughness: 0.3, metalness: 0.6, emissive: 0x1a2028 }));
+  band.position.copy(f.p); band.lookAt(new THREE.Vector3().copy(f.p).add(f.t)); grp.add(band);
+  return grp;
+}
+// each case has its own anatomy: build its tube (and sheath) on first use, then swap
+const LV_MESH = {};
+function setLevel(lv) {
+  if (LV_MESH[LV.id]) scene.remove(LV_MESH[LV.id]);
+  LV = lv;
+  if (!LV_MESH[lv.id]) { const grp = new THREE.Group(); grp.add(buildTube()); if (lv.sheath) grp.add(buildSheath()); LV_MESH[lv.id] = grp; }
+  scene.add(LV_MESH[lv.id]);
+  FL.bg = null; // fluoro redraws with or without the sheath
+}
 
 // ───────────────────────── lights
 const spot = new THREE.SpotLight(0xfff1e2, 26, 0, 0.95, 0.65, 1.6);
@@ -642,7 +711,7 @@ function markTex(kind) {
 const MARK_GEO = new THREE.PlaneGeometry(1, 1), marks = [];
 const MARK_MATS = Object.fromEntries(['burn', 'thermal', 'scrape'].map(k => [k, new THREE.MeshStandardMaterial({ map: markTex(k), transparent: true, depthWrite: false, alphaTest: 0.02, roughness: 0.95, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })]));
 // the tube's actual inner radius at (s, θ) — same folds as buildTube()
-function wallR(s, th) { const fold = 1 - smooth(UPJ_S, UPJ_S + 10, s); return baseR(s) * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)); }
+function wallR(s, th) { const fold = 1 - smooth(UPJ_S, UPJ_S + 10, s); return baseR(s) * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th); }
 const FMK = mkF(), MK_M = new THREE.Matrix4(), MK_D = new THREE.Vector3(), MK_X = new THREE.Vector3(), MK_Z = new THREE.Vector3();
 const angGap = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 // one lesion site = one decal; repeat hits on the same spot deepen it (bigger, and can upgrade its depth) instead of stacking new ones
@@ -750,7 +819,8 @@ let G = null;
 let state = 'brief'; // brief | play | paused | end
 let camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase';
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function newRun(seed, fixed) {
+function newRun(seed, fixed, lv = LV) {
+  setLevel(lv);
   if (G) { for (const st of G.stones) if (st.mesh.parent) scene.remove(st.mesh); for (const f of G.frags) scene.remove(f.mesh); }
   for (const m of marks) scene.remove(m); marks.length = 0;
   dustPS.clear(); bloodPS.clear();
@@ -765,13 +835,15 @@ function newRun(seed, fixed) {
     ped: { a: { ...PRESETS.dust }, b: { ...PRESETS.frag } }, act: 'a', get las() { return this.ped[this.act]; },
     pend: null, L: laserNums(PRESETS.dust.J, PRESETS.dust.Hz), firing: false, rateObj: null, backed: false, slips: 0,
     injury: { burn: 0, thermal: 0, scrape: 0 }, lastMark: {},
-    trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })),
-    residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
+    trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })), lv: LV,
+    wasUnlocked: unlocked > LV.id, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
   };
-  G.stones = SLOTS.map((sl, i) => {
+  G.stones = LV.slots.map((sl, i) => {
     const type = types[i], d = sizes[i], T = TYPES[type], { mesh, mat } = makeStoneMesh(type);
     scene.add(mesh);
-    const hx = rand(-0.45, 0.45), hy = rand(-0.35, 0.35);
+    let hx = rand(-0.45, 0.45), hy = rand(-0.35, 0.35);
+    if (sl.pelvis) { hx = rand(-1.6, 1.6); hy = rand(-2, -0.6); } // lying in the dependent part of the pelvis
+    if (sl.cx != null) { const c = LV.calyces[sl.cx], rr = baseR(sl.s) + CX_DEPTH * 0.6; hx = Math.cos(c.th) * rr; hy = Math.sin(c.th) * rr; } // in the calyx cup
     return { i, type, d0: d, d, V0: d ** 3, V: d ** 3, s0: sl.s, s: sl.s, x: hx, y: hy, hx, hy, vs: 0, vx: 0, vy: 0, loc: sl.loc,
       hu: Math.round(rand(T.hu[0], T.hu[1]) / 10) * 10, phase: 'alive', how: null, cracked: 0, crackV: 0, pulses: 0, dustT: 0, specimens: 0, lastS: sl.s, clearT: 0,
       mesh, mat, spin: new THREE.Vector3(rand(-0.3, 0.3), rand(-0.3, 0.3), rand(-0.3, 0.3)), flash: 0, isFrag: false, held: false };
@@ -1010,7 +1082,7 @@ function splitOff(st, vol, pushS) {
   for (const k of w) {
     const a = mr(0, 6.28), V = usable * k / sum;
     if (Math.random() < SLIP_P) { // shoots distally along the wall, past the scope
-      const lim = Math.max(0.3, baseR(st.s) - Math.cbrt(V) * MMR - 0.15);
+      const lim = Math.max(0.3, lumR(st.s, a) - Math.cbrt(V) * MMR - 0.15);
       const sf = spawnFrag(st, V, st.s - R * 0.6, Math.cos(a) * lim, Math.sin(a) * lim, -mr(7, 10), 0, 0);
       if (sf) sf.slip = true; // counted + announced once it's actually behind the tip
       continue;
@@ -1045,15 +1117,20 @@ function moveOn() {
 }
 // something in beam range that the rails would otherwise drive past (the gate's own target doesn't count — the gate already stops short of it)
 function workAhead(gate) { const p = G.p; return liveTargets().some(o => { const ds = o.s - p.s; return ds > 0.2 && ds - rOf(o) < BEAM_RANGE && o.s - rOf(o) - WORK_DIST < gate - 0.3; }); }
+// in the kidney the rails carry you up to a calyx's mouth, then only as far as you deflect toward its stone, so you can't overrun it
+function stoneGate(st) {
+  const g = st.s - rOf(st) - WORK_DIST, c = LV.calyces && LV.slots[st.i].cx != null && LV.calyces[LV.slots[st.i].cx];
+  return c ? Math.min(g, Math.max(c.s - 9, g - 0.85 * Math.max(0, Math.hypot(st.x - G.p.x, st.y - G.p.y) - 1.5))) : g;
+}
 function gateS() {
   for (const st of G.stones) {
     if (st.phase === 'done') continue;
-    if (st.phase === 'alive') return st.s - rOf(st) - WORK_DIST;
+    if (st.phase === 'alive') return stoneGate(st);
     let m = Infinity;
     for (const f of G.frags) if (!f.gone && f.owner === st.i && !f.left) m = Math.min(m, f.s - rOf(f));
     return (m === Infinity ? st.lastS : m) - WORK_DIST;
   }
-  return END_S + 40;
+  return LV.end + 40;
 }
 function basketPress() {
   if (!G || state !== 'play' || G.bk.state !== 'idle' || G.trip) return;
@@ -1098,15 +1175,15 @@ function update(dt) {
   const pn = pinchNear(p.s), slowK = pn ? smooth(3, 8, Math.abs(pn.d)) : 1;
   let gap = 0;
   if (trip) {
-    // no access sheath: the basketed piece rides all the way out to the bladder, then you drive back up
-    let dmin = Infinity; for (const k of PINCHES) dmin = Math.min(dmin, Math.abs(k.s - p.s));
-    const tripK = smooth(3, 8, dmin), ease = Math.min(1, dt * 6); // symmetric: brake before a pinch whichever way you travel
+    // the basketed piece rides all the way out (to the bladder, or out through the sheath), then you drive back up
+    let dmin = Infinity; for (const k of PINCHES) if (livePinch(k)) dmin = Math.min(dmin, Math.abs(k.s - p.s));
+    const tripK = smooth(3, 8, dmin), ease = Math.min(1, dt * 6), sv = inSheath(p.s) ? SHEATH_V : 1; // symmetric: brake before a pinch whichever way you travel
     if (trip.phase === 'out') {
-      p.v += (lerp(PINCH_TRIP_V, WITHDRAW_V, tripK) - p.v) * ease; p.s = Math.max(0.6, p.s - p.v * dt);
+      p.v += (lerp(PINCH_TRIP_V, WITHDRAW_V * sv, tripK) - p.v) * ease; p.s = Math.max(0.6, p.s - p.v * dt);
       if (p.s <= 0.6) { capture(bk.target); bk.state = 'idle'; bk.target = null; trip.phase = 'in'; }
     } else {
       const target = Math.min(trip.back, gateS());
-      p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
+      p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V * sv, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
       if (p.s >= target - 0.01) {
         const tt = G.t - trip.t0; G.tripTime += tt; G.trips++; G.trip = null; p.v = 0;
         toast(`Back at the stone — that basket trip cost ${Math.round(tt)} s of anesthesia`, 'warn', 'tripback', 0);
@@ -1119,24 +1196,28 @@ function update(dt) {
       const floor = Math.max(1, gate - 25);
       p.v = 0; if (p.s > floor) { p.s = Math.max(floor, p.s - BACK_V * dt); G.backed = true; }
     } else {
-      // ride the rails up to the next obstacle — after a pull-back: slowly, and hold while there's work in front of you
-      let tv = gap <= 0 ? 0 : Math.min(lerp(PINCH_V, CRUISE, slowK), gap * 2 + 0.3);
+      // ride the rails up to the next obstacle: ease down to a creep over the last stretch so the stone comes in slowly,
+      // faster inside a sheath; after a pull-back: slowly, and hold while there's work in front of you
+      const cruise = inSheath(p.s + 4) ? CRUISE * SHEATH_V : CRUISE, near = lerp(APPROACH_V, cruise, smooth(6, APPROACH_D, gap));
+      let tv = gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, gap * 1.2 + 0.25);
+      // in the kidney the rails never shove you into a wall: steer out of a calyx before they carry you on
+      if (LV.kidney && tv > 0) { const th = Math.atan2(p.y, p.x), m0 = Math.hypot(p.x, p.y); if (m0 > lumR(p.s + 0.8, th) - SCOPE_R - 0.05) { tv = 0; G.wallHold = true; } else G.wallHold = false; }
       if (G.backed) { if (gap <= 0.05) G.backed = false; else { tv = Math.min(tv, 5); if (workAhead(gate)) tv = 0; } }
       p.v += (tv - p.v) * Math.min(1, dt * 3);
       if (gap > 0) p.s += Math.min(p.v * dt, gap); else p.v = 0;
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
-  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && gap > 66) { G.wave.on = true; G.wave.s = p.s + 62; }
+  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 66) { G.wave.on = true; G.wave.s = p.s + 62; }
   if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(4, 7); } }
   UNI.waveS.value = G.wave.on ? G.wave.s : -999;
   // walls
-  const rEff = Math.max(0.6, baseR(p.s) * squeeze(p.s) - SCOPE_R), m = Math.hypot(p.x, p.y);
+  const rEff = Math.max(0.6, lumR(p.s, Math.atan2(p.y, p.x)) - SCOPE_R), m = Math.hypot(p.x, p.y);
   let scraping = false;
   if (m > rEff) {
     const over = m - rEff; p.x *= rEff / m; p.y *= rEff / m; p.vx *= 0.4; p.vy *= 0.4;
     const outward = (ix * p.x + iy * p.y) / (rEff || 1);
-    if (!trip && (outward > 0.25 || over > 0.01)) {
+    if (!trip && !inSheath(p.s) && (outward > 0.25 || over > 0.01)) { // inside the sheath you rub plastic, not mucosa
       scraping = true;
       G.hp -= (6 + over * 120) * dt; G.lastLoss = 'scrape'; G.blood = Math.min(100, G.blood + 32 * dt); G.hurt = 1;
       worldAt(p.s + 0.4, p.x * 1.1, p.y * 1.1, V1);
@@ -1149,6 +1230,7 @@ function update(dt) {
   // clean pass through a pinch point = bonus
   PINCHES.forEach((k, i) => {
     const pf = G.pinch[i];
+    if (!livePinch(k)) return;
     if (scraping && Math.abs(p.s - k.s) < 3) pf.scraped = true;
     if (!pf.passed && p.s > k.s + 3) {
       pf.passed = true;
@@ -1156,7 +1238,7 @@ function update(dt) {
     }
   });
   // irrigation → pressure, sepsis
-  const Ptarget = 6 + G.flow * 54;
+  const Ptarget = 6 + G.flow * 54 * LV.pk;
   G.P += (Ptarget - G.P) * Math.min(1, dt * 1.6);
   G.peakP = Math.max(G.peakP, G.P);
   if (G.P > 40) { G.sepsis += (G.P - 40) * 0.9 * dt; G.timeOver40 += dt; } else if (G.P < 30) G.sepsis = Math.max(0, G.sepsis - 2 * dt);
@@ -1240,23 +1322,25 @@ function update(dt) {
     st.vs *= Math.exp(-3.2 * dt); st.s += st.vs * dt;
     if (Math.abs(st.vs) < 0.3 && st.s > st.s0) st.s = Math.max(st.s0, st.s - 0.45 * dt);
     st.s = Math.max(st.s, p.s + rOf(st) + 1.0);
+    if (LV.kidney) st.s = Math.min(st.s, st.s0 + (st.s0 > UPJ_S + 20 ? 1.2 : 4)); // a calyx cup (or the far wall of the pelvis) stops it
     st.vx *= Math.exp(-3 * dt); st.vy *= Math.exp(-3 * dt);
     st.x += (st.vx + (st.hx - st.x) * 0.4 + Math.sin(G.t * 0.7 + st.i) * 0.05) * dt;
     st.y += (st.vy + (st.hy - st.y) * 0.4 + Math.cos(G.t * 0.6 + st.i) * 0.05) * dt;
     st.flash *= Math.exp(-dt * 8);
-    if (st.s > UPJ_S - 0.5) migrateStone(st);
+    if (st.s0 < UPJ_S && st.s > UPJ_S - 0.5) migrateStone(st);
   }
   // fragments float, drift up with the irrigant, can wash into the kidney
   for (const f of G.frags) {
     if (f.gone || f.held) continue;
     f.vs *= Math.exp(-2.5 * dt); f.vx *= Math.exp(-3 * dt); f.vy *= Math.exp(-3 * dt); f.bob += dt;
-    const behind = f.s < p.s - 0.3;
-    if (!behind) f.lodge = null; else if (f.lodge == null) f.lodge = f.s - mr(2, 5);
+    const behind = f.s < p.s - 0.3, wide = LV.kidney && f.s > UPJ_S + 4; // in the pelvis nothing washes down past the scope
+    if (!behind || wide) f.lodge = null; else if (f.lodge == null) f.lodge = f.s - mr(2, 5);
     // ahead: the irrigant carries it up; behind the tip: the outflow around the scope carries it down until it lodges
-    f.s += (f.vs + (behind ? (f.s > f.lodge ? -(0.25 + G.flow * 0.4) : 0) : G.flow * 0.3)) * dt;
+    f.s += (f.vs + (behind ? (wide ? 0 : f.s > f.lodge ? -(0.25 + G.flow * 0.4) : 0) : G.flow * 0.3)) * dt;
     if (f.s < 0.8) { killFrag(f, false); continue; } // washed into the bladder — it'll pass
+    if (behind && f.d < 3.5 && inSheath(f.s - 0.5)) { killFrag(f, false); toast('A fragment washed out through the sheath ✓', 'good', 'shout', 3); continue; } // outflow up the sheath carries it out
     f.x += (f.vx + Math.sin(f.bob * 0.9) * 0.08) * dt; f.y += (f.vy + Math.cos(f.bob * 0.7) * 0.08) * dt;
-    const lim = Math.max(0.05, baseR(f.s) * squeeze(f.s) - rOf(f) - 0.05), fm = Math.hypot(f.x, f.y);
+    const lim = Math.max(0.05, lumR(f.s, Math.atan2(f.y, f.x)) - rOf(f) - 0.05), fm = Math.hypot(f.x, f.y);
     if (fm > lim) { f.x *= lim / fm; f.y *= lim / fm; f.vx *= -0.5; f.vy *= -0.5; }
     if (f.left) { if (f.s < p.s - 1.5) killFrag(f, false); continue; }
     const fr = rOf(f), ahead = f.s - p.s;
@@ -1265,17 +1349,18 @@ function update(dt) {
       if (ahead < -0.3 && !f.slipSeen) { f.slipSeen = true; G.slips++; toast("A fragment slipped past the scope — it's behind you (check the fluoro)", 'warn', 'slip', 6); }
       if (ahead > 0.3 && f.slipSeen) f.slip = false; // back in front after a pull-back: normal rules again
       else if (ahead > -0.4 && ahead < fr + 0.6 && Math.hypot(f.x - p.x, f.y - p.y) < SCOPE_R + fr + 0.1) { f.s = p.s + fr + 0.6; f.vs = Math.max(f.vs, 0); }
-    } else if (f.s < p.s + fr + 0.6) { f.s = p.s + fr + 0.6; f.vs = Math.max(f.vs, 0); } // everything else is pushed ahead of the tip
-    if (f.s > UPJ_S + 2 || f.s > G.stones[f.owner].s0 + 26) {
+    } else if (f.s < p.s + fr + 0.6 && (!wide || Math.hypot(f.x - p.x, f.y - p.y) < SCOPE_R + fr + 1)) { f.s = p.s + fr + 0.6; f.vs = Math.max(f.vs, 0); } // everything else is pushed ahead of the tip
+    const s0 = G.stones[f.owner].s0;
+    if (LV.kidney && s0 > UPJ_S ? f.s > s0 + 9 : (f.s > UPJ_S + 2 || f.s > s0 + 26)) {
       G.residual++; G.migFrags++; killFrag(f, false);
-      toast('A fragment washed up toward the kidney (residual)', 'warn', 'fmig', 3);
+      toast(LV.kidney && s0 > UPJ_S ? 'A fragment washed off into another calyx (residual)' : 'A fragment washed up toward the kidney (residual)', 'warn', 'fmig', 3);
     }
   }
   // basket state machine
   if (bk.state !== 'idle') {
     bk.t += dt; const o = bk.target;
     if (bk.state === 'out' && bk.t >= 0.45) {
-      if (o.d >= 4) { bk.state = 'stuck'; bk.t = 0; SFX.stuck(); toast(`${o.d.toFixed(1)} mm won't come down the ureter — releasing`, 'bad', 'stuck', 0); }
+      if (o.d >= 4) { bk.state = 'stuck'; bk.t = 0; SFX.stuck(); toast(`${o.d.toFixed(1)} mm won't ${LV.sheath ? 'fit through the sheath' : 'come down the ureter'} — releasing`, 'bad', 'stuck', 0); }
       else { bk.state = 'retract'; bk.t = 0; bk.cap = true; }
     } else if (bk.state === 'stuck') {
       G.hp -= 10 * dt; G.lastLoss = 'basket'; G.hurt = 1; G.shake = Math.max(G.shake, 0.06);
@@ -1284,7 +1369,7 @@ function update(dt) {
     } else if (bk.state === 'retract' && bk.t >= 0.6) {
       if (bk.cap) {
         bk.state = 'carry'; G.trip = { phase: 'out', back: p.s, t0: G.t };
-        toast(G.trips ? 'Withdrawing with the basket…' : 'No access sheath: every basketed piece rides out to the bladder and back. The anesthesia clock keeps running.', 'warn', 'trip', G.trips ? 3 : 0);
+        toast(G.trips ? 'Withdrawing with the basket…' : LV.sheath ? 'Out through the sheath and straight back in — quick, but still on the clock.' : 'No access sheath: every basketed piece rides out to the bladder and back. The anesthesia clock keeps running.', 'warn', 'trip', G.trips ? 3 : 0);
       } else { bk.state = 'idle'; bk.target = null; }
     }
   }
@@ -1302,7 +1387,9 @@ function update(dt) {
   G.hurt = Math.max(0, G.hurt - dt * 2.5);
   if (G.hp <= 0) return endRun(G.lastLoss === 'thermal' ? 'thermal' : 'perf');
   if (G.sepsis >= 100) return endRun('sepsis');
-  if (p.s >= END_S) return endRun('done');
+  if (p.s >= LV.end) return endRun('done');
+  // the kidney case is over once every calyx is clear — there's nowhere further up to go
+  if (LV.kidney && G.stones.every(st => st.phase === 'done')) { G.doneT = (G.doneT || 0) + dt; if (G.doneT > 1.5) return endRun('done'); }
 }
 // one visible laser pulse in the fragmenting regime: flash, shockwave, retropulsion; breaks fragments
 function kick(tgt, nearWall, L) {
@@ -1364,10 +1451,14 @@ function updateScene(dt) {
   if (camMode === 'chase') {
     G.eng = lerp(G.eng || 0, p.v < 1.5 ? 1 : 0, Math.min(1, dt * 2));
     const e = G.eng, cs = Math.max(0, p.s - lerp(5.2, 3.7, e)); frameAt(cs, F2);
-    let ox = p.x * 0.55, oy = p.y * 0.55 + lerp(1.2, 1.65, e); const lim = baseR(cs) * squeeze(cs) - 0.45, mm = Math.hypot(ox, oy);
+    const kf = LV.kidney ? 0.8 : 0.55; // in the kidney the camera follows the tip further off-axis, out toward the calyces
+    let ox = p.x * kf, oy = p.y * kf + lerp(1.2, 1.65, e); const lim = lumR(cs, Math.atan2(oy, ox)) - 0.45, mm = Math.hypot(ox, oy);
     if (mm > lim) { ox *= lim / mm; oy *= lim / mm; }
     camWant.copy(F2.p).addScaledVector(F2.r, ox).addScaledVector(F2.u, oy);
     frameAt(p.s + lerp(7, 5.5, e), F3); lookWant.copy(F3.p).addScaledVector(F3.r, p.x * 0.75).addScaledVector(F3.u, p.y * 0.75 + lerp(0.45, 0.25, e));
+    // kidney: keep the stone you're working on in frame when it sits off to the side in a calyx
+    const ks = LV.kidney && G.stones.find(st => st.phase === 'alive' && !st.held && st.s - p.s < 20);
+    if (ks) lookWant.lerp(worldAt(ks.s, ks.x, ks.y, V3), 0.3 * smooth(20, 8, ks.s - p.s));
     camera.up.copy(F2.u);
   } else {
     camWant.copy(V1).addScaledVector(F1.t, -0.05);
@@ -1380,6 +1471,9 @@ function updateScene(dt) {
   if (G.shake > 0.002) { camera.position.add(V2.set(mr(-1, 1), mr(-1, 1), mr(-1, 1)).multiplyScalar(G.shake)); G.shake *= Math.exp(-dt * 9); }
   // lights ride the scope
   spot.position.copy(V1).addScaledVector(F1.u, 0.5).addScaledVector(F1.r, 0.3); spot.target.position.copy(V1).addScaledVector(F1.t, 8); fill.position.copy(V1).addScaledVector(F1.t, 0.6);
+  // the pelvis is several times wider than the ureter: more light, thrown where you're looking, so the calyces read from their mouths
+  const kl = LV.kidney ? smooth(UPJ_S, UPJ_S + 18, p.s) : 0;
+  spot.intensity = 26 * (1 + 2.2 * kl); if (kl > 0) spot.target.position.lerp(camLook, kl);
   rim.position.copy(V1).addScaledVector(F1.t, -1.6).addScaledVector(F1.u, 0.9);
   // ghost the scope while a target is locked so the impact stays visible
   const op = lerp(SCOPE_MATS[0].opacity, G.lock ? 0.4 : 1, Math.min(1, dt * 8));
@@ -1432,7 +1526,7 @@ function updateScene(dt) {
   const m0 = Math.hypot(p.x, p.y);
   PINCHES.forEach((k, i) => {
     const r = pinchRings[i], d = k.s - p.s, fade = smooth(45, 22, d) * smooth(-1, 1.5, d);
-    r.visible = fade > 0.01;
+    r.visible = fade > 0.01 && livePinch(k);
     if (!r.visible) return;
     const inside = m0 < (k.r - SCOPE_R) * 0.8;
     r.material.color.setRGB(inside ? 0.3 : 2.4, inside ? 2.2 : 1.3, inside ? 0.6 : 0.2);
@@ -1472,6 +1566,8 @@ function flPoint(s) {
   const loc = clamp((u - FL_KEYS[k][0]) / (FL_KEYS[k + 1][0] - FL_KEYS[k][0]), 0, 1);
   return flCurve.getPoint((k + loc) / (FL_KEYS.length - 1));
 }
+// past the UPJ the run is inside the kidney: spread the point out by its lateral offset (upper pole up, lower pole down)
+function flAt(s, x, y) { const q = flPoint(s); if (s > UPJ_S + 4) { q.x += x * 0.006; q.y -= y * 0.006; } return q; }
 function flBackground() {
   const S = FL.c.width, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d'), X = v => v * S;
@@ -1501,6 +1597,11 @@ function flBackground() {
   g.strokeStyle = 'rgba(22,22,22,0.75)'; g.lineWidth = X(0.006); g.beginPath(); g.moveTo(X(0.375), X(1.02)); // safety wire, coiled in the pelvis
   for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); g.lineTo(X(q.x + 0.008), X(q.y)); }
   g.arc(X(0.71), X(0.13), X(0.035), Math.PI, Math.PI * 2.8); g.stroke();
+  if (LV.sheath) { // the access sheath: a broad grey band with a dense marker ring at its tip
+    g.strokeStyle = 'rgba(45,45,45,0.5)'; g.lineWidth = X(0.032); g.beginPath(); g.moveTo(X(0.36), X(1.02));
+    for (let i = 0; i <= 60; i++) { const q = flPoint(i / 60 * LV.sheath); g.lineTo(X(q.x), X(q.y)); }
+    g.stroke(); const q = flPoint(LV.sheath); g.fillStyle = 'rgba(15,15,15,0.85)'; g.beginPath(); g.arc(X(q.x), X(q.y), X(0.016), 0, 6.283); g.fill();
+  }
   g.font = `700 ${X(0.045)}px system-ui`; g.fillStyle = 'rgba(255,255,255,0.8)'; g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = X(0.006);
   for (const k of PINCHES) { const q = flPoint(k.s); g.beginPath(); g.moveTo(X(q.x + 0.03), X(q.y)); g.lineTo(X(q.x + 0.07), X(q.y)); g.stroke(); g.fillText(k.short, X(q.x + 0.08), X(q.y + 0.016)); }
   g.restore();
@@ -1523,13 +1624,13 @@ function drawFluoro() {
   g.beginPath(); g.moveTo(X(0.36), X(1.02));
   const n = Math.max(2, Math.ceil(p.s / 3));
   for (let i = 0; i <= n; i++) { const q = flPoint(i / n * p.s); g.lineTo(X(q.x), X(q.y)); }
+  const tip = flAt(p.s, p.x, p.y); g.lineTo(X(tip.x), X(tip.y));
   g.stroke();
-  const tip = flPoint(p.s);
   g.fillStyle = '#080808'; g.beginPath(); g.arc(X(tip.x), X(tip.y), X(0.013), 0, 6.283); g.fill();
   // stones over the scope (a faint rim keeps them readable where they overlap the tip); uric acid stays invisible
   const dot = (q, d, a) => { if (a <= 0) return; g.beginPath(); g.arc(X(q.x + 0.004), X(q.y), Math.max(1.6, d * 0.7), 0, 6.283); g.fillStyle = `rgba(18,18,18,${a})`; g.fill(); g.strokeStyle = 'rgba(235,235,235,0.45)'; g.lineWidth = 1.2; g.stroke(); };
-  for (const st of G.stones) if (st.phase === 'alive' && !st.held) dot(flPoint(st.s), st.d, RADIO[st.type]);
-  for (const f of G.frags) if (!f.gone && !f.held) dot(flPoint(f.s), f.d, RADIO[f.type]);
+  for (const st of G.stones) if (st.phase === 'alive' && !st.held) dot(flAt(st.s, st.x, st.y), st.d, RADIO[st.type]);
+  for (const f of G.frags) if (!f.gone && !f.held) dot(flAt(f.s, f.x, f.y), f.d, RADIO[f.type]);
   let mi = 0; // a stone pushed into the kidney still shows — that's how migration is confirmed
   for (const st of G.stones) if (st.how === 'migrated') dot({ x: 0.70 + (mi++) * 0.03, y: 0.21 }, st.d, RADIO[st.type]);
   if (G.bk.state === 'carry') { g.strokeStyle = 'rgba(10,10,10,0.9)'; g.lineWidth = X(0.008); g.beginPath(); g.arc(X(tip.x), X(tip.y - 0.035), X(0.022), 0, 6.283); g.stroke(); }
@@ -1552,9 +1653,10 @@ el('gG').setAttribute('d', arcPath(0, 30)); el('gA').setAttribute('d', arcPath(3
 el('flowZone').style.bottom = ((40 - 6) / 54 * 100) + '%'; // where flow tips IRP past 40
 function buildProgress() {
   const bar = el('prog');
-  bar.querySelectorAll('.pm,.pupj').forEach(n => n.remove());
-  const u = document.createElement('div'); u.className = 'pupj'; u.style.left = (UPJ_S / END_S * 100) + '%'; bar.appendChild(u);
-  G.stones.forEach(st => { const d = document.createElement('div'); d.className = 'pm alive'; d.style.left = (st.s0 / END_S * 100) + '%'; st.pm = d; bar.appendChild(d); });
+  bar.querySelectorAll('.pm,.pupj,.psh').forEach(n => n.remove());
+  const u = document.createElement('div'); u.className = 'pupj'; u.style.left = (UPJ_S / LV.end * 100) + '%'; bar.appendChild(u);
+  if (LV.sheath) { const sh = document.createElement('div'); sh.className = 'psh'; sh.style.width = (LV.sheath / LV.end * 100) + '%'; bar.appendChild(sh); }
+  G.stones.forEach(st => { const d = document.createElement('div'); d.className = 'pm alive'; d.style.left = (st.s0 / LV.end * 100) + '%'; st.pm = d; bar.appendChild(d); });
 }
 function score() {
   let sc = 0;
@@ -1580,7 +1682,7 @@ function updateHUD() {
   setT(HUD.vis, Math.round(G.vis * 100) + '%');
   setT(HUD.score, score() + '');
   setT(HUD.stage, stageName(p.s));
-  setS(HUD.me, 'left', clamp(p.s / END_S * 100, 0, 100).toFixed(1) + '%');
+  setS(HUD.me, 'left', clamp(p.s / LV.end * 100, 0, 100).toFixed(1) + '%');
   setS(HUD.fill, 'height', (G.flow * 100).toFixed(0) + '%');
   setT(HUD.ftxt, Math.round(G.flow * 100) + '');
   setT(HUD.orT, fmtT(G.t)); HUD.orT.style.color = G.t > 240 ? '#f87171' : G.t > 180 ? '#fbbf24' : '';
@@ -1588,7 +1690,7 @@ function updateHUD() {
   for (const st of G.stones) st.pm.className = 'pm ' + (st.how === 'migrated' ? 'mig' : st.phase);
   // target readout
   let txt = '', cls = '';
-  const near = G.stones.find(s => s.phase === 'alive' && s.s - p.s < 14);
+  const near = G.stones.find(s => s.phase === 'alive' && s.s - p.s < APPROACH_D + 6);
   if (G.vis <= 0.35 && (G.tgt || near)) { txt = 'VISIBILITY LOST — more flow'; cls = 'blind'; }
   else if (G.tgt) {
     const o = G.tgt.o;
@@ -1596,13 +1698,16 @@ function updateHUD() {
     else txt = `STONE ${o.i + 1} · ${o.d.toFixed(1)} mm · ${o.hu.toLocaleString()} HU`;
     if (G.firing && G.rateObj === o && o.rate > 0.005) txt += ` · −${o.rate.toFixed(2)} mm/s`;
     cls = 'lock';
-  } else if (near) txt = `STONE ${near.i + 1} ahead · ${near.d.toFixed(1)} mm · ${near.hu.toLocaleString()} HU — line up the aiming beam`;
+  } else if (near) {
+    const c = LV.calyces && LV.slots[near.i].cx != null ? LV.calyces[LV.slots[near.i].cx] : null;
+    txt = `STONE ${near.i + 1} ahead · ${near.d.toFixed(1)} mm · ${near.hu.toLocaleString()} HU — ${c && Math.hypot(near.x - p.x, near.y - p.y) > 2 ? (p.v < 1 ? `deflect into the ${c.name.toLowerCase()}` : `in the ${c.name.toLowerCase()}`) : 'line up the aiming beam'}`;
+  }
   const tcls = cls + (txt ? '' : ' hidden');
   if (HUD.target.dataset.c !== tcls) { HUD.target.className = tcls; HUD.target.dataset.c = tcls; }
   setT(HUD.target, txt);
   // banner
   let b = '', red = false;
-  const pn = pinchNear(p.s), nearUpj = G.stones.some(s => s.phase === 'alive' && s.s > UPJ_S - 9);
+  const pn = pinchNear(p.s), nearUpj = G.stones.some(s => s.phase === 'alive' && s.s0 < UPJ_S && s.s > UPJ_S - 9);
   const curSt = G.stones.find(s => s.phase !== 'done');
   const behindF = !!curSt && G.frags.some(f => !f.gone && !f.left && !f.held && f.owner === curSt.i && f.s < p.s - 0.3);
   if (G.P > 40) { b = 'IRP > 40 mmHg — PYELOVENOUS BACKFLOW'; red = true; }
@@ -1612,6 +1717,7 @@ function updateHUD() {
   else if (G.pend) b = 'LASER STANDBY';
   else if (input.back || keys.KeyB) b = 'PULLING BACK ↓';
   else if (behindF) b = '⬇ FRAGMENT BEHIND THE SCOPE — HOLD PULL BACK';
+  else if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) b = 'STEER BACK TOWARD THE PELVIS ↺  THEN ON TO THE NEXT CALYX';
   else if (pn && pn.d > 0 && pn.d < 18) b = `PINCH POINT · ${pn.k.name} — CENTER THE SCOPE`;
   else if (G.wave.on && G.wave.s > p.s && G.wave.s - p.s < 24) b = 'PERISTALSIS ↓  CENTER THE SCOPE';
   setT(HUD.banner, b); HUD.banner.classList.toggle('on', !!b); HUD.banner.classList.toggle('red', red);
@@ -1629,12 +1735,12 @@ function toolsHTML() {
   const laser = SETTINGS.level === 'advanced'
     ? `<div class="tool" style="grid-column:span 2"><b style="color:#93c5fd">TWO PEDALS · ENERGY × FREQUENCY</b>Program each pedal yourself (⚙ LASER). Low energy at high frequency dusts; from ~1.2 J it fragments. Retropulsion climbs steeply with pulse energy, heat with total watts (J × Hz). Max 120 W.</div>`
     : `<div class="tool"><b style="color:var(--g)">LEFT PEDAL · DUST 0.4 J × 80 Hz</b>Continuous beam that grinds the stone to dust. No retropulsion, but it clouds the view and heats the lumen.</div>
-       <div class="tool"><b style="color:var(--a)">RIGHT PEDAL · FRAG 1.5 J × 8 Hz</b>Heavy pulses that break hard stones fast. Retropulsion pushes the stone up (past the UPJ = lost to the kidney). Leaves fragments — some slip behind the scope.</div>`;
+       <div class="tool"><b style="color:var(--a)">RIGHT PEDAL · FRAG 1.5 J × 8 Hz</b>Heavy pulses that break hard stones fast. ${LV.kidney ? 'Retropulsion scatters pieces out of the calyx into the rest of the kidney.' : 'Retropulsion pushes the stone up (past the UPJ = lost to the kidney).'} Leaves fragments — some slip behind the scope.</div>`;
   return laser + `<div class="tool"><b style="color:#93c5fd">IRRIGATION</b>Flow clears dust and blood and cools the tip. It also raises intrarenal pressure. Above 40 mmHg, sepsis risk climbs.</div>
-    <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won't come down safely.</div>`;
+    <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. ${LV.sheath ? 'Through the sheath: a quick trip out and back, still on the clock. ≥4 mm won\'t fit through it.' : 'No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won\'t come down safely.'}</div>`;
 }
 function wireSegs(root, after) {
-  root.querySelectorAll('.seg').forEach(sg => sg.addEventListener('click', e => {
+  root.querySelectorAll('.seg[data-k]').forEach(sg => sg.addEventListener('click', e => {
     const btn = e.target.closest('button'); if (!btn) return;
     const raw = btn.dataset.v; SETTINGS[sg.dataset.k] = raw === 'true' ? true : raw === 'false' ? false : raw; saveSettings();
     sg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === btn));
@@ -1644,11 +1750,15 @@ function wireSegs(root, after) {
 function showBrief() {
   state = 'brief'; closeLaserPanel(); document.body.classList.remove('ingame');
   $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('scopeMask').classList.add('hidden');
+  const cases = LEVELS.map(l => `<button data-case="${l.id}" class="${l === LV ? 'on' : ''}"${l.id > unlocked ? ' disabled' : ''}>${l.id > unlocked ? '🔒 ' : ''}${l.tag} · ${l.name}</button>`).join('');
   const rows = G.stones.map(st => `<tr><td>${st.i + 1}</td><td>${st.loc}</td><td><b>${st.d0} mm</b></td><td><b>${st.hu.toLocaleString()} HU</b></td></tr>`).join('');
   screen.innerHTML = `<div class="panel">
     <h1>STONE <span>SQUADRON</span><span class="tag">3D PROTOTYPE</span></h1>
     <p class="keys" style="margin:4px 0 0">build ${BUILD} · a work in progress — things may break</p>
     <p>Fly the ureteroscope from the UVJ to the renal pelvis. Clear every stone on the way. Goal: <b>stone-free</b>, ureter intact, intrarenal pressure under control.</p>
+    <h2>CASE</h2>
+    <div class="seg cases">${cases}</div>
+    <p class="keys">${LV.blurb}${unlocked < LEVELS.length ? ' Finish a case to unlock the next.' : ''}</p>
     <h2>PRE-OP NCCT</h2>
     <table><tr><th>#</th><th>LOCATION</th><th>SIZE</th><th>DENSITY</th></tr>${rows}</table>
     <p class="keys">Composition is unknown. Read the HU and how the stone looks on camera. Basket a fragment to confirm it.</p>
@@ -1660,7 +1770,7 @@ function showBrief() {
     </div>
     <h2>YOUR TOOLS</h2>
     <div class="tools" id="toolsBox">${toolsHTML()}</div>
-    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (UVJ, iliac crossing, UPJ) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>.</p>
+    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
     <h2>CONTROLS</h2>
     <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
     Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
@@ -1672,6 +1782,7 @@ function showBrief() {
   $('goBtn').addEventListener('click', startPlay);
   if (EMBED) $('exitBtn').addEventListener('click', () => toApp({ type: 'squadron:exit' }));
   const fb = $('firstBtn'); if (fb) fb.addEventListener('click', () => { newRun(1, true); showBrief(); });
+  screen.querySelectorAll('[data-case]').forEach(b => b.addEventListener('click', () => { const l = LEVELS[+b.dataset.case - 1]; if (l === LV || l.id > unlocked) return; newRun(G.seed, G.fixed, l); showBrief(); }));
 }
 function startPlay() {
   audioInit();
@@ -1719,6 +1830,8 @@ function endRun(reason) {
   G.end = reason;
   if (G.trip) { G.tripTime += G.t - G.trip.t0; G.trips++; if (G.bk.state === 'carry' && G.bk.target) capture(G.bk.target); G.trip = null; }
   const aborted = reason !== 'done';
+  if (!aborted) unlockCase(LV.id + 1);
+  const next = !aborted && LEVELS[LV.id];
   const migrated = G.stones.filter(s => s.how === 'migrated').length;
   const stoneFree = !aborted && G.residual === 0 && migrated === 0;
   let sc = score() + Math.round(G.minHp * 5) + Math.max(0, Math.round((240 - G.t) * 3)) - Math.round(G.timeOver40 * 20);
@@ -1740,11 +1853,12 @@ function endRun(reason) {
   }).join('');
   screen.innerHTML = `<div class="panel">
     <h1 style="font-size:24px">${head[0]}</h1><p>${head[1]}</p>
+    <p class="keys">${LV.tag} · ${LV.name}${next && next.id === unlocked && !G.wasUnlocked ? ` — <b class="ok">${next.tag} unlocked: ${next.name}</b>` : ''}</p>
     <div class="stats">
       <div class="stat"><small>SCORE</small><b>${sc.toLocaleString()}</b></div>
       <div class="stat"><small>OR TIME</small><b>${fmtT(G.t)}</b></div>
       <div class="stat"><small>BASKET TRIPS</small><b>${G.trips}${G.trips ? ` · ${Math.round(G.tripTime)} s` : ''}</b></div>
-      <div class="stat"><small>CLEAN PINCH PASSES</small><b>${G.cleanPasses}/${PINCHES.length}</b></div>
+      <div class="stat"><small>CLEAN PINCH PASSES</small><b>${G.cleanPasses}/${PINCHES.filter(livePinch).length}</b></div>
       <div class="stat"><small>PEDAL SWITCHES · REPROGRAMS</small><b>${G.pedSwitches} · ${G.reprograms}</b></div>
       <div class="stat"><small>RESIDUAL ≥2 MM</small><b>${G.residual}</b></div>
       <div class="stat"><small>PEAK IRP</small><b class="${G.peakP > 40 ? 'bd' : G.peakP > 30 ? 'wn' : 'ok'}">${Math.round(G.peakP)}</b></div>
@@ -1757,7 +1871,7 @@ function endRun(reason) {
     <div class="fb"><textarea id="fbNotes" placeholder="What felt off, confusing or fun? (optional) — then share or copy the report and text it over"></textarea>
       <div class="go">${navigator.share ? '<button id="shareBtn">SHARE REPORT</button>' : ''}<button class="alt" id="copyBtn">Copy report</button><span id="fbMsg" class="keys"></span></div>
       <textarea id="fbOut" class="hidden" readonly></textarea></div>
-    <div class="go"><button id="againBtn">NEW STONES ▸</button><button class="alt" id="sameBtn">Same stones</button>${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
+    <div class="go">${next ? `<button id="nextBtn">${next.tag} ▸</button>` : ''}<button id="againBtn"${next ? ' class="alt"' : ''}>NEW STONES ▸</button><button class="alt" id="sameBtn">Same stones</button>${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
   </div>`;
   if (EMBED) {
     // one claim per run; the app clamps it again (150 coins / 80 xp)
@@ -1771,6 +1885,7 @@ function endRun(reason) {
   $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); closeLaserPanel();
   $('againBtn').addEventListener('click', () => { newRun((Math.random() * 1e9) | 0, false); showBrief(); });
   $('sameBtn').addEventListener('click', () => { newRun(G.seed, G.fixed); showBrief(); });
+  if (next) $('nextBtn').addEventListener('click', () => { newRun((Math.random() * 1e9) | 0, false, next); showBrief(); });
 }
 
 // ───────────────────────── tester run report (share sheet / clipboard — no backend)
@@ -1782,7 +1897,7 @@ function runReport() {
     `Stone Squadron 3D — run report · build ${BUILD}`,
     `Device: ${PHONE ? 'phone' : useTouch ? 'tablet' : 'desktop'} (${ua}) · ${innerWidth}×${innerHeight}`,
     `Settings: deflection ${SETTINGS.invert ? 'inverted' : 'standard'} · ${camMode === 'scope' ? 'scope view' : 'chase cam'} · laser ${SETTINGS.level}`,
-    `Run: ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · OR time ${fmtT(G.t)}`,
+    `Run: ${LV.tag} (${LV.name}) · ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · OR time ${fmtT(G.t)}`,
     `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
     `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${Math.round(G.tripTime)} s) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
     `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
@@ -1856,7 +1971,9 @@ function frame(now) {
 }
 if (DEBUG) HUD.fps.classList.remove('hidden');
 resize();
-newRun(params.has('seed') ? +params.get('seed') : 1, !params.has('seed'));
+const bootCase = clamp((+params.get('case') || 1) | 0, 1, LEVELS.length);
+if (params.has('case')) unlockCase(bootCase); // direct link (tests, demos) opens that case
+newRun(params.has('seed') ? +params.get('seed') : 1, !params.has('seed'), LEVELS[bootCase - 1]);
 showBrief();
 if (Q.bloom) setupBloom();
 requestAnimationFrame(frame);
@@ -1864,7 +1981,7 @@ window.__sqBooted = true;
 // test hook (headless checks): read state, drive input, advance the sim without rAF
 window.__sq = {
   get G() { return G; }, get state() { return state; }, input, keys, joy, Q,
-  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera,
+  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt,
   step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) update(dt); if (state === 'play') { updateScene(dt); updateHUD(); } },
 };
 </script>

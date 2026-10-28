@@ -3,6 +3,46 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-28 — 🛩️ Stone Squadron: slower stone approach + Cases 2 and 3 (sheath, kidney)
+
+Andrew: the scope moves forward too fast as stones come into view, so it's easy for them to go by.
+Also add later levels with a ureteral access sheath and/or work in the renal pelvis and calyces.
+
+**Done (`games/stone-squadron.html` only; the Lab prototype in `prototypes/` is untouched):**
+- **Approach:** over the last 26 units before a stone, the scope now slows from cruise (9) to a
+  creep (2.6). Headless measurement: ~6 s from first sight to arrival (was ~2.9 s), and at most
+  3 units/s over the last 10 (before, it held full cruise until the final brake). The "STONE ahead"
+  readout now appears from that distance too.
+- **Cases** (`LEVELS`) unlock in order: finishing a run unlocks the next (localStorage
+  `sq3d_cases`; `?case=N` opens one directly). There's a picker on the brief and a "CASE n ▸"
+  button on the end screen, and the run report names the case.
+  - Case 1: the old run, unchanged apart from the approach.
+  - Case 2, access sheath (tip at s 186): you ride through the sheath fast, with no wall injury and
+    no pinch slowdown or peristalsis inside it. Basket trips go 2.2× faster in the sheath, outflow
+    lowers IRP (×0.66), and small fragments that drift back into it wash out. The stones sit high
+    (204 / 228 / 252). The sheath shows in 3D (with a marker band at the tip), on the fluoro and on
+    the progress bar.
+  - Case 3, renal pelvis & calyces (sheath tip at 236): one stone in the pelvis and one each in the
+    upper- and lower-pole calyces (side pockets bulging off the pelvis). The rails take you to a
+    calyx mouth, then only as far as you deflect toward its stone. They won't push you into a wall,
+    so you steer back out to move on. Stones don't migrate here: fragments that wash 9+ units on
+    count as residual "in another calyx". The pelvis has brighter light, the camera keeps the calyx
+    stone in frame, and the fluoro spreads kidney positions out (upper pole up). The case ends once
+    every calyx is clear.
+- The track has one more control point past the old end (room for the kidney), and the far end is
+  now a closed sac.
+
+**Verified:** in headless Chromium (playwright, with three.js served locally because the CDN is
+blocked in the sandbox). A scripted pilot plays all three cases from start to end with no page
+errors. Screenshots cover the sheath, the calyx mouth and an upper-pole stone (chase and scope
+view), and the case picker fits at 844×390.
+**Not verified:** on an iPad or phone. Not pushed.
+**Next steps:** play Cases 2–3 on the iPad. Is the 2.6 creep too slow? Are the calyces easy to
+find? Is the lower pole hard enough? If testers should get this, port it to
+`prototypes/squadron3d.html`.
+**Open questions:** should Case 3 add an interpolar stone (the pocket is already modelled), or a
+"relocate the stone to the upper pole" move for the lower pole?
+
 ## 2026-10-26 — 🛩️ Stone Squadron added to the Arcade
 
 **Done:** `games/stone-squadron.html` = copy of `prototypes/squadron3d.html` + `?embed=1` mode
