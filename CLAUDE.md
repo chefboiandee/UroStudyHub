@@ -11,7 +11,7 @@ inside another workspace; nothing here depends on that one any more.)
 |---|---|
 | Roadmap, architecture, features, data model | `UroStudyHub_CLAUDE.md` (big — grep, then slice) |
 | What the last session did, next steps | `STATUS.md` (newest entries at the top) |
-| Stone Squadron (the 2D bullet-hell inside the app) | `STONE_SQUADRON.md` |
+| Stone Squadron (3D ureteroscopy game in `games/`): design notes, roadmap | `STONE_SQUADRON.md` |
 | User-facing setup | `SETUP.md` |
 
 ## Layout

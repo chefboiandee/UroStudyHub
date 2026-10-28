@@ -136,6 +136,18 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .seg button{font:700 14px/1 system-ui;padding:12px 15px;border:0;background:rgba(255,255,255,.05);color:var(--t);cursor:pointer}
 .seg button.on{background:var(--g);color:#032}
+.prep{width:min(1060px,100%)}
+.prepgrid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:16px;margin-top:12px}
+@media (max-width:760px){.prepgrid{grid-template-columns:1fr}}
+#ctc{display:block;width:100%;max-width:min(420px,72vh);aspect-ratio:1;border-radius:10px;background:#000;touch-action:none;cursor:ns-resize;margin:0 auto}
+.ctbar{display:flex;gap:8px;align-items:center;margin-top:8px}.ctbar input{flex:1;accent-color:var(--g)}
+.ctbar button{width:40px;height:34px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--t);font-size:13px}
+.ctrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap}.ctrow .seg button{padding:9px 12px;font-size:13px}
+#ctT{font-size:12px;letter-spacing:.12em;color:var(--a)}#ctT.ok{color:var(--g)}
+.doctabs{display:flex;flex-wrap:wrap}.doctabs button{flex:1 1 auto;padding:10px 10px;font-size:12px;letter-spacing:.08em}
+.doc{margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:rgba(0,0,0,.35);white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e6dfdb;max-height:min(440px,60vh);overflow:auto;-webkit-user-select:text;user-select:text}
+.seg.abx{display:flex;flex-wrap:wrap}.seg.abx button{flex:1 1 150px;font-size:13px}
+.go button:disabled{opacity:.5;cursor:default}
 .seg.cases{display:flex;flex-wrap:wrap;margin-top:6px}.seg.cases button{flex:1 1 180px}.seg.cases button:disabled{opacity:.45;cursor:default}
 .set small{color:var(--m);font-size:12px}
 @media (max-height:560px){
@@ -236,6 +248,7 @@ setTimeout(function(){ if(!window.__sqBooted){ var e=document.getElementById('er
 <script type="module">
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeCT, SLICES, zOf, imOf } from './squadron-ct.js';
 
 const BUILD = '2026-10-28 12:00'; // bump on every push so testers can say which build they played
 const params = new URLSearchParams(location.search);
@@ -310,9 +323,48 @@ const LEVELS = [
     blurb: 'A 12/14 Fr access sheath is in, its tip in the proximal ureter. Basket trips are quick through it, and outflow up the sheath keeps the pressure down — but the stones sit high, close to the UPJ.' },
   { id: 3, name: 'Renal pelvis & calyces', tag: 'CASE 3', pk: 0.74, sheath: 236, end: 318, kidney: true,
     calyces: [{ s: 296, th: 1.65, name: 'Upper-pole calyx' }, { s: 304, th: -0.25, name: 'Interpolar calyx' }, { s: 311, th: -1.95, name: 'Lower-pole calyx' }],
-    slots: [{ s: 281, loc: 'Renal pelvis', pelvis: true }, { s: 296, loc: 'Upper-pole calyx', cx: 0 }, { s: 311, loc: 'Lower-pole calyx', cx: 2 }],
+    slots: [{ s: 281, loc: 'Renal pelvis', pelvis: true, ct: 'pelvis' }, { s: 296, loc: 'Upper-pole calyx', cx: 0, ct: 'upper' }, { s: 311, loc: 'Lower-pole calyx', cx: 2, ct: 'lower' }],
     blurb: 'Flexible URS through a sheath into the kidney. One stone floats in the renal pelvis; the others sit in calyces — deflect into each one to reach it. The lower pole needs the most deflection.' },
 ];
+// ───────────────────────── mission prep: the chart for each case (fictional patients) + what the pre-op antibiotic choice does
+const ABX = [['none', 'None'], ['cefazolin', 'Cefazolin 2 g IV'], ['ceftriaxone', 'Ceftriaxone 1 g IV'], ['cipro', 'Ciprofloxacin 400 mg IV'], ['ampgent', 'Ampicillin 2 g + gentamicin IV']];
+// verdict per choice: best / ok (fine) · weak (works, not ideal) · none (no prophylaxis) · wrong (doesn't cover the bug). sepK scales sepsis build-up, sep0 is where it starts
+const ABX_FX = { best: { k: 1, s0: 0, cls: 'ok' }, ok: { k: 1, s0: 0, cls: 'ok' }, weak: { k: 1.4, s0: 0, cls: 'wn' }, none: { k: 1.5, s0: 0, cls: 'wn' }, wrong: { k: 2.2, s0: 18, cls: 'bd' } };
+const PREP = {
+  1: { hydro: 0.5, stent: false, hu: true,
+    history: '52-year-old with 4 days of left flank pain radiating to the groin, with nausea. Afebrile, vitals normal.\nFailed a 2-week trial of passage (tamsulosin, NSAIDs); pain persists. No prior stone surgery.\nPlan today: left ureteroscopy, laser lithotripsy.',
+    noteTitle: 'ED NOTE · 2 weeks ago',
+    note: 'A/P: Left ureteral calculi with mild hydronephrosis on CT. Afebrile, Cr 1.1, UA without nitrites.\nPain controlled with ketorolac.\nTrial of passage: tamsulosin 0.4 mg daily, NSAIDs, strain urine.\nReturn for fever, intractable pain or vomiting.\nUrology follow-up in 2 weeks; ureteroscopy if not passed.',
+    labs: 'Cr 1.1 mg/dL · WBC 8.9\nUA: 2+ blood · nitrite NEG · leukocyte esterase NEG · 5–10 RBC/hpf · 0–5 WBC/hpf\n\nURINE CULTURE (1 week ago): no growth.',
+    abx: { cefazolin: ['best', 'Negative culture → single-dose prophylaxis. A first-generation cephalosporin is a standard choice for ureteroscopy.'],
+      ceftriaxone: ['ok', 'Covers it, but broader than a culture-negative case needs. Cefazolin is the usual pick.'],
+      cipro: ['ok', 'An accepted prophylaxis alternative, but cefazolin is the usual pick and avoids fluoroquinolone side effects.'],
+      ampgent: ['ok', 'An accepted alternative regimen, but more than a culture-negative case needs.'],
+      none: ['none', 'Ureteroscopy gets single-dose periprocedural prophylaxis even with a negative culture.'] } },
+  2: { hydro: 0, stent: true, hu: false,
+    history: '61-year-old with left proximal ureteral stones. Ureteroscopy attempted 2 weeks ago; a stent was left for passive dilation (see op note).\nStent-related urgency and bladder spasms since. Afebrile. No antibiotics started yet.\nPlan today: stent removal, left ureteroscopy with an access sheath, laser lithotripsy.',
+    noteTitle: 'OPERATIVE NOTE · 2 weeks ago',
+    note: 'PROCEDURE: Cystoscopy, attempted left ureteroscopy, left ureteral stent placement (6 Fr × 26 cm).\nFINDINGS: Narrow left distal ureter. The semirigid ureteroscope would not pass the intramural ureter with gentle pressure; not forced.\nA 0.038" guidewire passed easily to the kidney under fluoroscopy.\nPLAN: Stent for passive dilation. Return in ~2 weeks for ureteroscopy with an access sheath.',
+    labs: 'Cr 0.9 mg/dL · WBC 7.1\nUA: 3+ blood · nitrite POS · leukocyte esterase 2+ · >50 WBC/hpf\n\nURINE CULTURE (5 days ago): Escherichia coli >100,000 CFU/mL\n  Ampicillin ........ R\n  Cefazolin ......... R\n  Ceftriaxone ....... S\n  Ciprofloxacin ..... R\n  TMP-SMX ........... R\n  Nitrofurantoin .... S (oral only — no use as IV prophylaxis)',
+    abx: { ceftriaxone: ['best', 'Culture-directed: the E. coli is ceftriaxone-sensitive. A stented, colonized system gets treated for its own organism.'],
+      cefazolin: ['wrong', 'The E. coli is cefazolin-resistant: lasing in colonized urine under pressure, effectively uncovered.'],
+      cipro: ['wrong', 'The E. coli is ciprofloxacin-resistant.'],
+      ampgent: ['weak', 'Ampicillin-resistant; only the gentamicin covers it. Read the sensitivities — ceftriaxone is the clean answer.'],
+      none: ['wrong', 'A positive culture with a stent in place: treat it before you instrument, guided by the sensitivities.'] } },
+  3: { hydro: 0, stent: true, hu: false,
+    history: '45-year-old. Three weeks ago: fever 39.2 °C and an obstructing left UPJ stone, decompressed with an emergent stent (see op note), then 14 days of culture-directed antibiotics.\nNow afebrile and well, stent in place.\nPlan today: stent removal, left flexible ureteroscopy through an access sheath for the renal pelvis and calyceal stones.',
+    noteTitle: 'OPERATIVE NOTE · 3 weeks ago',
+    note: 'PROCEDURE: Cystoscopy, left retrograde pyelogram, left ureteral stent (6 Fr × 26 cm).\nINDICATION: Obstructing left UPJ stone with fever and leukocytosis.\nFINDINGS: Filling defect at the UPJ with hydronephrosis above it. Cloudy, purulent urine drained from the renal pelvis — sent for culture.\nStone NOT treated: infected, obstructed system — decompress first.\nPLAN: Culture-directed antibiotics; definitive ureteroscopy once the infection is treated.',
+    labs: 'Cr 1.0 mg/dL · WBC 6.8\nUA: 1+ blood · nitrite NEG · leukocyte esterase trace\n\nRENAL PELVIS URINE CULTURE (3 weeks ago): Enterococcus faecalis >100,000 CFU/mL\n  Ampicillin ........ S\n  Vancomycin ........ S\n  Nitrofurantoin .... S\n  Ciprofloxacin ..... I\n  Cephalosporins .... intrinsically resistant\n\nREPEAT URINE CULTURE (on antibiotics, 1 week ago): no growth.',
+    abx: { ampgent: ['best', 'Enterococcus: ampicillin covers it (gentamicin adds gram-negative cover). Recent infected stones — cover the known organism.'],
+      cefazolin: ['wrong', 'Enterococcus is intrinsically resistant to every cephalosporin.'],
+      ceftriaxone: ['wrong', 'Enterococcus is intrinsically resistant to every cephalosporin — ceftriaxone included.'],
+      cipro: ['weak', 'Intermediate susceptibility is not something to bank on in a recently infected kidney.'],
+      none: ['wrong', 'Three weeks ago this kidney was full of pus. A negative culture on antibiotics doesn\'t make the stones sterile: cover the known organism.'] } },
+};
+// where a ureteral stone (track s) sits on the CT stack (z, mm from the top of the kidneys)
+const S2Z = [[0, 338], [12, 333], [118, 226], [UPJ_S, 90]];
+function sToZ(s) { for (let k = 0; k < S2Z.length - 1; k++) if (s <= S2Z[k + 1][0]) return lerp(S2Z[k][1], S2Z[k + 1][1], (s - S2Z[k][0]) / (S2Z[k + 1][0] - S2Z[k][0])); return S2Z[S2Z.length - 1][1]; }
 const CX_DEPTH = 5.4, CX_WS = 6, CX_WT = 0.42; // calyx pocket: how far it bulges out of the pelvis, its length along the track, its angular width
 let LV = LEVELS[0];
 // extra wall radius where a calyx bulges out of the pelvis at (s, θ)
@@ -765,6 +817,13 @@ function pulsGrade(reason) {
   const d = G.worstDepth || 0;
   return reason === 'perf' ? ['≥3', 'perforation', 'bd'] : d >= 2 ? ['2', 'submucosal injury', 'bd'] : d >= 1 ? ['1', 'superficial mucosal injury / oedema', 'wn'] : ['0', 'no lesion', 'ok'];
 }
+function prepCard() {
+  const [v, why] = abxVerdict(), name = (ABX.find(a => a[0] === (G.prep.abx || 'none')) || ABX[0])[1];
+  const lab = { best: 'Right call ✓', ok: 'Acceptable', weak: 'Not ideal', none: 'No prophylaxis', wrong: 'Doesn\'t cover it ✗' }[v];
+  return `<div class="sc"><div class="h"><span>Antibiotic: ${name}</span><span class="${ABX_FX[v].cls}">${lab}</span></div>
+    <div class="keys">Targets found on the CT ${G.prep.found.size}/${G.stones.length}${G.prep.phleb.size ? ` · ${G.prep.phleb.size} phlebolith${G.prep.phleb.size === 1 ? '' : 's'} checked` : ''}${v === 'wrong' ? ' · sepsis risk built ×2.2 faster and started at 18' : v === 'weak' || v === 'none' ? ` · sepsis risk built ×${ABX_FX[v].k} faster` : ''}</div>
+    <p>${why}</p></div>`;
+}
 function injuryCard(reason) {
   const inj = G.injury, g = pulsGrade(reason);
   return `<div class="sc"><div class="h"><span>On the way out</span><span class="${g[2]}">PULS ${g[0]} — ${g[1]}</span></div>
@@ -836,7 +895,7 @@ function newRun(seed, fixed, lv = LV) {
     pend: null, L: laserNums(PRESETS.dust.J, PRESETS.dust.Hz), firing: false, rateObj: null, backed: false, slips: 0,
     injury: { burn: 0, thermal: 0, scrape: 0 }, lastMark: {},
     trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })), lv: LV,
-    wasUnlocked: unlocked > LV.id, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
+    wasUnlocked: unlocked > LV.id, prep: { abx: null, found: new Set(), phleb: new Set() }, ct: null, sepK: 1, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
   };
   G.stones = LV.slots.map((sl, i) => {
     const type = types[i], d = sizes[i], T = TYPES[type], { mesh, mat } = makeStoneMesh(type);
@@ -1241,7 +1300,7 @@ function update(dt) {
   const Ptarget = 6 + G.flow * 54 * LV.pk;
   G.P += (Ptarget - G.P) * Math.min(1, dt * 1.6);
   G.peakP = Math.max(G.peakP, G.P);
-  if (G.P > 40) { G.sepsis += (G.P - 40) * 0.9 * dt; G.timeOver40 += dt; } else if (G.P < 30) G.sepsis = Math.max(0, G.sepsis - 2 * dt);
+  if (G.P > 40) { G.sepsis += (G.P - 40) * 0.9 * G.sepK * dt; G.timeOver40 += dt; } else if (G.P < 30) G.sepsis = Math.max(0, G.sepsis - 2 * dt);
   level(AU.flow, 0.03 + G.flow * 0.12);
   // lasing
   const firing = !!(want || input.fire || keys.Space);
@@ -1751,7 +1810,6 @@ function showBrief() {
   state = 'brief'; closeLaserPanel(); document.body.classList.remove('ingame');
   $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('scopeMask').classList.add('hidden');
   const cases = LEVELS.map(l => `<button data-case="${l.id}" class="${l === LV ? 'on' : ''}"${l.id > unlocked ? ' disabled' : ''}>${l.id > unlocked ? '🔒 ' : ''}${l.tag} · ${l.name}</button>`).join('');
-  const rows = G.stones.map(st => `<tr><td>${st.i + 1}</td><td>${st.loc}</td><td><b>${st.d0} mm</b></td><td><b>${st.hu.toLocaleString()} HU</b></td></tr>`).join('');
   screen.innerHTML = `<div class="panel">
     <h1>STONE <span>SQUADRON</span><span class="tag">3D PROTOTYPE</span></h1>
     <p class="keys" style="margin:4px 0 0">build ${BUILD} · a work in progress — things may break</p>
@@ -1759,9 +1817,7 @@ function showBrief() {
     <h2>CASE</h2>
     <div class="seg cases">${cases}</div>
     <p class="keys">${LV.blurb}${unlocked < LEVELS.length ? ' Finish a case to unlock the next.' : ''}</p>
-    <h2>PRE-OP NCCT</h2>
-    <table><tr><th>#</th><th>LOCATION</th><th>SIZE</th><th>DENSITY</th></tr>${rows}</table>
-    <p class="keys">Composition is unknown. Read the HU and how the stone looks on camera. Basket a fragment to confirm it.</p>
+    <p class="keys">Next: <b>mission prep</b> — scroll the CT and tap every stone, read the chart, then write the pre-op antibiotic order.</p>
     <h2>RUN SETTINGS</h2>
     <div class="sets">
       <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}<small id="defHint">${defHint()}</small></div>
@@ -1775,17 +1831,118 @@ function showBrief() {
     <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
     Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
     ${PHONE ? '<p class="keys">📱 Play in landscape. On iPhone, Share → <b>Add to Home Screen</b> and launch from the icon for full screen.</p>' : ''}
-    <div class="go stick"><button id="goBtn">SCRUB IN ▸</button>${G.fixed ? '' : '<button class="alt" id="firstBtn">Starter stones</button>'}${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
+    <div class="go stick"><button id="goBtn">MISSION PREP ▸</button>${G.fixed ? '' : '<button class="alt" id="firstBtn">Starter stones</button>'}${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
   </div>`;
   screen.classList.remove('hidden');
   wireSegs(screen, () => { $('defHint').textContent = defHint(); $('toolsBox').innerHTML = toolsHTML(); });
-  $('goBtn').addEventListener('click', startPlay);
+  $('goBtn').addEventListener('click', showPrep);
   if (EMBED) $('exitBtn').addEventListener('click', () => toApp({ type: 'squadron:exit' }));
   const fb = $('firstBtn'); if (fb) fb.addEventListener('click', () => { newRun(1, true); showBrief(); });
   screen.querySelectorAll('[data-case]').forEach(b => b.addEventListener('click', () => { const l = LEVELS[+b.dataset.case - 1]; if (l === LV || l.id > unlocked) return; newRun(G.seed, G.fixed, l); showBrief(); }));
 }
+// ───────────────────────── mission prep: scroll the CT, find the targets, read the chart, write the antibiotic order
+function abxVerdict() { const c = G.prep.abx || 'none', v = PREP[LV.id].abx[c]; return v || ['ok', '']; }
+function ctSpec() {
+  const pr = PREP[LV.id], stones = G.stones.map(st => { const sl = LV.slots[st.i]; return sl.ct ? { i: st.i, at: sl.ct, d: st.d0, hu: st.hu } : { i: st.i, at: 'ureter', z: sToZ(st.s0), d: st.d0, hu: st.hu }; });
+  const uz = stones.filter(x => x.at === 'ureter').map(x => x.z);
+  return { seed: G.seed, hydro: pr.hydro, obstructZ: pr.hydro && uz.length ? Math.max(...uz) : 0, stent: pr.stent, stones };
+}
+const mm2 = d => `${d} × ${Math.max(2, Math.round(d * 0.8))} mm`;
+function readText() {
+  const pr = PREP[LV.id], ct = G.ct, hu = st => pr.hu ? `, ${st.hu.toLocaleString()} HU` : '';
+  const im = i => imOf(ct.stones.find(x => x.i === i).z);
+  const where = { pelvis: 'in the left renal pelvis', upper: 'in a left upper-pole calyx', lower: 'in a left lower-pole calyx', inter: 'in a left interpolar calyx' };
+  const lines = G.stones.map(st => { const sl = LV.slots[st.i]; return `- ${mm2(st.d0)} calculus ${sl.ct ? where[sl.ct] : 'in the left ' + sl.loc.charAt(0).toLowerCase() + sl.loc.slice(1)} (series 2, image ${im(st.i)})${hu(st)}.`; });
+  const kid = pr.stent ? 'Left ureteral stent in place: proximal coil in the renal pelvis, distal coil in the bladder. No hydronephrosis.'
+    : 'Mild left hydroureteronephrosis to the level of the most distal ureteral calculus, with periureteral and mild perinephric stranding.';
+  return `EXAM: CT abdomen and pelvis without IV contrast (stone protocol), 3 mm.\nCOMPARISON: ${pr.stent ? 'Prior stone CT.' : 'None.'}\n\nFINDINGS:\nLeft kidney/ureter: ${kid}\n${lines.join('\n')}\n${pr.hu ? '' : 'Densities not reported — measure on the images (ROI).\n'}Right kidney/ureter: No calculi or hydronephrosis.\nBladder: ${pr.stent ? 'Distal stent coil. ' : ''}Otherwise unremarkable.\nOther: Pelvic phleboliths. Mild atherosclerotic calcification of the abdominal aorta. No free fluid.\n\nIMPRESSION:\n1. ${G.stones.length} left-sided calculi as above.${pr.stent ? ' Stent in good position.' : ' Mild left hydroureteronephrosis.'}`;
+}
+const CTV = { idx: 0, win: 'soft', roi: null, msg: '' };
+const WINS = { soft: [400, 40, 'Soft tissue'], bone: [1800, 400, 'Bone'] };
+function huWord(h) { return h < -500 ? 'air' : h < -40 ? 'fat' : h < 20 ? 'fluid' : h < 90 ? 'soft tissue' : h < 250 ? 'dense soft tissue / partial volume' : 'calcification or bone'; }
+function drawCT() {
+  const c = $('ctc'); if (!c || !G.ct) return;
+  const g = c.getContext('2d'), z = zOf(CTV.idx), [W, L] = WINS[CTV.win];
+  G.ct.render(g, CTV.idx, W, L);
+  g.font = '600 10px system-ui'; g.fillStyle = 'rgba(255,255,255,.85)'; g.textBaseline = 'top';
+  g.fillText('NCCT A/P · STONE PROTOCOL', 8, 8); g.fillText(`Se 2   Im ${CTV.idx + 1}/${SLICES}`, 8, 21);
+  g.fillText(`W ${W}  L ${L}   3.0 mm`, 8, 340); g.fillText('R', 6, 176); g.fillText('L', 346, 176);
+  for (const st of G.ct.stones) if (G.prep.found.has(st.i) && Math.abs(st.z - z) < st.r + 1.5) {
+    g.strokeStyle = '#4ade80'; g.lineWidth = 1.5; g.beginPath(); g.arc(st.x, st.y, st.r + 6, 0, 6.283); g.stroke();
+    g.fillStyle = '#4ade80'; g.fillText('S' + (st.i + 1), st.x + st.r + 7, st.y - 12);
+  }
+  if (CTV.roi && CTV.roi.idx === CTV.idx) { const q = CTV.roi; g.strokeStyle = '#fbbf24'; g.lineWidth = 1; g.beginPath(); g.arc(q.x, q.y, 3, 0, 6.283); g.stroke(); g.fillStyle = '#fbbf24'; g.textAlign = 'right'; g.fillText(`ROI ${Math.round(q.mean)} ± ${Math.round(q.sd)} HU`, 352, 8); g.textAlign = 'left'; }
+  $('ctS').value = CTV.idx;
+  $('ctT').textContent = `TARGETS ${G.prep.found.size}/${G.stones.length}`; $('ctT').className = G.prep.found.size === G.stones.length ? 'ok' : '';
+  $('ctMsg').innerHTML = CTV.msg;
+}
+function ctTap(x, y) {
+  const z = zOf(CTV.idx), q = G.ct.roi(CTV.idx, x, y, 2); CTV.roi = { idx: CTV.idx, x, y, mean: q.mean, sd: q.sd };
+  const hit = G.ct.stones.find(st => Math.abs(st.z - z) <= st.r + 0.6 && Math.hypot(st.x - x, st.y - y) < Math.max(st.r + 3, 5));
+  const ph = G.ct.phleb.findIndex(p => Math.abs(p.z - z) <= p.r + 0.6 && Math.hypot(p.x - x, p.y - y) < p.r + 4);
+  if (hit) {
+    const st = G.stones[hit.i], first = !G.prep.found.has(hit.i);
+    if (first) { G.prep.found.add(hit.i); G.bonus += 75; }
+    CTV.msg = `<b class="ok">Stone ${hit.i + 1} ${first ? 'confirmed ✓ +75' : '(already marked)'}</b> — ${LV.slots[hit.i].loc}, ${st.d0} mm. ROI ${Math.round(q.mean)} HU${Math.abs(hit.z - z) > hit.r * 0.5 ? ' (edge slice: partial volume reads low — measure where it is widest)' : ''}.`;
+  } else if (ph >= 0) {
+    G.prep.phleb.add(ph);
+    CTV.msg = `<b class="wn">Phlebolith, not a stone.</b> Round and smooth, with a lucent centre, sitting outside the ureter (no soft-tissue rim). Follow the ureter slice by slice to tell them apart.`;
+  } else CTV.msg = `ROI ${Math.round(q.mean)} ± ${Math.round(q.sd)} HU — ${huWord(q.mean)}.`;
+  drawCT();
+}
+function showPrep() {
+  state = 'brief';
+  if (!G.ct) G.ct = makeCT(ctSpec());
+  const pr = PREP[LV.id];
+  if (!CTV.ready || CTV.seed !== G.seed + ':' + LV.id) { // start at the kidneys, soft-tissue window
+    Object.assign(CTV, { idx: Math.round(70 / 3), win: 'soft', roi: null, ready: true, seed: G.seed + ':' + LV.id,
+      msg: 'Drag up/down on the image (or the slider) to scroll. Tap anything to measure it (ROI); tap a stone to mark it as a target.' });
+  }
+  const docs = { hx: ['HISTORY', pr.history], ct: ['CT READ', readText()], note: [pr.noteTitle.split(' ·')[0], pr.noteTitle + '\n\n' + pr.note], labs: ['LABS', pr.labs] };
+  screen.innerHTML = `<div class="panel prep">
+    <h1 style="font-size:22px">MISSION PREP <span class="tag">${LV.tag}</span></h1>
+    <p class="keys" style="margin-top:6px">${LV.name}. Find every target on the CT, read the chart, write the pre-op order.</p>
+    <div class="prepgrid">
+      <div class="ctcol">
+        <canvas id="ctc" width="360" height="360"></canvas>
+        <div class="ctbar"><button id="ctUp" aria-label="Previous slice">▲</button><input type="range" id="ctS" min="0" max="${SLICES - 1}" step="1" value="${CTV.idx}"><button id="ctDn" aria-label="Next slice">▼</button></div>
+        <div class="ctrow"><div class="seg" id="ctWin">${Object.keys(WINS).map(k => `<button data-win="${k}" class="${CTV.win === k ? 'on' : ''}">${WINS[k][2]}</button>`).join('')}</div><b id="ctT"></b></div>
+        <p class="keys" id="ctMsg"></p>
+      </div>
+      <div class="doccol">
+        <div class="seg doctabs">${Object.keys(docs).map((k, i) => `<button data-doc="${k}" class="${i ? '' : 'on'}">${docs[k][0]}</button>`).join('')}</div>
+        <div class="doc" id="docBody"></div>
+      </div>
+    </div>
+    <h2>PRE-OP ORDER · ANTIBIOTIC</h2>
+    <div class="seg abx">${ABX.map(([k, n]) => `<button data-abx="${k}" class="${G.prep.abx === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="go"><button id="scrubBtn"${G.prep.abx ? '' : ' disabled'}>${G.prep.abx ? 'SCRUB IN ▸' : 'ORDER AN ANTIBIOTIC FIRST'}</button><button class="alt" id="prepBack">Back</button></div>
+  </div>`;
+  screen.classList.remove('hidden');
+  const setDoc = k => { $('docBody').textContent = docs[k][1]; screen.querySelectorAll('[data-doc]').forEach(b => b.classList.toggle('on', b.dataset.doc === k)); };
+  setDoc('hx');
+  screen.querySelectorAll('[data-doc]').forEach(b => b.addEventListener('click', () => setDoc(b.dataset.doc)));
+  screen.querySelectorAll('[data-win]').forEach(b => b.addEventListener('click', () => { CTV.win = b.dataset.win; screen.querySelectorAll('[data-win]').forEach(x => x.classList.toggle('on', x === b)); drawCT(); }));
+  screen.querySelectorAll('[data-abx]').forEach(b => b.addEventListener('click', () => {
+    G.prep.abx = b.dataset.abx; screen.querySelectorAll('[data-abx]').forEach(x => x.classList.toggle('on', x === b));
+    const sb = $('scrubBtn'); sb.disabled = false; sb.textContent = 'SCRUB IN ▸';
+  }));
+  const step = d => { CTV.idx = clamp(CTV.idx + d, 0, SLICES - 1); drawCT(); };
+  $('ctUp').addEventListener('click', () => step(-1)); $('ctDn').addEventListener('click', () => step(1));
+  $('ctS').addEventListener('input', e => { CTV.idx = +e.target.value; drawCT(); });
+  const c = $('ctc'); let drag = null;
+  c.addEventListener('pointerdown', e => { drag = { id: e.pointerId, y: e.clientY, i: CTV.idx, moved: false }; try { c.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+  c.addEventListener('pointermove', e => { if (!drag || e.pointerId !== drag.id) return; const dy = e.clientY - drag.y; if (Math.abs(dy) > 6) drag.moved = true; if (drag.moved) { const ni = clamp(drag.i + Math.round(dy / 5), 0, SLICES - 1); if (ni !== CTV.idx) { CTV.idx = ni; drawCT(); } } });
+  c.addEventListener('pointerup', e => { if (!drag || e.pointerId !== drag.id) return; if (!drag.moved) { const r = c.getBoundingClientRect(); ctTap((e.clientX - r.left) / r.width * 360, (e.clientY - r.top) / r.height * 360); } drag = null; });
+  c.addEventListener('pointercancel', () => { drag = null; });
+  c.addEventListener('wheel', e => { e.preventDefault(); step(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+  $('scrubBtn').addEventListener('click', () => { if (G.prep.abx) startPlay(); });
+  $('prepBack').addEventListener('click', showBrief);
+  drawCT();
+}
 function startPlay() {
   audioInit();
+  const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0;
   if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
   hideScreen();
   $('hud').classList.remove('hidden');
@@ -1865,6 +2022,7 @@ function endRun(reason) {
       <div class="stat"><small>TIME &gt;40 MMHG</small><b>${G.timeOver40.toFixed(1)} s</b></div>
       <div class="stat"><small>MIN INTEGRITY</small><b>${Math.max(0, Math.round(G.minHp))}%</b></div>
     </div>
+    <h2>PRE-OP</h2>${prepCard()}
     <h2>URETER</h2>${injuryCard(reason)}
     <h2>STONE ANALYSIS</h2>${cards}
     <h2>FEEDBACK</h2>
@@ -1899,6 +2057,7 @@ function runReport() {
     `Settings: deflection ${SETTINGS.invert ? 'inverted' : 'standard'} · ${camMode === 'scope' ? 'scope view' : 'chase cam'} · laser ${SETTINGS.level}`,
     `Run: ${LV.tag} (${LV.name}) · ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · OR time ${fmtT(G.t)}`,
     `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
+    `Prep: antibiotic ${G.prep.abx || 'none'} (${abxVerdict()[0]}) · CT targets ${G.prep.found.size}/${G.stones.length} · phleboliths checked ${G.prep.phleb.size}`,
     `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${Math.round(G.tripTime)} s) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
     `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
     `Notes: ${notes}`,

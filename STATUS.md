@@ -3,6 +3,41 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-28 (later) — 🛩️ Stone Squadron: mission prep (generated CT, chart, antibiotic order)
+
+Andrew wants the game to teach case prep: CT images showing the targets, op notes and imaging
+reads as the mission briefing, and a more game-like loop. His full roadmap is in `STONE_SQUADRON.md` (new).
+
+**Done:**
+- `games/squadron-ct.js` (new): a procedural non-contrast stone-protocol CT, 117 slices × 3 mm.
+  - Anatomy: body wall, liver, spleen, bowel, kidneys (with hydro), psoas, spine, pelvis,
+    bladder, vessels with aortic calcification, phleboliths, and a ureteral stent with coils.
+  - Drawn in HU, then blurred and given noise and windowing, so the ROI reads plausible HU and
+    stones fade at their top and bottom slices (partial volume).
+  - Built from the run's actual stones.
+- **Mission prep screen** between the brief and SCRUB IN:
+  - Scroll the CT (drag, slider, ▲▼, wheel). Soft-tissue and bone windows. Tap anything for an
+    ROI; tap a stone to confirm it as a target (+75). Tapping a phlebolith gives a teaching note.
+  - Chart tabs: history, the CT read (generated; Case 1 quotes HU, Cases 2–3 make you measure),
+    the prior note, and labs with the culture and sensitivities.
+  - Pre-op antibiotic order: required before scrubbing in. Each case has its own right answer
+    (Case 1 negative culture → cefazolin; Case 2 E. coli, ceftriaxone-sensitive only; Case 3
+    Enterococcus → ampicillin). A wrong or missing choice makes sepsis risk build faster (×1.4–2.2)
+    and can start it at 18.
+  - The debrief has a PRE-OP card with the verdict and why, and the run report has a Prep line.
+- The brief's NCCT table is gone; the read replaces it.
+- `CLAUDE.md`'s map row for `STONE_SQUADRON.md` updated (it described a 2D game).
+
+**Verified:** headless Chromium: all 3 cases play start to end, no page errors. A script finds
+every stone on the CT and checks the phlebolith message, the antibiotic gate and its effect, the
+debrief and the report. Screenshots at iPad and phone size; no sideways overflow.
+**Not verified:** on device. A CT slice takes ~15–25 ms to render on desktop, so check that
+scrolling is smooth on the iPad. Not pushed.
+**Next steps:** play it; then medals for the debrief (roadmap #1). The clinical content of the
+`PREP` text needs Andrew's review.
+**Open questions:** is the CT realistic enough, or is it worth more anatomy work? Should
+confirming targets also mark them in the 3D run?
+
 ## 2026-10-28 — 🛩️ Stone Squadron: slower stone approach + Cases 2 and 3 (sheath, kidney)
 
 Andrew: the scope moves forward too fast as stones come into view, so it's easy for them to go by.
