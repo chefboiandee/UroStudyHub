@@ -79,6 +79,7 @@ b{font-variant-numeric:tabular-nums}
 #bBasket{right:calc(env(safe-area-inset-right) + 158px);bottom:calc(env(safe-area-inset-bottom) + 160px);width:84px;height:84px}
 #bLaser{right:calc(env(safe-area-inset-right) + 252px);bottom:calc(env(safe-area-inset-bottom) + 166px);width:72px;height:72px}
 #bBack{left:calc(env(safe-area-inset-left) + 22px);bottom:calc(env(safe-area-inset-bottom) + 236px);width:84px;height:84px}
+#bFwd{left:calc(env(safe-area-inset-left) + 118px);bottom:calc(env(safe-area-inset-bottom) + 236px);width:84px;height:84px}
 #flowTrack{position:absolute;right:calc(env(safe-area-inset-right) + 48px);bottom:calc(env(safe-area-inset-bottom) + 166px);width:60px;height:210px;border-radius:16px;border:2px solid rgba(96,165,250,.55);background:rgba(10,20,40,.5);pointer-events:auto;overflow:hidden}
 #flowFill{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,rgba(59,130,246,.65),rgba(147,197,253,.5))}
 #flowTrack span{position:absolute;left:0;right:0;top:8px;text-align:center;font:800 10px/1 system-ui;letter-spacing:.12em;color:#bfdbfe;text-shadow:0 1px 3px #000}
@@ -147,8 +148,15 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 .obj i{font-style:normal;font-weight:900}.obj.ok i{color:var(--g)}.obj.no i{color:var(--r)}.obj.no span{color:var(--m)}.obj small{color:var(--m);font-size:11px;text-align:right}
 @keyframes tick{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 @media (max-width:560px){.medalbox{flex-direction:column}}
-#comms{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 106px);transform:translate(-50%,12px);width:min(460px,46vw);display:flex;gap:10px;align-items:center;padding:7px 12px 7px 7px;border-radius:14px;background:rgba(6,10,22,.84);border:1px solid var(--cc,#60a5fa);box-shadow:0 0 18px rgba(0,0,0,.6);opacity:0;transition:opacity .22s,transform .22s;pointer-events:none}
-#comms.on{opacity:1;transform:translate(-50%,0)}
+#comms{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 106px);transform:translate(-50%,0);width:min(460px,46vw);display:flex;gap:10px;align-items:center;padding:7px 12px 7px 7px;border-radius:14px;background:rgba(6,10,22,.84);border:1px solid var(--cc,#60a5fa);box-shadow:0 0 18px rgba(0,0,0,.6);opacity:0;pointer-events:none}
+#comms.on{opacity:1;animation:crtOpen .2s ease-out}
+#comms.shut{animation:crtShut .15s ease-in forwards}
+@keyframes crtOpen{0%{opacity:1;transform:translate(-50%,0) scale(.2,.03);filter:brightness(4)}45%{transform:translate(-50%,0) scale(1.04,.06);filter:brightness(3)}75%{transform:translate(-50%,0) scale(1,1.05);filter:brightness(1.4)}100%{transform:translate(-50%,0) scale(1,1);filter:none}}
+@keyframes crtShut{0%{opacity:1;transform:translate(-50%,0) scale(1,1)}55%{opacity:1;transform:translate(-50%,0) scale(1.03,.05);filter:brightness(3)}100%{opacity:0;transform:translate(-50%,0) scale(.1,.02);filter:brightness(4)}}
+#comms .face{position:relative}
+#comms .face::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);pointer-events:none}
+#comms.on .face svg{animation:faceTune .35s steps(5)}
+@keyframes faceTune{0%{filter:contrast(3) brightness(2) blur(1.5px);transform:translateX(-3px)}40%{filter:contrast(2) brightness(1.4);transform:translateX(2px)}100%{filter:none;transform:none}}
 #comms .face{width:54px;height:54px;flex:none;border-radius:10px;overflow:hidden;border:2px solid var(--cc,#60a5fa);background:#0c1c33}
 #comms .face svg{display:block;width:100%;height:100%}
 #comms .who{font:800 10px/1 system-ui;letter-spacing:.14em;color:var(--cc,#60a5fa)}
@@ -179,6 +187,7 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 #bLaser{width:62px;height:62px;right:calc(env(safe-area-inset-right) + 210px);bottom:calc(env(safe-area-inset-bottom) + 134px)}
 #flowTrack{height:140px;bottom:calc(env(safe-area-inset-bottom) + 134px)}
 #bBack{width:64px;height:64px;left:calc(env(safe-area-inset-left) + 14px);bottom:calc(env(safe-area-inset-bottom) + 14px)}
+#bFwd{width:64px;height:64px;left:calc(env(safe-area-inset-left) + 14px);bottom:calc(env(safe-area-inset-bottom) + 88px)}
 #joyBase{left:200px;top:calc(100% - 104px)}
 #lcol,#tr{transform:scale(.8);transform-origin:top left}#tr{transform-origin:top right}
 #fluoro{width:124px;padding:4px}#fluoro .fl-tag,#fluoro .fl-u{font-size:8px;top:5px}
@@ -254,6 +263,7 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
   <div id="joyBase" class="idle"><div id="joyKnob"></div></div>
   <div id="flowTrack"><div id="flowFill"></div><div class="z" id="flowZone"></div><span>FLOW</span><em id="flowTxt">35</em></div>
   <button class="tb" id="bBack">◀<small>PULL BACK</small></button>
+  <button class="tb" id="bFwd">▶<small>ADVANCE</small></button>
   <button class="tb hidden" id="bLaser">⚙<small>LASER</small></button>
   <button class="tb" id="bBasket">BASKET<small>2–4 mm</small></button>
   <button class="tb ped dust" id="bPedA">DUST<small>0.4 J × 80 Hz</small></button>
@@ -308,7 +318,11 @@ const mr = (a, b) => a + (b - a) * Math.random();
 const UPJ_S = 268, END_S = 285; // END_S: where the ureter run ends (and the fluoro map's scale); a case can end further on (LV.end)
 // the laser fiber exits the working channel at 5 o'clock: the beam (and the green aiming spot) run along ITS line, not the scope's centre
 const FIB_X = 0.17, FIB_Y = -0.15;
-const APPROACH_D = 26, APPROACH_V = 2.6; // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
+const APPROACH_D = 26, APPROACH_V = 2.6;
+// the rails park MANUAL_D short of the working distance; from there the scope only moves while you hold ADVANCE (ADV_V)
+const MANUAL_D = 3, ADV_V = 2.2;
+// the laser works best right up on the stone: effectiveness falls off with distance from the fiber to its surface
+const reach = d => lerp(1, 0.3, smooth(1.4, 5.5, d)); // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
 const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
 const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.38;
 const PRESETS = { dust: { J: 0.4, Hz: 80 }, frag: { J: 1.5, Hz: 8 } }, STANDBY_S = 2.5;
@@ -930,6 +944,48 @@ function burst(dur, vol, freq) {
   s.buffer = AU.noise; f.type = 'lowpass'; f.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   s.connect(f); f.connect(g); g.connect(AU.master); s.start(t); s.stop(t + dur + 0.02);
 }
+// ───────── comms radio: the window snapping open/shut, and each crew member's garbled "voice" (Star Fox style)
+// a voice = sawtooth syllables through two vowel formants, then a radio chain (band-limited, soft-clipped) with a hiss bed
+const VOICES = { att: { f0: 105, spread: 0.3 }, tech: { f0: 220, spread: 0.45 }, gas: { f0: 160, spread: 0.35 } };
+const VOWELS = [[730, 1090], [530, 1840], [270, 2290], [570, 840], [300, 870], [660, 1720], [490, 1350]];
+function radioChain(t, dur) {
+  const c = AU.ctx, hp = c.createBiquadFilter(), lp = c.createBiquadFilter(), sh = c.createWaveShaper(), g = c.createGain();
+  hp.type = 'highpass'; hp.frequency.value = 380; lp.type = 'lowpass'; lp.frequency.value = 3000;
+  const k = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 127.5 - 1; k[i] = Math.tanh(2.6 * x); } sh.curve = k;
+  g.gain.value = 0.9; hp.connect(lp); lp.connect(sh); sh.connect(g); g.connect(AU.master);
+  const n = c.createBufferSource(), nb = c.createBiquadFilter(), ng = c.createGain(); // hiss under the voice
+  n.buffer = AU.noise; n.loop = true; nb.type = 'bandpass'; nb.frequency.value = 2200; nb.Q.value = 0.8;
+  ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.035, t + 0.03); ng.gain.setValueAtTime(0.035, t + dur); ng.gain.linearRampToValueAtTime(0.0001, t + dur + 0.06);
+  n.connect(nb); nb.connect(ng); ng.connect(hp); n.start(t); n.stop(t + dur + 0.1);
+  return hp;
+}
+const CHIRP = {
+  open() {
+    if (!AU.ctx || AU.muted) return;
+    const t = AU.ctx.currentTime;
+    blip(880, 0.05, 'square', 0.07, 1900); blip(2300, 0.025, 'square', 0.05, null, 0.06); // ba-dip
+    const s = AU.ctx.createBufferSource(), f = AU.ctx.createBiquadFilter(), g = AU.ctx.createGain();
+    s.buffer = AU.noise; f.type = 'bandpass'; f.Q.value = 1.4; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(3600, t + 0.09);
+    g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    s.connect(f); f.connect(g); g.connect(AU.master); s.start(t); s.stop(t + 0.14);
+  },
+  close() {
+    if (!AU.ctx || AU.muted) return;
+    blip(1700, 0.06, 'square', 0.06, 600); burst(0.07, 0.12, 2600); // the snap shut
+  },
+  voice(who, syl) {
+    if (!AU.ctx || AU.muted) return;
+    const c = AU.ctx, V = VOICES[who], t0 = c.currentTime + 0.13, step = 0.095, dur = syl * step + 0.05, out = radioChain(t0, dur);
+    for (let k = 0; k < syl; k++) {
+      const t = t0 + k * step + Math.random() * 0.02, d = 0.06 + Math.random() * 0.05, f = V.f0 * (1 - V.spread / 2 + Math.random() * V.spread);
+      const o = c.createOscillator(), env = c.createGain(), [F1, F2] = VOWELS[(Math.random() * VOWELS.length) | 0];
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * (0.85 + Math.random() * 0.35), t + d);
+      env.gain.setValueAtTime(0.0001, t); env.gain.linearRampToValueAtTime(0.9, t + 0.012); env.gain.setValueAtTime(0.75, t + d * 0.7); env.gain.linearRampToValueAtTime(0.0001, t + d);
+      for (const [F, q, a] of [[F1, 7, 1], [F2, 9, 0.6]]) { const bp = c.createBiquadFilter(), ga = c.createGain(); bp.type = 'bandpass'; bp.frequency.value = F; bp.Q.value = q; ga.gain.value = a; o.connect(bp); bp.connect(ga); ga.connect(env); }
+      env.connect(out); o.start(t); o.stop(t + d + 0.02);
+    }
+  },
+};
 const SFX = {
   pulse() { burst(0.16, 0.55, 2000); blip(120, 0.2, 'sine', 0.55, 38); },
   basket() { blip(1400, 0.05, 'square', 0.1); blip(900, 0.08, 'square', 0.08, null, 0.06); },
@@ -980,7 +1036,7 @@ function newRun(seed, fixed, lv = LV) {
 // ───────────────────────── input
 const keys = {};
 const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
-const input = { fire: false, pa: false, pb: false, back: false, last: 'a' };
+const input = { fire: false, pa: false, pb: false, back: false, fwd: false, last: 'a' };
 addEventListener('keydown', e => {
   if (e.repeat || (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName))) return; // typing feedback ≠ game keys
   keys[e.code] = true;
@@ -995,6 +1051,7 @@ addEventListener('keydown', e => {
     if (e.code === 'Minus') nudgeLaser(0, -1);
     if (e.code === 'Equal') nudgeLaser(0, 1);
     if (e.code === 'KeyE') basketPress();
+    if (e.code === 'KeyF') e.preventDefault();
     if (e.code === 'Enter') moveOn();
   }
   if (e.code === 'KeyC') toggleCam();
@@ -1002,7 +1059,7 @@ addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.fire = input.pa = input.pb = input.back = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.fire = input.pa = input.pb = input.back = input.fwd = false; });
 document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('dblclick', e => e.preventDefault());
 
@@ -1036,6 +1093,7 @@ function holdButton(el, down, up) {
 holdButton($('bPedA'), () => { input.pa = true; input.last = 'a'; }, () => { input.pa = false; });
 holdButton($('bPedB'), () => { input.pb = true; input.last = 'b'; }, () => { input.pb = false; });
 holdButton($('bBack'), () => { input.back = true; }, () => { input.back = false; });
+holdButton($('bFwd'), () => { input.fwd = true; }, () => { input.fwd = false; });
 holdButton($('bLaser'), () => { if (LP.open) closeLaserPanel(true); else openLaserPanel(); });
 holdButton($('bBasket'), () => basketPress());
 const flowTrack = $('flowTrack');
@@ -1156,7 +1214,7 @@ function onOrient() {
 }
 if (PORTRAIT_PHONE.addEventListener) PORTRAIT_PHONE.addEventListener('change', onOrient); else PORTRAIT_PHONE.addListener(onOrient);
 function togglePause() {
-  if (state === 'play') { state = 'paused'; showPause(); quiet(); commsEl.classList.remove('on', 'talk'); if (COMMS.cur) { COMMS.q.unshift(COMMS.cur); COMMS.cur = null; } }
+  if (state === 'play') { state = 'paused'; showPause(); quiet(); commsEl.classList.remove('on', 'talk', 'shut'); if (COMMS.cur) { COMMS.q.unshift(COMMS.cur); COMMS.cur = null; } }
   else if (state === 'paused') { state = 'play'; rotPaused = false; hideScreen(); }
 }
 
@@ -1175,9 +1233,9 @@ function toast(msg, cls = '', key = msg, gap = 3.5) {
 // ───────────────────────── OR chatter: the crew on comms, Star Fox wingmate style (fictional characters)
 // attending = coaching + reminders, scrub tech = the room's eyes, anesthesia = pressure and the patient
 const CREW = {
-  att: { name: 'DR. HAWKE · ATTENDING', c: '#60a5fa', pitch: 140 },
-  tech: { name: 'REMY · SCRUB TECH', c: '#4ade80', pitch: 250 },
-  gas: { name: 'DR. VANCE · ANESTHESIA', c: '#c084fc', pitch: 195 },
+  att: { name: 'DR. HAWKE · ATTENDING', c: '#60a5fa' },
+  tech: { name: 'REMY · SCRUB TECH', c: '#4ade80' },
+  gas: { name: 'DR. VANCE · ANESTHESIA', c: '#c084fc' },
 };
 function faceSVG(who) {
   const skin = { att: '#e0b48a', tech: '#8d5a3b', gas: '#f1c9a5' }[who];
@@ -1193,7 +1251,7 @@ function faceSVG(who) {
 const COMMS = { q: [], cur: null, t: 0, last: {}, once: {} };
 const commsEl = $('comms');
 const pick = a => a[(Math.random() * a.length) | 0];
-function commsReset() { COMMS.q = []; COMMS.cur = null; COMMS.t = 0; COMMS.last = {}; COMMS.once = {}; commsEl.classList.remove('on', 'talk'); }
+function commsReset() { COMMS.q = []; COMMS.cur = null; COMMS.t = 0; COMMS.last = {}; COMMS.once = {}; commsEl.classList.remove('on', 'talk', 'shut'); }
 // queue a line; key + cd stop repeats (cd = Infinity: once per run); pri 2 = urgent, jumps the queue
 function say(who, text, key = text, cd = 12, pri = 1) {
   if (!SETTINGS.chatter || !G || state !== 'play' || (pri < 2 && COMMS.q.length >= 2)) return; // full queue: a routine line waits its turn
@@ -1203,18 +1261,18 @@ function say(who, text, key = text, cd = 12, pri = 1) {
   else COMMS.q.push({ who, text, pri });
 }
 function commsTick(dt) {
-  if (COMMS.cur) { COMMS.t -= dt; if (COMMS.t > 0) return; COMMS.cur = null; commsEl.classList.remove('on', 'talk'); COMMS.gap = 0.35; return; }
+  if (COMMS.cur) { COMMS.t -= dt; if (COMMS.t > 0) return; COMMS.cur = null; commsEl.classList.remove('on', 'talk'); commsEl.classList.add('shut'); CHIRP.close(); COMMS.gap = 0.45; return; }
   if ((COMMS.gap = (COMMS.gap || 0) - dt) > 0) return;
   const n = COMMS.q.shift(); if (!n) return;
   const c = CREW[n.who]; COMMS.cur = n; COMMS.t = clamp(1.6 + n.text.length * 0.05, 2.6, 6);
   commsEl.style.setProperty('--cc', c.c);
   commsEl.querySelector('.face').innerHTML = faceSVG(n.who);
   commsEl.querySelector('.who').textContent = c.name; commsEl.querySelector('.say').textContent = n.text;
-  commsEl.classList.add('on', 'talk');
-  // gibberish voice, a blip per syllable-ish, like the old wingmates
-  const syl = clamp(Math.round(n.text.length / 7), 3, 9);
-  for (let k = 0; k < syl; k++) blip(c.pitch * (0.8 + Math.random() * 0.5), 0.07, 'square', 0.045, c.pitch * (0.7 + Math.random() * 0.6), k * 0.09);
-  clearTimeout(COMMS.flap); COMMS.flap = setTimeout(() => commsEl.classList.remove('talk'), syl * 90 + 120);
+  commsEl.classList.remove('shut'); void commsEl.offsetWidth; commsEl.classList.add('on', 'talk'); // reflow restarts the snap-open
+  // the window snaps open with a radio chirp, then the garbled voice, a syllable-ish per word
+  const syl = clamp(Math.round(n.text.split(' ').length * 0.8), 3, 11);
+  CHIRP.open(); CHIRP.voice(n.who, syl);
+  clearTimeout(COMMS.flap); COMMS.flap = setTimeout(() => commsEl.classList.remove('talk'), 130 + syl * 95);
 }
 // state-driven lines, checked every frame
 function chatter() {
@@ -1238,6 +1296,7 @@ function chatter() {
       : st.hu > 1200 ? `Stone ${st.i + 1}: ${st.hu.toLocaleString()} HU. That\'s hard. Dusting will crawl, think fragmenting.`
       : st.hu < 550 ? `Stone ${st.i + 1} is low HU, probably uric acid. It\'ll dust in seconds.`
       : `Stone ${st.i + 1} ahead. Green spot on the stone, then fire.`, 'st' + st.i, Infinity);
+    if (st.i === 0 && G.manual) say('att', 'Your scope, your distance. Hold ADVANCE to close in. Dusting works best right up on the stone.', 'advhint', Infinity);
     if (st.i === 0) say('att', 'Aim with the green spot. It comes off the fiber at 5 o\'clock, not the middle of the screen.', 'fiberhint', Infinity);
     break;
   }
@@ -1397,7 +1456,7 @@ function update(dt) {
       p.v += (lerp(PINCH_TRIP_V, WITHDRAW_V * sv, tripK) - p.v) * ease; p.s = Math.max(0.6, p.s - p.v * dt);
       if (p.s <= 0.6) { capture(bk.target); bk.state = 'idle'; bk.target = null; trip.phase = 'in'; }
     } else {
-      const target = Math.min(trip.back, gateS());
+      const target = Math.min(trip.back, gateS() + WORK_DIST - 1.05); // back to where you were, even if you'd advanced past the rails' stop
       p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V * sv, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
       if (p.s >= target - 0.01) {
         const tt = G.t - trip.t0; G.tripTime += tt; G.trips++; G.trip = null; p.v = 0;
@@ -1411,15 +1470,20 @@ function update(dt) {
       const floor = Math.max(1, gate - 25);
       p.v = 0; if (p.s > floor) { p.s = Math.max(floor, p.s - BACK_V * dt); G.backed = true; }
     } else {
-      // ride the rails up to the next obstacle: ease down to a creep over the last stretch so the stone comes in slowly,
-      // faster inside a sheath; after a pull-back: slowly, and hold while there's work in front of you
-      const cruise = inSheath(p.s + 4) ? CRUISE * SHEATH_V : CRUISE, near = lerp(APPROACH_V, cruise, smooth(6, APPROACH_D, gap));
-      let tv = gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, gap * 1.2 + 0.25);
+      // ride the rails up to MANUAL_D short of the work, easing down to a creep over the last stretch so the stone comes in slowly
+      // (faster inside a sheath); after a pull-back: slowly, and hold while there's work in front of you.
+      // Inside that last stretch the scope only moves while you hold ADVANCE — you choose how close to get, up to touching
+      const cur = G.stones.find(st => st.phase !== 'done'), inCalyx = !!(cur && LV.calyces && LV.slots[cur.i].cx != null);
+      const ride = gap - (inCalyx ? 0.6 : MANUAL_D), manual = ride <= 0.05 && !G.backed, fwd = manual && (input.fwd || keys.KeyF); // a calyx narrows toward its mouth: park nearer, or you can't deflect in
+      const cruise = inSheath(p.s + 4) ? CRUISE * SHEATH_V : CRUISE, near = lerp(APPROACH_V, cruise, smooth(6, APPROACH_D, ride));
+      let tv = fwd ? ADV_V : manual || gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, Math.max(ride, 0) * 1.2 + 0.25);
       // in the kidney the rails never shove you into a wall: steer out of a calyx before they carry you on
       if (LV.kidney && tv > 0) { const th = Math.atan2(p.y, p.x), m0 = Math.hypot(p.x, p.y); if (m0 > lumR(p.s + 0.8, th) - SCOPE_R - 0.05) { tv = 0; G.wallHold = true; } else G.wallHold = false; }
-      if (G.backed) { if (gap <= 0.05) G.backed = false; else { tv = Math.min(tv, 5); if (workAhead(gate)) tv = 0; } }
-      p.v += (tv - p.v) * Math.min(1, dt * 3);
-      if (gap > 0) p.s += Math.min(p.v * dt, gap); else p.v = 0;
+      if (G.backed) { if (ride <= 0.05) G.backed = false; else { tv = Math.min(tv, 5); if (workAhead(gate)) tv = 0; } }
+      p.v = manual ? tv : p.v + (tv - p.v) * Math.min(1, dt * 3); // ADVANCE answers at once, like your hand on the scope
+      const lim = fwd ? gap + WORK_DIST - 1.05 : ride; // ADVANCE closes in until just off the stone (any closer and the tip shoves it up)
+      if (lim > 0) p.s += Math.min(p.v * dt, lim); else p.v = 0;
+      G.manual = manual;
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
@@ -1440,6 +1504,13 @@ function update(dt) {
       toast('Scraping mucosa — stay off the wall', 'bad', 'scr', 5);
       say('att', pick(['Easy! You\'re on the wall!', 'Off the wall, off the wall!']), 'scr', 9, 2);
       injure('scrape', p.s + 0.25, Math.atan2(p.y, p.x), mr(0.6, 0.8), 0.22);
+      // ADVANCE with the tip jammed into the wall = pushing against resistance: the classic way to perforate
+      if (G.manual && (input.fwd || keys.KeyF) && p.v > 0.3) {
+        G.hp -= 32 * dt; G.lastLoss = 'scrape'; G.shake = Math.max(G.shake, 0.05);
+        injure('scrape', p.s + 0.3, Math.atan2(p.y, p.x), mr(0.8, 1.0), 0.15, 2);
+        toast('Pushing against resistance — stop advancing!', 'bad', 'push', 3);
+        say('att', 'STOP! Never push against resistance. That\'s how you perforate.', 'push', 8, 2);
+      }
     }
   }
   level(AU.scrape, scraping ? 0.35 : 0);
@@ -1482,14 +1553,14 @@ function update(dt) {
   if (canFire) {
     power = L.W;
     if (tgt) {
-      const o = tgt.o, T = TYPES[o.type];
+      const o = tgt.o, T = TYPES[o.type], rk = reach(tgt.ds - rOf(o));
       G.dust = Math.min(100, G.dust + 22 * (1 - L.f) * (L.W / 32) * dt); // stone dust only when the beam is on stone
       if (L.dustRate > 0) {
         hitting = true;
-        o.V = Math.max(0, o.V - L.dustRate * T.dust * (o.isFrag ? 1.3 : 1) * dt);
+        o.V = Math.max(0, o.V - L.dustRate * T.dust * (o.isFrag ? 1.3 : 1) * rk * dt);
         if (!o.isFrag && L.f < 0.5) o.dustT += dt;
       }
-      if (L.fragRate > 0 && !o.isFrag) { const dV = Math.min(o.V, L.fragRate * T.frag * dt); o.V -= dV; o.cracked += dV; o.crackV += dV; }
+      if (L.fragRate > 0 && !o.isFrag) { const dV = Math.min(o.V, L.fragRate * T.frag * rk * dt); o.V -= dV; o.cracked += dV; o.crackV += dV; }
       o.d = Math.cbrt(Math.max(o.V, 0)); o.flash = Math.max(o.flash || 0, 1);
       // live ablation rate — the "is this working?" readout
       if (G.rateObj === o && o.prevD != null) o.rate = lerp(o.rate || 0, (o.prevD - o.d) / dt, Math.min(1, dt * 3));
@@ -1916,6 +1987,7 @@ function updateHUD() {
     if (o.isFrag) txt = `FRAGMENT · ${o.d.toFixed(1)} mm · ${o.d >= 4 ? 'too big to basket' : 'basketable'}`;
     else txt = `STONE ${o.i + 1} · ${o.d.toFixed(1)} mm · ${o.hu.toLocaleString()} HU`;
     if (G.firing && G.rateObj === o && o.rate > 0.005) txt += ` · −${o.rate.toFixed(2)} mm/s`;
+    if (G.tgt.ds - rOf(o) > 3.2) txt += ' · far: hold ▶ ADVANCE';
     cls = 'lock';
   } else if (near) {
     const c = LV.calyces && LV.slots[near.i].cx != null ? LV.calyces[LV.slots[near.i].cx] : null;
@@ -1935,6 +2007,7 @@ function updateHUD() {
   else if (nearUpj) { b = 'STONE AT THE UPJ — EASE OFF THE PULSES'; red = true; }
   else if (G.pend) b = 'LASER STANDBY';
   else if (input.back || keys.KeyB) b = 'PULLING BACK ↓';
+  else if (G.manual && (input.fwd || keys.KeyF)) b = 'ADVANCING ↑';
   else if (behindF) b = '⬇ FRAGMENT BEHIND THE SCOPE — HOLD PULL BACK';
   else if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) b = 'STEER BACK TOWARD THE PELVIS ↺  THEN ON TO THE NEXT CALYX';
   else if (pn && pn.d > 0 && pn.d < 18) b = `PINCH POINT · ${pn.k.name} — CENTER THE SCOPE`;
@@ -1987,10 +2060,10 @@ function showBrief() {
     </div>
     <h2>YOUR TOOLS</h2>
     <div class="tools" id="toolsBox">${toolsHTML()}</div>
-    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>. <b>Aim with the green spot</b>: it comes off the laser fiber at 5 o'clock, so it sits a little down and right of the middle of the view, not dead centre.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
+    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. Near a stone the rails stop short: hold <b>▶ ADVANCE</b> to close in yourself — the laser works best right up on the stone. A fragment behind the scope? Hold <b>PULL BACK</b>. <b>Aim with the green spot</b>: it comes off the laser fiber at 5 o'clock, so it sits a little down and right of the middle of the view, not dead centre.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
     <h2>CONTROLS</h2>
-    <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
-    Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
+    <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK / ▶ ADVANCE (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
+    Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · F advance · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
     ${PHONE ? '<p class="keys">📱 Play in landscape. On iPhone, Share → <b>Add to Home Screen</b> and launch from the icon for full screen.</p>' : ''}
     <div class="go stick"><button id="goBtn">MISSION PREP ▸</button>${G.fixed ? '' : '<button class="alt" id="firstBtn">Starter stones</button>'}${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
   </div>`;
@@ -2127,7 +2200,7 @@ function startPlay() {
   if (PORTRAIT_PHONE.matches) { togglePause(); rotPaused = true; } // started upright: wait for the turn
   toast('Put the green aiming spot on the stone, then fire. It comes off the fiber at 5 o\'clock, not the middle of the view.', '', 'hint1', 0);
 }
-function quiet() { for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); input.fire = input.pa = input.pb = input.back = false; }
+function quiet() { for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); input.fire = input.pa = input.pb = input.back = input.fwd = false; }
 function showPause() {
   closeLaserPanel();
   screen.innerHTML = `<div class="panel" style="width:min(480px,100%)"><h1 style="font-size:22px">PAUSED</h1>
