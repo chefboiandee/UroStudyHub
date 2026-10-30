@@ -2563,12 +2563,13 @@ export default function UroStudyHub() {
     return !!(s.unlockedGames || {})[gameId];
   }
 
-  function gameReward(coins, xp) {
+  // keepOpen: the game shows its own debrief after paying out (Stone Squadron) — don't close it under the player
+  function gameReward(coins, xp, keepOpen) {
     var sm = getStreakMultiplier(s.streak || 0);
     var bc = Math.ceil(coins * sm);
     var bx = Math.ceil(xp * sm);
     setS(function(p) { return Object.assign({}, p, { coins: p.coins + bc, xp: p.xp + bx, games: (p.games || 0) + 1 }); });
-    setShowGame("");
+    if (!keepOpen) setShowGame("");
   }
 
   // ═══ TOKEN & ACTIVITY SYSTEM ═══
@@ -4338,7 +4339,7 @@ export default function UroStudyHub() {
       function onMsg(e) {
         if (e.origin !== window.location.origin || !frameRef.current || e.source !== frameRef.current.contentWindow) return;
         var d = e.data || {};
-        if (d.type === "squadron:claim") gameReward(Math.max(0, Math.min(150, d.coins | 0)), Math.max(0, Math.min(80, d.xp | 0)));
+        if (d.type === "squadron:claim") gameReward(Math.max(0, Math.min(150, d.coins | 0)), Math.max(0, Math.min(80, d.xp | 0)), true);
         else if (d.type === "squadron:exit") setShowGame("");
       }
       window.addEventListener("message", onMsg);
