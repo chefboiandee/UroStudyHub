@@ -3,6 +3,26 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (later) — 🛩️ Stone Squadron: aim along the laser fiber, not the scope centre
+
+Andrew: the fiber off to the side is what's realistic; the centre aiming made it look redundant.
+
+**Done:**
+- The fiber exits at 5 o'clock (`FIB_X/FIB_Y`, lateral 0.17 / −0.15).
+- Lock-on, basketing, the auto-assist and wall burns all run along the fiber's line. The beam and
+  green spot go straight down it, with no snapping toward the stone's centre.
+- Scope view: the beam starts at the visible fiber tip.
+- Teaching: the first-stone attending line, the start toast, the brief and the target readout
+  say "green spot on the stone".
+- Big stones still forgive a centred scope (offset 0.23 < radius ~0.9); small fragments
+  (radius 0.26–0.5) need the spot.
+- PR #2 (medals) merged. Pages deploys for PR #1 and #2 were stuck "queued" on GitHub's side
+  at the time of writing.
+
+**Verified:** headless: all cases still play through; the lock follows the fiber; screenshots in
+the scope view and chase cam.
+**Next steps:** fiber advance/retract + burn-back (roadmap #8).
+
 ## 2026-10-30 — 🛩️ Stone Squadron: medals in the debrief (+ PR #1 merged)
 
 **Done:**

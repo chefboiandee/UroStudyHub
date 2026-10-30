@@ -49,7 +49,12 @@ intel you read should change what the right play is.
 6. **Wires.** Pass a guidewire (and safety wire) through tight segments, impacted stones and a
    narrow UVJ before the scope can follow.
 7. **Retrograde pyelogram mid-case.** Inject contrast on fluoro and identify filling defects.
-8. **Surprises and other case types.** An unexpected urothelial tumor found during a stone case.
+8. **Fiber handling.** (Aiming already runs along the fiber at 5 o'clock — `FIB_X/FIB_Y`.)
+   - Advance and retract the fiber. Firing with the tip still inside the channel damages the
+     scope (a scope-repair cost on the debrief); too far out, and the fiber is floppy and harder to aim.
+   - Fiber burn-back in later missions: the tip chips down with lasing (faster on hard stones and
+     at high energy). Re-strip/cleave it or swap fibers, or lose power and aim.
+9. **Surprises and other case types.** An unexpected urothelial tumor found during a stone case.
    Planned cases: ureteroscopic biopsy, tumor ablation.
 
 ## Constraints

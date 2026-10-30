@@ -306,6 +306,8 @@ const mr = (a, b) => a + (b - a) * Math.random();
 
 // ───────────────────────── tuning
 const UPJ_S = 268, END_S = 285; // END_S: where the ureter run ends (and the fluoro map's scale); a case can end further on (LV.end)
+// the laser fiber exits the working channel at 5 o'clock: the beam (and the green aiming spot) run along ITS line, not the scope's centre
+const FIB_X = 0.17, FIB_Y = -0.15;
 const APPROACH_D = 26, APPROACH_V = 2.6; // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
 const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
 const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.38;
@@ -718,7 +720,7 @@ const ENV = tissueEnv(), SCOPE_MATS = [];
   const lens = new THREE.Mesh(new THREE.CircleGeometry(0.09, 20), emiss(new THREE.Color(0.25, 0.4, 0.9))); lens.rotation.y = Math.PI; lens.position.set(-0.07, 0.07, -0.004);
   const l1 = new THREE.Mesh(new THREE.CircleGeometry(0.05, 14), emiss(new THREE.Color(3, 2.9, 2.6))); l1.rotation.y = Math.PI; l1.position.set(0.13, 0.11, -0.004);
   const l2 = l1.clone(); l2.position.set(-0.15, -0.09, -0.004);
-  const fiber = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.34, 10), emiss(new THREE.Color(0.9, 1.6, 1.0))); fiber.rotation.x = Math.PI / 2; fiber.position.set(0.12, -0.12, -0.15);
+  const fiber = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.34, 10), emiss(new THREE.Color(0.9, 1.6, 1.0))); fiber.rotation.x = Math.PI / 2; fiber.position.set(FIB_X, FIB_Y, -0.15);
   scope.add(tip, shaft, face, lens, l1, l2, fiber);
 }
 const tipGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(0.5, 2.2, 0.8), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
@@ -1235,7 +1237,8 @@ function chatter() {
       : sl.ct === 'lower' ? 'Lower pole. Max deflection, take it slow, don\'t fight the wall.'
       : st.hu > 1200 ? `Stone ${st.i + 1}: ${st.hu.toLocaleString()} HU. That\'s hard. Dusting will crawl, think fragmenting.`
       : st.hu < 550 ? `Stone ${st.i + 1} is low HU, probably uric acid. It\'ll dust in seconds.`
-      : `Stone ${st.i + 1} ahead. Line up the green beam, then fire.`, 'st' + st.i, Infinity);
+      : `Stone ${st.i + 1} ahead. Green spot on the stone, then fire.`, 'st' + st.i, Infinity);
+    if (st.i === 0) say('att', 'Aim with the green spot. It comes off the fiber at 5 o\'clock, not the middle of the screen.', 'fiberhint', Infinity);
     break;
   }
   const pn = pinchNear(p.s);
@@ -1264,7 +1267,7 @@ function findTarget(extraLat = 0.18, maxDs = BEAM_RANGE) {
   for (const o of liveTargets()) {
     const R = rOf(o), ds = o.s - p.s;
     if (ds < 0.2 || ds - R > maxDs) continue;
-    const lat = Math.hypot(o.x - p.x, o.y - p.y);
+    const lat = Math.hypot(o.x - p.x - FIB_X, o.y - p.y - FIB_Y); // along the fiber's line
     if (lat < R + extraLat && (!best || ds < best.ds)) best = { o, ds, lat };
   }
   return best;
@@ -1464,17 +1467,17 @@ function update(dt) {
   G.tgt = tgt;
   const vis = clamp(1 - (G.dust * 0.7 + G.blood * 0.8) / 100, 0, 1);
   G.vis = vis; G.lock = !!tgt && vis > 0.35;
-  // assist: gently drift onto a nearly-aligned target when the stick is idle (thumbs are imprecise)
+  // assist: gently drift the fiber's line onto a nearly-aligned target when the stick is idle (thumbs are imprecise)
   if (!busy && !trip && Math.hypot(ix, iy) < 0.3) {
     let soft = findTarget(0.75);
     if (!soft) {
       const st = G.stones.find(s => s.phase === 'alive' && !s.held);
-      if (st) { const ds = st.s - p.s, lat = Math.hypot(st.x - p.x, st.y - p.y); if (ds > 0.2 && ds - rOf(st) < BEAM_RANGE && lat < rOf(st) + 1.6) soft = { o: st }; }
+      if (st) { const ds = st.s - p.s, lat = Math.hypot(st.x - p.x - FIB_X, st.y - p.y - FIB_Y); if (ds > 0.2 && ds - rOf(st) < BEAM_RANGE && lat < rOf(st) + 1.6) soft = { o: st }; }
     }
-    if (soft) { p.x += (soft.o.x - p.x) * Math.min(1, dt * 1.6); p.y += (soft.o.y - p.y) * Math.min(1, dt * 1.6); }
+    if (soft) { p.x += (soft.o.x - FIB_X - p.x) * Math.min(1, dt * 1.6); p.y += (soft.o.y - FIB_Y - p.y) * Math.min(1, dt * 1.6); }
   }
   let power = 0, hitting = false;
-  const nearWall = m > rEff - 0.5;
+  const fib = { s: p.s, x: p.x + FIB_X, y: p.y + FIB_Y }, nearWall = Math.hypot(fib.x, fib.y) > rEff - 0.3; // the fiber, not the scope, is what's near the wall
   G.fragCD -= dt;
   if (canFire) {
     power = L.W;
@@ -1508,7 +1511,7 @@ function update(dt) {
       if (nearWall && L.f < 0.5) {
         say('att', 'Don\'t fire at what you can\'t see!', 'burn', 9, 2);
         G.hp -= 7 * (1 - L.f) * dt; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 25 * dt); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4);
-        injure('burn', burnS(p), Math.atan2(p.y, p.x), mr(0.5, 0.65), 0.3, 1);
+        injure('burn', burnS(fib), Math.atan2(fib.y, fib.x), mr(0.5, 0.65), 0.3, 1);
       }
     }
     if (L.kickHz > 0 && G.fragCD <= 0) {
@@ -1610,7 +1613,7 @@ function update(dt) {
 function kick(tgt, nearWall, L) {
   SFX.pulse(); G.shake = Math.max(G.shake, 0.09 * Math.min(1, L.J / 1.5)); G.dust = Math.min(100, G.dust + 2.5 * L.f);
   if (!tgt) {
-    if (nearWall) { G.hp -= 3 * L.f; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 8); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4); injure('burn', burnS(G.p), Math.atan2(G.p.y, G.p.x), mr(0.65, 0.8), 0, L.J >= 0.9 ? 2 : 1); }
+    if (nearWall) { G.hp -= 3 * L.f; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 8); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4); injure('burn', burnS({ s: G.p.s, x: G.p.x + FIB_X, y: G.p.y + FIB_Y }), Math.atan2(G.p.y + FIB_Y, G.p.x + FIB_X), mr(0.65, 0.8), 0, L.J >= 0.9 ? 2 : 1); }
     return;
   }
   const o = tgt.o, T = TYPES[o.type];
@@ -1661,7 +1664,8 @@ function updateScene(dt) {
   rollQ.setFromAxisAngle(ZAX, -p.vx * 0.12); scopeQ.multiply(rollQ);
   rollQ.setFromEuler(new THREE.Euler(p.vy * 0.05, -p.vx * 0.05, 0)); scopeQ.multiply(rollQ);
   scope.position.copy(V1); scope.quaternion.copy(scopeQ);
-  scope.updateMatrixWorld(); tipW.set(0.12, -0.12, -0.33).applyMatrix4(scope.matrixWorld);
+  scope.updateMatrixWorld(); tipW.set(FIB_X, FIB_Y, -0.33).applyMatrix4(scope.matrixWorld);
+  if (camMode === 'scope') { camera.updateMatrixWorld(); fpTip.getWorldPosition(tipW); } // first person: the beam leaves the fiber you can see at 5 o'clock
   // camera
   if (camMode === 'chase') {
     G.eng = lerp(G.eng || 0, p.v < 1.5 ? 1 : 0, Math.min(1, dt * 2));
@@ -1698,7 +1702,7 @@ function updateScene(dt) {
   // beams
   const tgt = G.tgt;
   const hitDs = tgt ? tgt.ds - rOf(tgt.o) * 0.85 : BEAM_RANGE;
-  worldAt(p.s + Math.max(0.3, hitDs), tgt ? lerp(p.x, tgt.o.x, 0.6) : p.x, tgt ? lerp(p.y, tgt.o.y, 0.6) : p.y, hitW);
+  worldAt(p.s + Math.max(0.3, hitDs), p.x + FIB_X, p.y + FIB_Y, hitW); // straight down the fiber's line: the spot lands where the fiber points
   const L = G.L || laserNums(G.las.J, G.las.Hz);
   const firing = !!(input.pa || input.pb || keys.KeyJ || keys.KeyK || input.fire || keys.Space) && G.bk.state === 'idle' && state === 'play' && !G.pend && !G.trip;
   aimBeam.visible = aimDot.visible = !G.pend && !G.trip; // the aiming beam drops out in standby
@@ -1915,7 +1919,7 @@ function updateHUD() {
     cls = 'lock';
   } else if (near) {
     const c = LV.calyces && LV.slots[near.i].cx != null ? LV.calyces[LV.slots[near.i].cx] : null;
-    txt = `STONE ${near.i + 1} ahead · ${near.d.toFixed(1)} mm · ${near.hu.toLocaleString()} HU — ${c && Math.hypot(near.x - p.x, near.y - p.y) > 2 ? (p.v < 1 ? `deflect into the ${c.name.toLowerCase()}` : `in the ${c.name.toLowerCase()}`) : 'line up the aiming beam'}`;
+    txt = `STONE ${near.i + 1} ahead · ${near.d.toFixed(1)} mm · ${near.hu.toLocaleString()} HU — ${c && Math.hypot(near.x - p.x, near.y - p.y) > 2 ? (p.v < 1 ? `deflect into the ${c.name.toLowerCase()}` : `in the ${c.name.toLowerCase()}`) : 'put the green spot on it'}`;
   }
   const tcls = cls + (txt ? '' : ' hidden');
   if (HUD.target.dataset.c !== tcls) { HUD.target.className = tcls; HUD.target.dataset.c = tcls; }
@@ -1983,7 +1987,7 @@ function showBrief() {
     </div>
     <h2>YOUR TOOLS</h2>
     <div class="tools" id="toolsBox">${toolsHTML()}</div>
-    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
+    <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. A fragment behind the scope? Hold <b>PULL BACK</b>. <b>Aim with the green spot</b>: it comes off the laser fiber at 5 o'clock, so it sits a little down and right of the middle of the view, not dead centre.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
     <h2>CONTROLS</h2>
     <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
     Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
@@ -2121,7 +2125,7 @@ function startPlay() {
   for (const o of warm) o.visible = false; for (const m of dummies) scene.remove(m);
   state = 'play'; fpsReset(); document.body.classList.add('ingame');
   if (PORTRAIT_PHONE.matches) { togglePause(); rotPaused = true; } // started upright: wait for the turn
-  toast('Line up the green aiming beam on the stone, then fire', '', 'hint1', 0);
+  toast('Put the green aiming spot on the stone, then fire. It comes off the fiber at 5 o\'clock, not the middle of the view.', '', 'hint1', 0);
 }
 function quiet() { for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); input.fire = input.pa = input.pb = input.back = false; }
 function showPause() {
