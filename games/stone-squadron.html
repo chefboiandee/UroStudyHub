@@ -1514,7 +1514,8 @@ function update(dt) {
   if (keys.ArrowUp) G.flow = clamp(G.flow + 0.5 * dt, 0, 1);
   if (keys.ArrowDown) G.flow = clamp(G.flow - 0.5 * dt, 0, 1);
   // pinch points slow you down, both ways
-  const pn = pinchNear(p.s), slowK = pn ? smooth(3, 8, Math.abs(pn.d)) : 1;
+  // the rails slow for a pinch point, and for an oncoming peristaltic wave: you ride through the squeeze, you don't blow past it
+  const pn = pinchNear(p.s), wd = G.wave.on ? G.wave.s - p.s : 99, slowK = Math.min(pn ? smooth(3, 8, Math.abs(pn.d)) : 1, wd > -4 ? smooth(4, 24, wd) : 1);
   let gap = 0;
   if (trip) {
     // the basketed piece rides all the way out (to the bladder, or out through the sheath), then you drive back up
@@ -1562,8 +1563,8 @@ function update(dt) {
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
-  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(62, gap - 4); }
-  if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } }
+  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(85, gap - 4); } // starts well out ahead
+  if (G.wave.on) { G.wave.s -= 8 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } } // rolls down slowly enough to see it coming
   UNI.waveS.value = G.wave.on ? G.wave.s : -999;
   // walls
   const rEff = Math.max(0.6, lumR(p.s, Math.atan2(p.y, p.x)) - SCOPE_R), m = Math.hypot(p.x, p.y);

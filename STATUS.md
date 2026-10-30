@@ -3,6 +3,15 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late 5) — 🛩️ Stone Squadron: peristalsis you actually ride through
+
+Andrew: by the time the peristalsis hits, the scope is basically past it.
+**Done:**
+- Waves start up to 85 ahead (was 62) and roll down at 8/s (was 13).
+- The rails ease toward pinch speed as a wave closes in (like a pinch point).
+- Measured headless: a wave is within 30 units for ~2.5–3 s (was ~1.4) and the scope crosses the
+  squeeze at ~3.3/s (was ~9).
+
 ## 2026-10-30 (late 4) — 🛩️ Stone Squadron: first-person view no longer shows two "lasers"
 
 Andrew: in first person the "steering pointer thing" also looked like the laser fiber.
