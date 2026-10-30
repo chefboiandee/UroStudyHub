@@ -3,6 +3,16 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late 4) — 🛩️ Stone Squadron: first-person view no longer shows two "lasers"
+
+Andrew: in first person the "steering pointer thing" also looked like the laser fiber.
+**Cause:** the first-person fiber was a long white rod reaching from the corner to the middle, and
+the green aiming line continued from its tip: two stacked line-things, one reading as a pointer.
+**Done:** first person now shows only a short fiber stub on its own line near 5 o'clock (glowing
+tip) and the green spot where it lands. No aiming line: in saline you only see the spot. The
+treatment flash while firing stays; the chase cam is unchanged.
+**Verified:** headless screenshots (cruising + at a stone); all 3 cases play through.
+
 ## 2026-10-30 (late 3) — 🛩️ Stone Squadron: make the fiber + green spot obviously "the gun"
 
 Andrew: the aiming fiber should be more obvious, and the thing in the middle shouldn't look like
