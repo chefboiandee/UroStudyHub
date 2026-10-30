@@ -3,6 +3,21 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late 2) — 🛩️ Stone Squadron: penalty for not reading the whole chart
+
+Andrew: penalize and have the attending chastise if not all notes are opened; NO reminder at
+scrub-in ("people need to learn from losing points").
+**Done:**
+- Each unopened chart note (history, CT read, prior note, labs) costs −100 (`NOTE_PEN`) at scrub-in.
+- The medal "prep" objective now needs the whole chart + every target + the right antibiotic.
+- ~2.5 s into the case the attending (urgent) names what was skipped ("You didn't read the
+  operative note and labs…"; harsher if 3+ were skipped).
+- Debrief pre-op card: "Chart read 2/4 — skipped: … (−200)". Run report has a chart line.
+- No warning beforehand (the button and brief stay silent, as Andrew asked).
+
+**Verified:** headless: skipped 2 → −200, attending line, card + objective; read all → no penalty;
+all cases play through.
+
 ## 2026-10-30 (late) — 🛩️ Stone Squadron: music, quieter laser, terminal-style briefing
 
 **Done:**
