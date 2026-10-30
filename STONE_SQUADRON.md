@@ -57,9 +57,12 @@ intel you read should change what the right play is.
 9. **Narrow-ureter levels.** Later cases where the ureter itself is about sheath-calibre
    (`SHEATH_R` 1.3 vs 2.6 now): every pinch, wave and fragment gets tighter. Also: let ADVANCE get
    a little closer to the stone.
-10. **A real stone surface under the laser.** Dusting in the middle cratters it. Dusting the edges
-    badly carves out chunks that break off and have to be chased. The stone's shape becomes the
-    result of how you lased it (it's currently a shrinking volume).
+10. **A real stone surface under the laser.** The stone's shape becomes the result of how you lased
+    it (it's currently a shrinking volume).
+    - Dusting done right (painting the edges/surface) dusts it away cleanly, with no chunks.
+    - Lasing the middle digs a crater.
+    - Poor technique carves out pieces that break off and have to be chased: trenching a groove
+      through it, or undercutting an edge.
 11. **Surprises and other case types.** An unexpected urothelial tumor found during a stone case.
    Planned cases: ureteroscopic biopsy, tumor ablation.
 
