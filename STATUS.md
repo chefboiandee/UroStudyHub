@@ -3,6 +3,43 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (evening) — 🛩️ Stone Squadron: debrief fix, ADVANCE button, perforation by pushing, Star Fox comms sound
+
+Andrew (2026-10-30): "push it and merge so it's live — you can do that for the rest of our changes".
+He's the only user and tests online, so in this session finished work is pushed, PR'd and merged to `main`.
+
+**Done:**
+- **Bug: the debrief/medals never showed in the app (Andrew saw it in admin mode, but it hit
+  everyone).** The game sends `squadron:claim` as the debrief opens, and the app's `gameReward()`
+  closed every game after paying. Now `gameReward(coins, xp, keepOpen)`; Stone Squadron passes
+  `true`. `UroStudyHub.html` changed + `UroStudyHub.min.html` rebuilt. The Babel compile of both is clean.
+- **Manual approach:**
+  - The rails park `MANUAL_D` (3) short of the old working distance (0.6 for calyx stones, which
+    narrow toward the mouth).
+  - From there the scope moves only while you hold **▶ ADVANCE** (new button beside PULL BACK; key F).
+    It closes in to just off the stone and never shoves it.
+  - Fragments can still end up behind the scope.
+  - Laser effectiveness falls off with distance (`reach()`: 100% up close → 30% at 5.5).
+  - The readout says "far: hold ▶ ADVANCE". The attending explains it on the first stone.
+- **Perforation by pushing:** holding ADVANCE with the tip jammed into the wall costs ~32
+  integrity/s plus deep lesions, and the attending yells "Never push against resistance". About
+  2½ s of it perforates and ends the case (the existing PERF abort).
+- **Comms sound/feel:**
+  - The window snaps open and shut like a CRT (squash to a bright line), with a scanlined,
+    "tuning" portrait.
+  - Radio chirp on open, snap on close.
+  - Voices are now formant-filtered sawtooth syllables through a band-limited, soft-clipped radio
+    chain with a hiss bed. Pitch per character: attending low, tech high, anesthesia mid.
+
+**Verified:** headless:
+- Park 5.24 from the stone, no idle drift, ADVANCE to 1.05, stone not pushed.
+- Lasing up close works; pushing into the wall → perf.
+- All 3 cases play through.
+- Comms classes cycle open → shut → open; no page errors.
+
+**Not verified:** how the voices actually sound (no audio here); feel on the iPad.
+**Next steps:** Andrew to listen to the voices and tune pitch/speed; tune `MANUAL_D` and `reach()`.
+
 ## 2026-10-30 (later) — 🛩️ Stone Squadron: aim along the laser fiber, not the scope centre
 
 Andrew: the fiber off to the side is what's realistic; the centre aiming made it look redundant.
