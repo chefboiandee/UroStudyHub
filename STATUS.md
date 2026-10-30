@@ -3,6 +3,27 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 — 🛩️ Stone Squadron: medals in the debrief (+ PR #1 merged)
+
+**Done:**
+- PR #1 (approach, cases, mission prep, OR chatter) opened and merged to `main` on Andrew's
+  request. The Pages deploy was still queued when this entry was written.
+- **Medals:**
+  - Six bonus objectives: stone-free, PULS 0, IRP never over 40, specimen sent, prep (every CT
+    target + the right antibiotic), under par (`LV.par`: 4:00 / 3:30 / 4:30).
+  - Finishing = bronze; stone-free + 3 = silver; stone-free + 5 = gold; all six = S rank.
+    Aborted = no medal.
+  - Debrief: the objectives tick in one by one with blips, then the medal stamps in. "NEW BEST"
+    plus what the next medal needs.
+  - The best medal per case is kept (localStorage `sq3d_medals`) and shown on the case picker.
+  - Arcade reward bonus by medal (still capped by the app). Medal line in the run report.
+
+**Verified:** headless: a sloppy run (no antibiotic, no targets, no specimen) → silver; a clean
+run → S rank; picker shows ⭐; no page errors.
+**Not verified:** on device. Par times come from a bot that lases perfectly (it finishes Case 1
+in 2:00), so they probably need loosening or tightening from real play.
+**Next steps:** push/merge when Andrew asks; tune par; roadmap #2 (music and sound).
+
 ## 2026-10-28 (late) — 🛩️ Stone Squadron: OR chatter (attending as Star Fox wingmate)
 
 Andrew likes cartoonish attending comments like Star Fox wingmates, good for reminders, and likes
