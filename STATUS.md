@@ -3,6 +3,27 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late) — 🛩️ Stone Squadron: music, quieter laser, terminal-style briefing
+
+**Done:**
+- **Music:** an original generative lounge loop in the spirit of Balatro's mood (not its music).
+  - 88 BPM, 8-bar jazzy progression (Am9 Dm9 G13 Cmaj9 Fmaj9 Bø7 E7b9 Am9).
+  - Walking triangle bass, rolled e-piano chords + comps, a sparse square arpeggio through a
+    dotted-eighth echo, offbeat shaker. One shared LFO gives everything a "tape wobble"
+    (±11 cents).
+  - Starts at MISSION PREP. Mute covers it; MUSIC On/Off in the brief + pause.
+  - Level: averaged RMS ≈ 1/3 of the dusting buzz (measured headless).
+- **Laser SFX −25%:** dusting buzz 0.22 → 0.165, hit crackle 0.18 → 0.135, frag pulse 0.55 → 0.41.
+- **Briefing terminal:**
+  - The chart notes are green phosphor with scanlines and a blinking block cursor.
+  - Each note types out the first time it's opened (300 chars/s, faster than reading), with
+    key-tick beeps and a "ba-deep" when done. A tap shows it all.
+  - Seen notes show instantly for the rest of the run.
+
+**Verified:** headless: music runs (RMS measured), mute silences it; crawl → tap-skip → instant
+revisit; all 3 cases play through; no page errors.
+**Not verified:** how any of it sounds (no speakers here).
+
 ## 2026-10-30 (late night) — 🛩️ Stone Squadron: fix ADVANCE sometimes doing nothing
 
 Andrew: ADVANCE "straight up wouldn't let me advance at times".

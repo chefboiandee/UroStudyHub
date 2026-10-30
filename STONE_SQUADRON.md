@@ -41,7 +41,9 @@ intel you read should change what the right play is.
    prep = all CT targets + right antibiotic, under par). Finish = bronze; stone-free + 3 = silver;
    stone-free + 5 = gold; all 6 = S rank. Best medal per case is shown on the case picker. Par
    times (`LV.par`) need tuning from real play.
-2. **Music and sound design.** A score, plus better cues for the existing procedural SFX.
+2. **Music and sound design.** First pass done: an original mellow lounge loop (`MUS`, Balatro-ish mood:
+   jazzy chords, walking bass, echoing arpeggio, tape wobble) from mission prep onward, MUSIC On/Off;
+   laser SFX −25%; terminal-style typing beeps on the briefing. Still to do: more tracks/variation, mixing.
 3. ~~Radio chatter~~ — done (first pass). More lines per case type as cases are added.
 4. **Harder CT reading.** More stones across the stack, decoys (phleboliths, vascular
    calcification), and decisions such as whether to also treat kidney stones in a ureteral case.
