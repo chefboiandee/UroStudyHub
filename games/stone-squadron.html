@@ -872,7 +872,7 @@ function objectives(stoneFree) {
     { k: 'puls', n: 'No ureteral injury (PULS 0)', ok: g === '0', v: `PULS ${g}` },
     { k: 'irp', n: 'Pressure never over 40 mmHg', ok: G.timeOver40 === 0, v: `peak ${Math.round(G.peakP)} mmHg` },
     { k: 'spec', n: 'Specimen sent for analysis', ok: spec > 0, v: spec ? `${spec} in the jar` : 'none basketed' },
-    { k: 'prep', n: 'Prep: every target + the right antibiotic', ok: G.prep.found.size === G.stones.length && (v === 'best' || v === 'ok'), v: `${G.prep.found.size}/${G.stones.length} targets · ${v === 'best' || v === 'ok' ? 'abx ✓' : 'abx ✗'}` },
+    { k: 'prep', n: 'Prep: whole chart, every target, right antibiotic', ok: !unreadNotes().length && G.prep.found.size === G.stones.length && (v === 'best' || v === 'ok'), v: `${4 - unreadNotes().length}/4 notes · ${G.prep.found.size}/${G.stones.length} targets · ${v === 'best' || v === 'ok' ? 'abx ✓' : 'abx ✗'}` },
     { k: 'time', n: `Under par (${fmtOR(LV.par)} of anesthesia)`, ok: G.t <= LV.par, v: fmtOR(G.t) },
   ];
 }
@@ -900,11 +900,16 @@ function attQuote(reason, stoneFree) {
   if (G.stones.some(st => st.how === 'migrated')) return '"You pushed it into the kidney. Near the UPJ, dust. Frag pulses mean retropulsion."';
   return G.residual ? `"${G.residual} fragment${G.residual === 1 ? '' : 's'} left. Post-op CT will find ${G.residual === 1 ? 'it' : 'them'}, and so will the patient."` : '"Not bad. Not done, either."';
 }
+// the chart: every note has to be opened before you scrub — skipping one costs points, the prep objective, and an earful
+const NOTE_PEN = 100;
+function chartNames() { const pr = PREP[LV.id]; return { hx: 'history', ct: 'CT read', note: pr.noteTitle.split(' ·')[0].toLowerCase(), labs: 'labs' }; }
+function unreadNotes() { const nm = chartNames(); return Object.keys(nm).filter(k => !G.prep.seen.has(k)).map(k => nm[k]); }
+const listWords = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
 function prepCard() {
   const [v, why] = abxVerdict(), name = (ABX.find(a => a[0] === (G.prep.abx || 'none')) || ABX[0])[1];
   const lab = { best: 'Right call ✓', ok: 'Acceptable', weak: 'Not ideal', none: 'No prophylaxis', wrong: 'Doesn\'t cover it ✗' }[v];
   return `<div class="sc"><div class="h"><span>Antibiotic: ${name}</span><span class="${ABX_FX[v].cls}">${lab}</span></div>
-    <div class="keys">Targets found on the CT ${G.prep.found.size}/${G.stones.length}${G.prep.phleb.size ? ` · ${G.prep.phleb.size} phlebolith${G.prep.phleb.size === 1 ? '' : 's'} checked` : ''}${v === 'wrong' ? ' · sepsis risk built ×2.2 faster and started at 18' : v === 'weak' || v === 'none' ? ` · sepsis risk built ×${ABX_FX[v].k} faster` : ''}</div>
+    <div class="keys">Chart read ${4 - unreadNotes().length}/4${unreadNotes().length ? ` — <span class="bd">skipped: ${listWords(unreadNotes())} (−${unreadNotes().length * NOTE_PEN})</span>` : ' ✓'} · Targets found on the CT ${G.prep.found.size}/${G.stones.length}${G.prep.phleb.size ? ` · ${G.prep.phleb.size} phlebolith${G.prep.phleb.size === 1 ? '' : 's'} checked` : ''}${v === 'wrong' ? ' · sepsis risk built ×2.2 faster and started at 18' : v === 'weak' || v === 'none' ? ` · sepsis risk built ×${ABX_FX[v].k} faster` : ''}</div>
     <p>${why}</p></div>`;
 }
 function injuryCard(reason) {
@@ -1340,6 +1345,7 @@ function chatter() {
     else if (v === 'none') say('gas', 'No antibiotics on board. Keep that pressure down for me.', 'abx', Infinity);
     else say('gas', `Heads up: ${drug === 'None' ? 'no antibiotic' : drug} doesn't cover what grew. Keep the pressure LOW.`, 'abx', Infinity, 2);
   }
+  if (G.t > 2.5 && G.prep.unread && G.prep.unread.length) say('att', G.prep.unread.length >= 3 ? `You barely opened the chart. You skipped the ${listWords(G.prep.unread)}. You don't walk into a case on a patient you haven't read about.` : `You didn't read the ${listWords(G.prep.unread)}. Everything in that chart is there for a reason. Read all of it, every time.`, 'unread', Infinity, 2);
   if (G.t > 10 && G.prep.found.size < n) say('att', `You marked ${G.prep.found.size} of ${n} stones on the CT. Read the films before you scrub. Every time.`, 'films', Infinity);
   // approaching each stone: a reminder that fits it
   for (const st of G.stones) {
@@ -2273,6 +2279,7 @@ function showPrep() {
 function startPlay() {
   audioInit(); musicStart();
   const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0; commsReset();
+  G.prep.unread = unreadNotes(); G.bonus -= G.prep.unread.length * NOTE_PEN; // read the whole chart, every time
   if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
   hideScreen();
   $('hud').classList.remove('hidden');
@@ -2396,7 +2403,7 @@ function runReport() {
     `Run: ${LV.tag} (${LV.name}) · ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · anesthesia ${fmtOR(G.t)} (${fmtT(G.t)} played)`,
     `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
     `Medal: ${G.medal ? MEDALS[G.medal].n : 'none'} · objectives ${G.objs ? G.objs.filter(o => o.ok).map(o => o.k).join(', ') || 'none' : '?'}`,
-    `Prep: antibiotic ${G.prep.abx || 'none'} (${abxVerdict()[0]}) · CT targets ${G.prep.found.size}/${G.stones.length} · phleboliths checked ${G.prep.phleb.size}`,
+    `Prep: chart ${4 - unreadNotes().length}/4 read${unreadNotes().length ? ' (skipped ' + unreadNotes().join(', ') + ')' : ''} · antibiotic ${G.prep.abx || 'none'} (${abxVerdict()[0]}) · CT targets ${G.prep.found.size}/${G.stones.length} · phleboliths checked ${G.prep.phleb.size}`,
     `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${orMin(G.tripTime)} OR min) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
     `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
     `Notes: ${notes}`,
