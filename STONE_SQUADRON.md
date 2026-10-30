@@ -37,8 +37,10 @@ intel you read should change what the right play is.
 
 ## Roadmap (Andrew's list, roughly in order)
 
-1. **Debrief with medals.** Bronze, silver, gold and S rank, plus bonus objectives (stone-free,
-   PULS 0, IRP never >40, specimen sent, time).
+1. ~~Debrief with medals~~ — done: six objectives (stone-free, PULS 0, IRP never >40, specimen,
+   prep = all CT targets + right antibiotic, under par). Finish = bronze; stone-free + 3 = silver;
+   stone-free + 5 = gold; all 6 = S rank. Best medal per case is shown on the case picker. Par
+   times (`LV.par`) need tuning from real play.
 2. **Music and sound design.** A score, plus better cues for the existing procedural SFX.
 3. ~~Radio chatter~~ — done (first pass). More lines per case type as cases are added.
 4. **Harder CT reading.** More stones across the stack, decoys (phleboliths, vascular
