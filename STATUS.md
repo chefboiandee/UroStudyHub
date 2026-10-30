@@ -3,6 +3,22 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late night) — 🛩️ Stone Squadron: fix ADVANCE sometimes doing nothing
+
+Andrew: ADVANCE "straight up wouldn't let me advance at times".
+**Causes (all fixed):**
+1. After PULL BACK the rails ran a "creep back, hold while there's work ahead" mode, and ADVANCE
+   was disabled in it. With a fragment ahead, you were stuck.
+2. During cleanup, ADVANCE treated the fragment pushed against the tip as its stop: zero movement.
+   Now the tip just pushes fragments along (up to 8 past the stone's old spot).
+3. In the kidney, the "don't drive into the calyx wall" guard and the deflect-to-advance hold also
+   blocked ADVANCE. Both now apply to the rails only; pushing into a wall still does the
+   perforation damage.
+4. At the closest allowed distance (1.05 off a live stone, any closer shoves it) nothing explained
+   it; now the banner reads "AS CLOSE AS IT GETS — LASE FROM HERE".
+
+**Verified:** headless: ADVANCE moves 3.4/s in each case above; all 3 cases play through.
+
 ## 2026-10-30 (night) — 🛩️ Stone Squadron: tuning after Andrew's first play (flow, dust, peristalsis, anesthesia clock)
 
 **Done:**

@@ -1479,16 +1479,23 @@ function update(dt) {
       // (faster inside a sheath); after a pull-back: slowly, and hold while there's work in front of you.
       // Inside that last stretch the scope only moves while you hold ADVANCE — you choose how close to get, up to touching
       const cur = G.stones.find(st => st.phase !== 'done'), inCalyx = !!(cur && LV.calyces && LV.slots[cur.i].cx != null);
-      const ride = gap - (inCalyx ? 0.6 : MANUAL_D), manual = ride <= 0.05 && !G.backed, fwd = manual && (input.fwd || keys.KeyF); // a calyx narrows toward its mouth: park nearer, or you can't deflect in
+      const ride = gap - (inCalyx ? 0.6 : MANUAL_D), manual = ride <= 0.05 && !G.backed; // a calyx narrows toward its mouth: park nearer, or you can't deflect in
       const cruise = inSheath(p.s + 4) ? CRUISE * SHEATH_V : CRUISE, near = lerp(APPROACH_V, cruise, smooth(6, APPROACH_D, ride));
-      let tv = fwd ? ADV_V : manual || gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, Math.max(ride, 0) * 1.2 + 0.25);
+      let tv = manual || gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, Math.max(ride, 0) * 1.2 + 0.25);
       // in the kidney the rails never shove you into a wall: steer out of a calyx before they carry you on
       if (LV.kidney && tv > 0) { const th = Math.atan2(p.y, p.x), m0 = Math.hypot(p.x, p.y); if (m0 > lumR(p.s + 0.8, th) - SCOPE_R - 0.05) { tv = 0; G.wallHold = true; } else G.wallHold = false; }
       if (G.backed) { if (ride <= 0.05) G.backed = false; else { tv = Math.min(tv, 5); if (workAhead(gate)) tv = 0; } }
-      p.v = manual ? tv : p.v + (tv - p.v) * Math.min(1, dt * 3); // ADVANCE answers at once, like your hand on the scope
-      const lim = fwd ? gap + WORK_DIST - 1.05 : ride; // ADVANCE closes in until just off the stone (any closer and the tip shoves it up)
+      // ADVANCE always works (after a pull-back, in a calyx, with fragments ahead — the tip just pushes those along).
+      // Its only stop: just off a live stone, since any closer and the tip shoves the stone up
+      const fwd = input.fwd || keys.KeyF;
+      let lim = ride;
+      if (fwd) {
+        tv = Math.max(tv, ADV_V);
+        lim = cur && cur.phase === 'alive' ? cur.s - rOf(cur) - 1.05 - p.s : cur ? cur.lastS + 8 - p.s : 1;
+      }
+      p.v = manual || fwd ? tv : p.v + (tv - p.v) * Math.min(1, dt * 3); // ADVANCE answers at once, like your hand on the scope
       if (lim > 0) p.s += Math.min(p.v * dt, lim); else p.v = 0;
-      G.manual = manual;
+      G.manual = manual; G.advStop = fwd && lim <= 0.02 && !!cur && cur.phase === 'alive';
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
@@ -1510,7 +1517,7 @@ function update(dt) {
       say('att', pick(['Easy! You\'re on the wall!', 'Off the wall, off the wall!']), 'scr', 9, 2);
       injure('scrape', p.s + 0.25, Math.atan2(p.y, p.x), mr(0.6, 0.8), 0.22);
       // ADVANCE with the tip jammed into the wall = pushing against resistance: the classic way to perforate
-      if (G.manual && (input.fwd || keys.KeyF) && p.v > 0.3) {
+      if ((input.fwd || keys.KeyF) && p.v > 0.3) {
         G.hp -= 32 * dt; G.lastLoss = 'scrape'; G.shake = Math.max(G.shake, 0.05);
         injure('scrape', p.s + 0.3, Math.atan2(p.y, p.x), mr(0.8, 1.0), 0.15, 2);
         toast('Pushing against resistance — stop advancing!', 'bad', 'push', 3);
@@ -2017,7 +2024,8 @@ function updateHUD() {
   else if (nearUpj) { b = 'STONE AT THE UPJ — EASE OFF THE PULSES'; red = true; }
   else if (G.pend) b = 'LASER STANDBY';
   else if (input.back || keys.KeyB) b = 'PULLING BACK ↓';
-  else if (G.manual && (input.fwd || keys.KeyF)) b = 'ADVANCING ↑';
+  else if (G.advStop) b = 'AS CLOSE AS IT GETS — LASE FROM HERE';
+  else if (input.fwd || keys.KeyF) b = 'ADVANCING ↑';
   else if (behindF) b = '⬇ FRAGMENT BEHIND THE SCOPE — HOLD PULL BACK';
   else if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) b = 'STEER BACK TOWARD THE PELVIS ↺  THEN ON TO THE NEXT CALYX';
   else if (pn && pn.d > 0 && pn.d < 18) b = `PINCH POINT · ${pn.k.name} — CENTER THE SCOPE`;
