@@ -3,6 +3,21 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (late 3) — 🛩️ Stone Squadron: make the fiber + green spot obviously "the gun"
+
+Andrew: the aiming fiber should be more obvious, and the thing in the middle shouldn't look like
+what you fire with.
+**Done:**
+- The fiber sticks 0.6 out past the scope tip (bright glass, glowing tip; the beam starts there).
+- The aiming beam is ~2× thicker and much brighter, with a soft glow sheath (thin in scope view).
+- The green spot sits ON the stone's surface where the fiber's line meets it (it was buried
+  inside the stone) and is always drawn on top. It's dim in the air; big, bright and pulsing
+  when locked.
+- The scope body fades to 32% whenever you're working at a stone (was: only when locked).
+  Its two front lights are dimmed so they don't read as a muzzle.
+
+**Verified:** headless screenshots in the chase cam and scope view; all 3 cases play through.
+
 ## 2026-10-30 (late 2) — 🛩️ Stone Squadron: penalty for not reading the whole chart
 
 Andrew: penalize and have the attending chastise if not all notes are opened; NO reminder at
