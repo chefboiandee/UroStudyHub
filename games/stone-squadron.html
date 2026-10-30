@@ -744,9 +744,11 @@ tipGlow.scale.setScalar(0.32); tipGlow.position.set(FIB_X, FIB_Y, -0.6); scope.a
 const rim = new THREE.PointLight(0xffe8e0, 2.5, 2.4, 1.5); // lights the scope from the camera side, too short to reach the walls
 scene.add(scope, rim);
 // first-person: the fiber poking in from 5 o'clock, like a real URS view
-const fpFiber = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.7, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 0.82, 0.8) }));
-fpFiber.rotation.x = Math.PI / 2; fpFiber.position.set(0.16, -0.14, -0.9); fpFiber.visible = false;
-const fpTip = new THREE.Sprite(tipGlow.material); fpTip.scale.setScalar(0.05); fpTip.position.set(0.16, -0.14, -1.25); fpTip.visible = false;
+// a short stub a few mm out of the working channel, on the fiber's own line (FIB_X/FIB_Y), seen out toward the 5 o'clock edge —
+// not a long rod reaching for the middle. In first person the aiming beam isn't drawn as a line (in saline you only see the spot)
+const fpFiber = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.2, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.85, 0.9, 0.88) }));
+fpFiber.rotation.x = Math.PI / 2; fpFiber.position.set(FIB_X, FIB_Y, -0.52); fpFiber.visible = false;
+const fpTip = new THREE.Sprite(tipGlow.material); fpTip.scale.setScalar(0.035); fpTip.position.set(FIB_X, FIB_Y, -0.62); fpTip.visible = false;
 camera.add(fpFiber, fpTip);
 
 // beams: green aiming beam always on; treatment beam only while lasing
@@ -1512,7 +1514,8 @@ function update(dt) {
   if (keys.ArrowUp) G.flow = clamp(G.flow + 0.5 * dt, 0, 1);
   if (keys.ArrowDown) G.flow = clamp(G.flow - 0.5 * dt, 0, 1);
   // pinch points slow you down, both ways
-  const pn = pinchNear(p.s), slowK = pn ? smooth(3, 8, Math.abs(pn.d)) : 1;
+  // the rails slow for a pinch point, and for an oncoming peristaltic wave: you ride through the squeeze, you don't blow past it
+  const pn = pinchNear(p.s), wd = G.wave.on ? G.wave.s - p.s : 99, slowK = Math.min(pn ? smooth(3, 8, Math.abs(pn.d)) : 1, wd > -4 ? smooth(4, 24, wd) : 1);
   let gap = 0;
   if (trip) {
     // the basketed piece rides all the way out (to the bladder, or out through the sheath), then you drive back up
@@ -1560,8 +1563,8 @@ function update(dt) {
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
-  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(62, gap - 4); }
-  if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } }
+  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(85, gap - 4); } // starts well out ahead
+  if (G.wave.on) { G.wave.s -= 8 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } } // rolls down slowly enough to see it coming
   UNI.waveS.value = G.wave.on ? G.wave.s : -999;
   // walls
   const rEff = Math.max(0.6, lumR(p.s, Math.atan2(p.y, p.x)) - SCOPE_R), m = Math.hypot(p.x, p.y);
@@ -1854,6 +1857,7 @@ function updateScene(dt) {
   const L = G.L || laserNums(G.las.J, G.las.Hz);
   const firing = !!(input.pa || input.pb || keys.KeyJ || keys.KeyK || input.fire || keys.Space) && G.bk.state === 'idle' && state === 'play' && !G.pend && !G.trip;
   aimBeam.visible = aimDot.visible = !G.pend && !G.trip; // the aiming beam drops out in standby
+  if (camMode === 'scope') aimBeam.visible = false; // first person: just the fiber tip and the green spot, like the real view
   const fpw = camMode === 'scope' ? 0.35 : 1; // first person: the beam starts an inch from the lens, so keep it thin
   setBeam(aimBeam, tipW, hitW, 0.02 * fpw); setBeam(aimGlow, tipW, hitW, 0.07 * fpw); aimGlow.visible = aimBeam.visible;
   // green aiming spot: small and dim in the air, big, bright and pulsing once it's on a target
