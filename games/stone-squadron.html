@@ -176,7 +176,9 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
 .ctrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap}.ctrow .seg button{padding:9px 12px;font-size:13px}
 #ctT{font-size:12px;letter-spacing:.12em;color:var(--a)}#ctT.ok{color:var(--g)}
 .doctabs{display:flex;flex-wrap:wrap}.doctabs button{flex:1 1 auto;padding:10px 10px;font-size:12px;letter-spacing:.08em}
-.doc{margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:rgba(0,0,0,.35);white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e6dfdb;max-height:min(440px,60vh);overflow:auto;-webkit-user-select:text;user-select:text}
+.doc{margin-top:8px;border:1px solid rgba(74,222,128,.35);border-radius:12px;padding:12px 14px;background:#020a05 repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 1px,transparent 1px 3px);white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#7cf2a0;text-shadow:0 0 6px rgba(80,255,140,.45);max-height:min(440px,60vh);overflow:auto;-webkit-user-select:text;user-select:text;cursor:default}
+.doc .cur{display:inline-block;width:.6em;height:1.05em;margin-left:1px;vertical-align:text-bottom;background:#7cf2a0;box-shadow:0 0 6px rgba(80,255,140,.6);animation:curBlink 1s steps(1) infinite}
+@keyframes curBlink{50%{opacity:0}}
 .seg.abx{display:flex;flex-wrap:wrap}.seg.abx button{flex:1 1 150px;font-size:13px}
 .go button:disabled{opacity:.5;cursor:default}
 .seg.cases{display:flex;flex-wrap:wrap;margin-top:6px}.seg.cases button{flex:1 1 180px}.seg.cases button:disabled{opacity:.45;cursor:default}
@@ -291,7 +293,7 @@ const EMBED = params.has('embed') && window.parent !== window;
 const toApp = m => { try { window.parent.postMessage(m, location.origin); } catch (_) {} };
 const DEBUG = params.has('debug');
 const $ = id => document.getElementById(id);
-const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets', chatter: true };
+const SET_KEY = 'sq3d_settings', SET_DEF = { invert: false, cam: 'chase', level: 'presets', chatter: true, music: true };
 const SETTINGS = (() => { try { return Object.assign({}, SET_DEF, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (_) { return Object.assign({}, SET_DEF); } })();
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch (_) {} }
 // cases unlock in order: finishing one opens the next (kept per device)
@@ -944,6 +946,58 @@ function burst(dur, vol, freq) {
   s.buffer = AU.noise; f.type = 'lowpass'; f.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   s.connect(f); f.connect(g); g.connect(AU.master); s.start(t); s.stop(t + dur + 0.02);
 }
+// ───────── music: an original mellow lounge loop in the spirit of chill card-game soundtracks — jazzy chords, a walking
+// bass, a lazy echoing arpeggio, all through one slow "tape wobble" so it sways. Generated live; no audio files.
+const MUS = { on: false, bus: null, next: 0, step: 0, timer: null };
+const MUS_VOL = 1.3, BEAT8 = 60 / 88 / 2; // 88 BPM, scheduled in eighth notes
+const PROG = [[45, [0, 3, 7, 10, 14]], [50, [0, 3, 7, 10, 14]], [43, [0, 4, 10, 14, 21]], [48, [0, 4, 7, 11, 14]], // Am9 Dm9 G13 Cmaj9
+  [41, [0, 4, 7, 11, 14]], [47, [0, 3, 6, 10]], [40, [0, 4, 10, 13]], [45, [0, 3, 7, 10, 14]]];                     // Fmaj9 Bø7 E7b9 Am9
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+function musicInit() {
+  const c = AU.ctx; if (!c || MUS.bus) return;
+  MUS.bus = c.createGain(); MUS.bus.gain.value = 0;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200; lp.Q.value = 0.4;
+  MUS.bus.connect(lp); lp.connect(AU.master);
+  MUS.lfo = c.createOscillator(); MUS.lfo.frequency.value = 0.33; MUS.wob = c.createGain(); MUS.wob.gain.value = 11; MUS.lfo.connect(MUS.wob); MUS.lfo.start(); // ±11 cents of wow
+  const dl = c.createDelay(1), fb = c.createGain(), df = c.createBiquadFilter(); // dotted-eighth echo
+  dl.delayTime.value = BEAT8 * 3; fb.gain.value = 0.32; df.type = 'lowpass'; df.frequency.value = 1500;
+  MUS.echo = c.createGain(); MUS.echo.gain.value = 0.4; MUS.echo.connect(dl); dl.connect(df); df.connect(fb); fb.connect(dl); df.connect(MUS.bus);
+}
+function mnote(type, midi, t, dur, vol, a = 0.01, echo = false, det = 0) {
+  const c = AU.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = mtof(midi); o.detune.value = det; MUS.wob.connect(o.detune);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(MUS.bus); if (echo) g.connect(MUS.echo);
+  o.onended = () => { try { MUS.wob.disconnect(o.detune); } catch (_) {} }; // the shared LFO must not keep dead notes alive
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function musicTick() {
+  const c = AU.ctx; if (!c || !MUS.on) return;
+  while (MUS.next < c.currentTime + 0.35) {
+    const t = MUS.next, k = MUS.step, bar = Math.floor(k / 8) % PROG.length, e = k % 8, [root, ch] = PROG[bar], nextRoot = PROG[(bar + 1) % PROG.length][0];
+    // walking bass: root, fifth, a chord tone, then a chromatic step into the next bar
+    if (e === 0) mnote('triangle', root, t, BEAT8 * 2.6, 0.2, 0.012);
+    if (e === 2) mnote('triangle', root + 7, t, BEAT8 * 1.7, 0.15, 0.012);
+    if (e === 4) mnote('triangle', root + ch[1], t, BEAT8 * 1.7, 0.15, 0.012);
+    if (e === 6) mnote('triangle', nextRoot + (Math.random() < 0.5 ? -1 : 1), t, BEAT8 * 1.6, 0.13, 0.012);
+    // electric-piano chords: a soft rolled chord on the 1, a short comp on the and-of-3
+    if (e === 0) ch.forEach((n, i) => { mnote('sine', root + 12 + n, t + i * 0.025, BEAT8 * 7.5, 0.045, 0.05, false, -6); mnote('triangle', root + 12 + n, t + i * 0.025, BEAT8 * 5, 0.018, 0.05, false, 7); });
+    if (e === 5 && Math.random() < 0.7) ch.slice(1, 4).forEach(n => mnote('sine', root + 12 + n, t, BEAT8 * 0.9, 0.03, 0.01));
+    // lazy arpeggio up top, through the echo
+    if ((e === 1 || e === 3 || e === 6 || e === 7) && Math.random() < 0.55) mnote('square', root + 24 + ch[(Math.random() * ch.length) | 0], t, BEAT8 * 1.4, 0.012, 0.01, true);
+    // brushed shaker on the offbeats
+    if (e % 2 === 1 && !AU.muted) { const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = AU.noise; f.type = 'highpass'; f.frequency.value = 6500; g.gain.setValueAtTime(0.025, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06); s.connect(f); f.connect(g); g.connect(MUS.bus); s.start(t, Math.random() * 0.5); s.stop(t + 0.07); }
+    MUS.next += BEAT8; MUS.step++;
+  }
+}
+function musicLevel() { if (MUS.bus) MUS.bus.gain.setTargetAtTime(MUS.on && !AU.muted ? MUS_VOL : 0, AU.ctx.currentTime, 0.6); }
+function musicStart() {
+  if (!SETTINGS.music || !AU.ctx || MUS.on) return;
+  musicInit(); MUS.on = true; MUS.next = AU.ctx.currentTime + 0.15; musicLevel();
+  MUS.timer = setInterval(musicTick, 90); musicTick();
+}
+function musicStop() { if (!MUS.on) return; MUS.on = false; musicLevel(); clearInterval(MUS.timer); }
+
 // ───────── comms radio: the window snapping open/shut, and each crew member's garbled "voice" (Star Fox style)
 // a voice = sawtooth syllables through two vowel formants, then a radio chain (band-limited, soft-clipped) with a hiss bed
 const VOICES = { att: { f0: 105, spread: 0.3 }, tech: { f0: 220, spread: 0.45 }, gas: { f0: 160, spread: 0.35 } };
@@ -987,7 +1041,7 @@ const CHIRP = {
   },
 };
 const SFX = {
-  pulse() { burst(0.16, 0.55, 2000); blip(120, 0.2, 'sine', 0.55, 38); },
+  pulse() { burst(0.16, 0.41, 2000); blip(120, 0.2, 'sine', 0.41, 38); },
   basket() { blip(1400, 0.05, 'square', 0.1); blip(900, 0.08, 'square', 0.08, null, 0.06); },
   clear() { [660, 880, 1320].forEach((f, i) => blip(f, 0.2, 'triangle', 0.16, null, i * 0.08)); },
   alarm() { blip(920, 0.12, 'square', 0.1); },
@@ -1018,7 +1072,7 @@ function newRun(seed, fixed, lv = LV) {
     pend: null, L: laserNums(PRESETS.dust.J, PRESETS.dust.Hz), firing: false, rateObj: null, backed: false, slips: 0,
     injury: { burn: 0, thermal: 0, scrape: 0 }, lastMark: {},
     trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })), lv: LV,
-    wasUnlocked: unlocked > LV.id, prep: { abx: null, found: new Set(), phleb: new Set() }, ct: null, sepK: 1, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
+    wasUnlocked: unlocked > LV.id, prep: { abx: null, found: new Set(), phleb: new Set(), seen: new Set() }, ct: null, sepK: 1, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
   };
   G.stones = LV.slots.map((sl, i) => {
     const type = types[i], d = sizes[i], T = TYPES[type], { mesh, mat } = makeStoneMesh(type);
@@ -1105,7 +1159,7 @@ flowTrack.addEventListener('pointerup', () => { flowId = null; }); flowTrack.add
 $('moveOn').addEventListener('pointerdown', e => { e.preventDefault(); moveOn(); });
 $('bCam').addEventListener('click', () => toggleCam());
 $('bPause').addEventListener('click', () => togglePause());
-$('bMute').addEventListener('click', () => { AU.muted = !AU.muted; $('bMute').textContent = AU.muted ? '🔇' : '🔊'; if (AU.muted) for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); });
+$('bMute').addEventListener('click', () => { AU.muted = !AU.muted; musicLevel(); $('bMute').textContent = AU.muted ? '🔇' : '🔊'; if (AU.muted) for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); });
 
 function readStick() {
   let x = joy.x + ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
@@ -1603,8 +1657,8 @@ function update(dt) {
       kick(kt, nearWall, L);
     }
   } else G.rateObj = null;
-  level(AU.buzz, canFire && L.f < 0.5 ? 0.22 : 0);
-  level(AU.crack, hitting ? 0.18 : 0);
+  level(AU.buzz, canFire && L.f < 0.5 ? 0.165 : 0); // laser sounds sit 25% under where they started
+  level(AU.crack, hitting ? 0.135 : 0);
   // heat: total watts cook the lumen unless irrigation carries it away
   G.temp += (power * 0.09 - (G.temp - 37) * (0.08 + G.flow * 0.9)) * dt;
   if (G.temp > 43) {
@@ -2076,6 +2130,7 @@ function showBrief() {
       <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
       <div class="set"><span>LASER</span>${segHTML('level', [['presets', 'Presets'], ['advanced', 'Advanced J × Hz']])}</div>
       <div class="set"><span>OR CHATTER</span>${segHTML('chatter', [[true, 'On'], [false, 'Off']])}</div>
+      <div class="set"><span>MUSIC</span>${segHTML('music', [[true, 'On'], [false, 'Off']])}</div>
     </div>
     <h2>YOUR TOOLS</h2>
     <div class="tools" id="toolsBox">${toolsHTML()}</div>
@@ -2143,8 +2198,30 @@ function ctTap(x, y) {
   } else CTV.msg = `ROI ${Math.round(q.mean)} ± ${Math.round(q.sd)} HU — ${huWord(q.mean)}.`;
   drawCT();
 }
+// old-terminal briefing: a note crawls out in green phosphor with a blinking block cursor and soft key beeps —
+// only the first time it's opened, and fast (TT_CPS, well ahead of reading speed). A tap shows the rest at once
+const TYPE = { timer: null, finish: null }, TT_CPS = 300;
+function typeDoc(el, text, crawl) {
+  clearInterval(TYPE.timer); TYPE.timer = null;
+  el.innerHTML = '<span class="tt"></span><i class="cur"></i>';
+  const tt = el.firstChild;
+  if (!crawl) { tt.textContent = text; return; }
+  let i = 0, last = performance.now();
+  const stop = () => { clearInterval(TYPE.timer); TYPE.timer = null; el.onclick = null; };
+  TYPE.finish = () => { tt.textContent = text; stop(); };
+  el.onclick = () => TYPE.finish();
+  TYPE.timer = setInterval(() => {
+    const now = performance.now(), j = Math.min(text.length, i + Math.max(1, Math.round((now - last) / 1000 * TT_CPS)));
+    last = now;
+    if (Math.floor(j / 4) > Math.floor(i / 4) && /\S/.test(text[j - 1])) blip(1250 + (text.charCodeAt(j - 1) % 7) * 70, 0.022, 'square', 0.03); // tick-tick-tick
+    tt.textContent = text.slice(0, j); i = j;
+    if (el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight;
+    if (i >= text.length) { stop(); blip(880, 0.05, 'square', 0.035); blip(1320, 0.07, 'square', 0.03, null, 0.06); } // done: ba-deep
+  }, 25);
+}
 function showPrep() {
   state = 'brief';
+  audioInit(); musicStart(); // the MISSION PREP tap is a user gesture: sound can start here
   if (!G.ct) G.ct = makeCT(ctSpec());
   const pr = PREP[LV.id];
   if (!CTV.ready || CTV.seed !== G.seed + ':' + LV.id) { // start at the kidneys, soft-tissue window
@@ -2172,7 +2249,7 @@ function showPrep() {
     <div class="go"><button id="scrubBtn"${G.prep.abx ? '' : ' disabled'}>${G.prep.abx ? 'SCRUB IN ▸' : 'ORDER AN ANTIBIOTIC FIRST'}</button><button class="alt" id="prepBack">Back</button></div>
   </div>`;
   screen.classList.remove('hidden');
-  const setDoc = k => { $('docBody').textContent = docs[k][1]; screen.querySelectorAll('[data-doc]').forEach(b => b.classList.toggle('on', b.dataset.doc === k)); };
+  const setDoc = k => { typeDoc($('docBody'), docs[k][1], !G.prep.seen.has(k)); G.prep.seen.add(k); screen.querySelectorAll('[data-doc]').forEach(b => b.classList.toggle('on', b.dataset.doc === k)); };
   setDoc('hx');
   screen.querySelectorAll('[data-doc]').forEach(b => b.addEventListener('click', () => setDoc(b.dataset.doc)));
   screen.querySelectorAll('[data-win]').forEach(b => b.addEventListener('click', () => { CTV.win = b.dataset.win; screen.querySelectorAll('[data-win]').forEach(x => x.classList.toggle('on', x === b)); drawCT(); }));
@@ -2194,7 +2271,7 @@ function showPrep() {
   drawCT();
 }
 function startPlay() {
-  audioInit();
+  audioInit(); musicStart();
   const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0; commsReset();
   if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
   hideScreen();
@@ -2227,11 +2304,12 @@ function showPause() {
       <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}</div>
       <div class="set"><span>CAMERA</span>${segHTML('cam', [['scope', 'Scope view'], ['chase', 'Chase cam']])}</div>
       <div class="set"><span>OR CHATTER</span>${segHTML('chatter', [[true, 'On'], [false, 'Off']])}</div>
+      <div class="set"><span>MUSIC</span>${segHTML('music', [[true, 'On'], [false, 'Off']])}</div>
     </div>
     <p class="keys">Graphics: ${Q.bloom ? 'bloom on' : 'bloom off'} · ${Q.pr.toFixed(2)}× resolution</p>
     <div class="go"><button id="resBtn">RESUME</button><button class="alt" id="gfxBtn">${Q.bloom ? 'Bloom off' : 'Bloom on'}</button><button class="alt" id="quitBtn">Abort run</button></div></div>`;
   screen.classList.remove('hidden');
-  wireSegs(screen, k => { if (k === 'cam') { camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase'; applyCam(); } });
+  wireSegs(screen, k => { if (k === 'cam') { camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase'; applyCam(); } if (k === 'music') SETTINGS.music ? musicStart() : musicStop(); });
   $('resBtn').addEventListener('click', togglePause);
   $('gfxBtn').addEventListener('click', () => { Q.bloom = !Q.bloom; if (Q.bloom && !composer) setupBloom(); showPause(); });
   $('quitBtn').addEventListener('click', () => { state = 'play'; endRun('quit'); });
@@ -2401,7 +2479,7 @@ window.__sqBooted = true;
 // test hook (headless checks): read state, drive input, advance the sim without rAF
 window.__sq = {
   get G() { return G; }, get state() { return state; }, input, keys, joy, Q,
-  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt, say, get comms() { return COMMS; },
+  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt, say, get music() { return MUS; }, get AU() { return AU; }, get comms() { return COMMS; },
   step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) { update(dt); if (state === 'play') { chatter(); commsTick(dt); } } if (state === 'play') { updateScene(dt); updateHUD(); } },
 };
 </script>
