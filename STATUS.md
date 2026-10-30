@@ -3,6 +3,31 @@
 **Updated:** 2026-10-25
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-30 (night) — 🛩️ Stone Squadron: tuning after Andrew's first play (flow, dust, peristalsis, anesthesia clock)
+
+**Done:**
+- **Manual moves:** ADVANCE 2.2 → 3.4, PULL BACK 3 → 4.5. The rails approach is unchanged
+  (Andrew likes where it slows).
+- **Peristalsis:**
+  - Amplitude 0.38 → 0.62: the lumen closes to ~40%, and ~0.4 at a narrowing.
+  - Waves come every 3–6 s and also fire on shorter stretches (gap > 34, was 66), starting
+    between you and the stone.
+- **Dust:**
+  - Generation 22 → 40/s while dusting; clearing 0.05 + 1.0×flow (was 0.12 + 1.1×flow).
+  - Dusting at 35% flow now fogs you below the lock threshold; ~70% keeps you seeing.
+- **Irrigation washes stones up:** above 45% flow a ureteral stone drifts up (small ones faster;
+  ×0.35 with a sheath). The banner reads "FLOW IS WASHING THE STONE UP ↑" and the attending warns.
+  It can migrate a stone past the UPJ.
+- **Anesthesia clock ×15** (`OR_X`): the HUD shows "ANESTHESIA 47 min"; par in OR minutes
+  (60 / 53 / 68 min); basket trips cost OR minutes. Anesthesia calls 30 min, nearing par, and
+  15 min over par.
+- Roadmap: narrow-ureter levels (sheath-calibre lumen), ADVANCE a bit closer, and a stone surface
+  model with craters and chunks that break off.
+
+**Verified:** headless: waves fire and squeeze; dust/visibility at 35% vs 70% flow; 90% flow moves
+a stone ~1 unit/s; the OR clock maths; all 3 cases play through, no page errors.
+**Next steps:** Andrew to retune by feel (wave strength, dust, flow push, OR_X).
+
 ## 2026-10-30 (evening) — 🛩️ Stone Squadron: debrief fix, ADVANCE button, perforation by pushing, Star Fox comms sound
 
 Andrew (2026-10-30): "push it and merge so it's live — you can do that for the rest of our changes".

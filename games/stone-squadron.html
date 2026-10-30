@@ -239,7 +239,7 @@ th{font-size:11px;letter-spacing:.1em;color:var(--m);font-weight:700}
   <div id="tr" class="card">
     <div class="lbl" style="margin-top:0">URETER INTEGRITY</div><div class="bar"><i id="hpBar"></i></div>
     <div class="row" style="margin-top:7px"><span>VIEW</span><b id="visV">100%</b><span>SCORE</span><b id="scoreV">0</b></div>
-    <div class="row" style="margin-top:4px"><span>OR TIME</span><b id="orT">0:00</b></div>
+    <div class="row" style="margin-top:4px"><span>ANESTHESIA</span><b id="orT">0 min</b></div>
     <div class="btns"><button id="bCam" title="Camera (C)">📷</button><button id="bMute" title="Sound">🔊</button><button id="bPause" title="Pause (P)">⏸</button></div>
   </div>
   <div id="toasts"></div>
@@ -320,14 +320,14 @@ const UPJ_S = 268, END_S = 285; // END_S: where the ureter run ends (and the flu
 const FIB_X = 0.17, FIB_Y = -0.15;
 const APPROACH_D = 26, APPROACH_V = 2.6;
 // the rails park MANUAL_D short of the working distance; from there the scope only moves while you hold ADVANCE (ADV_V)
-const MANUAL_D = 3, ADV_V = 2.2;
+const MANUAL_D = 3, ADV_V = 3.4;
 // the laser works best right up on the stone: effectiveness falls off with distance from the fiber to its surface
 const reach = d => lerp(1, 0.3, smooth(1.4, 5.5, d)); // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
 const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
-const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.38;
+const DUST_RATE = 130, FRAG_V = 46, FRAG_HZ = 4, WAVE_AMP = 0.62; // a contraction closes the lumen to ~40%: off-centre, you hit the wall
 const PRESETS = { dust: { J: 0.4, Hz: 80 }, frag: { J: 1.5, Hz: 8 } }, STANDBY_S = 2.5;
 const HZ_STEPS = [5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 70, 80, 100];
-const WITHDRAW_V = 22, RETURN_V = 26, PINCH_V = 3.2, PINCH_TRIP_V = 7, MAX_W = 120, BACK_V = 3, SLIP_P = 0.07; // ~1 slipped fragment every other fragmented stone // 120 W ≈ top-end holmium generator
+const WITHDRAW_V = 22, RETURN_V = 26, PINCH_V = 3.2, PINCH_TRIP_V = 7, MAX_W = 120, BACK_V = 4.5, SLIP_P = 0.07; // ~1 slipped fragment every other fragmented stone // 120 W ≈ top-end holmium generator
 // One laser model for both levels: presets are just two points on it.
 // f = how far into the fragmenting regime the pulse energy is (0 = pure dusting, 1 = pure fragmenting).
 const fragFrac = J => smooth(0.6, 1.2, J);
@@ -871,7 +871,7 @@ function objectives(stoneFree) {
     { k: 'irp', n: 'Pressure never over 40 mmHg', ok: G.timeOver40 === 0, v: `peak ${Math.round(G.peakP)} mmHg` },
     { k: 'spec', n: 'Specimen sent for analysis', ok: spec > 0, v: spec ? `${spec} in the jar` : 'none basketed' },
     { k: 'prep', n: 'Prep: every target + the right antibiotic', ok: G.prep.found.size === G.stones.length && (v === 'best' || v === 'ok'), v: `${G.prep.found.size}/${G.stones.length} targets · ${v === 'best' || v === 'ok' ? 'abx ✓' : 'abx ✗'}` },
-    { k: 'time', n: `Under par (${fmtT(LV.par)})`, ok: G.t <= LV.par, v: fmtT(G.t) },
+    { k: 'time', n: `Under par (${fmtOR(LV.par)} of anesthesia)`, ok: G.t <= LV.par, v: fmtOR(G.t) },
   ];
 }
 function medalOf(aborted, stoneFree, objs) {
@@ -1304,6 +1304,7 @@ function chatter() {
   if (pn && pn.d > 0 && pn.d < 16) say('att', { UVJ: 'UVJ, the tightest spot. Center up and let it come to you.', ILIAC: 'Iliac crossing. Stay centered over the vessels.', UPJ: 'UPJ coming up. Center it.' }[pn.k.short], 'pinch' + pn.k.short, Infinity);
   if (LV.sheath && p.s > LV.sheath + 1) say('tech', 'Out the end of the sheath. Real mucosa from here.', 'sheathout', Infinity);
   if (G.wave.on && G.wave.s > p.s && G.wave.s - p.s < 22) say('att', 'Peristalsis. Center up and ride it out.', 'wave', 30);
+  if (G.stones.some(st => st.phase === 'alive' && st.push > 0.35 && st.s - p.s < 20)) say('att', LV.sheath ? 'Easy on the flow. Even with a sheath you can wash it up.' : 'Your flow\'s washing the stone up the ureter. Ease off, you\'re chasing it.', 'flowpush', 20, 2);
   if (G.P > 40) say('gas', pick(['We\'re over 40! Flow down, now!', 'Pressure\'s over 40! Back off the irrigation!']), 'p40', 9, 2);
   else if (G.P > 34) say('gas', 'Pressure\'s creeping up. Ease the flow.', 'p34', 16);
   if (G.temp > 42) say('tech', 'Tip\'s cooking. More flow, or let off the pedal.', 'hot', 14);
@@ -1314,7 +1315,11 @@ function chatter() {
   if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) say('tech', 'Come back out to the pelvis first, then over to the next one.', 'wallhold', 14);
   if (G.sepsis > 50) say('gas', abxVerdict()[0] === 'wrong' ? 'Heart rate\'s up, pressure\'s soft. That\'s the antibiotic catching up with us.' : 'Heart rate\'s up, pressure\'s soft. Let\'s not be long.', 'sep', 30, 2);
   if (G.hp < 45) say('att', 'That ureter\'s taking a beating. Gentle, or we stent and stop.', 'hp', 30, 2);
-  if (G.t > 200) say('gas', 'Clock\'s running, doc.', 'clock', Infinity);
+  // anesthesia keeps the clock: milestones in OR minutes, relative to this case's par
+  const om = orMin(G.t), pm = orMin(LV.par);
+  if (om >= 30) say('gas', 'Thirty minutes of anesthesia.', 'or30', Infinity);
+  if (om >= pm - 10) say('gas', `${om} minutes in. Let\'s start thinking about wrapping up.`, 'orpar', Infinity);
+  if (om >= pm + 15) say('gas', `${om} minutes, doc. Long cases mean more infection, more swelling, more everything.`, 'orlong', Infinity, 2);
 }
 
 // ───────────────────────── gameplay helpers
@@ -1460,7 +1465,7 @@ function update(dt) {
       p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V * sv, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
       if (p.s >= target - 0.01) {
         const tt = G.t - trip.t0; G.tripTime += tt; G.trips++; G.trip = null; p.v = 0;
-        toast(`Back at the stone — that basket trip cost ${Math.round(tt)} s of anesthesia`, 'warn', 'tripback', 0);
+        toast(`Back at the stone — that basket trip cost ${orMin(tt)} min of anesthesia`, 'warn', 'tripback', 0);
       }
     }
   } else {
@@ -1487,8 +1492,8 @@ function update(dt) {
     }
   }
   // peristalsis: a contraction ring rolls down toward you between stones
-  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 66) { G.wave.on = true; G.wave.s = p.s + 62; }
-  if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(4, 7); } }
+  if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(62, gap - 4); }
+  if (G.wave.on) { G.wave.s -= 13 * dt; if (G.wave.s < p.s - 14) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } }
   UNI.waveS.value = G.wave.on ? G.wave.s : -999;
   // walls
   const rEff = Math.max(0.6, lumR(p.s, Math.atan2(p.y, p.x)) - SCOPE_R), m = Math.hypot(p.x, p.y);
@@ -1554,7 +1559,7 @@ function update(dt) {
     power = L.W;
     if (tgt) {
       const o = tgt.o, T = TYPES[o.type], rk = reach(tgt.ds - rOf(o));
-      G.dust = Math.min(100, G.dust + 22 * (1 - L.f) * (L.W / 32) * dt); // stone dust only when the beam is on stone
+      G.dust = Math.min(100, G.dust + 40 * (1 - L.f) * (L.W / 32) * dt); // stone dust only when the beam is on stone
       if (L.dustRate > 0) {
         hitting = true;
         o.V = Math.max(0, o.V - L.dustRate * T.dust * (o.isFrag ? 1.3 : 1) * rk * dt);
@@ -1602,13 +1607,16 @@ function update(dt) {
     while (G.thermDose >= 1.5) { G.thermDose -= 1.5; injure('thermal', p.s + mr(3.5, 6), mr(0, 6.28), mr(1.0, 1.4), 0, G.temp > 46 ? 2 : 1); }
   }
   // visibility clears with flow
-  G.dust = Math.max(0, G.dust - G.dust * (0.12 + G.flow * 1.1) * dt);
+  G.dust = Math.max(0, G.dust - G.dust * (0.05 + G.flow * 1.0) * dt); // low flow barely clears it: dusting at 35% flow fogs you out
   G.blood = Math.max(0, G.blood - G.blood * (0.08 + G.flow * 0.8) * dt);
   // stones: retropulsion, settle back, migration
   for (const st of G.stones) {
     if (st.phase !== 'alive' || st.held) continue;
     st.vs *= Math.exp(-3.2 * dt); st.s += st.vs * dt;
-    if (Math.abs(st.vs) < 0.3 && st.s > st.s0) st.s = Math.max(st.s0, st.s - 0.45 * dt);
+    // high irrigation washes the stone up the ureter (small ones most); a sheath's outflow takes most of that force away
+    st.push = st.s0 > UPJ_S ? 0 : Math.max(0, G.flow - 0.45) * 2.6 * Math.min(2, 8 / Math.max(st.d, 3)) * (LV.sheath ? 0.35 : 1);
+    st.s += st.push * dt;
+    if (Math.abs(st.vs) < 0.3 && st.push < 0.05 && st.s > st.s0) st.s = Math.max(st.s0, st.s - 0.45 * dt);
     st.s = Math.max(st.s, p.s + rOf(st) + 1.0);
     if (LV.kidney) st.s = Math.min(st.s, st.s0 + (st.s0 > UPJ_S + 20 ? 1.2 : 4)); // a calyx cup (or the far wall of the pelvis) stops it
     st.vx *= Math.exp(-3 * dt); st.vy *= Math.exp(-3 * dt);
@@ -1932,6 +1940,8 @@ function drawFluoro() {
 const el = id => $(id);
 const HUD = { irp: el('gVal'), needle: el('needle'), flowV: el('flowV'), tempV: el('tempV'), sep: el('sepBar'), hp: el('hpBar'), vis: el('visV'), score: el('scoreV'), stage: el('stage'), target: el('target'), me: el('progMe'), banner: el('banner'), moveOn: el('moveOn'), hurt: el('hurt'), fill: el('flowFill'), ftxt: el('flowTxt'), fps: el('fps'), orT: el('orT') };
 const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+// anesthesia time runs OR_X× faster than the game: a 4-minute run is an hour-long case, so dawdling costs
+const OR_X = 15, orMin = t => Math.round(t * OR_X / 60), fmtOR = t => { const m = orMin(t); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
 const cache = new Map();
 function setT(e, v) { if (cache.get(e) !== v) { cache.set(e, v); e.textContent = v; } }
 function setS(e, k, v) { const key = e.id + k; if (cache.get(key) !== v) { cache.set(key, v); e.style[k] = v; } }
@@ -1975,7 +1985,7 @@ function updateHUD() {
   setS(HUD.me, 'left', clamp(p.s / LV.end * 100, 0, 100).toFixed(1) + '%');
   setS(HUD.fill, 'height', (G.flow * 100).toFixed(0) + '%');
   setT(HUD.ftxt, Math.round(G.flow * 100) + '');
-  setT(HUD.orT, fmtT(G.t)); HUD.orT.style.color = G.t > 240 ? '#f87171' : G.t > 180 ? '#fbbf24' : '';
+  setT(HUD.orT, fmtOR(G.t)); HUD.orT.style.color = G.t > LV.par ? '#f87171' : G.t > LV.par * 0.75 ? '#fbbf24' : '';
   drawFluoro();
   for (const st of G.stones) st.pm.className = 'pm ' + (st.how === 'migrated' ? 'mig' : st.phase);
   // target readout
@@ -2012,6 +2022,7 @@ function updateHUD() {
   else if (LV.kidney && G.wallHold && gateS() - p.s > 0.5) b = 'STEER BACK TOWARD THE PELVIS ↺  THEN ON TO THE NEXT CALYX';
   else if (pn && pn.d > 0 && pn.d < 18) b = `PINCH POINT · ${pn.k.name} — CENTER THE SCOPE`;
   else if (G.wave.on && G.wave.s > p.s && G.wave.s - p.s < 24) b = 'PERISTALSIS ↓  CENTER THE SCOPE';
+  else if (G.stones.some(st => st.phase === 'alive' && st.push > 0.35 && st.s - p.s < 20)) b = 'FLOW IS WASHING THE STONE UP ↑';
   setT(HUD.banner, b); HUD.banner.classList.toggle('on', !!b); HUD.banner.classList.toggle('red', red);
   const cur = G.stones.find(s => s.phase !== 'done');
   HUD.moveOn.classList.toggle('hidden', !(cur && cur.phase === 'cleanup' && !G.trip && G.bk.state === 'idle' && G.frags.some(f => f.owner === cur.i && !f.left && !f.held)));
@@ -2028,7 +2039,7 @@ function toolsHTML() {
     ? `<div class="tool" style="grid-column:span 2"><b style="color:#93c5fd">TWO PEDALS · ENERGY × FREQUENCY</b>Program each pedal yourself (⚙ LASER). Low energy at high frequency dusts; from ~1.2 J it fragments. Retropulsion climbs steeply with pulse energy, heat with total watts (J × Hz). Max 120 W.</div>`
     : `<div class="tool"><b style="color:var(--g)">LEFT PEDAL · DUST 0.4 J × 80 Hz</b>Continuous beam that grinds the stone to dust. No retropulsion, but it clouds the view and heats the lumen.</div>
        <div class="tool"><b style="color:var(--a)">RIGHT PEDAL · FRAG 1.5 J × 8 Hz</b>Heavy pulses that break hard stones fast. ${LV.kidney ? 'Retropulsion scatters pieces out of the calyx into the rest of the kidney.' : 'Retropulsion pushes the stone up (past the UPJ = lost to the kidney).'} Leaves fragments — some slip behind the scope.</div>`;
-  return laser + `<div class="tool"><b style="color:#93c5fd">IRRIGATION</b>Flow clears dust and blood and cools the tip. It also raises intrarenal pressure. Above 40 mmHg, sepsis risk climbs.</div>
+  return laser + `<div class="tool"><b style="color:#93c5fd">IRRIGATION</b>Flow clears dust and blood and cools the tip — dusting at low flow fogs you out. But it raises intrarenal pressure (above 40 mmHg, sepsis risk climbs)${LV.sheath ? '' : ' and, with no sheath, washes the stone back up the ureter'}.</div>
     <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. ${LV.sheath ? 'Through the sheath: a quick trip out and back, still on the clock. ≥4 mm won\'t fit through it.' : 'No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won\'t come down safely.'}</div>`;
 }
 function wireSegs(root, after) {
@@ -2049,7 +2060,7 @@ function showBrief() {
     <p>Fly the ureteroscope from the UVJ to the renal pelvis. Clear every stone on the way. Goal: <b>stone-free</b>, ureter intact, intrarenal pressure under control.</p>
     <h2>CASE</h2>
     <div class="seg cases">${cases}</div>
-    <p class="keys">${LV.blurb}${unlocked < LEVELS.length ? ' Finish a case to unlock the next.' : ''}</p>
+    <p class="keys">${LV.blurb}${unlocked < LEVELS.length ? ' Finish a case to unlock the next.' : ''} Anesthesia time runs fast (×${OR_X}): par for this case is <b>${fmtOR(LV.par)}</b>.</p>
     <p class="keys">Next: <b>mission prep</b> — scroll the CT and tap every stone, read the chart, then write the pre-op antibiotic order.</p>
     <h2>RUN SETTINGS</h2>
     <div class="sets">
@@ -2252,8 +2263,8 @@ function endRun(reason) {
     <p class="keys">${LV.tag} · ${LV.name}${next && next.id === unlocked && !G.wasUnlocked ? ` — <b class="ok">${next.tag} unlocked: ${next.name}</b>` : ''}</p>
     <div class="stats">
       <div class="stat"><small>SCORE</small><b>${sc.toLocaleString()}</b></div>
-      <div class="stat"><small>OR TIME</small><b>${fmtT(G.t)}</b></div>
-      <div class="stat"><small>BASKET TRIPS</small><b>${G.trips}${G.trips ? ` · ${Math.round(G.tripTime)} s` : ''}</b></div>
+      <div class="stat"><small>ANESTHESIA TIME</small><b>${fmtOR(G.t)}</b></div>
+      <div class="stat"><small>BASKET TRIPS</small><b>${G.trips}${G.trips ? ` · ${orMin(G.tripTime)} min` : ''}</b></div>
       <div class="stat"><small>CLEAN PINCH PASSES</small><b>${G.cleanPasses}/${PINCHES.filter(livePinch).length}</b></div>
       <div class="stat"><small>PEDAL SWITCHES · REPROGRAMS</small><b>${G.pedSwitches} · ${G.reprograms}</b></div>
       <div class="stat"><small>RESIDUAL ≥2 MM</small><b>${G.residual}</b></div>
@@ -2296,11 +2307,11 @@ function runReport() {
     `Stone Squadron 3D — run report · build ${BUILD}`,
     `Device: ${PHONE ? 'phone' : useTouch ? 'tablet' : 'desktop'} (${ua}) · ${innerWidth}×${innerHeight}`,
     `Settings: deflection ${SETTINGS.invert ? 'inverted' : 'standard'} · ${camMode === 'scope' ? 'scope view' : 'chase cam'} · laser ${SETTINGS.level}`,
-    `Run: ${LV.tag} (${LV.name}) · ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · OR time ${fmtT(G.t)}`,
+    `Run: ${LV.tag} (${LV.name}) · ${G.fixed ? 'starter stones' : 'seed ' + G.seed} · ${e.head} · score ${e.sc} · anesthesia ${fmtOR(G.t)} (${fmtT(G.t)} played)`,
     `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
     `Medal: ${G.medal ? MEDALS[G.medal].n : 'none'} · objectives ${G.objs ? G.objs.filter(o => o.ok).map(o => o.k).join(', ') || 'none' : '?'}`,
     `Prep: antibiotic ${G.prep.abx || 'none'} (${abxVerdict()[0]}) · CT targets ${G.prep.found.size}/${G.stones.length} · phleboliths checked ${G.prep.phleb.size}`,
-    `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${Math.round(G.tripTime)} s) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
+    `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${orMin(G.tripTime)} OR min) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips}`,
     `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
     `Notes: ${notes}`,
   ].join('\n');

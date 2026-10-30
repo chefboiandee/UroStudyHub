@@ -54,7 +54,13 @@ intel you read should change what the right play is.
      scope (a scope-repair cost on the debrief); too far out, and the fiber is floppy and harder to aim.
    - Fiber burn-back in later missions: the tip chips down with lasing (faster on hard stones and
      at high energy). Re-strip/cleave it or swap fibers, or lose power and aim.
-9. **Surprises and other case types.** An unexpected urothelial tumor found during a stone case.
+9. **Narrow-ureter levels.** Later cases where the ureter itself is about sheath-calibre
+   (`SHEATH_R` 1.3 vs 2.6 now): every pinch, wave and fragment gets tighter. Also: let ADVANCE get
+   a little closer to the stone.
+10. **A real stone surface under the laser.** Dusting in the middle cratters it. Dusting the edges
+    badly carves out chunks that break off and have to be chased. The stone's shape becomes the
+    result of how you lased it (it's currently a shrinking volume).
+11. **Surprises and other case types.** An unexpected urothelial tumor found during a stone case.
    Planned cases: ureteroscopic biopsy, tumor ablation.
 
 ## Constraints
