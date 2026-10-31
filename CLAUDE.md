@@ -19,10 +19,10 @@ inside another workspace; nothing here depends on that one any more.)
 - `UroStudyHub.html` — the app (React + in-browser Babel, ~13k lines: grep → slice).
   `python3 build.py` → `UroStudyHub.min.html`, which Pages serves (`index.html` redirects to it).
 - `games/` — arcade games that are their own page; the app hosts them in a frame
-  (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`).
+  (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
-- `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`
-  (needs the `urostudyhub` server), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
+- `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
+  (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
 
 ## Run and verify
 
