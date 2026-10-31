@@ -314,7 +314,7 @@ const actOf = (mode, id) => MODES[mode].acts.find(a => a.id === id);
 const WW = 800, WH = 600, T = 14;            // world size; wall thickness
 const SPEED = 250, ACCEL = 11, DOC_R = 15;   // world units/s; velocity smoothing (1/s); doctor radius
 const LIVES = 4;
-const PATIENCE = [19, 17, 15.5];             // seconds a patient waits, by tier
+const PATIENCE = [22, 18.7, 17];             // seconds a patient waits, by tier (+15% / +10% / +10% after the first play-test)
 const GAP = [4.6, 4.1, 3.6];                 // seconds between arrivals, by tier
 const TIER_OF_BLOCK = [1, 2, 2, 3, 3];       // a shift is 5 blocks; new orders unlock at blocks 2 and 4
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];

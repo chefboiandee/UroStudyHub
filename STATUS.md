@@ -3,6 +3,12 @@
 **Updated:** 2026-10-31
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-31 (later) — 🏥 Uro Rush: patients wait longer
+
+Andrew after playing: joystick feels good; patients need ~10% longer, especially early on.
+**Done:** `PATIENCE` 19 / 17 / 15.5 s → **22 / 18.7 / 17 s** (tier 1 +15%, tiers 2–3 +10%).
+**Verified:** `tools/uro-rush.drive.mjs` 28/28.
+
 ## 2026-10-31 — 🛩️ Stone Squadron: two bug fixes, laser-on-stone, random patients, tumor wildcard, suction shop
 
 Andrew (Case 2): a peristaltic wave showed a gap in the sheath with ureter behind it; the last stone
