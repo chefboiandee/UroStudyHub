@@ -56,7 +56,8 @@ function bone(g, cx, cy, rx, ry, rot = 0, marrow = 260) { E(g, cx, cy, rx, ry, 1
 // additive HU (partial volume): adds (hu - bg) on top of whatever is there
 function addHU(g, cx, cy, r, dhu) { if (r < 0.25) return; g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgb(${clamp(Math.round(dhu / 12), 0, 255)},0,0)`; g.beginPath(); g.arc(cx, cy, r, 0, 6.2832); g.fill(); g.globalCompositeOperation = 'source-over'; }
 
-// spec: { seed, hydro (0–1, left side), obstructZ (dilated above this z), stent, stones: [{ i, at: 'ureter'|'pelvis'|'upper'|'lower'|'inter', z?, d, hu }] }
+// spec: { seed, hydro (0–1, left side), obstructZ (dilated above this z), stent, urogram (excretory-phase contrast in the collecting
+// systems), stones: [{ i, at: 'ureter'|'pelvis'|'upper'|'lower'|'inter', z?, d, hu, kind? ('tumor' = a soft-tissue filling defect) }] }
 export function makeCT(spec) {
   const r = rng((spec.seed | 0) ^ 0x5ca1ab1e), rr = (a, b) => a + (b - a) * r();
   const A = { loops: [], dots: [], gas: [], calc: [], phleb: [] };
@@ -80,9 +81,9 @@ export function makeCT(spec) {
   }
   const stones = spec.stones.map(s => {
     const at = s.at === 'ureter' ? Object.assign(ureterXY(s.z), { z: s.z }) : kidneySpot(s.at);
-    return { i: s.i, x: at.x, y: at.y, z: at.z, r: s.d / 2, d: s.d, hu: s.hu, at: s.at };
+    return { i: s.i, x: at.x, y: at.y, z: at.z, r: s.d / 2, d: s.d, hu: s.hu, at: s.at, kind: s.kind };
   });
-  const hydro = clamp(spec.hydro || 0, 0, 1), obstructZ = spec.obstructZ || 0, stent = !!spec.stent;
+  const hydro = clamp(spec.hydro || 0, 0, 1), obstructZ = spec.obstructZ || 0, stent = !!spec.stent, uro = !!spec.urogram, CON = 1100; // CON: excreted contrast, HU
   const can = document.createElement('canvas'); can.width = can.height = N;
   const g = can.getContext('2d', { willReadFrequently: true });
   let last = null, lastIdx = -1;
@@ -173,28 +174,37 @@ export function makeCT(spec) {
     for (const s of [-1, 1]) {
       const k = KID[s], p = prof(z, k.z0, k.z1); if (p <= 0) continue;
       const len = k.z1 - k.z0, t = (z - k.z0) / len, h = s === 1 ? hydro : 0, rot = s * 0.55;
-      E(g, k.x, k.y, 26 * p, 31 * p, 36, rot);
+      E(g, k.x, k.y, 26 * p, 31 * p, uro ? 150 : 36, rot); // excretory phase: the parenchyma still enhances
       const sp = prof(t, 0.18, 0.86);
       if (sp > 0) E(g, k.x - s * 8, k.y - 5, 10 * sp, 14 * sp, -72, rot); // sinus fat
-      for (const ct of [0.2, 0.5, 0.82]) { const q = prof(z, k.z0 + ct * len - 9, k.z0 + ct * len + 9); if (q > 0) for (const off of [-9, 8]) E(g, k.x + s * 3, k.y + off, (1.2 + 4.5 * h) * q, (1.4 + 4 * h) * q, h > 0.1 ? 0 : 18, rot); } // calyces
+      for (const ct of [0.2, 0.5, 0.82]) { const q = prof(z, k.z0 + ct * len - 9, k.z0 + ct * len + 9); if (q > 0) for (const off of [-9, 8]) E(g, k.x + s * 3, k.y + off, (1.2 + 4.5 * h) * q, (1.4 + 4 * h) * q, uro ? CON : h > 0.1 ? 0 : 18, rot); } // calyces
       const pz = hilZ(s), pp = prof(z, pz - 12 - 8 * h, pz + 10 + 8 * h);
-      if (pp > 0) E(g, k.x - s * (16 + 4 * h), k.y - 6, (4 + 9 * h) * pp, (5 + 7 * h) * pp, 0, rot); // renal pelvis
+      if (pp > 0) E(g, k.x - s * (16 + 4 * h), k.y - 6, (4 + 9 * h) * pp, (5 + 7 * h) * pp, uro ? CON : 0, rot); // renal pelvis
       if (s === 1 && stent && Math.abs(z - pz) < 7) R(g, k.x - s * 17, k.y - 6, 5, 4.5, 1.6, 1300, 0, z * 0.5, z * 0.5 + 4.2); // proximal stent coil
       if (s === 1 && h > 0 && z > pz - 25 && z < pz + 15) for (let i = 0; i < 6; i++) { const a = i * 1.05 + z * 0.03; P(g, [[k.x + Math.cos(a) * (28 * p + 2), k.y + Math.sin(a) * (33 * p + 2)], [k.x + Math.cos(a) * (28 * p + 9), k.y + Math.sin(a) * (33 * p + 9)]], 0.8, -40); } // perinephric stranding
     }
     // bladder
-    if (z > 266) { const q = prof(z, 262, 352), cy = 196; E(g, MID, cy, 50 * q, 36 * q, 38); E(g, MID, cy, 50 * q - 2, 36 * q - 2, 6); if (stent && z > 322 && z < 340) R(g, MID + 20, cy + 14, 6, 5.5, 1.6, 1300, 0, z * 0.45, z * 0.45 + 4); }
+    if (z > 266) { const q = prof(z, 262, 352), cy = 196; E(g, MID, cy, 50 * q, 36 * q, 38); E(g, MID, cy, 50 * q - 2, 36 * q - 2, 6);
+      if (uro && q > 0.1) { g.save(); g.beginPath(); g.ellipse(MID, cy, 50 * q - 2, 36 * q - 2, 0, 0, 6.2832); g.clip(); g.fillStyle = col(900); g.fillRect(MID - 60, cy + 6 * q, 120, 60); g.restore(); } /* contrast layers in the dependent bladder */ if (stent && z > 322 && z < 340) R(g, MID + 20, cy + 14, 6, 5.5, 1.6, 1300, 0, z * 0.45, z * 0.45 + 4); }
     // ureters (left one carries the story: dilated above the obstruction, stent, stones with their tissue rim)
     for (const s of [-1, 1]) {
       if (z < URETER_Z0 || z > URETER_Z1) continue;
       const u = ureterXY(z, s), dil = s === 1 && z < obstructZ ? hydro : 0, lr = 1 + 2.8 * dil;
       if (s === 1 && obstructZ && Math.abs(z - obstructZ) < 22) E(g, u.x, u.y, 11, 9, -62); // periureteral stranding
-      E(g, u.x, u.y, lr + 1.2, lr + 1.2, 36); E(g, u.x, u.y, lr, lr, 9);
+      E(g, u.x, u.y, lr + 1.2, lr + 1.2, 36); E(g, u.x, u.y, lr, lr, uro ? CON : 9);
       if (s === 1 && stent) E(g, u.x, u.y, 0.95, 0.95, 1300);
     }
     // stones (summed over the 3 mm slab = partial volume) and phleboliths
     for (const st of stones) {
-      const dz = Math.abs(st.z - z); if (dz > st.r + THICK / 2) continue;
+      const dz = Math.abs(st.z - z);
+      if (st.kind === 'tumor') { // soft tissue in a contrast-filled, slightly widened ureter: contrast caps it above and below ("goblet")
+        if (dz > st.r + 6) continue;
+        const rr = Math.sqrt(Math.max(0, st.r * st.r - Math.min(dz, st.r) ** 2)), lum = dz < st.r ? rr + 1.4 : 2.4 * (1 - (dz - st.r) / 6) + 1;
+        E(g, st.x, st.y, lum + 1.4, lum + 1.4, 44); E(g, st.x, st.y, lum, lum, CON);
+        if (rr > 0.3) E(g, st.x + 0.7, st.y, rr, rr * 0.9, st.hu);
+        continue;
+      }
+      if (dz > st.r + THICK / 2) continue;
       if (st.at === 'ureter') E(g, st.x, st.y, Math.sqrt(Math.max(0, st.r * st.r - Math.min(dz, st.r) ** 2)) + 1.7, Math.sqrt(Math.max(0, st.r * st.r - Math.min(dz, st.r) ** 2)) + 1.7, 44); // ureteral wall rim
       for (const o of [-1, 0, 1]) { const d2 = st.r * st.r - (st.z - (z + o)) ** 2; if (d2 > 0) addHU(g, st.x, st.y, Math.sqrt(d2), (st.hu - 20) / 3); }
     }

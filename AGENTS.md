@@ -22,7 +22,8 @@ roughly **Chromium ≤92**. Everything must run on that engine:
   produce `UroStudyHub.min.html` for Pages.
 - Verify by building and loading the page (check the browser console for
   `Uncaught SyntaxError`), not by a syntax pass alone.
-- Deploying = pushing this repo to GitHub. **Never push — Andrew pushes
-  deliberately.** Never add remotes.
+- Deploying = merging to `main` (Pages serves it). Pushing the working
+  branch is pre-approved (2026-10-31); **merge to `main` only when Andrew
+  asks.** Never add remotes.
 - End any non-trivial session with a `STATUS.md` breadcrumb
   (Done / Next steps / Open questions).

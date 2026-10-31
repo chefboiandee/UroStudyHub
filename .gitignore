@@ -4,7 +4,9 @@ node_modules/
 AUA guidelines copy/
 __pycache__/
 *.pyc
-.claude/
+# .claude/ stays local (launch.json, settings.local.json) except the shared project settings
+.claude/*
+!.claude/settings.json
 
 # stray SurgiLog snapshot — SurgiLog lives in its own repo (untracked 2026-08-19)
 caselog-extension-main/

@@ -3,6 +3,51 @@
 **Updated:** 2026-10-31
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-31 — 🛩️ Stone Squadron: two bug fixes, laser-on-stone, random patients, tumor wildcard, suction shop
+
+Andrew (Case 2): a peristaltic wave showed a gap in the sheath with ureter behind it; the last stone
+(cystine) could barely be fragmented without pushing it into the kidney. Plus: preset FRAG a bit
+stronger, the planned laser-on-stone mechanics, random cases/stones, a rare thulium tumor-ablation
+case, and suction sheath / scope in a shop for renal cases.
+**Done** (`games/stone-squadron.html`, `games/squadron-ct.js`; BUILD 2026-10-31 16:00):
+- **Sheath gap fixed:** the wave squeezed the ureter mesh through the sheath bore (the shader didn't
+  know about the sheath). Waves now fade out over the 4 units above the sheath tip (shader,
+  `squeeze()`, injury marks), end once they reach the sheath, and don't slow the rails or warn there.
+- **Retropulsion:** per-pulse push ∝ 8 mm / size (was (8/size)^1.5) at 40% of the old scale, and the
+  ureter settles a stone back between pulses (`RETRO_K`, `SETTLE_V`). FRAG preset 1.5 J × 8 Hz →
+  1.2 J × 12 Hz (+21% break-up, ~¾ the retropulsion). Measured, Case 2 starter stones: cystine
+  8 mm at s252 moves ~1 unit (migrated every time before); 2.0 J or 75% flow without a sheath
+  still push stones 10–20 units.
+- **Laser on the stone's surface** (roadmap #10): radial heightfield per stone; the beam erodes
+  where the fiber's line meets the surface. Paint = clean; holding one spot digs a crater (ablates
+  at down to 30%), and keeping at it breaks a piece off (crack / slab / undercut chip) that you
+  then chase. HUD "CRATERING: move the spot", attending lines, debrief + report count breaks.
+  Bots: painting 0 breaks; holding still 2–6 breaks and several times slower. FRAG chunks come off
+  the face you hit.
+- **Fresh patient every run:** count, place, size and composition randomized per case type
+  (realistic sites, one stone disease per patient); par scales with burden. Once all three cases
+  are done, NEXT PATIENT (end screen + brief + boot) picks a random case.
+- **Wildcard: upper-tract tumor ablation** (12% of the random list; in the picker once seen).
+  Thulium COAG 10 W / CUT 25 W, biopsy forceps first, fronds then base, IRP ≤ 30. CT urogram
+  prep with a filling defect; chart, read, debrief card and pearls (low-risk UTUC criteria,
+  second look 6–8 weeks).
+- **Shop & loadout** on the brief: department budget (start $500; a run pays half its score +
+  medal bonus). FANS suction sheath $2,000, DISS suction scope $3,500; renal cases only. Lower IRP
+  (60% flow: 30 → 17 mmHg with both), faster dust clearing, fragment aspiration into the trap
+  (counts as specimens), and the pelvis collapses if flow drops under 25%.
+
+**Verified (headless Chromium, three.js served locally):** screenshots of the sheath before/after,
+a crater, the tumor (chase + scope), the urogram CT, the shop (iPad and 844×390, no sideways
+overflow); bot playthroughs of Cases 1–3 (starter + random seeds) and the tumor case (clean → gold,
+sloppy CUT/high flow → sepsis); unlock → NEXT PATIENT flow; no page errors.
+**Not verified:** on the iPad; feel of painting with a thumb stick (tune `PIT_OK`, `STRESS_K`,
+`SPOT_W` if breaks come too easily or too rarely); shop prices vs. real earning pace.
+**Next steps:** Andrew plays: is retropulsion now too tame? Is the tumor case too long/short (par
+60 s + 7 s/frond)? Device names are generic (FANS/DISS) on purpose; brand names could go in the
+descriptions if wanted.
+**Open questions:** the 12% wildcard rate; whether kit should cost per case (single-use devices)
+instead of a one-time unlock.
+
 ## 2026-10-31 — 🏥 Uro Rush: Clinic Rush + Inpatient Consults merged into one game, with a joystick
 
 Andrew: joystick on iPad/iPhone instead of just WASD, a graphical upgrade, bring Clinic Rush back,
