@@ -3,6 +3,54 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 — 🛩️ Stone Squadron: wire work as a random wrinkle, experience counter, safety-wire order (built 2026-10-31, merged today)
+
+Andrew: advanced levels with a wire to get past tight or redundant areas — the scope stops like at a stone, you advance or
+withdraw, "deploy" the wire like the basket aiming for the centre of the lumen so you don't raise a flap, then ride the wire
+past. Not on a case type's first run; it should show up randomly on existing cases as you get more experienced (a counter of
+how many times you've done each case, "like a junior building their skills/confidence"), and difficulty rises with skill.
+Not every advanced run should have it. Maybe choose a safety wire at the start (a prep decision juniors should think about).
+**Done** (`games/stone-squadron.html`; BUILD 2026-10-31 18:00):
+- **Experience per case type** (`XP`, localStorage `sq3d_xp`): finished runs, a skill number (+0.5 bronze, +1 silver,
+  +1.5 gold/S; −1 after a perforation or a false passage), wrinkles wired. Shown on the brief ("You've finished 3 of these").
+- **Wrinkles, rolled per patient** (`rollWrinkles`): never on a type's first run; then 20% after one finished run, +6% per
+  run, capped at 50%. Severity follows skill; rarely two in one case. The first one on a case is always in the chart (CT read
+  in Case 1, the retrograde in the op note in Cases 2–3); later ones can be a surprise. "Same stones" keeps the same ureter.
+- **Kink** (redundant ureter: the lumen jogs sideways, a fold across your path) and **tight segment** (a short narrowing to
+  a pinhole, a little off-centre). Ureter only, above the sheath tip, clear of stones and pinch rings. The tube mesh is
+  built per patient when there's a wrinkle and reshaped as it straightens.
+- **Wire**: the rails stop before it; ADVANCE stops at its mouth (holding it there = pushing against resistance, damage +
+  attending). The basket button becomes WIRE (E/G). It runs up the fiber's channel, so you aim with the green spot; a ring
+  marks the open line (green/amber/red on the easier ones). Centred → through, coils in the kidney on fluoro → the scope
+  rides it past (the kink straightens). A bit off → buckles, retry. Into the wall → a **flap** (−100, PULS 2, bleeding,
+  that side narrows); the third is a false passage and ends the case. Distance matters: from far the wire wanders. No laser
+  while the wire is in the channel. Clean first pass +150.
+- **Safety wire**: a second pre-op order next to the antibiotic (scrub-in needs both). Costs 3 OR min, shows along the
+  wall and on fluoro (the fluoro used to always draw one). Graded against the chart: wrinkle in the chart + no safety wire
+  = wrong (fails the prep objective, attending quote); otherwise defensible either way, with a teaching note. It changes how
+  a perforation or false passage ends (stent over the safety wire vs nephrostomy).
+- Attending coaches less once you've finished 3 of a type; terse at wrinkles after you've wired 2.
+- Debrief: WIRE WORK card, safety-wire card, run report line. `STONE_SQUADRON.md` updated.
+
+**Verified (headless Chromium, local three.js):**
+- Roll odds over 300–500 seeds per setting: 0% before a type's first finish, 20% after one, ~30% after three, ~50% from six.
+  Never on starter stones or the tumor case. No stone ever inside a wrinkle or the 14 units before it. A seed's stones are
+  unchanged when it has no wrinkle (the roll uses its own random stream).
+- Counter: a finish adds a run and skill, a perforation takes skill down a step, quitting changes nothing. "Same stones"
+  replays the same ureter.
+- Bot play-throughs, scope centred on the ring:
+  - Kink and tight segment wire through first time and ride past, including two wrinkles at full severity in Case 1 and a
+    kink just below the UPJ in Case 3.
+  - Aimed into the fold: three flaps end the run as a false passage. The debrief reads differently with and without a
+    safety wire, and the prep objective fails without one.
+- Plain Cases 1–3 and the tumor case behave as on the previous build. Prep orders gate scrub-in; no sideways overflow at
+  844×390.
+- Screenshots in chase cam and scope view: approach, wire out, through, ride, past, flap, tight segment. No page errors.
+**Not verified:** on the iPad (thumb aiming at the opening; is the ring too generous or too tight?), and how it feels.
+**Next steps:** Andrew plays a few runs of a case to see wrinkles appear (or force one: `?case=1&seed=5&wire=kink&sev=0.5`,
+`wire=tight|both`, `sev` 0–1). Tune `wireChance`, `sevOf`, the −0.06/unit distance penalty and the buckle/flap thresholds.
+**Open questions:** should the ring's colour hint go away sooner? Wire choice (hydrophilic vs stiff) as a loadout item next?
+
 ## 2026-11-09 — 🏥 Uro Rush: more time in the room
 
 Andrew after playing the computer mechanic: patients run out a bit fast in the bay (try +20%);
