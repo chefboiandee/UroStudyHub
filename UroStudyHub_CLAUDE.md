@@ -251,9 +251,8 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 | Game | ID | Description | Multi-Specialty Potential |
 |------|----|-------------|--------------------------|
 | 🪨 Stone Crusher | `blaster` | Click falling kidney stones before they hit bottom | Urology-specific — would need specialty variants (e.g. catch arrhythmias for cardiology, identify lesions for derm) |
-| 🏥 Uro Clinic Rush | `clinic` | Top-down doctor sim — WASD movement, diagnose patients | **Highly adaptable** — swap patient scenarios for any specialty (EM triage, ortho clinic, peds, etc.) |
+| 🏥 Uro Rush | `rush` | Top-down doctor sim, one shift that switches at random between outpatient clinic (incl. 🚑 Send to ED) and the inpatient consult pager; walk into a room, order the right first step. Merged the old Uro Clinic Rush (`clinic`) + Inpatient Consults (`consults`) in Oct 2026; either old unlock carries over. Own page `games/uro-rush.html` (canvas, floating joystick on touch) hosted in a frame (postMessage `rush:claim`/`rush:exit`); harness `tools/uro-rush.drive.mjs` | **Highly adaptable** — cases + order sets are data; swap scenarios for any specialty (EM triage, ortho clinic, peds, etc.) |
 | 🛂 Pre-Op, Please | `preop` | Papers, Please-style pre-op desk: check each patient's papers against a policy binder that grows by day (identity, labs, culture, consent/side → blood-thinner holds per drug + β-hCG → infected-obstructed ESCALATE + the pre-op antibiotic order from the last 3 culture susceptibilities). Own page `games/preop-please.html` hosted in a frame (postMessage claim/exit); harness `tools/preop-please.drive.mjs` | **Highly adaptable** — rules + flaws are data; any "check the chart before the case" specialty |
-| 🚨 Inpatient Consults | `consults` | Inpatient variant of Clinic Rush | **Highly adaptable** — same engine, just swap consult scenarios per specialty |
 | 💊 Drug Match | `drugmatch` | Conveyor belt — catch pills in correct drug class bucket | **Universal** — works for any specialty by swapping drug categories (abx classes, psych meds, chemo regimens, etc.) |
 | 🔔 Buzzer Rounds | `buzzer` | Rapid-fire Q&A with timer | **Universal** — content-agnostic, just swap question banks |
 
@@ -435,7 +434,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 ## Roadmap
 
 ### Phase 1: Mobile Experience (High Priority)
-- [x] Touch controls for games (virtual joystick / tap-to-move) — shipped April 2026 as reusable `<TouchOverlay>` applied to UroClinicRush, InpatientConsults, DrugMatch
+- [x] Touch controls for games (virtual joystick / tap-to-move) — shipped April 2026 as reusable `<TouchOverlay>` (now only DrugMatch; Clinic Rush + Consults became Uro Rush, which has its own floating joystick)
 - [x] Device detection + per-game fit hints in Games tab (device picker on onboarding + auto-detection fallback)
 - [x] Snap Decision — touch-first swipe game (Bench or OR?) with AI-generated deck + seed fallback
 - [ ] Responsive layout audit at 375px and 390px

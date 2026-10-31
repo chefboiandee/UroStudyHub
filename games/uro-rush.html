@@ -1,0 +1,1303 @@
+<!doctype html>
+<!--
+  Uro Rush — UroStudyHub arcade game. One shift that switches between outpatient clinic and the inpatient
+  consult pager at random (it replaces the old separate Uro Clinic Rush + Inpatient Consults React games).
+  Walk the doctor into a room, read the chart, order the right first step before the patient gives up.
+  Clinic and consults have different order sets, so you have to know both.
+  Standalone page: the app opens it in a frame with ?embed=1 and gets coins/XP back by postMessage
+  ({type:'rush:claim', coins, xp} / {type:'rush:exit'}). Harness: tools/uro-rush.drive.mjs.
+  Params: ?seed=N  ?debug (shows the keyed answer on the chart)  ?touch (force the touch UI)  ?embed=1
+  Keys:   WASD / arrows walk · 1-9 0 - = order · P / Esc pause · M mute · Enter / Space continue
+  Touch:  drag anywhere on the map: a joystick appears under the thumb (it follows if you drag past the rim).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a1118">
+<title>Uro Rush</title>
+<style>
+:root{--bg:#0b121a;--bar:#0a1118;--panel:#121c27;--ink:#e8eef5;--mute:#8ea2b6;--line:#223142;--acc:#38bdf8;--accbg:rgba(56,189,248,.14)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%;overscroll-behavior:none;touch-action:manipulation}
+button{font:inherit;color:inherit;cursor:pointer}
+#app{position:fixed;left:0;top:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(260px,31vw,380px);grid-template-rows:auto minmax(0,1fr);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* top bar */
+#hud{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:7px 12px;background:var(--bar);border-bottom:1px solid var(--line);min-width:0}
+#modeChip{display:flex;align-items:center;gap:7px;padding:5px 12px 5px 9px;border-radius:999px;background:var(--accbg);border:1px solid var(--acc);color:var(--acc);font-weight:800;letter-spacing:.08em;font-size:13px;white-space:nowrap;transition:background .3s,border-color .3s,color .3s}
+#modeChip span{font-size:17px}
+.hs{display:flex;flex-direction:column;line-height:1.05;white-space:nowrap}
+.hs small{font-size:9px;letter-spacing:.14em;color:var(--mute);font-weight:800}
+.hs b{font-size:19px;font-variant-numeric:tabular-nums}
+#streak{color:#fbbf24;font-weight:900;font-size:15px;white-space:nowrap}
+#blocks{display:flex;gap:4px}
+#blocks i{font-style:normal;width:25px;height:25px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;background:#132030;border:1px solid var(--line);color:var(--mute);font-weight:800}
+#blocks i.done{opacity:.4}
+#blocks i.cur{border-color:var(--acc);background:var(--accbg)}
+#hearts{font-size:18px;letter-spacing:1px;color:#f43f5e;white-space:nowrap}
+#hearts .lost{color:#2b394a}
+.ib{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#142030;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.sp{flex:1}
+
+/* map */
+#stage{position:relative;overflow:hidden;touch-action:none;min-height:0;min-width:0;background:var(--bg)}
+#stage:after{content:"";position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 58%,rgba(0,0,0,.38) 100%)}
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+#joyBase{position:absolute;width:116px;height:116px;margin:-58px 0 0 -58px;border-radius:50%;border:2px solid rgba(255,255,255,.4);background:radial-gradient(circle,rgba(255,255,255,.12),rgba(255,255,255,.04) 70%);pointer-events:none;z-index:3;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.25),inset 0 0 18px rgba(0,0,0,.3)}
+#joyBase.show{display:block}
+#joyBase.idle{opacity:.45}
+#joyKnob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#cbd5e1 60%,#8696aa);box-shadow:0 3px 8px rgba(0,0,0,.45)}
+#joyHint{position:absolute;left:50%;top:100%;margin-top:8px;transform:translateX(-50%);font:800 10px/1 system-ui;letter-spacing:.14em;color:rgba(255,255,255,.75);white-space:nowrap;text-shadow:0 1px 2px #000}
+#joyBase:not(.idle) #joyHint{display:none}
+#toast{position:absolute;left:50%;top:10px;transform:translateX(-50%) translateY(-6px);z-index:4;pointer-events:none;padding:7px 14px;border-radius:12px;background:rgba(8,14,20,.9);border:1.5px solid currentColor;font-weight:800;font-size:15px;white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .2s,transform .2s}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* chart + orders */
+#panel{display:flex;flex-direction:column;gap:8px;padding:12px 10px 10px;background:var(--panel);border-left:1px solid var(--line);min-height:0;min-width:0}
+#chart{position:relative;background:#f6f1e7;color:#1f2933;border-radius:12px;padding:12px 12px 10px;min-height:136px;box-shadow:0 3px 0 rgba(0,0,0,.4);overflow:hidden;flex:none}
+#chart:before{content:"";position:absolute;left:50%;top:0;width:58px;height:8px;margin-left:-29px;border-radius:0 0 6px 6px;background:#7b8794}
+#chart.flash-ok{animation:fok .5s}
+#chart.flash-bad{animation:fbad .5s}
+@keyframes fok{0%{box-shadow:0 0 0 4px #4ade80}100%{box-shadow:0 3px 0 rgba(0,0,0,.4)}}
+@keyframes fbad{0%{box-shadow:0 0 0 4px #f87171}100%{box-shadow:0 3px 0 rgba(0,0,0,.4)}}
+.ch-top{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#52606d}
+.ch-top .room{color:#0f172a;font-size:13px}
+.loc{padding:1px 7px;border-radius:6px;font-size:11px;background:#e2e8f0;color:#334155}
+.loc.ED{background:#fed7aa;color:#7c2d12}.loc.ICU{background:#fecaca;color:#7f1d1d}.loc.FLOOR{background:#bbf7d0;color:#14532d}.loc.EXAM{background:#bae6fd;color:#0c4a6e}
+.bar{display:block;height:6px;border-radius:4px;background:rgba(0,0,0,.12);overflow:hidden;margin:7px 0 8px}
+.bar i{display:block;height:100%;width:100%;background:#22c55e;border-radius:4px}
+.cc{font-size:18px;font-weight:650;line-height:1.3}
+.who{display:inline-block;padding:0 6px;margin-right:6px;border-radius:6px;background:#1f2933;color:#f6f1e7;font-weight:800;font-size:15px}
+.dbg{margin-top:6px;font:700 11px ui-monospace,monospace;color:#b45309}
+.hint{font-size:13px;color:#52606d;font-weight:650;margin-bottom:7px}
+.census{display:flex;flex-direction:column;gap:6px}
+.census.empty{font-size:13px;color:#7b8794;font-style:italic}
+.cz{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:8px;font-size:12.5px;align-items:baseline}
+.cz b{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#0f172a}
+.cz span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#334155}
+.cz .bar{grid-column:1/-1;margin:2px 0 0;height:4px}
+#ordHead{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--mute);padding:0 2px}
+#ordHead b{color:var(--acc)}
+#orders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(36px,60px);align-content:start;gap:6px;flex:1;min-height:0}
+#orders.off .ord{opacity:.4}
+.ord{position:relative;display:flex;align-items:center;gap:8px;padding:5px 9px;border-radius:11px;border:1px solid #2a3a4d;border-left:5px solid var(--c);background:linear-gradient(180deg,#1a2838,#142131);color:var(--ink);text-align:left;font-weight:700;font-size:14px;line-height:1.15;box-shadow:0 2px 0 rgba(0,0,0,.45);touch-action:manipulation;min-width:0}
+.ord .ic{font-size:20px;flex:none}
+.ord .nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ord .sn{display:none}
+.ord kbd{position:absolute;right:6px;top:4px;font:700 10px ui-monospace,monospace;color:var(--mute)}
+.ord.down{transform:translateY(2px);box-shadow:none;background:var(--c);color:#08111a}
+.ord.nope{animation:nope .3s}
+@keyframes nope{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+
+/* overlay cards */
+#scr{position:fixed;left:0;top:0;right:0;bottom:0;z-index:10;display:none;align-items:center;justify-content:center;padding:16px;padding-top:calc(16px + env(safe-area-inset-top));padding-bottom:calc(16px + env(safe-area-inset-bottom));background:rgba(5,9,14,.74);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+#scr.on{display:flex}
+.card{width:100%;max-width:540px;max-height:100%;overflow:auto;background:#121c27;border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.55);text-align:center;animation:pop .25s ease-out}
+@keyframes pop{0%{transform:scale(.94);opacity:0}100%{transform:none;opacity:1}}
+.card h1{margin:4px 0 2px;font-size:34px;letter-spacing:-.01em}
+.card h2{margin:2px 0 6px;font-size:26px}
+.card .sub{margin:0 0 12px;color:var(--mute);font-size:15px}
+.logo{font-size:40px;display:flex;justify-content:center;align-items:center;gap:10px}
+.logo .swap{font-size:22px;color:var(--mute)}
+.how{list-style:none;margin:10px 0 14px;padding:0;text-align:left;display:flex;flex-direction:column;gap:7px}
+.how li{background:#182533;border-radius:10px;padding:8px 11px;font-size:14px;color:#cfd9e3}
+.how li b{color:#fff}
+.btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.big{padding:14px 28px;border-radius:12px;border:0;background:var(--acc);color:#06121c;font-weight:900;font-size:17px;box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.alt{padding:12px 18px;border-radius:12px;border:1px solid var(--line);background:#182533;font-weight:700}
+.big:active,.alt:active{transform:translateY(2px)}
+.tiny{font-size:12px;color:var(--mute);margin-top:8px}
+.pager{width:184px;margin:4px auto 14px;padding:12px;border-radius:16px;background:linear-gradient(#3d4452,#222833);box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 8px 18px rgba(0,0,0,.5);animation:buzz .12s linear 12}
+.pager .lcd{background:#a3c58f;color:#13210e;font:700 15px/1.3 ui-monospace,Menlo,monospace;border-radius:6px;padding:8px 6px;letter-spacing:.06em;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}
+.pager .lcd span{animation:blink 1s steps(1) infinite}
+.pager .btn3{display:flex;justify-content:center;gap:8px;margin-top:8px}.pager .btn3 i{width:22px;height:8px;border-radius:4px;background:#525b6b}
+@keyframes buzz{0%{transform:none}25%{transform:translate(-2px,1px) rotate(-1.5deg)}50%{transform:translate(1px,-1px) rotate(1deg)}75%{transform:translate(2px,1px) rotate(1.5deg)}}
+@keyframes blink{50%{opacity:0}}
+.csign{display:inline-block;margin:8px auto 16px;padding:12px 22px;border-radius:12px;background:#f6f1e7;color:#0f172a;font-weight:900;letter-spacing:.14em;font-size:18px;border:4px solid #38bdf8;transform-origin:50% -30px;animation:swing 1.8s ease-out;box-shadow:0 8px 18px rgba(0,0,0,.45)}
+.csign small{display:block;font-size:11px;letter-spacing:.2em;color:#0369a1}
+@keyframes swing{0%{transform:rotate(14deg)}25%{transform:rotate(-9deg)}50%{transform:rotate(5deg)}75%{transform:rotate(-2deg)}100%{transform:none}}
+.newacts{margin:6px 0 4px}
+.newacts .lbl{display:block;font-size:10px;letter-spacing:.18em;font-weight:900;color:var(--acc);margin-bottom:4px}
+.chip{display:inline-flex;align-items:center;gap:5px;margin:3px;padding:5px 9px;border-radius:9px;background:#182533;border-left:4px solid var(--c);font-weight:700;font-size:13px}
+.score{font-size:46px;font-weight:900;color:#fbbf24;line-height:1}
+.stats{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:10px 0}
+.stats span{background:#182533;border-radius:9px;padding:6px 10px;font-weight:700;font-size:13px}
+.reward{font-weight:900;font-size:17px;margin:6px 0}
+.misses{text-align:left;margin:10px 0 0;display:flex;flex-direction:column;gap:6px}
+.misses .lbl{font-size:10px;letter-spacing:.18em;font-weight:900;color:#f87171}
+.miss{display:flex;gap:9px;background:#182533;border-radius:10px;padding:8px 10px;font-size:13px}
+.miss .mi{font-size:17px}
+.miss .mcc{color:#e8eef5;font-weight:650}
+.miss .mans{color:var(--mute);margin-top:2px}
+.miss .mans b{color:#4ade80}
+
+/* portrait (phones, iPad upright): map on top, chart + orders underneath */
+@media (max-aspect-ratio:1/1){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  #panel{border-left:0;border-top:1px solid var(--line);padding:10px 10px 8px}
+  #chart{min-height:118px}
+  #orders{grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:54px;flex:none;gap:5px}
+  .ord{flex-direction:column;justify-content:center;gap:1px;text-align:center;padding:3px 3px 3px 1px;font-size:11.5px;line-height:1.1;border-left-width:4px}
+  .ord .ic{font-size:18px}
+  .ord .nm,.ord .sn{max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .ord .nm{display:none}
+  #ordHead{display:none}
+}
+@media (max-aspect-ratio:1/1) and (min-width:700px){ .ord .nm{display:-webkit-box} .ord .sn{display:none} #orders{grid-auto-rows:62px} .ord{font-size:14px} .ord .ic{font-size:21px} .cc{font-size:20px} #ordHead{display:flex} }
+@media (max-aspect-ratio:1/1) and (max-height:740px){ #chart{min-height:96px;padding:10px 10px 8px} .cc{font-size:15px} .who{font-size:13px} .bar{margin:5px 0 6px} #orders{grid-auto-rows:48px} }
+/* phone landscape: everything tighter */
+@media (max-height:520px) and (min-aspect-ratio:1/1){
+  #hud{padding:4px 10px;gap:9px} .hs b{font-size:15px} .ib{width:32px;height:32px} #hearts{font-size:15px} #modeChip{padding:3px 10px 3px 7px}
+  #panel{padding:8px 6px 6px;gap:5px} #chart{min-height:0;padding:9px 9px 7px} .cc{font-size:14px} .who{font-size:12px} .bar{margin:4px 0 5px}
+  #orders{gap:4px;grid-auto-rows:minmax(26px,46px)} .ord{font-size:12px;padding:2px 6px;gap:5px} .ord .ic{font-size:15px}
+  #ordHead{display:none}
+}
+@media (max-width:560px){ #blocks{display:none} #muteBtn{display:none} }
+@media (max-width:400px){ .hs small{display:none} #hud{gap:8px} #modeChip b{display:none} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div id="modeChip"><span id="modeIcon">🏥</span><b id="modeName">CLINIC</b></div>
+    <div class="hs"><small>SCORE</small><b id="score">0</b></div>
+    <div id="streak"></div>
+    <div class="sp"></div>
+    <div id="blocks"></div>
+    <div id="hearts"></div>
+    <div class="hs" id="progWrap"><small>PATIENTS</small><b id="prog">0/0</b></div>
+    <button class="ib" id="muteBtn" aria-label="Sound">🔊</button>
+    <button class="ib" id="pauseBtn" aria-label="Pause">⏸</button>
+  </header>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="joyBase"><div id="joyKnob"></div><div id="joyHint">DRAG TO WALK</div></div>
+    <div id="toast"></div>
+  </div>
+  <aside id="panel">
+    <div id="chart"></div>
+    <div id="ordHead"><span>FIRST STEP</span><b id="ordMode"></b></div>
+    <div id="orders"></div>
+  </aside>
+</div>
+<div id="scr"></div>
+<script>
+'use strict';
+// ── setup ──────────────────────────────────────────────────────────
+const Q = new URLSearchParams(location.search);
+const EMBED = Q.has('embed') && window.parent !== window;   // hosted inside UroStudyHub's arcade
+const DEBUG = Q.has('debug');
+const TOUCH = Q.has('touch') || ('ontouchstart' in window) || !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const SEED = Q.has('seed') ? (parseInt(Q.get('seed'), 10) || 1) : ((Math.random() * 1e9) | 0);
+let rnd = mulberry32(SEED), vrnd = mulberry32(SEED ^ 0x5bd1e995);   // gameplay / looks (looks never shift the gameplay stream)
+const ri = n => Math.floor(rnd() * n);
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+const vpick = a => a[Math.floor(vrnd() * a.length)];
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+// ── content ────────────────────────────────────────────────────────
+// ans = the keyed first step; alt = other answers that are also right (full credit, the toast names the best one).
+// diff = the tier the case appears from; its answer's order unlocks at that tier or earlier.
+const CLINIC_CASES = [
+  // tier 1: UA / PSA / CT / US
+  { cc: '22F, dysuria, frequency, urgency x2 days', ans: 'ua', diff: 1 },
+  { cc: '58M, LUTS, weak stream, nocturia x3', ans: 'psa', alt: ['ua'], diff: 1 },
+  { cc: '45M, acute flank pain radiating to groin, N/V', ans: 'ct', diff: 1 },
+  { cc: '25M, painless testicular mass, firm', ans: 'us', diff: 1 },
+  { cc: '55F, recurrent UTIs (4/yr), no anatomic issues', ans: 'ua', diff: 1 },
+  { cc: '30F, microscopic hematuria, no risk factors', ans: 'ua', diff: 1 },
+  { cc: '35M, painless scrotal swelling, testis not palpable', ans: 'us', diff: 1 },
+  { cc: '60M, nocturia x5, AUA-SI score 22', ans: 'psa', alt: ['ua'], diff: 1 },
+  // tier 2: + cystoscopy, biopsy, Foley, send to ED (what an office can't handle: CBI, urgent decompression, torsion)
+  { cc: '65M, painless gross hematuria, 40 pk-yr smoker', ans: 'cysto', alt: ['ct'], diff: 2 },
+  { cc: '70M, hard prostatic nodule on referral note', ans: 'bx', diff: 2 },
+  { cc: '62M, PSA 4.2 last yr, now 8.1, soft prostate', ans: 'bx', alt: ['psa'], diff: 2 },
+  { cc: '68M, PSA 12, PI-RADS 5 lesion on MRI', ans: 'bx', diff: 2 },
+  { cc: '50M, elevated Cr + bilateral hydro on US', ans: 'foley', diff: 2 },
+  { cc: '80M, urinary retention, BPH, Cr rising', ans: 'foley', diff: 2 },
+  { cc: '72M, gross hematuria + clot retention', ans: 'ed', diff: 2 },
+  { cc: '38M, R ureteral stone on CT, hydro, fever 102', ans: 'ed', diff: 2 },
+  { cc: '14M, sudden L scrotal pain 2 hrs, high-riding testis', ans: 'ed', diff: 2 },
+  { cc: '60M, BCG-unresponsive CIS of the bladder, follow-up', ans: 'cysto', diff: 2 },
+  { cc: "78M, AUR, can't void, suprapubic distension", ans: 'foley', diff: 2 },
+  // tier 3: + urodynamics, semen analysis
+  { cc: '29M, spinal cord injury, neurogenic bladder, rising PVR', ans: 'uds', diff: 3 },
+  { cc: '52F, SUI back after a sling, planning redo surgery', ans: 'uds', diff: 3 },
+  { cc: '28M, infertility, small soft testes, low T', ans: 'sa', diff: 3 },
+  { cc: '32M, 1 yr trying to conceive, partner work-up normal', ans: 'sa', diff: 3 },
+  { cc: '68M, post-TURP bleeding day 2, clots, dropping Hgb', ans: 'ed', diff: 3 },
+  { cc: '66F, solitary kidney, obstructing stone, Cr 1.1 → 3.4', ans: 'ed', diff: 3 },
+  { cc: '45F, stage III pelvic organ prolapse, voiding sx', ans: 'uds', diff: 3 },
+  { cc: '52M, penile curvature 45°, painful erections', ans: 'us', diff: 3 },
+];
+const CONSULT_CASES = [
+  // tier 1: Foley / bladder scan / labs / CT
+  { cc: 'ED: 75M, AUR, unable to void x12 hrs, distended', ans: 'foley', diff: 1 },
+  { cc: "Floor: 70F, can't void after hip replacement, painful", ans: 'foley', diff: 1 },
+  { cc: 'Floor: 80M, confused, no void x8 hrs, on oxybutynin', ans: 'scan', diff: 1 },
+  { cc: 'Floor: post-op day 1, UOP 50 cc/8 hrs, Foley in place', ans: 'scan', diff: 1 },
+  { cc: 'ED: 35M, L flank pain 10/10, N/V, no prior imaging', ans: 'ct', diff: 1 },
+  { cc: 'ED: 40M, bilateral flank pain, Cr 4.2 (baseline 1.0)', ans: 'ct', alt: ['us'], diff: 1 },
+  { cc: 'ED: 45F, fever 102, R CVA tenderness, pyuria on dip', ans: 'labs', alt: ['ct'], diff: 1 },
+  { cc: 'Floor: 55M, incidental 4 cm renal mass on CT', ans: 'labs', diff: 1 },
+  { cc: 'ED: 28F, R flank pain, 32 wks pregnant, hydro on US', ans: 'labs', diff: 1 },
+  { cc: 'Floor: 62M, new gross hematuria, on warfarin, INR 3.8', ans: 'labs', diff: 1 },
+  // tier 2: + CBI, bedside US, IV antibiotics, OR
+  { cc: 'ICU: 65M, gross hematuria + clots, s/p TURP 3 days ago', ans: 'cbi', diff: 2 },
+  { cc: 'Floor: 55M, post-TURBT, heavy hematuria + clot retention', ans: 'cbi', diff: 2 },
+  { cc: 'ED: 14M, acute L scrotal pain 4 hrs, absent cremasteric', ans: 'us', alt: ['or'], diff: 2 },
+  { cc: 'ED: 22M, scrotal swelling after a straddle injury', ans: 'us', diff: 2 },
+  { cc: 'Floor: 58F, T 103, WBC 22k, pyelonephritis, no hydro on US', ans: 'abx', diff: 2 },
+  { cc: 'ICU: 70M, urosepsis, pyuria, hemodynamically unstable', ans: 'abx', diff: 2 },
+  { cc: 'ED: 30M, testicular mass on US, AFP 400, LDH elevated', ans: 'or', diff: 2 },
+  { cc: 'ED: 50M, bladder perf after catheter trauma, free fluid', ans: 'or', diff: 2 },
+  { cc: 'ICU: renal transplant POD 2, dropping UOP, Cr rising', ans: 'us', diff: 2 },
+  // tier 3: + manual detorsion, drain, stent, nephrostomy
+  { cc: 'ED: 12M, sudden scrotal pain 1 hr, US: no flow to L testis', ans: 'or', alt: ['detorsion'], diff: 3 },
+  { cc: 'ED: 15M, torsion on exam, nearest OR is 2 hrs away', ans: 'detorsion', alt: ['or'], diff: 3 },
+  { cc: 'Floor: 60F, septic + obstructing stone, not an OR candidate', ans: 'neph', diff: 3 },
+  { cc: 'ICU: 50F, bilateral obstruction, anuric, Cr 9, too sick for OR', ans: 'neph', diff: 3 },
+  { cc: 'ED: 35M, septic from an infected obstructing stone', ans: 'stent', alt: ['neph'], diff: 3 },
+  { cc: 'Floor: 45F, post-URS ureteral edema, rising Cr, hydro', ans: 'stent', alt: ['neph'], diff: 3 },
+  { cc: 'Floor: 45M, 6 cm perinephric abscess on CT, not resolving', ans: 'drain', diff: 3 },
+  { cc: "ED: 40M, Fournier's gangrene, perineal crepitus, septic", ans: 'or', diff: 3 },
+  { cc: 'ICU: 70M, refractory sepsis, pyonephrosis, too sick for OR', ans: 'neph', diff: 3 },
+];
+const CLINIC_ACTS = [
+  { id: 'ua', name: 'UA / urine culture', short: 'UA / culture', icon: '🧪', col: '#fbbf24', wave: 1 },
+  { id: 'psa', name: 'PSA + DRE', short: 'PSA + DRE', icon: '🧤', col: '#38bdf8', wave: 1 },
+  { id: 'ct', name: 'CT scan', short: 'CT scan', icon: '📡', col: '#a78bfa', wave: 1 },
+  { id: 'us', name: 'Ultrasound', short: 'Ultrasound', icon: '🔊', col: '#34d399', wave: 1 },
+  { id: 'cysto', name: 'Cystoscopy', short: 'Cystoscopy', icon: '🔬', col: '#f472b6', wave: 2 },
+  { id: 'bx', name: 'Biopsy', short: 'Biopsy', icon: '🎯', col: '#fb923c', wave: 2 },
+  { id: 'foley', name: 'Foley catheter', short: 'Foley', icon: '➰', col: '#94a3b8', wave: 2 },
+  { id: 'ed', name: 'Send to ED', short: 'Send to ED', icon: '🚑', col: '#ef4444', wave: 2 },
+  { id: 'uds', name: 'Urodynamics', short: 'Urodynamics', icon: '📊', col: '#818cf8', wave: 3 },
+  { id: 'sa', name: 'Semen analysis', short: 'Semen analysis', icon: '🧫', col: '#e879f9', wave: 3 },
+];
+const CONSULT_ACTS = [
+  { id: 'foley', name: 'Foley catheter', short: 'Foley', icon: '➰', col: '#94a3b8', wave: 1 },
+  { id: 'scan', name: 'Bladder scan', short: 'Bladder scan', icon: '📶', col: '#38bdf8', wave: 1 },
+  { id: 'labs', name: 'Labs + UA', short: 'Labs + UA', icon: '🧪', col: '#fbbf24', wave: 1 },
+  { id: 'ct', name: 'CT imaging', short: 'CT', icon: '📡', col: '#a78bfa', wave: 1 },
+  { id: 'cbi', name: 'Start CBI', short: 'CBI', icon: '💧', col: '#22d3ee', wave: 2 },
+  { id: 'us', name: 'Bedside US', short: 'Bedside US', icon: '🔊', col: '#34d399', wave: 2 },
+  { id: 'abx', name: 'IV antibiotics', short: 'IV abx', icon: '💊', col: '#f472b6', wave: 2 },
+  { id: 'or', name: 'Book the OR', short: 'Book OR', icon: '🔪', col: '#ef4444', wave: 2 },
+  { id: 'detorsion', name: 'Manual detorsion', short: 'Detorsion', icon: '🔄', col: '#fb923c', wave: 3 },
+  { id: 'drain', name: 'Perc drain / I&D', short: 'Drain / I&D', icon: '🩸', col: '#e879f9', wave: 3 },
+  { id: 'stent', name: 'Ureteral stent', short: 'Stent', icon: '📏', col: '#818cf8', wave: 3 },
+  { id: 'neph', name: 'IR nephrostomy', short: 'Nephrostomy', icon: '📞', col: '#f59e0b', wave: 3 },
+];
+const MODES = {
+  clinic: { key: 'clinic', name: 'Clinic', icon: '🏥', acc: '#38bdf8', cases: CLINIC_CASES, acts: CLINIC_ACTS },
+  consult: { key: 'consult', name: 'Consults', icon: '📟', acc: '#f59e0b', cases: CONSULT_CASES, acts: CONSULT_ACTS },
+};
+function parseCase(c) {
+  let s = c.cc, loc = null, age = null, sex = null;
+  const m = /^(ED|Floor|ICU):\s*/.exec(s);
+  if (m) { loc = m[1] === 'Floor' ? 'FLOOR' : m[1]; s = s.slice(m[0].length); }
+  const a = /^(\d+)\s*([MF])\b,?\s*/.exec(s);
+  if (a) { age = +a[1]; sex = a[2]; s = s.slice(a[0].length); }
+  return { loc, age, sex, text: s.charAt(0).toUpperCase() + s.slice(1) };
+}
+CLINIC_CASES.concat(CONSULT_CASES).forEach(c => { c.p = parseCase(c); });
+const actOf = (mode, id) => MODES[mode].acts.find(a => a.id === id);
+
+// ── tuning ─────────────────────────────────────────────────────────
+const WW = 800, WH = 600, T = 14;            // world size; wall thickness
+const SPEED = 250, ACCEL = 11, DOC_R = 15;   // world units/s; velocity smoothing (1/s); doctor radius
+const LIVES = 4;
+const PATIENCE = [19, 17, 15.5];             // seconds a patient waits, by tier
+const GAP = [4.6, 4.1, 3.6];                 // seconds between arrivals, by tier
+const TIER_OF_BLOCK = [1, 2, 2, 3, 3];       // a shift is 5 blocks; new orders unlock at blocks 2 and 4
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+
+// ── floor plans ────────────────────────────────────────────────────
+// Same bones for both (3 rooms over a corridor over 2 rooms + a nook), different dressing:
+// clinic = exam rooms + nurses' station; hospital = ED bays behind curtains, glass ICU, two floor rooms, elevator.
+function rel(r, u, v, w, h) { return { x: r.x + u, y: r.back === 'N' ? r.y + v : r.y + r.h - v - h, w, h }; }
+function relPt(r, u, v) { return { x: r.x + u, y: r.back === 'N' ? r.y + v : r.y + r.h - v }; }
+function buildLayout(mode) {
+  const hosp = mode === 'consult';
+  const L = { mode, hosp, walls: [], solids: [], rooms: [], decor: [], over: [], spawn: { x: 400, y: 300 } };
+  const wall = (x, y, w, h, kind) => { const r = { x, y, w, h, kind: kind || 'wall' }; L.walls.push(r); L.solids.push(r); return r; };
+  const solid = r => { L.solids.push(r); return r; };
+  const deco = (t, r, extra) => { const o = Object.assign({ t, r }, extra || {}); L.decor.push(o); return o; };
+  wall(0, 0, WW, T); wall(0, WH - T, WW, T); wall(0, 0, T, WH); wall(WW - T, 0, T, WH);
+  const TOP_H = 208, TOP_WALL = T + TOP_H, BOT_WALL = 364, BOT_Y = BOT_WALL + T, BOT_H = WH - T - BOT_Y;
+  const names = hosp ? [['ED 1', 'ED', 'ED1'], ['ED 2', 'ED', 'ED2'], ['ICU', 'ICU', 'ICU'], ['4 North', 'FLOOR', '4N'], ['6 South', 'FLOOR', '6S']]
+                     : [['Exam 1', 'EXAM', '1'], ['Exam 2', 'EXAM', '2'], ['Exam 3', 'EXAM', '3'], ['Exam 4', 'EXAM', '4'], ['Exam 5', 'EXAM', '5']];
+  const doorW = hosp ? [150, 150, 100, 96, 96] : [92, 92, 92, 92, 92];
+  [[T, 258], [286, 228], [528, WW - T - 528]].forEach((t, i) => L.rooms.push({ x: t[0], y: T, w: t[1], h: TOP_H, back: 'N' }));
+  [[T, 286], [500, WW - T - 500]].forEach(t => L.rooms.push({ x: t[0], y: BOT_Y, w: t[1], h: BOT_H, back: 'S' }));
+  L.rooms.forEach((r, k) => {
+    r.i = k; r.label = names[k][0]; r.type = names[k][1]; r.short = names[k][2];
+    const dw = doorW[k], cx = r.x + r.w / 2;
+    r.door = { x: cx - dw / 2, w: dw, y: r.back === 'N' ? TOP_WALL : BOT_WALL, cx };
+    r.blanket = r.type === 'ED' ? '#9db8cc' : r.type === 'ICU' ? '#b6aad6' : '#a6c79f';
+  });
+  // dividers
+  wall(272, T, 14, TOP_H, hosp ? 'curtain' : 'wall');
+  wall(514, T, 14, TOP_H, hosp ? 'glass' : 'wall');
+  wall(300, BOT_WALL, 14, WH - T - BOT_WALL);
+  wall(486, BOT_WALL, 14, WH - T - BOT_WALL);
+  // front walls, minus the doors
+  const kindAt = (row, mx) => { if (!hosp) return 'wall'; const r = L.rooms.find(q => q.back === row && mx >= q.x - 7 && mx <= q.x + q.w + 7); return !r ? 'wall' : r.type === 'ED' ? 'curtain' : r.type === 'ICU' ? 'glass' : 'wall'; };
+  function front(y, x0, x1, gaps, row) {
+    let x = x0;
+    gaps.slice().sort((a, b) => a.x - b.x).forEach(g => { if (g.x > x) wall(x, y, g.x - x, T, kindAt(row, (x + g.x) / 2)); x = g.x + g.w; });
+    if (x1 > x) wall(x, y, x1 - x, T, kindAt(row, (x + x1) / 2));
+  }
+  front(TOP_WALL, T, WW - T, L.rooms.slice(0, 3).map(r => r.door), 'N');
+  front(BOT_WALL, T, 314, [L.rooms[3].door], 'S');
+  front(BOT_WALL, 486, WW - T, [L.rooms[4].door], 'S');
+
+  L.rooms.forEach(r => {
+    const bw = hosp ? 62 : 56, bh = hosp ? 118 : 108;
+    r.bed = rel(r, r.w / 2 - bw / 2, 12, bw, bh);
+    solid(r.bed);
+    r.head = { x: r.x + r.w / 2, y: r.back === 'N' ? r.bed.y + 22 : r.bed.y + r.bed.h - 22 };
+    r.foot = { x: r.x + r.w / 2 + 34, y: r.back === 'N' ? r.bed.y + r.bed.h + 16 : r.bed.y - 16 };
+    r.badge = { x: r.x + r.w - 30, y: r.back === 'N' ? r.y + r.h - 30 : r.y + 30 };
+    const d = r.door, leaf = r.back === 'N' ? { x: d.x + 1, y: d.y - (d.w - 10), w: 6, h: d.w - 10 } : { x: d.x + 1, y: d.y + T, w: 6, h: d.w - 10 };
+    if (!hosp || r.type === 'FLOOR') { solid(leaf); deco('leaf', leaf, { room: r }); }
+    else if (r.type === 'ED') deco('bunch', rel(r, d.x - r.x - 2, r.h - 16, 24, 16), { room: r });
+    else L.over.push({ t: 'slider', room: r });
+    if (!hosp) {
+      deco('table', r.bed, { room: r });
+      deco('counter', solid(rel(r, 4, 4, 30, 112)), { room: r });
+      deco('chair', solid(rel(r, r.w - 36, 10, 30, 30)), { room: r });
+      deco('stool', null, { p: relPt(r, r.w / 2 + 50, 72) });
+      deco('bin', null, { p: relPt(r, 26, r.h - 22) });
+    } else {
+      deco('bed', r.bed, { room: r });
+      r.mon = rel(r, r.w / 2 + 40, 4, 38, 26);
+      deco('monitor', solid(r.mon), { room: r });
+      deco('iv', solid(rel(r, r.w / 2 - 54, 18, 14, 14)), { room: r });
+      if (r.type === 'ED') { deco('cart', solid(rel(r, 6, 6, 34, 26)), { room: r }); deco('sharps', rel(r, 50, 1, 12, 8)); }
+      if (r.type === 'ICU') { deco('vent', solid(rel(r, r.w / 2 + 86, 6, 30, 40)), { room: r }); deco('sink', solid(rel(r, 4, 70, 22, 40))); }
+      if (r.type === 'FLOOR') { deco('chair', solid(rel(r, r.w - 40, 14, 30, 30)), { room: r }); L.over.push({ t: 'window', room: r }); }
+    }
+    L.over.push({ t: 'sign', room: r });
+  });
+  if (!hosp) {
+    deco('rug', { x: 70, y: 278, w: 660, h: 44 });
+    deco('desk', solid({ x: 336, y: 456, w: 128, h: 26 }));
+    deco('deskchair', null, { p: { x: 400, y: 508 } });
+    deco('plant', solid({ x: 322, y: 556, w: 22, h: 22 }));
+    deco('plant', solid({ x: 456, y: 556, w: 22, h: 22 }));
+    deco('cooler', solid({ x: 18, y: 242, w: 22, h: 22 }));
+    deco('bench', solid({ x: 18, y: 284, w: 22, h: 70 }));
+    deco('plant', solid({ x: 762, y: 242, w: 22, h: 22 }));
+    deco('bench', solid({ x: 762, y: 284, w: 22, h: 70 }));
+    L.exit = { x: 70, y: 300 };
+  } else {
+    deco('stripes', null);
+    deco('ws', solid({ x: 344, y: 470, w: 112, h: 26 }));
+    deco('crash', solid({ x: 322, y: 384, w: 30, h: 22 }));
+    deco('linen', solid({ x: 448, y: 384, w: 30, h: 22 }));
+    deco('gurney', solid({ x: 20, y: 252, w: 30, h: 92 }));
+    deco('wheelchair', solid({ x: 752, y: 296, w: 28, h: 30 }));
+    L.over.push({ t: 'elevator' });
+    L.exit = { x: 400, y: 440 };
+  }
+  return L;
+}
+const LAYOUTS = { clinic: buildLayout('clinic'), consult: buildLayout('consult') };
+function roomAt(L, x, y) {   // the room the point is in (its door apron counts), or -1
+  for (let i = 0; i < L.rooms.length; i++) {
+    const r = L.rooms[i], d = r.door;
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
+    if (x >= d.x && x <= d.x + d.w && y >= d.y - 20 && y <= d.y + T + 20) return i;
+  }
+  return -1;
+}
+
+// ── state ──────────────────────────────────────────────────────────
+const G = {
+  state: 'title', mode: null, L: null, blocks: [], bi: -1, blockSpawned: 0, blockEndT: 0, endT: 0,
+  tier: 1, seen: 0, total: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, time: 0, runs: 0, pid: 0,
+  rooms: [], spawnT: 0, doc: { x: 400, y: 300, vx: 0, vy: 0, a: -Math.PI / 2, ph: 0, moving: false },
+  leavers: [], parts: [], floats: [], log: [], decks: {}, deckTier: {}, used: {}, shownTier: {},
+  shake: 0, claimed: false, card: null, frozen: false, autoJoy: null, best: +(store.get('uroRush_best') || 0),
+};
+const ACC = () => MODES[G.mode || 'clinic'].acc;
+const visActs = () => G.mode ? MODES[G.mode].acts.filter(a => a.wave <= G.tier) : [];
+
+function planShift() {   // 3 blocks of one setting + 2 of the other, shuffled until it switches at least twice
+  const major = rnd() < .5 ? 'clinic' : 'consult', minor = major === 'clinic' ? 'consult' : 'clinic';
+  let seq, sw;
+  do { seq = shuffle([major, major, major, minor, minor]); sw = 0; for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) sw++; } while (sw < 2);
+  return seq.map((m, i) => ({ mode: m, n: rnd() < .55 ? 5 : 4, tier: TIER_OF_BLOCK[i] }));
+}
+function startShift() {
+  audioInit();
+  rnd = mulberry32(SEED + G.runs * 7919); G.runs++;
+  Object.assign(G, { blocks: planShift(), bi: -1, seen: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, log: [], leavers: [], parts: [], floats: [],
+    used: { clinic: new Set(), consult: new Set() }, decks: { clinic: [], consult: [] }, deckTier: { clinic: 0, consult: 0 }, shownTier: { clinic: 0, consult: 0 },
+    claimed: false, mode: null, endT: 0, blockEndT: 0, time: 0 });
+  G.total = G.blocks.reduce((s, b) => s + b.n, 0);
+  nextBlock();
+}
+function setMode(m) {
+  G.mode = m; G.L = LAYOUTS[m];
+  G.rooms = G.L.rooms.map(() => ({ pat: null, freeAt: 0 }));
+  G.leavers = []; G.parts = []; G.floats = [];
+  clearTimeout(toastT); $('toast').classList.remove('on');
+  Object.assign(G.doc, { x: G.L.spawn.x, y: G.L.spawn.y, vx: 0, vy: 0, a: -Math.PI / 2 });
+  const acc = MODES[m].acc;
+  document.documentElement.style.setProperty('--acc', acc);
+  document.documentElement.style.setProperty('--accbg', rgba(acc, .15));
+  buildCache();
+}
+function nextBlock() {
+  G.bi++; G.blockEndT = 0;
+  if (G.bi >= G.blocks.length) { endShift(true); return; }
+  const b = G.blocks[G.bi], prev = G.mode;
+  G.tier = b.tier; G.blockSpawned = 0;
+  const switching = b.mode !== prev;
+  if (switching) setMode(b.mode);
+  const shown = G.shownTier[b.mode];
+  const newActs = MODES[b.mode].acts.filter(a => a.wave > shown && a.wave <= G.tier);
+  G.shownTier[b.mode] = G.tier;
+  buildOrders(); updateHud();
+  G.spawnT = 0.9;
+  if (switching || newActs.length) showCard({ kind: !prev ? 'first' : switching ? 'switch' : 'tier', mode: b.mode, n: b.n, newActs, fresh: shown === 0 });
+  else { G.state = 'play'; toast('+' + b.n + (b.mode === 'clinic' ? ' more patients checked in' : ' more consults on the list'), ACC()); }
+}
+function deckFor(m) {
+  if (G.deckTier[m] !== G.tier || !G.decks[m].length) {
+    let pool = MODES[m].cases.filter(c => c.diff <= G.tier && !G.used[m].has(c));
+    if (!pool.length) { G.used[m].clear(); pool = MODES[m].cases.filter(c => c.diff <= G.tier); }
+    shuffle(pool);
+    if (G.deckTier[m] !== G.tier) {   // lead with the newest tier's cases so the new orders get used right away
+      const lead = pool.filter(c => c.diff === G.tier).slice(0, 2);
+      pool = lead.concat(pool.filter(c => lead.indexOf(c) < 0));
+    }
+    G.decks[m] = pool; G.deckTier[m] = G.tier;
+  }
+  return G.decks[m];
+}
+function trySpawn() {
+  const b = G.blocks[G.bi];
+  if (G.blockSpawned >= b.n) return;
+  const empty = [];
+  G.rooms.forEach((r, i) => { if (!r.pat && G.time >= r.freeAt) empty.push(i); });
+  if (!empty.length) { G.spawnT = .35; return; }
+  shuffle(empty);
+  const deck = deckFor(G.mode);
+  let roomI = empty[0], ci = 0;
+  if (G.mode === 'consult') {   // ED cases go to an ED bay, ICU to the ICU, floor to a floor room
+    search: for (const e of empty) for (let k = 0; k < deck.length; k++) if (deck[k].p.loc === G.L.rooms[e].type) { roomI = e; ci = k; break search; }
+  }
+  const c = deck.splice(ci, 1)[0];
+  G.used[G.mode].add(c);
+  const max = PATIENCE[G.tier - 1];
+  G.rooms[roomI].pat = { c, max, left: max, t0: G.time, look: lookFor(c), id: ++G.pid, warned: false };
+  G.blockSpawned++; G.seen++;
+  G.spawnT = (G.blockSpawned === 1 ? 1.6 : GAP[G.tier - 1]) * (0.85 + rnd() * 0.3);
+  sfx.arrive(); updateHud();
+}
+function update(dt) {
+  G.time += dt;
+  moveDoctor(dt);
+  if (G.endT > 0) { G.endT -= dt; if (G.endT <= 0) endShift(false); fx(dt); return; }
+  G.rooms.forEach((r, i) => {
+    const p = r.pat; if (!p) return;
+    p.left -= dt;
+    if (!p.warned && p.left < p.max * .3) { p.warned = true; sfx.urgent(); }
+    if (p.left <= 0) resolve(i, null);
+  });
+  if (G.state !== 'play') return;
+  G.spawnT -= dt; if (G.spawnT <= 0) trySpawn();
+  const b = G.blocks[G.bi];
+  if (G.endT <= 0 && G.blockSpawned >= b.n && G.rooms.every(r => !r.pat)) { G.blockEndT += dt; if (G.blockEndT > 1.2) nextBlock(); }
+  fx(dt);
+}
+function activeRoom() { return G.L && G.state !== 'title' ? roomAt(G.L, G.doc.x, G.doc.y) : -1; }
+function order(act) {
+  if (G.state !== 'play' || G.endT > 0) return false;
+  const i = activeRoom();
+  if (i < 0 || !G.rooms[i].pat) return false;
+  if (!visActs().some(a => a.id === act)) return false;
+  resolve(i, act); return true;
+}
+function resolve(i, act) {
+  const r = G.rooms[i], p = r.pat; if (!p) return;
+  const c = p.c, room = G.L.rooms[i], best = actOf(G.mode, c.ans);
+  const ok = act !== null && (act === c.ans || (c.alt || []).indexOf(act) >= 0);
+  const kind = act === null ? 'timeout' : ok ? 'ok' : 'wrong';
+  G.log.push({ mode: G.mode, room: room.label, cc: c.cc, chose: act, ans: c.ans, alt: c.alt || [], kind });
+  const at = room.head;
+  if (ok) {
+    G.streak++; G.bestStreak = Math.max(G.bestStreak, G.streak);
+    const bonus = G.streak >= 3 ? Math.floor(G.streak * 1.5) : 0, quick = Math.round(5 * p.left / p.max);
+    const pts = 10 + c.diff * 5 + bonus + quick;
+    G.score += pts;
+    floatText(at.x, at.y - 34, '+' + pts, '#16a34a');
+    burst(at.x, at.y, ['#4ade80', '#facc15', '#38bdf8'], 22, 'spark');
+    toast(act === c.ans ? '✓ ' + best.icon + ' ' + best.name + (G.streak >= 3 ? '  ·  ' + G.streak + ' in a row' : '') : '✓ OK. Best first step: ' + best.icon + ' ' + best.name, '#4ade80');
+    flashChart('ok'); sfx.ok(G.streak);
+  } else {
+    G.streak = 0; G.lives = Math.max(0, G.lives - 1); G.shake = .35;
+    floatText(at.x, at.y - 34, kind === 'timeout' ? 'Gone!' : '✗', '#dc2626');
+    burst(at.x, at.y, kind === 'timeout' ? ['#fb923c', '#94a3b8'] : ['#ef4444', '#f87171'], 16, 'puff');
+    toast((kind === 'timeout' ? (G.mode === 'consult' ? 'Consult missed. ' : 'Walked out. ') : '✗ ') + 'Needed ' + best.icon + ' ' + best.name, kind === 'timeout' ? '#fb923c' : '#f87171');
+    flashChart('bad');
+    if (kind === 'timeout') sfx.timeout(); else sfx.bad();
+    try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) {}
+  }
+  leave(i, p, ok ? 'ok' : 'bad');
+  r.pat = null; r.freeAt = G.time + 1.3;
+  updateHud();
+  if (G.lives <= 0 && G.endT <= 0) G.endT = 1.2;
+}
+function rewards() { return { coins: Math.min(150, Math.ceil(G.score * .13)), xp: Math.min(80, Math.ceil(G.score * .065)) }; }
+function endShift(done) {
+  G.state = 'over'; G.endT = 0; G.done = done;
+  if (G.score > G.best) { G.best = G.score; G.newBest = true; store.set('uroRush_best', String(G.best)); } else G.newBest = false;
+  showOver();
+}
+function claim() {
+  if (!EMBED || G.claimed) return; G.claimed = true;
+  const r = rewards(); window.parent.postMessage({ type: 'rush:claim', coins: r.coins, xp: r.xp }, location.origin);
+}
+function exitGame() { window.parent.postMessage({ type: 'rush:exit' }, location.origin); }
+
+// ── movement ───────────────────────────────────────────────────────
+const keys = { up: false, down: false, left: false, right: false };
+const joy = { id: null, on: false, ox: 0, oy: 0, vx: 0, vy: 0 };
+function inputVec() {
+  if (G.autoJoy) return G.autoJoy;
+  if (joy.on) return { x: joy.vx, y: joy.vy };
+  let x = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), y = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+  const m = Math.hypot(x, y); if (m > 0) { x /= m; y /= m; }
+  return { x, y };
+}
+function moveDoctor(dt) {
+  const d = G.doc, inp = inputVec(), k = 1 - Math.exp(-ACCEL * dt);
+  d.vx += (inp.x * SPEED - d.vx) * k; d.vy += (inp.y * SPEED - d.vy) * k;
+  doorAssist(d, inp, dt);
+  const sp = Math.hypot(d.vx, d.vy), n = Math.max(1, Math.ceil(sp * dt / 5));
+  for (let s = 0; s < n; s++) { d.x += d.vx * dt / n; d.y += d.vy * dt / n; collide(d); }
+  d.moving = sp > 14;
+  if (d.moving) {
+    let da = Math.atan2(d.vy, d.vx) - d.a;
+    while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    d.a += da * Math.min(1, dt * 14); d.ph += sp * dt * .055;
+  }
+}
+function collide(d) {   // circle vs axis-aligned rects: push out along the shortest way, drop the velocity into the wall
+  const sol = G.L.solids;
+  for (let i = 0; i < sol.length; i++) {
+    const w = sol[i], cx = clamp(d.x, w.x, w.x + w.w), cy = clamp(d.y, w.y, w.y + w.h);
+    const dx = d.x - cx, dy = d.y - cy, d2 = dx * dx + dy * dy;
+    if (d2 >= DOC_R * DOC_R) continue;
+    if (d2 > 1e-6) {
+      const dist = Math.sqrt(d2), nx = dx / dist, ny = dy / dist;
+      d.x += nx * (DOC_R - dist); d.y += ny * (DOC_R - dist);
+      const vn = d.vx * nx + d.vy * ny; if (vn < 0) { d.vx -= vn * nx; d.vy -= vn * ny; }
+    } else {
+      const l = d.x - w.x, r = w.x + w.w - d.x, t = d.y - w.y, b = w.y + w.h - d.y, m = Math.min(l, r, t, b);
+      if (m === l) d.x = w.x - DOC_R; else if (m === r) d.x = w.x + w.w + DOC_R; else if (m === t) d.y = w.y - DOC_R; else d.y = w.y + w.h + DOC_R;
+    }
+  }
+}
+function doorAssist(d, inp, dt) {   // thumbs are imprecise: heading at a wall near a doorway slides you into the gap
+  if (Math.abs(inp.y) < .3) return;
+  for (const r of G.L.rooms) {
+    const dr = r.door, wy = dr.y;
+    const below = d.y > wy + T && d.y < wy + T + 64, above = d.y < wy && d.y > wy - 64;
+    if (!((inp.y < 0 && below) || (inp.y > 0 && above))) continue;
+    const off = d.x - dr.cx, half = dr.w / 2 - DOC_R - 3;
+    if (Math.abs(off) > half && Math.abs(off) < dr.w / 2 + DOC_R + 20) d.x -= Math.sign(off) * Math.min(Math.abs(off) - half, 170 * dt * Math.abs(inp.y));
+  }
+}
+
+// ── looks + effects ────────────────────────────────────────────────
+const SKIN = ['#f6d2b8', '#eab68e', '#d29a6b', '#b0764a', '#8a5532', '#603b23'];
+const HAIR = ['#2b1d14', '#4a3020', '#6b4425', '#a87442', '#d9b26a', '#1c1c1c', '#7a2f1b'];
+const GOWN = ['#8fb8e0', '#9fd0c1', '#b9a9e3', '#7fc4d6', '#a9bde8'];   // nothing near a skin tone
+function lookFor(c) {
+  const P = c.p, age = P.age != null ? P.age : 35 + Math.floor(vrnd() * 45), sex = P.sex || (vrnd() < .5 ? 'M' : 'F');
+  return { skin: vpick(SKIN), hair: age >= 66 ? (vrnd() < .5 ? '#dcdcd6' : '#a9a9a2') : vpick(HAIR), long: sex === 'F' && vrnd() < .8,
+    bald: sex === 'M' && age >= 55 && vrnd() < .45, glasses: age >= 50 && vrnd() < .5, kid: age < 16, gown: vpick(GOWN), pants: vpick(['#334155', '#475569', '#7c5e3c', '#1e3a5f', '#5b3f6b']) };
+}
+function leave(i, p, mood) {
+  const room = G.L.rooms[i], dr = room.door, N = room.back === 'N';
+  const inY = N ? dr.y - 26 : dr.y + T + 26, outY = N ? dr.y + T + 34 : dr.y - 34;
+  G.leavers.push({ look: p.look, mood, x: room.foot.x, y: room.foot.y, a: 0, path: [{ x: dr.cx, y: inY }, { x: dr.cx, y: outY }, { x: G.L.exit.x, y: G.L.exit.y }], alpha: 1, ph: 0 });
+}
+function burst(x, y, cols, n, kind) {
+  for (let k = 0; k < n; k++) {
+    const a = Math.random() * Math.PI * 2, s = 50 + Math.random() * 120, life = .55 + Math.random() * .45;
+    G.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (kind === 'spark' ? 60 : 10), life, max: life, col: cols[k % cols.length], kind, sz: kind === 'spark' ? 2.5 + Math.random() * 2.5 : 6 + Math.random() * 6 });
+  }
+}
+function floatText(x, y, txt, col) { G.floats.push({ x, y, txt, col, life: 1.2 }); }
+function fx(dt) {
+  G.shake = Math.max(0, G.shake - dt);
+  G.parts = G.parts.filter(q => {
+    q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= Math.pow(.08, dt); q.vy *= Math.pow(.08, dt);
+    if (q.kind === 'spark') q.vy += 140 * dt;
+    return q.life > 0;
+  });
+  G.floats = G.floats.filter(f => { f.life -= dt; f.y -= 34 * dt; return f.life > 0; });
+  G.leavers = G.leavers.filter(l => {
+    let step = 150 * dt;
+    while (step > 0 && l.path.length) {
+      const t = l.path[0], dx = t.x - l.x, dy = t.y - l.y, m = Math.hypot(dx, dy);
+      if (m > .01) l.a = Math.atan2(dy, dx);
+      if (m <= step) { l.x = t.x; l.y = t.y; l.path.shift(); step -= m; } else { l.x += dx / m * step; l.y += dy / m * step; step = 0; }
+    }
+    l.ph += dt * 9;
+    if (l.path.length <= 1) l.alpha -= dt * 1.6;
+    return l.alpha > 0 && l.path.length > 0;
+  });
+}
+
+// ── drawing helpers ────────────────────────────────────────────────
+const cv = $('cv'), ctx = cv.getContext('2d');
+let DPR = 1, VIEW = { s: 1, ox: 0, oy: 0, w: 0, h: 0 }, cache = document.createElement('canvas'), KS = 1;
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+function shade(hex, amt) { const n = parseInt(hex.slice(1), 16), f = amt < 0 ? 0 : 255, p = Math.abs(amt) / 100; const ch = v => Math.round(v + (f - v) * p); return 'rgb(' + ch(n >> 16) + ',' + ch(n >> 8 & 255) + ',' + ch(n & 255) + ')'; }
+function rr(c, x, y, w, h, r) { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function box(c, r, fill, edge, rad, shadow) {
+  c.save();
+  if (shadow) { c.shadowColor = 'rgba(30,25,20,.28)'; c.shadowBlur = 6 * KS; c.shadowOffsetY = 2.5 * KS; }
+  rr(c, r.x, r.y, r.w, r.h, rad == null ? 3 : rad); c.fillStyle = fill; c.fill();
+  c.restore();
+  if (edge) { rr(c, r.x, r.y, r.w, r.h, rad == null ? 3 : rad); c.strokeStyle = edge; c.lineWidth = 1.2; c.stroke(); }
+}
+function circ(c, x, y, r, fill, edge, lw) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); if (fill) { c.fillStyle = fill; c.fill(); } if (edge) { c.strokeStyle = edge; c.lineWidth = lw || 1; c.stroke(); } }
+function ell(c, x, y, rx, ry, rot, fill, edge) { c.beginPath(); c.ellipse(x, y, Math.max(.1, rx), Math.max(.1, ry), rot || 0, 0, Math.PI * 2); if (fill) { c.fillStyle = fill; c.fill(); } if (edge) { c.strokeStyle = edge; c.lineWidth = 1; c.stroke(); } }
+const PAL = {
+  clinic: { bg: '#0f1a24', hall: '#c69c70', room: '#f2eadc', room2: '#ebe1d1', grout: 'rgba(90,70,40,.09)', cap: '#e6ddcc', edge: '#8a7e6a', nook: '#a9bfb6', light: 'rgba(255,248,230,.42)' },
+  consult: { bg: '#0d1620', hall: '#cfd8e0', room: '#e8eef2', room2: '#e1e8ed', grout: 'rgba(40,60,80,.08)', cap: '#d6dee6', edge: '#687888', nook: '#d7dfe6', light: 'rgba(240,250,255,.45)' },
+};
+
+// ── static layer (floors, walls, furniture): drawn once per floor plan / resize ──
+function buildCache() {
+  if (!G.L || !VIEW.w) return;
+  KS = VIEW.s * DPR;
+  cache.width = Math.max(1, Math.ceil(WW * KS)); cache.height = Math.max(1, Math.ceil(WH * KS));
+  const c = cache.getContext('2d');
+  c.setTransform(KS, 0, 0, KS, 0, 0);
+  drawStatic(c, G.L);
+}
+function drawStatic(c, L) {
+  const P = PAL[L.mode], dr = mulberry32(L.hosp ? 77 : 33);
+  c.fillStyle = P.hall; c.fillRect(0, 0, WW, WH);
+  if (!L.hosp) {   // wood planks
+    for (let y = 0; y < WH; y += 16) { let x = -dr() * 140; while (x < WW) { const len = 70 + dr() * 100; c.fillStyle = shade(P.hall, (dr() - .5) * 16); c.fillRect(x + .6, y + .6, len - 1.2, 14.8); x += len; } }
+  } else {         // speckled vinyl
+    for (let k = 0; k < 2600; k++) { c.fillStyle = dr() < .5 ? 'rgba(80,100,120,.16)' : 'rgba(255,255,255,.4)'; c.fillRect(dr() * WW, dr() * WH, 1.7, 1.7); }
+  }
+  // nook floor
+  c.fillStyle = P.nook; c.fillRect(314, BOT(), 172, WH - T - BOT());
+  if (!L.hosp) { c.strokeStyle = 'rgba(40,60,50,.12)'; c.lineWidth = 1; for (let x = 314; x < 486; x += 24) for (let y = BOT(); y < WH; y += 24) c.strokeRect(x, y, 24, 24); }
+  L.rooms.forEach(r => {
+    c.save(); c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+    c.fillStyle = r.type === 'ICU' ? '#e1ecf1' : P.room; c.fillRect(r.x, r.y, r.w, r.h);
+    const ts = 32;
+    for (let y = r.y, j = 0; y < r.y + r.h; y += ts, j++) for (let x = r.x, i = 0; x < r.x + r.w; x += ts, i++) if ((i + j) % 2 === 0) { c.fillStyle = r.type === 'ICU' ? '#d8e6ec' : P.room2; c.fillRect(x, y, ts, ts); }
+    c.strokeStyle = P.grout; c.lineWidth = 1;
+    for (let x = r.x; x < r.x + r.w; x += ts) { c.beginPath(); c.moveTo(x, r.y); c.lineTo(x, r.y + r.h); c.stroke(); }
+    for (let y = r.y; y < r.y + r.h; y += ts) { c.beginPath(); c.moveTo(r.x, y); c.lineTo(r.x + r.w, y); c.stroke(); }
+    if (L.hosp) for (let k = 0; k < 220; k++) { c.fillStyle = 'rgba(90,110,130,.12)'; c.fillRect(r.x + dr() * r.w, r.y + dr() * r.h, 1.5, 1.5); }
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2, g = c.createRadialGradient(cx, cy, 10, cx, cy, r.w * .75);
+    g.addColorStop(0, P.light); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(r.x, r.y, r.w, r.h);
+    c.restore();
+    c.fillStyle = shade(r.type === 'ICU' ? '#e1ecf1' : P.room, -8); c.fillRect(r.door.x, r.door.y, r.door.w, T);   // threshold
+  });
+  L.decor.forEach(o => drawDecor(c, o, L));
+  // walls: soft shadow pass, then crisp caps
+  c.save(); c.shadowColor = 'rgba(20,24,32,.42)'; c.shadowBlur = 9 * KS; c.shadowOffsetY = 4 * KS;
+  L.walls.forEach(w => { if (w.kind === 'wall') { c.fillStyle = P.cap; c.fillRect(w.x, w.y, w.w, w.h); } });
+  c.restore();
+  L.walls.forEach(w => {
+    if (w.kind === 'wall') {
+      c.fillStyle = P.cap; c.fillRect(w.x, w.y, w.w, w.h);
+      c.strokeStyle = P.edge; c.lineWidth = 1.4; c.strokeRect(w.x + .7, w.y + .7, w.w - 1.4, w.h - 1.4);
+      c.fillStyle = 'rgba(255,255,255,.45)'; if (w.w > w.h) c.fillRect(w.x + 2, w.y + 2, w.w - 4, 2); else c.fillRect(w.x + 2, w.y + 2, 2, w.h - 4);
+    } else if (w.kind === 'curtain') {
+      const horiz = w.w > w.h, len = horiz ? w.w : w.h;
+      c.fillStyle = '#7fc1b7'; c.fillRect(w.x + (horiz ? 0 : 3), w.y + (horiz ? 3 : 0), horiz ? w.w : w.w - 6, horiz ? w.h - 6 : w.h);
+      for (let s = 0; s < len; s += 9) { c.fillStyle = (s / 9) % 2 ? '#a3d6cd' : '#6fb2a8'; if (horiz) c.fillRect(w.x + s, w.y + 3, 5, w.h - 6); else c.fillRect(w.x + 3, w.y + s, w.w - 6, 5); }
+      c.fillStyle = '#5f6b78'; if (horiz) c.fillRect(w.x, w.y + w.h / 2 - .6, w.w, 1.2); else c.fillRect(w.x + w.w / 2 - .6, w.y, 1.2, w.h);
+    } else if (w.kind === 'glass') {
+      c.fillStyle = 'rgba(150,205,232,.6)'; c.fillRect(w.x + 2, w.y + 2, w.w - 4, w.h - 4);
+      c.strokeStyle = '#5d7f95'; c.lineWidth = 1.5; c.strokeRect(w.x + 1.5, w.y + 1.5, w.w - 3, w.h - 3);
+      c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1; c.beginPath();
+      if (w.w > w.h) { c.moveTo(w.x + 4, w.y + 5); c.lineTo(w.x + w.w - 4, w.y + 5); } else { c.moveTo(w.x + 5, w.y + 4); c.lineTo(w.x + 5, w.y + w.h - 4); }
+      c.stroke();
+    }
+  });
+  L.over.forEach(o => drawOver(c, o, L));
+}
+function BOT() { return 364; }
+function drawDecor(c, o, L) {
+  const r = o.r, room = o.room, N = room && room.back === 'N';
+  switch (o.t) {
+    case 'table': {   // exam table with a paper roll
+      box(c, { x: r.x - 2, y: r.y - 2, w: r.w + 4, h: r.h + 4 }, '#cbc3b4', '#8d8576', 7, true);
+      rr(c, r.x + 3, r.y + 3, r.w - 6, r.h - 6, 7); c.fillStyle = '#6c9ebd'; c.fill();
+      rr(c, r.x + 3, N ? r.y + 3 : r.y + r.h - 43, r.w - 6, 40, 7); c.fillStyle = '#80b1d0'; c.fill();
+      c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(r.x + 12, r.y + 6, r.w - 24, r.h - 12);
+      c.strokeStyle = 'rgba(0,0,0,.06)'; c.lineWidth = 1; for (let k = 1; k < 5; k++) { const yy = r.y + 6 + (r.h - 12) * k / 5; c.beginPath(); c.moveTo(r.x + 12, yy); c.lineTo(r.x + r.w - 12, yy); c.stroke(); }
+      rr(c, r.x + 8, N ? r.y - 5 : r.y + r.h - 1, r.w - 16, 6, 3); c.fillStyle = '#f4f3ee'; c.fill(); c.strokeStyle = '#b5ad9f'; c.stroke();
+      rr(c, r.x + 12, N ? r.y + r.h + 3 : r.y - 13, r.w - 24, 10, 2); c.fillStyle = '#a0988a'; c.fill();
+      break;
+    }
+    case 'counter': {
+      box(c, r, '#cdb994', '#8f7b58', 3, true);
+      const sy = r.y + r.h * .55; ell(c, r.x + r.w / 2, sy, 9, 12, 0, '#e9eef2', '#9aa5b1'); ell(c, r.x + r.w / 2, sy, 5, 7, 0, '#cfd8e0');
+      circ(c, r.x + 4, sy, 2.2, '#9aa5b1');
+      const my = N ? r.y + 8 : r.y + r.h - 26; rr(c, r.x + 5, my, r.w - 10, 18, 2); c.fillStyle = '#26323f'; c.fill(); c.fillStyle = '#5fb3d9'; c.fillRect(r.x + 8, my + 3, r.w - 16, 12);
+      rr(c, r.x + 6, N ? r.y + r.h - 22 : r.y + 6, 16, 12, 2); c.fillStyle = '#e8b4c8'; c.fill();   // glove box
+      break;
+    }
+    case 'chair': {
+      box(c, r, '#8ea883', '#5e7656', 6, true);
+      c.fillStyle = '#6f8b64'; if (N) c.fillRect(r.x + 3, r.y + 2, r.w - 6, 6); else c.fillRect(r.x + 3, r.y + r.h - 8, r.w - 6, 6);
+      break;
+    }
+    case 'stool': circ(c, o.p.x, o.p.y, 10, '#3e4a57', '#273039', 1.5); circ(c, o.p.x, o.p.y, 6.5, '#596878'); break;
+    case 'bin': circ(c, o.p.x, o.p.y, 8, '#c9ced4', '#8b939c', 1.2); circ(c, o.p.x, o.p.y, 4, '#e3e7eb'); break;
+    case 'leaf': {
+      c.fillStyle = '#b58a5a'; c.fillRect(r.x, r.y, r.w, r.h); c.strokeStyle = '#7d5b36'; c.lineWidth = 1; c.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
+      const d = room.door, hy = N ? d.y : d.y + T, sgn = N ? -1 : 1;
+      c.save(); c.setLineDash([3, 4]); c.strokeStyle = 'rgba(80,60,40,.28)'; c.beginPath();
+      c.arc(r.x, hy, r.h, N ? -Math.PI / 2 : 0, N ? 0 : Math.PI / 2); c.stroke(); c.restore();
+      circ(c, r.x + r.w / 2, hy + sgn * (r.h - 8), 1.8, '#e2c27a');
+      break;
+    }
+    case 'bunch': for (let k = 0; k < 4; k++) ell(c, r.x + 4 + k * 5, r.y + r.h / 2, 4, r.h / 2, 0, k % 2 ? '#a3d6cd' : '#6fb2a8'); break;
+    case 'bed': {
+      box(c, r, '#8b98a7', '#5c6877', 7, true);
+      rr(c, r.x + 4, r.y + 4, r.w - 8, r.h - 8, 6); c.fillStyle = '#f5f7fa'; c.fill();
+      rr(c, r.x + 10, N ? r.y + 8 : r.y + r.h - 32, r.w - 20, 24, 9); c.fillStyle = '#ffffff'; c.fill(); c.strokeStyle = '#d3dbe4'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#5c6877'; c.fillRect(r.x - 3, r.y + r.h * .3, 3, r.h * .38); c.fillRect(r.x + r.w, r.y + r.h * .3, 3, r.h * .38);
+      rr(c, r.x + 6, N ? r.y + r.h - 32 : r.y + 8, r.w - 12, 24, 4); c.fillStyle = room.blanket; c.fill();
+      c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(r.x + 6, N ? r.y + r.h - 22 : r.y + 18, r.w - 12, 3);
+      break;
+    }
+    case 'monitor': { box(c, r, '#1f2a37', '#0e151d', 4, true); c.fillStyle = '#08130e'; c.fillRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); break; }
+    case 'iv': {
+      circ(c, r.x + r.w / 2, r.y + r.h / 2, 7, '#7b8794', '#4b5563', 1);
+      rr(c, r.x + 1, r.y + 1, r.w - 2, r.h - 6, 3); c.fillStyle = 'rgba(190,225,245,.9)'; c.fill(); c.strokeStyle = '#7aa9c4'; c.stroke();
+      break;
+    }
+    case 'cart': {
+      box(c, r, '#d9dee4', '#7b8794', 3, true);
+      ['#60a5fa', '#f87171', '#facc15', '#4ade80'].forEach((col, k) => { c.fillStyle = col; c.fillRect(r.x + 3 + k * 7.6, r.y + 4, 6, r.h - 8); });
+      break;
+    }
+    case 'sharps': rr(c, r.x, r.y, r.w, r.h, 2); c.fillStyle = '#dc2626'; c.fill(); c.fillStyle = '#fde68a'; c.fillRect(r.x + 3, r.y + 2, r.w - 6, 2); break;
+    case 'vent': {
+      box(c, r, '#e5e9ee', '#7b8794', 5, true);
+      rr(c, r.x + 4, N ? r.y + 4 : r.y + r.h - 18, r.w - 8, 14, 2); c.fillStyle = '#0f1d2a'; c.fill();
+      circ(c, r.x + r.w / 2, N ? r.y + r.h - 11 : r.y + 11, 5, '#9aa5b1', '#64748b');
+      break;
+    }
+    case 'sink': box(c, r, '#d7dde3', '#7b8794', 3, true); ell(c, r.x + r.w / 2, r.y + r.h / 2, 7, 12, 0, '#eef2f5', '#9aa5b1'); break;
+    case 'rug': {
+      rr(c, r.x, r.y, r.w, r.h, 6); c.fillStyle = '#5f8f8a'; c.fill();
+      rr(c, r.x + 4, r.y + 4, r.w - 8, r.h - 8, 4); c.strokeStyle = '#e8d9b5'; c.lineWidth = 1.5; c.stroke();
+      c.fillStyle = 'rgba(232,217,181,.5)'; for (let x = r.x + 14; x < r.x + r.w - 10; x += 22) { c.beginPath(); c.moveTo(x, r.y + r.h / 2); c.lineTo(x + 5, r.y + r.h / 2 - 5); c.lineTo(x + 10, r.y + r.h / 2); c.lineTo(x + 5, r.y + r.h / 2 + 5); c.closePath(); c.fill(); }
+      break;
+    }
+    case 'desk': {
+      box(c, r, '#b8936a', '#7d5b36', 5, true);
+      c.fillStyle = '#26323f'; [r.x + 24, r.x + 74].forEach(x => { rr(c, x, r.y + 4, 30, 12, 2); c.fill(); });
+      c.fillStyle = '#5fb3d9'; [r.x + 26, r.x + 76].forEach(x => c.fillRect(x, r.y + 6, 26, 8));
+      c.fillStyle = '#f5f1e6'; c.fillRect(r.x + 6, r.y + 6, 12, 15); c.fillRect(r.x + r.w - 18, r.y + 8, 12, 12);
+      c.fillStyle = 'rgba(40,25,10,.55)'; c.font = '700 7px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText("NURSES' STATION", r.x + r.w / 2, r.y + r.h - 4);
+      break;
+    }
+    case 'deskchair': circ(c, o.p.x, o.p.y, 11, '#334155', '#1e293b', 1.5); rr(c, o.p.x - 9, o.p.y + 5, 18, 6, 3); c.fillStyle = '#1e293b'; c.fill(); break;
+    case 'plant': {
+      circ(c, r.x + r.w / 2, r.y + r.h / 2, 10, '#b5643c', '#7c3f22', 1.2);
+      for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; ell(c, r.x + r.w / 2 + Math.cos(a) * 6, r.y + r.h / 2 + Math.sin(a) * 6, 7, 3.6, a, k % 2 ? '#3f8f4f' : '#56a865'); }
+      circ(c, r.x + r.w / 2, r.y + r.h / 2, 3, '#2f6e3b');
+      break;
+    }
+    case 'cooler': box(c, r, '#e8edf2', '#7b8794', 4, true); circ(c, r.x + r.w / 2, r.y + r.h / 2, 7, 'rgba(120,190,240,.85)', '#5a9fd0'); break;
+    case 'bench': {
+      box(c, r, '#9b7650', '#6b4f33', 4, true);
+      c.fillStyle = '#6aa0b8'; for (let y = r.y + 4; y < r.y + r.h - 6; y += 22) { rr(c, r.x + 3, y, r.w - 6, 18, 4); c.fill(); }
+      break;
+    }
+    case 'stripes': {
+      [['#e06a5f', 289, 'ED'], ['#5a8fd6', 300, 'ICU'], ['#5fae6e', 311, 'FLOORS']].forEach(s => {
+        c.fillStyle = rgba(s[0], .55); c.fillRect(60, s[1], 680, 4);
+        c.fillStyle = rgba(s[0], .8); c.font = '800 8px system-ui,sans-serif'; c.textAlign = 'left'; c.fillText(s[2], 64, s[1] - 1.5);
+      });
+      break;
+    }
+    case 'ws': {
+      box(c, r, '#c9d1da', '#6b7a8a', 4, true);
+      c.fillStyle = '#26323f'; rr(c, r.x + 40, r.y + 4, 32, 14, 2); c.fill(); c.fillStyle = '#5fb3d9'; c.fillRect(r.x + 42, r.y + 6, 28, 10);
+      c.fillStyle = 'rgba(30,40,55,.6)'; c.font = '700 7px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText('WORKSTATION', r.x + r.w / 2, r.y + r.h - 3);
+      circ(c, r.x + r.w / 2, r.y + r.h + 16, 10, '#334155', '#1e293b', 1.5);
+      break;
+    }
+    case 'crash': box(c, r, '#dc2626', '#7f1d1d', 3, true); c.fillStyle = '#fee2e2'; c.fillRect(r.x + 4, r.y + 4, r.w - 8, 4); c.fillRect(r.x + 4, r.y + 11, r.w - 8, 4); break;
+    case 'linen': box(c, r, '#9aa5b1', '#4b5563', 3, true); c.fillStyle = '#f1f5f9'; c.fillRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); c.fillStyle = '#bfdbfe'; c.fillRect(r.x + 3, r.y + 9, r.w - 6, 4); break;
+    case 'gurney': {
+      box(c, r, '#8b98a7', '#5c6877', 6, true);
+      rr(c, r.x + 3, r.y + 3, r.w - 6, r.h - 6, 5); c.fillStyle = '#f5f7fa'; c.fill();
+      rr(c, r.x + 6, r.y + 6, r.w - 12, 16, 6); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#d3dbe4'; c.stroke();
+      break;
+    }
+    case 'wheelchair': {
+      box(c, { x: r.x + 4, y: r.y + 3, w: r.w - 8, h: r.h - 6 }, '#334155', '#1e293b', 4, true);
+      c.fillStyle = '#111827'; c.fillRect(r.x, r.y + 2, 4, r.h - 4); c.fillRect(r.x + r.w - 4, r.y + 2, 4, r.h - 4);
+      break;
+    }
+  }
+}
+function drawOver(c, o, L) {   // things that sit on the walls
+  const room = o.room;
+  if (o.t === 'sign') {
+    const d = room.door, x = d.x + d.w + 7, y = room.back === 'N' ? d.y + T + 3 : d.y - 19;
+    c.font = '800 9px system-ui,sans-serif'; const w = c.measureText(room.label.toUpperCase()).width + 12;
+    box(c, { x, y, w, h: 16 }, L.hosp ? (room.type === 'ED' ? '#9a3412' : room.type === 'ICU' ? '#991b1b' : '#166534') : '#0c4a6e', null, 4, true);
+    c.fillStyle = '#fff'; c.textAlign = 'left'; c.fillText(room.label.toUpperCase(), x + 6, y + 11.5);
+  } else if (o.t === 'window') {
+    const y = room.back === 'S' ? WH - T : room.y - T;
+    c.fillStyle = 'rgba(160,210,240,.95)'; c.fillRect(room.x + 50, y + 3, room.w - 100, T - 6);
+    c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(room.x + 50, y + 4, room.w - 100, 2);
+    c.fillStyle = '#5d7f95'; for (let x = room.x + 50; x <= room.x + room.w - 50; x += (room.w - 100) / 3) c.fillRect(x - .75, y + 3, 1.5, T - 6);
+  } else if (o.t === 'slider') {
+    const d = room.door; c.fillStyle = 'rgba(150,205,232,.75)'; c.strokeStyle = '#5d7f95'; c.lineWidth = 1;
+    [[d.x - 30, 28], [d.x + d.w + 2, 28]].forEach(p => { c.fillRect(p[0], d.y + 4, p[1], T - 8); c.strokeRect(p[0], d.y + 4, p[1], T - 8); });
+  } else if (o.t === 'elevator') {
+    c.fillStyle = '#9ca9b6'; c.fillRect(356, WH - T - 4, 88, T + 4); c.fillStyle = '#c7d0d9'; c.fillRect(360, WH - T - 2, 39, T); c.fillRect(401, WH - T - 2, 39, T);
+    c.fillStyle = '#334155'; c.font = '800 8px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText('ELEVATOR', 400, WH - T - 8);
+    circ(c, 452, WH - T - 10, 3, '#fbbf24', '#92400e');
+  }
+}
+
+// ── dynamic layer ─────────────────────────────────────────────────
+function render() {
+  const cw = cv.width, ch = cv.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = PAL[G.mode || 'clinic'].bg; ctx.fillRect(0, 0, cw, ch);
+  if (!G.L || !VIEW.w) return;
+  const sh = G.shake > 0 ? G.shake * 18 : 0, sx = sh ? (Math.random() - .5) * sh : 0, sy = sh ? (Math.random() - .5) * sh : 0;
+  const ox = (VIEW.ox + sx) * DPR, oy = (VIEW.oy + sy) * DPR, k = VIEW.s * DPR;
+  ctx.drawImage(cache, Math.round(ox), Math.round(oy));
+  ctx.setTransform(k, 0, 0, k, Math.round(ox), Math.round(oy));
+  const t = G.time, now = performance.now() / 1000, ai = activeRoom(), acc = ACC();
+  G.L.rooms.forEach((room, i) => {
+    const p = G.rooms[i] && G.rooms[i].pat;
+    if (!p) { ctx.fillStyle = 'rgba(14,20,32,.24)'; ctx.fillRect(room.x, room.y, room.w, room.h); }
+    else if (p.left < p.max * .3) { ctx.fillStyle = 'rgba(239,68,68,' + (.07 + .06 * Math.sin(now * 8)) + ')'; ctx.fillRect(room.x, room.y, room.w, room.h); }
+    if (p && room.mon) drawEcg(room.mon, now, p.left < p.max * .3);
+  });
+  if (ai >= 0) {
+    const r = G.L.rooms[ai];
+    ctx.save(); ctx.strokeStyle = acc; ctx.lineWidth = 4; ctx.globalAlpha = .6 + .3 * Math.sin(now * 5); ctx.strokeRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); ctx.restore();
+  }
+  G.L.rooms.forEach((room, i) => { const p = G.rooms[i] && G.rooms[i].pat; if (p) drawPatient(room, p, now); });
+  G.leavers.forEach(l => drawWalker(l));
+  drawDoctor(G.doc, now);
+  G.L.rooms.forEach((room, i) => drawBadge(room, G.rooms[i] ? G.rooms[i].pat : null, now, i === ai));
+  G.parts.forEach(q => {
+    const a = clamp(q.life / q.max, 0, 1);
+    ctx.globalAlpha = q.kind === 'puff' ? a * .55 : a;
+    if (q.kind === 'puff') circ(ctx, q.x, q.y, q.sz * (1.6 - a * .6), q.col);
+    else { ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.life * 8); ctx.fillStyle = q.col; ctx.fillRect(-q.sz / 2, -q.sz / 2, q.sz, q.sz); ctx.restore(); }
+  });
+  ctx.globalAlpha = 1;
+  G.floats.forEach(f => {
+    ctx.globalAlpha = clamp(f.life / .5, 0, 1); ctx.font = '900 22px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(f.txt, f.x, f.y); ctx.fillStyle = f.col; ctx.fillText(f.txt, f.x, f.y);
+  });
+  ctx.globalAlpha = 1;
+}
+function drawEcg(m, now, urgent) {
+  const x0 = m.x + 4, w = m.w - 8, yc = m.y + m.h / 2, col = urgent && Math.sin(now * 10) > 0 ? '#f87171' : '#4ade80';
+  ctx.save(); ctx.beginPath(); ctx.rect(m.x + 3, m.y + 3, m.w - 6, m.h - 6); ctx.clip();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.3; ctx.beginPath();
+  for (let i = 0; i <= w; i += 1) {
+    const ph = ((i / w) * 2 - now * (urgent ? 1.6 : 1)) % 1, q = ph < 0 ? ph + 1 : ph;
+    let y = 0; if (q > .40 && q < .44) y = -7; else if (q >= .44 && q < .48) y = 5; else if (q > .62 && q < .72) y = -2;
+    if (i === 0) ctx.moveTo(x0 + i, yc + y); else ctx.lineTo(x0 + i, yc + y);
+  }
+  ctx.stroke(); ctx.restore();
+}
+function moodOf(p) { const f = p.left / p.max; return f > .6 ? 'calm' : f > .3 ? 'uneasy' : 'upset'; }
+function drawPatient(room, p, now) {
+  const L = p.look, b = room.bed, hx = room.head.x, hy = room.head.y, dir = room.back === 'N' ? 1 : -1, sc = L.kid ? .84 : 1;
+  const breathe = Math.sin(now * 2.3 + p.id) * 1.1;
+  if (G.mode === 'consult') {
+    const y0 = hy + dir * 10, y1 = room.back === 'N' ? b.y + b.h - 6 : b.y + 6;
+    rr(ctx, b.x + 5, Math.min(y0, y1), b.w - 10, Math.abs(y1 - y0), 8); ctx.fillStyle = room.blanket; ctx.fill();
+    ell(ctx, hx, hy + dir * 44 * sc, 16 + breathe * .5, 26 * sc, 0, 'rgba(255,255,255,.2)');
+    ctx.fillStyle = 'rgba(0,0,0,.08)'; ctx.fillRect(b.x + 5, y0 + dir * 4 - 1, b.w - 10, 2);
+    ell(ctx, hx - 19, hy + dir * 30 * sc, 4.5, 12 * sc, 0, L.skin); ell(ctx, hx + 19, hy + dir * 30 * sc, 4.5, 12 * sc, 0, L.skin);
+  } else {
+    ctx.fillStyle = L.pants;
+    rr(ctx, hx - 12, room.back === 'N' ? hy + 40 * sc : hy - 88 * sc, 10, 48 * sc, 5); ctx.fill();
+    rr(ctx, hx + 2, room.back === 'N' ? hy + 40 * sc : hy - 88 * sc, 10, 48 * sc, 5); ctx.fill();
+    ell(ctx, hx, hy + dir * 26 * sc, (17 + breathe * .4) * sc, 21 * sc, 0, L.gown, 'rgba(0,0,0,.15)');
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; for (let k = 0; k < 6; k++) circ(ctx, hx - 9 + (k % 3) * 9, hy + dir * (18 + Math.floor(k / 3) * 12) * sc, 1.4);
+    ell(ctx, hx - 17 * sc, hy + dir * 26 * sc, 4.5, 11 * sc, 0, L.skin); ell(ctx, hx + 17 * sc, hy + dir * 26 * sc, 4.5, 11 * sc, 0, L.skin);
+  }
+  drawHead(ctx, hx, hy, 11 * sc, L, moodOf(p), now);
+  const age = G.time - p.t0;
+  if (age < 1.8) bubble(hx + 18, hy - 24 - Math.abs(Math.sin(age * 8)) * 7, '!', ACC());
+  else if (p.left < p.max * .3) { const yy = hy - 6; ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.moveTo(hx + 12, yy - 6); ctx.quadraticCurveTo(hx + 16, yy, hx + 12, yy + 2); ctx.quadraticCurveTo(hx + 8, yy, hx + 12, yy - 6); ctx.fill(); }
+}
+function drawHead(c, x, y, r, L, mood, now) {
+  c.fillStyle = L.hair;
+  if (L.long) ell(c, x, y + r * .35, r * 1.2, r * 1.2, 0, L.hair);
+  circ(c, x, y, r, L.skin, 'rgba(0,0,0,.2)', 1);
+  if (!L.bald) { c.fillStyle = L.hair; c.beginPath(); c.arc(x, y - r * .05, r * 1.04, Math.PI * 1.02, Math.PI * 1.98); c.quadraticCurveTo(x, y - r * .45, x - r * 1.03, y - r * .1); c.fill(); }
+  else { ell(c, x - r * .9, y - r * .1, r * .25, r * .4, 0, L.hair); ell(c, x + r * .9, y - r * .1, r * .25, r * .4, 0, L.hair); }
+  const ey = y + r * .12;
+  circ(c, x - r * .36, ey, r * .13, '#1f2933'); circ(c, x + r * .36, ey, r * .13, '#1f2933');
+  if (L.glasses) { c.strokeStyle = '#1f2933'; c.lineWidth = .9; circ(c, x - r * .36, ey, r * .27, null, '#1f2933', .9); circ(c, x + r * .36, ey, r * .27, null, '#1f2933', .9); }
+  c.strokeStyle = '#7a3b2e'; c.lineWidth = 1.3; c.lineCap = 'round'; c.beginPath();
+  const my = y + r * .55;
+  if (mood === 'ok') { c.arc(x, my - r * .2, r * .32, .2 * Math.PI, .8 * Math.PI); c.stroke(); circ(c, x - r * .6, my - r * .15, r * .16, 'rgba(244,114,182,.5)'); circ(c, x + r * .6, my - r * .15, r * .16, 'rgba(244,114,182,.5)'); }
+  else if (mood === 'calm') { c.moveTo(x - r * .22, my); c.quadraticCurveTo(x, my + r * .12, x + r * .22, my); c.stroke(); }
+  else if (mood === 'uneasy') { c.moveTo(x - r * .22, my); c.lineTo(x + r * .22, my); c.stroke(); }
+  else { c.arc(x, my + r * .22, r * .26, 1.15 * Math.PI, 1.85 * Math.PI); c.stroke();
+    if (mood === 'bad' || mood === 'upset') { c.beginPath(); c.moveTo(x - r * .55, ey - r * .34); c.lineTo(x - r * .18, ey - r * .2); c.moveTo(x + r * .55, ey - r * .34); c.lineTo(x + r * .18, ey - r * .2); c.stroke(); } }
+  c.lineCap = 'butt';
+}
+function bubble(x, y, txt, col) {
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 4 * VIEW.s * DPR;
+  rr(ctx, x - 10, y - 11, 20, 20, 7); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 6, y + 8); ctx.lineTo(x - 10, y + 15); ctx.lineTo(x - 1, y + 8); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = col; ctx.font = '900 15px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(txt, x, y + 4.5);
+}
+function drawDoctor(d, now) {
+  const sw = d.moving ? Math.sin(d.ph * 2.2) : 0, acc = ACC();
+  ctx.save(); ctx.translate(d.x, d.y);
+  ctx.globalAlpha = .7; ell(ctx, 0, 3, 20, 13, 0, null); ctx.strokeStyle = acc; ctx.lineWidth = 2.2; ctx.stroke(); ctx.globalAlpha = 1;
+  ell(ctx, 0, 4, 15, 9.5, 0, 'rgba(0,0,0,.24)');
+  ctx.rotate(d.a);
+  ell(ctx, 5 + sw * 6, -6, 5, 3.4, 0, '#334155'); ell(ctx, 5 - sw * 6, 6, 5, 3.4, 0, '#334155');
+  ell(ctx, -sw * 5, -14, 6.5, 4.5, 0, '#eef2f6', '#94a3b8'); ell(ctx, sw * 5, 14, 6.5, 4.5, 0, '#eef2f6', '#94a3b8');
+  circ(ctx, 4 - sw * 5, -15, 3, '#e8b896'); circ(ctx, 4 + sw * 5, 15, 3, '#e8b896');
+  ell(ctx, 0, 0, 10.5, 15.5, 0, '#f8fafc', '#94a3b8');
+  ctx.fillStyle = G.mode === 'consult' ? '#0f766e' : '#1d6fa5'; ctx.beginPath(); ctx.moveTo(4, -6); ctx.lineTo(10.4, 0); ctx.lineTo(4, 6); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(1.5, 0, 8.5, -1.25, 1.25); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(1.5 + 8.5 * Math.cos(1.25), 8.5 * Math.sin(1.25)); ctx.quadraticCurveTo(9, 10, 7, 12); ctx.stroke(); circ(ctx, 7, 12.5, 2.2, '#cbd5e1', '#475569', 1);
+  ctx.fillStyle = '#e2e8f0'; ctx.fillRect(-3, -11, 4, 3);   // badge
+  circ(ctx, -.5, 0, 8.6, '#3b2a1e'); circ(ctx, 2.4, 0, 6.6, '#e8b896'); circ(ctx, 0, 0, 8.6, null, 'rgba(0,0,0,.25)', .8);
+  ctx.restore();
+}
+function drawWalker(l) {
+  ctx.save(); ctx.globalAlpha = clamp(l.alpha, 0, 1); ctx.translate(l.x, l.y);
+  ell(ctx, 0, 4, 12, 7.5, 0, 'rgba(0,0,0,.2)');
+  const sw = Math.sin(l.ph);
+  ctx.save(); ctx.rotate(l.a);
+  ell(ctx, 4 + sw * 5, -5, 4, 3, 0, '#475569'); ell(ctx, 4 - sw * 5, 5, 4, 3, 0, '#475569');
+  ell(ctx, 0, 0, 9, 12.5, 0, l.look.gown, 'rgba(0,0,0,.15)');
+  ctx.restore();
+  drawHead(ctx, 0, -2, 9 * (l.look.kid ? .85 : 1), l.look, l.mood, 0);
+  ctx.restore();
+}
+function drawBadge(room, p, now, active) {
+  const x = room.badge.x, y = room.badge.y;
+  ctx.save();
+  if (!p) {
+    ctx.globalAlpha = .6; circ(ctx, x, y, 13, 'rgba(255,255,255,.7)', 'rgba(100,116,139,.6)', 1);
+    ctx.fillStyle = '#64748b'; ctx.font = '800 ' + (room.short.length > 1 ? 8.5 : 12) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(room.short, x, y + (room.short.length > 1 ? 3 : 4.2));
+  } else {
+    const f = clamp(p.left / p.max, 0, 1), col = f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444', pulse = f < .3 ? 1 + .09 * Math.sin(now * 12) : 1, rr0 = 16 * pulse;
+    ctx.shadowColor = f < .3 ? 'rgba(239,68,68,.8)' : 'rgba(0,0,0,.35)'; ctx.shadowBlur = (f < .3 ? 12 : 5) * VIEW.s * DPR;
+    circ(ctx, x, y, rr0, '#fff'); ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 4.2; ctx.strokeStyle = '#e2e8f0'; ctx.beginPath(); ctx.arc(x, y, rr0 - 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(x, y, rr0 - 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke(); ctx.lineCap = 'butt';
+    if (active) { ctx.strokeStyle = ACC(); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, rr0 + 3, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = '#0f172a'; ctx.font = '900 ' + (room.short.length > 1 ? 9 : 13) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(room.short, x, y + (room.short.length > 1 ? 3.2 : 4.6));
+  }
+  ctx.restore();
+}
+
+// ── view / resize ─────────────────────────────────────────────────
+const stage = $('stage');
+function layoutView() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.max(1, Math.round(w * DPR)); cv.height = Math.max(1, Math.round(h * DPR));
+  const s = Math.max(.1, Math.min((w - 8) / WW, (h - 8) / WH));
+  const free = h - WH * s;
+  VIEW = { s, ox: Math.round((w - WW * s) / 2), oy: Math.round(TOUCH && free > 90 ? Math.min(12, free / 2) : free / 2), w, h };
+  VIEW.thumb = h - (VIEW.oy + WH * s);   // free strip under the map (touch): the idle joystick sits there
+  buildCache(); placeJoy();
+}
+if (window.ResizeObserver) new ResizeObserver(() => layoutView()).observe(stage); else addEventListener('resize', layoutView);
+
+// ── HUD + panel ───────────────────────────────────────────────────
+const chart = $('chart'), ordersEl = $('orders');
+function updateHud() {
+  const M = MODES[G.mode || 'clinic'];
+  $('modeIcon').textContent = M.icon; $('modeName').textContent = M.name.toUpperCase();
+  $('score').textContent = G.score;
+  $('streak').textContent = G.streak >= 2 ? '🔥×' + G.streak : '';
+  let h = ''; for (let k = 0; k < LIVES; k++) h += k < G.lives ? '♥' : '<span class="lost">♥</span>';
+  $('hearts').innerHTML = h;
+  $('prog').textContent = G.seen + '/' + G.total;
+  $('blocks').innerHTML = G.blocks.map((b, i) => i < G.bi ? '<i class="done">' + MODES[b.mode].icon + '</i>' : i === G.bi ? '<i class="cur">' + MODES[b.mode].icon + '</i>' : '<i>?</i>').join('');
+  $('ordMode').textContent = G.mode ? M.name.toUpperCase() + ' ORDERS' : '';
+  $('muteBtn').textContent = AUD.muted ? '🔇' : '🔊';
+}
+function buildOrders() {
+  const acts = visActs();
+  ordersEl.innerHTML = acts.map((a, k) => '<button class="ord" data-act="' + a.id + '" style="--c:' + a.col + '"><span class="ic">' + a.icon + '</span><span class="nm">' + esc(a.name) + '</span><span class="sn">' + esc(a.short || a.name) + '</span>' + (TOUCH ? '' : '<kbd>' + KEYS[k] + '</kbd>') + '</button>').join('');
+  ordersEl.querySelectorAll('.ord').forEach(b => tapify(b, () => { if (!order(b.dataset.act)) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); } }));
+  chartSig = '';
+}
+function tapify(el, fn) {   // fires on release over the same button; works while another finger holds the joystick
+  let id = null;
+  el.addEventListener('pointerdown', e => { id = e.pointerId; el.classList.add('down'); e.preventDefault(); audioInit(); });
+  el.addEventListener('pointerup', e => { if (e.pointerId !== id) return; id = null; el.classList.remove('down'); fn(); });
+  const off = () => { id = null; el.classList.remove('down'); };
+  el.addEventListener('pointerleave', off); el.addEventListener('pointercancel', off);
+}
+let chartSig = '';
+function setBar(i, f) { if (!i) return; i.style.width = clamp(f * 100, 0, 100) + '%'; i.style.background = f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444'; }
+function renderPanel() {
+  const i = (G.state === 'play' || G.state === 'paused') ? activeRoom() : -1, p = i >= 0 ? G.rooms[i].pat : null;
+  const occ = G.rooms.map((r, k) => ({ r, k })).filter(o => o.r.pat).sort((a, b) => a.r.pat.left - b.r.pat.left);
+  const sig = (G.mode || '') + '|' + G.state + '|' + i + '|' + (p ? p.id : 'c' + occ.map(o => o.r.pat.id).join(','));
+  if (sig !== chartSig) {
+    chartSig = sig;
+    ordersEl.classList.toggle('off', !p);
+    if (!G.mode) { chart.innerHTML = '<div class="hint">Charts show up here.</div>'; return; }
+    if (p) {
+      const room = G.L.rooms[i], P = p.c.p, loc = P.loc || (G.mode === 'clinic' ? 'EXAM' : room.type);
+      chart.innerHTML = '<div class="ch-top"><span class="room">' + esc(room.label) + '</span><span class="loc ' + loc + '">' + (loc === 'FLOOR' ? 'Floor' : loc === 'EXAM' ? 'Clinic' : loc) + '</span><span class="sp"></span><span>' + (G.mode === 'consult' ? '📟 consult' : '📋 new visit') + '</span></div>'
+        + '<span class="bar"><i></i></span><div class="cc">' + (P.age != null ? '<span class="who">' + P.age + ' ' + P.sex + '</span>' : '') + esc(P.text) + '</div>'
+        + (DEBUG ? '<div class="dbg">key: ' + p.c.ans + (p.c.alt ? ' / ' + p.c.alt.join(' / ') : '') + '</div>' : '');
+    } else {
+      const head = i >= 0 ? '<div class="hint">' + esc(G.L.rooms[i].label) + ' is empty.</div>' : '<div class="hint">' + (TOUCH ? 'Drag on the map to walk' : 'WASD / arrows to walk') + ' into a room to order.</div>';
+      chart.innerHTML = head + (!occ.length ? '<div class="census empty">' + (G.mode === 'clinic' ? 'Waiting for patients to check in…' : 'The pager is quiet… for now.') + '</div>'
+        : '<div class="census">' + occ.map(o => '<div class="cz" data-room="' + o.k + '"><b>' + esc(G.L.rooms[o.k].label) + '</b><span>' + esc((o.r.pat.c.p.age != null ? o.r.pat.c.p.age + o.r.pat.c.p.sex + ' · ' : '') + o.r.pat.c.p.text) + '</span><em class="bar"><i></i></em></div>').join('') + '</div>');
+    }
+  }
+  if (p) setBar(chart.querySelector('.bar i'), p.left / p.max);
+  else chart.querySelectorAll('.cz').forEach(el => { const q = G.rooms[+el.dataset.room] && G.rooms[+el.dataset.room].pat; if (q) setBar(el.querySelector('i'), q.left / q.max); });
+}
+function flashChart(kind) { chart.classList.remove('flash-ok', 'flash-bad'); void chart.offsetWidth; chart.classList.add('flash-' + kind); }
+let toastT = null;
+function toast(txt, col) {
+  const el = $('toast'); el.textContent = txt; el.style.color = col || '#fff'; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2300);
+}
+
+// ── overlay cards ─────────────────────────────────────────────────
+const scr = $('scr');
+function showScr(html, wire) { scr.innerHTML = '<div class="card">' + html + '</div>'; scr.classList.add('on'); if (wire) wire(); }
+function hideScr() { scr.classList.remove('on'); scr.innerHTML = ''; }
+const on = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
+const chips = acts => acts.map(a => '<span class="chip" style="--c:' + a.col + '">' + a.icon + ' ' + esc(a.name) + '</span>').join('');
+function showTitle() {
+  G.state = 'title';
+  showScr('<div class="logo"><span>🏥</span><span class="swap">⇄</span><span>📟</span></div><h1>Uro Rush</h1><p class="sub">Clinic and the consult pager. One shift, switching at random.</p>'
+    + '<ul class="how"><li>' + (TOUCH ? '<b>Drag anywhere on the map</b>: a joystick appears under your thumb.' : '<b>WASD / arrow keys</b> to walk (or drag on the map).') + '</li>'
+    + '<li>Walk into a room, read the chart, ' + (TOUCH ? 'tap' : 'click or press the key for') + ' the right <b>first step</b>.</li>'
+    + '<li><b>Clinic and consults have different orders</b>, and you won\'t know which one comes next.</li>'
+    + '<li>' + LIVES + ' ♥: a wrong order or a patient who gives up costs one.</li></ul>'
+    + (G.best ? '<div class="tiny">Best shift: ' + G.best + '</div>' : '')
+    + '<div class="btns"><button class="big" id="goBtn">Start shift ▸</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>',
+    () => { on('goBtn', startShift); on('exitBtn', exitGame); });
+}
+function showCard(cd) {
+  G.state = 'card'; G.card = cd;
+  const M = MODES[cd.mode];
+  let art, title, sub;
+  if (cd.mode === 'consult') {
+    art = '<div class="pager"><div class="lcd">STAT CONSULT<br><span>' + cd.n + ' WAITING</span></div><div class="btn3"><i></i><i></i><i></i></div></div>';
+    title = cd.kind === 'first' ? '📟 You\'re on call' : cd.kind === 'switch' ? '📟 Paged!' : '📟 Still on the pager';
+    sub = cd.kind === 'switch' ? 'Clinic is on hold. ' + cd.n + ' consults: ED, floor and ICU.' : cd.n + ' consults: ED, floor and ICU.';
+    if (cd.kind !== 'tier') sfx.pager(); else sfx.fanfare();
+  } else {
+    art = '<div class="csign"><small>OUTPATIENT</small>CLINIC OPEN</div>';
+    title = cd.kind === 'first' ? '🏥 Clinic day' : cd.kind === 'switch' ? '🏥 Back to clinic' : '🏥 Busy clinic';
+    sub = cd.n + ' patients checked in and waiting.';
+    if (cd.kind !== 'tier') sfx.bell(); else sfx.fanfare();
+  }
+  const acts = cd.fresh ? visActs() : cd.newActs;
+  const lbl = cd.fresh ? M.name.toUpperCase() + ' ORDERS' : 'NEW ORDERS UNLOCKED';
+  showScr(art + '<h2>' + title + '</h2><p class="sub">' + esc(sub) + '</p>'
+    + (acts.length ? '<div class="newacts"><span class="lbl">' + lbl + '</span>' + chips(acts) + '</div>' : '')
+    + '<div class="btns"><button class="big" id="goBtn">' + (cd.mode === 'consult' ? 'Go see them ▸' : 'Start seeing patients ▸') + '</button></div>', () => on('goBtn', contCard));
+}
+function contCard() { if (G.state !== 'card') return; hideScr(); G.state = 'play'; G.card = null; chartSig = ''; }
+function togglePause() {
+  if (G.state === 'play') {
+    G.state = 'paused'; joyReset();
+    showScr('<h2>⏸ Paused</h2><p class="sub">' + MODES[G.mode].icon + ' ' + MODES[G.mode].name + ' · ' + G.score + ' pts · ' + G.seen + '/' + G.total + ' patients</p>'
+      + '<div class="btns"><button class="big" id="resBtn">Resume ▸</button></div><div class="btns"><button class="alt" id="sndBtn">Sound: ' + (AUD.muted ? 'Off' : 'On') + '</button><button class="alt" id="rstBtn">Restart shift</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>',
+      () => { on('resBtn', togglePause); on('sndBtn', () => { toggleMute(); $('sndBtn').textContent = 'Sound: ' + (AUD.muted ? 'Off' : 'On'); }); on('rstBtn', () => { hideScr(); startShift(); }); on('exitBtn', exitGame); });
+  } else if (G.state === 'paused') { hideScr(); G.state = 'play'; }
+}
+function showOver() {
+  joyReset();
+  const r = rewards(), by = m => { const l = G.log.filter(x => x.mode === m); return [l.filter(x => x.kind === 'ok').length, l.length]; };
+  const c = by('clinic'), k = by('consult');
+  const miss = G.log.filter(x => x.kind !== 'ok');
+  const missHtml = miss.length ? '<div class="misses"><span class="lbl">REVIEW · ' + miss.length + ' MISSED</span>' + miss.map(x => {
+    const best = actOf(x.mode, x.ans), you = x.chose ? actOf(x.mode, x.chose) : null, alts = x.alt.map(id => actOf(x.mode, id).name);
+    return '<div class="miss"><span class="mi">' + MODES[x.mode].icon + '</span><div><div class="mcc">' + esc(x.cc) + '</div><div class="mans">' + (you ? 'You: ' + you.icon + ' ' + esc(you.name) : 'Ran out of time') + ' → <b>' + best.icon + ' ' + esc(best.name) + '</b>' + (alts.length ? ' (or ' + esc(alts.join(', ')) + ')' : '') + '</div></div></div>';
+  }).join('') + '</div>' : '<div class="tiny">No misses. Clean shift. 👏</div>';
+  showScr('<h2>' + (G.done ? (miss.length ? '🌙 Shift complete' : '🏆 Perfect shift') : '💔 Sent home early') + '</h2>'
+    + '<div class="score">' + G.score + '</div><div class="tiny">' + (G.newBest ? 'New best!' : 'Best: ' + G.best) + '</div>'
+    + '<div class="stats"><span>🏥 Clinic ' + c[0] + '/' + c[1] + '</span><span>📟 Consults ' + k[0] + '/' + k[1] + '</span><span>🔥 Best streak ' + G.bestStreak + '</span></div>'
+    + (EMBED ? '<div class="reward">+' + r.coins + ' 💰 · +' + r.xp + ' XP</div>' : '')
+    + missHtml
+    + '<div class="btns">' + (EMBED ? '<button class="big" id="claimBtn">Claim ▸</button>' : '') + '<button class="' + (EMBED ? 'alt' : 'big') + '" id="againBtn">Play again</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>'
+    + (EMBED ? '' : '<div class="tiny">Coins and XP are claimed when you play from the UroStudyHub arcade.</div>'),
+    () => { on('claimBtn', () => { claim(); $('claimBtn').disabled = true; $('claimBtn').textContent = 'Claimed ✓'; }); on('againBtn', () => { hideScr(); startShift(); }); on('exitBtn', exitGame); });
+}
+
+// ── input ─────────────────────────────────────────────────────────
+const joyBase = $('joyBase'), knob = $('joyKnob'), R_JOY = 56;
+function placeJoy() {
+  const show = joy.on || (TOUCH && G.state === 'play');
+  joyBase.classList.toggle('show', show); joyBase.classList.toggle('idle', !joy.on);
+  if (joy.on) { joyBase.style.left = joy.ox + 'px'; joyBase.style.top = joy.oy + 'px'; }
+  else {
+    const roomy = VIEW.thumb > 110;
+    joyBase.style.left = Math.max(74, VIEW.w * (roomy ? .22 : .13)) + 'px';
+    joyBase.style.top = (roomy ? VIEW.h - VIEW.thumb / 2 - 8 : VIEW.h - Math.max(74, VIEW.h * .16)) + 'px';
+    knob.style.transform = '';
+  }
+}
+function joyReset() { joy.id = null; joy.on = false; joy.vx = joy.vy = 0; placeJoy(); }
+stage.addEventListener('pointerdown', e => {
+  if (joy.id !== null || G.state !== 'play') return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  joy.id = e.pointerId; try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  const r = stage.getBoundingClientRect(); joy.ox = e.clientX - r.left; joy.oy = e.clientY - r.top; joy.on = true; joy.vx = joy.vy = 0;
+  placeJoy(); e.preventDefault(); audioInit();
+});
+stage.addEventListener('pointermove', e => {
+  if (e.pointerId !== joy.id) return;
+  const r = stage.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+  let dx = px - joy.ox, dy = py - joy.oy, m = Math.hypot(dx, dy);
+  const lim = R_JOY * 1.3;
+  if (m > lim) { const f = (m - lim) / m; joy.ox += dx * f; joy.oy += dy * f; dx = px - joy.ox; dy = py - joy.oy; m = lim; }   // the base follows the thumb
+  const cm = Math.min(m, R_JOY), ux = m ? dx / m : 0, uy = m ? dy / m : 0;
+  let mag = cm / R_JOY; mag = mag < .12 ? 0 : (mag - .12) / .88;
+  joy.vx = ux * mag; joy.vy = uy * mag;
+  knob.style.transform = 'translate(' + (ux * cm) + 'px,' + (uy * cm) + 'px)';
+  placeJoy();
+});
+const joyEnd = e => { if (e.pointerId !== joy.id) return; joyReset(); };
+stage.addEventListener('pointerup', joyEnd); stage.addEventListener('pointercancel', joyEnd); stage.addEventListener('lostpointercapture', joyEnd);
+const KMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
+addEventListener('keydown', e => {
+  audioInit();
+  if (KMAP[e.code]) { keys[KMAP[e.code]] = true; e.preventDefault(); return; }
+  if (G.state === 'play') { const ix = KEYS.indexOf(e.key); if (ix >= 0) { const a = visActs()[ix]; if (a) order(a.id); e.preventDefault(); return; } }
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); e.preventDefault(); }
+  else if (e.code === 'KeyM') toggleMute();
+  else if (e.code === 'Enter' || e.code === 'Space') {
+    if (G.state === 'card') { contCard(); e.preventDefault(); }
+    else if (G.state === 'title') { startShift(); e.preventDefault(); }
+  }
+});
+addEventListener('keyup', e => { if (KMAP[e.code]) keys[KMAP[e.code]] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && G.state === 'play') togglePause(); });
+document.addEventListener('gesturestart', e => e.preventDefault());
+$('pauseBtn').addEventListener('click', togglePause);
+$('muteBtn').addEventListener('click', toggleMute);
+
+// ── sound (synthesized, no files) ─────────────────────────────────
+const AUD = { ctx: null, master: null, muted: store.get('uroRush_mute') === '1' };
+function audioInit() {
+  if (AUD.ctx) { if (AUD.ctx.state === 'suspended') AUD.ctx.resume().catch(() => {}); return; }
+  const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+  try { AUD.ctx = new C(); AUD.master = AUD.ctx.createGain(); AUD.master.gain.value = AUD.muted ? 0 : .6; AUD.master.connect(AUD.ctx.destination); } catch (e) { AUD.ctx = null; }
+}
+function toggleMute() { AUD.muted = !AUD.muted; store.set('uroRush_mute', AUD.muted ? '1' : '0'); if (AUD.master) AUD.master.gain.value = AUD.muted ? 0 : .6; updateHud(); }
+function tone(f, at, dur, o) {
+  const c = AUD.ctx; if (!c || AUD.muted) return; o = o || {};
+  const t0 = c.currentTime + (at || 0), osc = c.createOscillator(), g = c.createGain();
+  osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(f, t0); if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(o.vol || .15, t0 + (o.att || .008)); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  osc.connect(g); g.connect(AUD.master); osc.start(t0); osc.stop(t0 + dur + .05);
+}
+const sfx = {
+  arrive() { if (G.mode === 'consult') { tone(1318, 0, .08, { type: 'square', vol: .04 }); tone(1318, .13, .08, { type: 'square', vol: .04 }); } else { tone(784, 0, .4, { vol: .1 }); tone(587, .17, .55, { vol: .1 }); } },
+  ok(n) { const b = 523.25 * Math.pow(2, Math.min(n, 9) / 24); [0, 4, 7, 12].forEach((s, k) => tone(b * Math.pow(2, s / 12), k * .055, .22, { type: 'triangle', vol: .12 })); },
+  bad() { tone(196, 0, .3, { type: 'sawtooth', vol: .07, to: 104 }); tone(185, .02, .3, { type: 'square', vol: .04, to: 98 }); },
+  timeout() { tone(392, 0, .55, { type: 'triangle', vol: .11, to: 140 }); },
+  urgent() { tone(988, 0, .06, { type: 'square', vol: .03 }); tone(988, .1, .06, { type: 'square', vol: .03 }); },
+  pager() { for (let k = 0; k < 6; k++) tone(k % 2 ? 1760 : 2093, k * .12, .1, { type: 'square', vol: .045 }); },
+  bell() { tone(880, 0, 1.1, { vol: .11 }); tone(1318, 0, .7, { vol: .04 }); tone(659, .26, 1.2, { vol: .1 }); },
+  fanfare() { [0, 4, 7, 12].forEach((s, k) => tone(440 * Math.pow(2, s / 12), k * .09, .32, { type: 'triangle', vol: .11 })); },
+};
+
+// ── self-test (content invariants; the harness runs it) ───────────
+function selfTest() {
+  const problems = [];
+  Object.keys(MODES).forEach(m => {
+    const M = MODES[m];
+    M.cases.forEach(c => {
+      const a = actOf(m, c.ans);
+      if (!a) problems.push(m + ': no action ' + c.ans + ' for ' + c.cc);
+      else if (a.wave > c.diff) problems.push(m + ': ' + c.ans + ' unlocks at tier ' + a.wave + ' but the case shows at ' + c.diff + ': ' + c.cc);
+      (c.alt || []).forEach(id => { if (!actOf(m, id)) problems.push(m + ': no alt action ' + id); if (id === c.ans) problems.push(m + ': alt repeats ans'); });
+      if (m === 'consult' && !c.p.loc) problems.push('consult without ED/Floor/ICU: ' + c.cc);
+    });
+    [1, 2, 3].forEach(t => { if (!M.cases.some(c => c.diff === t)) problems.push(m + ': no tier ' + t + ' cases'); });
+    if (M.acts.length > KEYS.length) problems.push(m + ': more orders than keys');
+  });
+  return problems;
+}
+
+// ── loop ──────────────────────────────────────────────────────────
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+  if (!G.frozen) {
+    if (G.state === 'play') update(dt);
+    else if (G.state !== 'paused') fx(dt);
+  }
+  render(); renderPanel();
+  if (TOUCH && !joy.on) placeJoy();
+  requestAnimationFrame(frame);
+}
+// test hooks for tools/uro-rush.drive.mjs
+window.__rush = {
+  G, MODES, LAYOUTS, SEED, EMBED, TOUCH, selfTest, rewards, claim, order, activeRoom, startShift, contCard, togglePause, visActs,
+  freeze(v) { G.frozen = v !== false; },
+  step(sec, h) { h = h || 1 / 60; for (let t = 0; t < sec - 1e-9; t += h) { if (G.state === 'play') update(h); } render(); renderPanel(); return G.state; },
+  teleport(i) { const r = G.L.rooms[i]; Object.assign(G.doc, { x: r.x + r.w / 2 + 40, y: r.back === 'N' ? r.bed.y + r.bed.h + 34 : r.bed.y - 34, vx: 0, vy: 0 }); },
+  occupied() { return G.rooms.map((r, i) => r.pat ? i : -1).filter(i => i >= 0); },
+  answer(i) { const p = G.rooms[i] && G.rooms[i].pat; return p ? p.c.ans : null; },
+  wrongFor(i) { const p = G.rooms[i].pat; return visActs().find(a => a.id !== p.c.ans && (p.c.alt || []).indexOf(a.id) < 0).id; },
+  setJoy(x, y) { G.autoJoy = x == null ? null : { x, y }; },
+  _view() { return VIEW; },
+  put(i, match) {   // seat a specific case (substring of its cc) in room i of the current setting
+    const c = MODES[G.mode].cases.find(x => x.cc.indexOf(match) >= 0); if (!c) return false;
+    G.rooms[i].pat = { c, max: PATIENCE[G.tier - 1], left: PATIENCE[G.tier - 1], t0: G.time, look: lookFor(c), id: ++G.pid, warned: false }; return true;
+  },
+  forceBlock(mode, tier) { G.blocks[G.bi + 1] = { mode, n: 5, tier }; G.blocks[G.bi].n = G.blockSpawned; G.rooms.forEach(r => { r.pat = null; }); nextBlock(); },
+};
+layoutView();
+updateHud();
+showTitle();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
