@@ -32,6 +32,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .hs small{font-size:9px;letter-spacing:.14em;color:var(--mute);font-weight:800}
 .hs b{font-size:19px;font-variant-numeric:tabular-nums}
 #streak{color:#fbbf24;font-weight:900;font-size:15px;white-space:nowrap}
+#pendHud{display:flex;gap:6px;font-weight:800;font-size:13px;white-space:nowrap}
+#pendHud span{padding:3px 8px;border-radius:8px;background:#172638;border:1px solid var(--line)}
+#pendHud .q{color:#fbbf24;border-color:#7c5a12}
 #blocks{display:flex;gap:4px}
 #blocks i{font-style:normal;width:25px;height:25px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;background:#132030;border:1px solid var(--line);color:var(--mute);font-weight:800}
 #blocks i.done{opacity:.4}
@@ -89,6 +92,14 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ord kbd{position:absolute;right:6px;top:4px;font:700 10px ui-monospace,monospace;color:var(--mute)}
 .ord.down{transform:translateY(2px);box-shadow:none;background:var(--c);color:#08111a}
 .ord.nope{animation:nope .3s}
+.ord.pend{background:var(--c);color:#08111a;box-shadow:0 0 0 2px #fff inset}
+.ord.pend:after{content:"📝";position:absolute;right:5px;bottom:2px;font-size:12px}
+.pendline{margin-top:7px;padding:5px 8px;border-radius:8px;background:#dbeafe;color:#1e3a8a;font-size:12.5px;font-weight:700}
+.comp .row{display:flex;gap:6px;align-items:baseline;font-size:12.5px;margin-top:3px}
+.comp .row b{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:#0f172a;min-width:44px}
+.comp .row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#334155}
+.comp .res.ok{color:#15803d}.comp .res.bad{color:#b91c1c}
+.qz b{color:#92400e}
 @keyframes nope{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 
 /* overlay cards */
@@ -164,6 +175,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     <div id="modeChip"><span id="modeIcon">🏥</span><b id="modeName">CLINIC</b></div>
     <div class="hs"><small>SCORE</small><b id="score">0</b></div>
     <div id="streak"></div>
+    <div id="pendHud"></div>
     <div class="sp"></div>
     <div id="blocks"></div>
     <div id="hearts"></div>
@@ -316,7 +328,11 @@ const SPEED = 250, ACCEL = 11, DOC_R = 15;   // world units/s; velocity smoothin
 const LIVES = 4;
 const PATIENCE = [22, 18.7, 17];             // seconds a patient waits, by tier (+15% / +10% / +10% after the first play-test)
 const GAP = [4.6, 4.1, 3.6];                 // seconds between arrivals, by tier
-const TIER_OF_BLOCK = [1, 2, 2, 3, 3];       // a shift is 5 blocks; new orders unlock at blocks 2 and 4
+const TIER_OF_BLOCK = [1, 2, 3, 3];          // a shift is 4 blocks; new orders unlock at blocks 2 and 3
+const BLOCK_N = [6, 7];                      // patients per block: more than the 5 rooms, so unsigned orders back up the hall
+const SIGN_TIME = 0.5;                       // seconds at the computer per order signed
+const QUEUE_RATE = 0.6;                      // a patient waiting for a room loses patience at this fraction of the in-room rate
+const COMP_R = 34;                           // how close to the computer spot counts as sitting at it
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
 
 // ── floor plans ────────────────────────────────────────────────────
@@ -390,7 +406,10 @@ function buildLayout(mode) {
   if (!hosp) {
     deco('rug', { x: 70, y: 278, w: 660, h: 44 });
     deco('desk', solid({ x: 336, y: 456, w: 128, h: 26 }));
-    deco('deskchair', null, { p: { x: 400, y: 508 } });
+    L.computer = { x: 400, y: 432, label: "nurses' station" };
+    deco('deskchair', null, { p: L.computer });
+    // waiting room: the two hallway benches (3 seats each)
+    L.slots = [297, 319, 341].map(y => ({ x: 29, y, pose: 'sit' })).concat([297, 319, 341].map(y => ({ x: 773, y, pose: 'sit' })));
     deco('plant', solid({ x: 322, y: 556, w: 22, h: 22 }));
     deco('plant', solid({ x: 456, y: 556, w: 22, h: 22 }));
     deco('cooler', solid({ x: 18, y: 242, w: 22, h: 22 }));
@@ -405,6 +424,10 @@ function buildLayout(mode) {
     deco('linen', solid({ x: 448, y: 384, w: 30, h: 22 }));
     deco('gurney', solid({ x: 20, y: 252, w: 30, h: 92 }));
     deco('wheelchair', solid({ x: 752, y: 296, w: 28, h: 30 }));
+    L.computer = { x: 400, y: 446, label: 'workstation' };
+    deco('deskchair', null, { p: L.computer });
+    // hallway boarding: the gurney, the wheelchair, then standing along the corridor walls
+    L.slots = [{ x: 35, y: 280, pose: 'lie' }, { x: 766, y: 311, pose: 'sit' }, { x: 545, y: 254, pose: 'stand' }, { x: 255, y: 348, pose: 'stand' }, { x: 590, y: 254, pose: 'stand' }, { x: 545, y: 348, pose: 'stand' }];
     L.over.push({ t: 'elevator' });
     L.exit = { x: 400, y: 440 };
   }
@@ -424,32 +447,33 @@ function roomAt(L, x, y) {   // the room the point is in (its door apron counts)
 const G = {
   state: 'title', mode: null, L: null, blocks: [], bi: -1, blockSpawned: 0, blockEndT: 0, endT: 0,
   tier: 1, seen: 0, total: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, time: 0, runs: 0, pid: 0,
-  rooms: [], spawnT: 0, doc: { x: 400, y: 300, vx: 0, vy: 0, a: -Math.PI / 2, ph: 0, moving: false },
+  rooms: [], queue: [], signT: 0, signLog: [], spawnT: 0, doc: { x: 400, y: 300, vx: 0, vy: 0, a: -Math.PI / 2, ph: 0, moving: false },
   leavers: [], parts: [], floats: [], log: [], decks: {}, deckTier: {}, used: {}, shownTier: {},
   shake: 0, claimed: false, card: null, frozen: false, autoJoy: null, best: +(store.get('uroRush_best') || 0),
 };
 const ACC = () => MODES[G.mode || 'clinic'].acc;
 const visActs = () => G.mode ? MODES[G.mode].acts.filter(a => a.wave <= G.tier) : [];
 
-function planShift() {   // 3 blocks of one setting + 2 of the other, shuffled until it switches at least twice
+function planShift() {   // 4 blocks, 2+2 or 3+1 of the two settings, shuffled until it switches at least twice
   const major = rnd() < .5 ? 'clinic' : 'consult', minor = major === 'clinic' ? 'consult' : 'clinic';
+  const base = rnd() < .6 ? [major, major, minor, minor] : [major, major, major, minor];
   let seq, sw;
-  do { seq = shuffle([major, major, major, minor, minor]); sw = 0; for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) sw++; } while (sw < 2);
-  return seq.map((m, i) => ({ mode: m, n: rnd() < .55 ? 5 : 4, tier: TIER_OF_BLOCK[i] }));
+  do { seq = shuffle(base.slice()); sw = 0; for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) sw++; } while (sw < 2);
+  return seq.map((m, i) => ({ mode: m, n: BLOCK_N[ri(BLOCK_N.length)], tier: TIER_OF_BLOCK[i] }));
 }
 function startShift() {
   audioInit();
   rnd = mulberry32(SEED + G.runs * 7919); G.runs++;
   Object.assign(G, { blocks: planShift(), bi: -1, seen: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, log: [], leavers: [], parts: [], floats: [],
     used: { clinic: new Set(), consult: new Set() }, decks: { clinic: [], consult: [] }, deckTier: { clinic: 0, consult: 0 }, shownTier: { clinic: 0, consult: 0 },
-    claimed: false, mode: null, endT: 0, blockEndT: 0, time: 0 });
+    claimed: false, mode: null, endT: 0, blockEndT: 0, time: 0, queue: [], signT: 0, signLog: [] });
   G.total = G.blocks.reduce((s, b) => s + b.n, 0);
   nextBlock();
 }
 function setMode(m) {
   G.mode = m; G.L = LAYOUTS[m];
   G.rooms = G.L.rooms.map(() => ({ pat: null, freeAt: 0 }));
-  G.leavers = []; G.parts = []; G.floats = [];
+  G.leavers = []; G.parts = []; G.floats = []; G.queue = []; G.signT = 0; G.signLog = [];
   clearTimeout(toastT); $('toast').classList.remove('on');
   Object.assign(G.doc, { x: G.L.spawn.x, y: G.L.spawn.y, vx: 0, vy: 0, a: -Math.PI / 2 });
   const acc = MODES[m].acc;
@@ -485,41 +509,68 @@ function deckFor(m) {
   }
   return G.decks[m];
 }
-function trySpawn() {
+function freeRooms() { const e = []; G.rooms.forEach((r, i) => { if (!r.pat && G.time >= r.freeAt) e.push(i); }); return e; }
+function seat(i, p) { G.rooms[i].pat = p; p.t0 = G.time; sfx.arrive(); }
+function trySpawn() {   // a new arrival: straight into a free room, else the waiting room (clinic) / hallway (hospital)
   const b = G.blocks[G.bi];
   if (G.blockSpawned >= b.n) return;
-  const empty = [];
-  G.rooms.forEach((r, i) => { if (!r.pat && G.time >= r.freeAt) empty.push(i); });
-  if (!empty.length) { G.spawnT = .35; return; }
-  shuffle(empty);
-  const deck = deckFor(G.mode);
-  let roomI = empty[0], ci = 0;
-  if (G.mode === 'consult') {   // ED cases go to an ED bay, ICU to the ICU, floor to a floor room
+  const empty = shuffle(freeRooms()), deck = deckFor(G.mode);
+  let roomI = empty.length ? empty[0] : -1, ci = 0;
+  if (G.mode === 'consult' && empty.length) {   // ED cases go to an ED bay, ICU to the ICU, floor to a floor room
     search: for (const e of empty) for (let k = 0; k < deck.length; k++) if (deck[k].p.loc === G.L.rooms[e].type) { roomI = e; ci = k; break search; }
   }
   const c = deck.splice(ci, 1)[0];
   G.used[G.mode].add(c);
   const max = PATIENCE[G.tier - 1];
-  G.rooms[roomI].pat = { c, max, left: max, t0: G.time, look: lookFor(c), id: ++G.pid, warned: false };
+  const p = { c, max, left: max, t0: G.time, look: lookFor(c), id: ++G.pid, warned: false, pend: null };
   G.blockSpawned++; G.seen++;
+  if (roomI >= 0) seat(roomI, p);
+  else { G.queue.push(p); sfx.queued(); toast((G.mode === 'clinic' ? '🪑 Waiting room: ' : '🛏️ Hallway: ') + G.queue.length + ' waiting for a room. Sign orders to free one.', '#fbbf24'); }
   G.spawnT = (G.blockSpawned === 1 ? 1.6 : GAP[G.tier - 1]) * (0.85 + rnd() * 0.3);
-  sfx.arrive(); updateHud();
+  updateHud();
 }
+function seatFromQueue() {   // a room just freed: bring in whoever has waited longest (a consult prefers its own kind of room)
+  const empty = freeRooms(); if (!empty.length || !G.queue.length) return;
+  let qi = 0, roomI = empty[0];
+  if (G.mode === 'consult') { search: for (let k = 0; k < G.queue.length; k++) for (const e of empty) if (G.queue[k].c.p.loc === G.L.rooms[e].type) { qi = k; roomI = e; break search; } }
+  const p = G.queue.splice(qi, 1)[0];
+  seat(roomI, p); updateHud();
+}
+const atComputer = () => !!G.L && Math.hypot(G.doc.x - G.L.computer.x, G.doc.y - G.L.computer.y) < COMP_R;
+const pendedRooms = () => G.rooms.map((r, i) => r.pat && r.pat.pend ? i : -1).filter(i => i >= 0).sort((a, b) => G.rooms[a].pat.pendAt - G.rooms[b].pat.pendAt);
 function update(dt) {
   G.time += dt;
   moveDoctor(dt);
   if (G.endT > 0) { G.endT -= dt; if (G.endT <= 0) endShift(false); fx(dt); return; }
   G.rooms.forEach((r, i) => {
-    const p = r.pat; if (!p) return;
+    const p = r.pat; if (!p || p.pend) return;   // seen + order pended: their clock stops
     p.left -= dt;
     if (!p.warned && p.left < p.max * .3) { p.warned = true; sfx.urgent(); }
     if (p.left <= 0) resolve(i, null);
   });
+  for (let k = G.queue.length - 1; k >= 0; k--) { const q = G.queue[k]; q.left -= dt * QUEUE_RATE; if (q.left <= 0 && G.endT <= 0) queueTimeout(k); }
   if (G.state !== 'play') return;
+  seatFromQueue();
+  // the computer: stand at it and pended orders go in one at a time (results come back as they're signed)
+  const pend = pendedRooms();
+  if (pend.length && atComputer() && G.endT <= 0) {
+    G.signT += dt;
+    if (G.signT >= SIGN_TIME) { G.signT = 0; const i = pend[0]; sfx.key(); resolve(i, G.rooms[i].pat.pend); }
+  } else G.signT = 0;
   G.spawnT -= dt; if (G.spawnT <= 0) trySpawn();
   const b = G.blocks[G.bi];
-  if (G.endT <= 0 && G.blockSpawned >= b.n && G.rooms.every(r => !r.pat)) { G.blockEndT += dt; if (G.blockEndT > 1.2) nextBlock(); }
+  if (G.endT <= 0 && G.blockSpawned >= b.n && !G.queue.length && G.rooms.every(r => !r.pat)) { G.blockEndT += dt; if (G.blockEndT > 1.2) nextBlock(); }
   fx(dt);
+}
+function queueTimeout(k) {
+  const q = G.queue.splice(k, 1)[0], best = actOf(G.mode, q.c.ans), slot = G.L.slots[Math.min(k, G.L.slots.length - 1)];
+  G.log.push({ mode: G.mode, room: G.mode === 'clinic' ? 'Waiting room' : 'Hallway', cc: q.c.cc, chose: null, ans: q.c.ans, alt: q.c.alt || [], kind: 'timeout' });
+  G.streak = 0; G.lives = Math.max(0, G.lives - 1); G.shake = .35;
+  floatText(slot.x, slot.y - 26, 'Left!', '#dc2626'); burst(slot.x, slot.y, ['#fb923c', '#94a3b8'], 14, 'puff');
+  toast('Left without being seen. Needed ' + best.icon + ' ' + best.name, '#fb923c');
+  G.leavers.push({ look: q.look, mood: 'bad', x: slot.x, y: slot.y, a: 0, path: [{ x: G.L.exit.x, y: G.L.exit.y }], alpha: 1, ph: 0 });
+  sfx.timeout(); updateHud();
+  if (G.lives <= 0 && G.endT <= 0) G.endT = 1.2;
 }
 function activeRoom() { return G.L && G.state !== 'title' ? roomAt(G.L, G.doc.x, G.doc.y) : -1; }
 function order(act) {
@@ -527,7 +578,13 @@ function order(act) {
   const i = activeRoom();
   if (i < 0 || !G.rooms[i].pat) return false;
   if (!visActs().some(a => a.id === act)) return false;
-  resolve(i, act); return true;
+  const p = G.rooms[i].pat, a = actOf(G.mode, act), was = p.pend;
+  if (was === act) return true;
+  p.pend = act;
+  if (!was) { p.pendAt = G.time; p.decidedLeft = p.left; }
+  toast('📝 ' + a.icon + ' ' + a.name + (was ? ' (changed)' : '') + ': sign it at the ' + G.L.computer.label, ACC());
+  sfx.pend(); chartSig = ''; updateHud();
+  return true;
 }
 function resolve(i, act) {
   const r = G.rooms[i], p = r.pat; if (!p) return;
@@ -535,21 +592,22 @@ function resolve(i, act) {
   const ok = act !== null && (act === c.ans || (c.alt || []).indexOf(act) >= 0);
   const kind = act === null ? 'timeout' : ok ? 'ok' : 'wrong';
   G.log.push({ mode: G.mode, room: room.label, cc: c.cc, chose: act, ans: c.ans, alt: c.alt || [], kind });
+  if (act !== null) { G.signLog.push({ room: room.short, label: room.label, ok, chose: act, ans: c.ans }); G.signLog = G.signLog.slice(-4); }
   const at = room.head;
   if (ok) {
     G.streak++; G.bestStreak = Math.max(G.bestStreak, G.streak);
-    const bonus = G.streak >= 3 ? Math.floor(G.streak * 1.5) : 0, quick = Math.round(5 * p.left / p.max);
+    const bonus = G.streak >= 3 ? Math.floor(G.streak * 1.5) : 0, quick = Math.round(5 * (p.pend ? p.decidedLeft : p.left) / p.max);
     const pts = 10 + c.diff * 5 + bonus + quick;
     G.score += pts;
     floatText(at.x, at.y - 34, '+' + pts, '#16a34a');
     burst(at.x, at.y, ['#4ade80', '#facc15', '#38bdf8'], 22, 'spark');
-    toast(act === c.ans ? '✓ ' + best.icon + ' ' + best.name + (G.streak >= 3 ? '  ·  ' + G.streak + ' in a row' : '') : '✓ OK. Best first step: ' + best.icon + ' ' + best.name, '#4ade80');
+    toast(room.label + ' ✓ ' + (act === c.ans ? best.icon + ' ' + best.name + (G.streak >= 3 ? '  ·  ' + G.streak + ' in a row' : '') : 'OK. Best first step: ' + best.icon + ' ' + best.name), '#4ade80');
     flashChart('ok'); sfx.ok(G.streak);
   } else {
     G.streak = 0; G.lives = Math.max(0, G.lives - 1); G.shake = .35;
     floatText(at.x, at.y - 34, kind === 'timeout' ? 'Gone!' : '✗', '#dc2626');
     burst(at.x, at.y, kind === 'timeout' ? ['#fb923c', '#94a3b8'] : ['#ef4444', '#f87171'], 16, 'puff');
-    toast((kind === 'timeout' ? (G.mode === 'consult' ? 'Consult missed. ' : 'Walked out. ') : '✗ ') + 'Needed ' + best.icon + ' ' + best.name, kind === 'timeout' ? '#fb923c' : '#f87171');
+    toast(room.label + (kind === 'timeout' ? (G.mode === 'consult' ? ': consult missed. ' : ': walked out. ') : ' ✗ ') + 'Needed ' + best.icon + ' ' + best.name, kind === 'timeout' ? '#fb923c' : '#f87171');
     flashChart('bad');
     if (kind === 'timeout') sfx.timeout(); else sfx.bad();
     try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) {}
@@ -559,7 +617,7 @@ function resolve(i, act) {
   updateHud();
   if (G.lives <= 0 && G.endT <= 0) G.endT = 1.2;
 }
-function rewards() { return { coins: Math.min(150, Math.ceil(G.score * .13)), xp: Math.min(80, Math.ceil(G.score * .065)) }; }
+function rewards() { return { coins: Math.min(150, Math.ceil(G.score * .105)), xp: Math.min(80, Math.ceil(G.score * .053)) }; }   // a clean ~26-patient shift ≈ 120 💰 / 60 XP
 function endShift(done) {
   G.state = 'over'; G.endT = 0; G.done = done;
   if (G.score > G.best) { G.best = G.score; G.newBest = true; store.set('uroRush_best', String(G.best)); } else G.newBest = false;
@@ -592,7 +650,7 @@ function moveDoctor(dt) {
     let da = Math.atan2(d.vy, d.vx) - d.a;
     while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
     d.a += da * Math.min(1, dt * 14); d.ph += sp * dt * .055;
-  }
+  } else if (atComputer()) { let da = Math.PI / 2 - d.a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; d.a += da * Math.min(1, dt * 8); }
 }
 function collide(d) {   // circle vs axis-aligned rects: push out along the shortest way, drop the velocity into the wall
   const sol = G.L.solids;
@@ -822,7 +880,12 @@ function drawDecor(c, o, L) {
       c.fillStyle = 'rgba(40,25,10,.55)'; c.font = '700 7px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText("NURSES' STATION", r.x + r.w / 2, r.y + r.h - 4);
       break;
     }
-    case 'deskchair': circ(c, o.p.x, o.p.y, 11, '#334155', '#1e293b', 1.5); rr(c, o.p.x - 9, o.p.y + 5, 18, 6, 3); c.fillStyle = '#1e293b'; c.fill(); break;
+    case 'deskchair': {
+      c.save(); c.setLineDash([4, 4]); c.strokeStyle = 'rgba(30,41,59,.35)'; c.lineWidth = 1.5; c.beginPath(); c.arc(o.p.x, o.p.y, COMP_R - 8, 0, Math.PI * 2); c.stroke(); c.restore();
+      circ(c, o.p.x, o.p.y, 12, '#334155', '#1e293b', 1.5); rr(c, o.p.x - 10, o.p.y - 13, 20, 6, 3); c.fillStyle = '#1e293b'; c.fill();
+      c.fillStyle = 'rgba(30,41,59,.55)'; c.font = '800 8px system-ui,sans-serif'; c.textAlign = 'left'; c.fillText('🖥 ORDERS', o.p.x + COMP_R - 4, o.p.y - 4);
+      break;
+    }
     case 'plant': {
       circ(c, r.x + r.w / 2, r.y + r.h / 2, 10, '#b5643c', '#7c3f22', 1.2);
       for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; ell(c, r.x + r.w / 2 + Math.cos(a) * 6, r.y + r.h / 2 + Math.sin(a) * 6, 7, 3.6, a, k % 2 ? '#3f8f4f' : '#56a865'); }
@@ -846,7 +909,6 @@ function drawDecor(c, o, L) {
       box(c, r, '#c9d1da', '#6b7a8a', 4, true);
       c.fillStyle = '#26323f'; rr(c, r.x + 40, r.y + 4, 32, 14, 2); c.fill(); c.fillStyle = '#5fb3d9'; c.fillRect(r.x + 42, r.y + 6, 28, 10);
       c.fillStyle = 'rgba(30,40,55,.6)'; c.font = '700 7px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText('WORKSTATION', r.x + r.w / 2, r.y + r.h - 3);
-      circ(c, r.x + r.w / 2, r.y + r.h + 16, 10, '#334155', '#1e293b', 1.5);
       break;
     }
     case 'crash': box(c, r, '#dc2626', '#7f1d1d', 3, true); c.fillStyle = '#fee2e2'; c.fillRect(r.x + 4, r.y + 4, r.w - 8, 4); c.fillRect(r.x + 4, r.y + 11, r.w - 8, 4); break;
@@ -908,6 +970,8 @@ function render() {
     ctx.save(); ctx.strokeStyle = acc; ctx.lineWidth = 4; ctx.globalAlpha = .6 + .3 * Math.sin(now * 5); ctx.strokeRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); ctx.restore();
   }
   G.L.rooms.forEach((room, i) => { const p = G.rooms[i] && G.rooms[i].pat; if (p) drawPatient(room, p, now); });
+  drawComputer(now);
+  G.queue.forEach((q, k) => { if (k < G.L.slots.length) drawQueued(G.L.slots[k], q, now, k === G.L.slots.length - 1 ? G.queue.length - G.L.slots.length : 0); });
   G.leavers.forEach(l => drawWalker(l));
   drawDoctor(G.doc, now);
   G.L.rooms.forEach((room, i) => drawBadge(room, G.rooms[i] ? G.rooms[i].pat : null, now, i === ai));
@@ -935,7 +999,38 @@ function drawEcg(m, now, urgent) {
   }
   ctx.stroke(); ctx.restore();
 }
-function moodOf(p) { const f = p.left / p.max; return f > .6 ? 'calm' : f > .3 ? 'uneasy' : 'upset'; }
+function moodOf(p) { if (p.pend) return 'calm'; const f = p.left / p.max; return f > .6 ? 'calm' : f > .3 ? 'uneasy' : 'upset'; }
+function drawComputer(now) {   // the spot in front of the desk where orders get signed
+  const C = G.L.computer, n = pendedRooms().length, acc = ACC();
+  if (n) {
+    ctx.save(); ctx.strokeStyle = acc; ctx.lineWidth = 3; ctx.globalAlpha = .5 + .35 * Math.sin(now * 5);
+    ctx.beginPath(); ctx.arc(C.x, C.y, COMP_R - 8, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    const txt = '📝 ' + n + ' to sign', y = C.y - 34 - Math.abs(Math.sin(now * 3)) * 3;
+    ctx.font = '800 12px system-ui,sans-serif'; const w = ctx.measureText(txt).width + 16;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 4 * VIEW.s * DPR; rr(ctx, C.x - w / 2, y - 11, w, 20, 9); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
+    rr(ctx, C.x - w / 2, y - 11, w, 20, 9); ctx.strokeStyle = acc; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#0f172a'; ctx.textAlign = 'center'; ctx.fillText(txt, C.x, y + 3.5);
+  }
+  if (G.signT > 0) { ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(C.x, C.y, COMP_R - 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * G.signT / SIGN_TIME); ctx.stroke(); ctx.lineCap = 'butt'; }
+}
+function drawQueued(slot, q, now, extra) {   // someone waiting for a room: bench seat / hallway gurney / wheelchair / standing
+  const L = q.look, x = slot.x, y = slot.y, f = clamp(q.left / q.max, 0, 1);
+  ctx.save();
+  if (slot.pose === 'lie') {
+    rr(ctx, x - 11, y + 8, 22, 54, 6); ctx.fillStyle = '#9db8cc'; ctx.fill();
+    drawHead(ctx, x, y - 2, 9, L, moodOf(q), now);
+  } else {
+    ell(ctx, x, y + 6, 11, 7, 0, 'rgba(0,0,0,.18)');
+    if (slot.pose === 'stand') { ell(ctx, x - 4, y + 9, 3.5, 3, 0, '#475569'); ell(ctx, x + 4, y + 9, 3.5, 3, 0, '#475569'); }
+    ell(ctx, x, y + 3, 9.5, 8, 0, L.pants, 'rgba(0,0,0,.18)');
+    drawHead(ctx, x, y - 6, 8.5 * (L.kid ? .85 : 1), L, moodOf(q), now);
+  }
+  const bx = x + (x > 700 ? -15 : 15), by = y - 16, col = f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444';
+  circ(ctx, bx, by, 7, '#fff'); ctx.lineWidth = 2.6; ctx.strokeStyle = '#e2e8f0'; ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(bx, by, 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke();
+  if (extra > 0) { ctx.fillStyle = '#0f172a'; ctx.font = '900 11px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('+' + extra, x, y + 26); }
+  ctx.restore();
+}
 function drawPatient(room, p, now) {
   const L = p.look, b = room.bed, hx = room.head.x, hy = room.head.y, dir = room.back === 'N' ? 1 : -1, sc = L.kid ? .84 : 1;
   const breathe = Math.sin(now * 2.3 + p.id) * 1.1;
@@ -956,6 +1051,7 @@ function drawPatient(room, p, now) {
   drawHead(ctx, hx, hy, 11 * sc, L, moodOf(p), now);
   const age = G.time - p.t0;
   if (age < 1.8) bubble(hx + 18, hy - 24 - Math.abs(Math.sin(age * 8)) * 7, '!', ACC());
+  else if (p.pend) { ctx.font = '15px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('📝', hx + 19, hy - 10); }
   else if (p.left < p.max * .3) { const yy = hy - 6; ctx.fillStyle = '#60a5fa'; ctx.beginPath(); ctx.moveTo(hx + 12, yy - 6); ctx.quadraticCurveTo(hx + 16, yy, hx + 12, yy + 2); ctx.quadraticCurveTo(hx + 8, yy, hx + 12, yy - 6); ctx.fill(); }
 }
 function drawHead(c, x, y, r, L, mood, now) {
@@ -1018,13 +1114,15 @@ function drawBadge(room, p, now, active) {
     ctx.globalAlpha = .6; circ(ctx, x, y, 13, 'rgba(255,255,255,.7)', 'rgba(100,116,139,.6)', 1);
     ctx.fillStyle = '#64748b'; ctx.font = '800 ' + (room.short.length > 1 ? 8.5 : 12) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(room.short, x, y + (room.short.length > 1 ? 3 : 4.2));
   } else {
-    const f = clamp(p.left / p.max, 0, 1), col = f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444', pulse = f < .3 ? 1 + .09 * Math.sin(now * 12) : 1, rr0 = 16 * pulse;
-    ctx.shadowColor = f < .3 ? 'rgba(239,68,68,.8)' : 'rgba(0,0,0,.35)'; ctx.shadowBlur = (f < .3 ? 12 : 5) * VIEW.s * DPR;
+    const f = clamp(p.left / p.max, 0, 1), col = p.pend ? '#3b82f6' : f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444', pulse = f < .3 && !p.pend ? 1 + .09 * Math.sin(now * 12) : 1, rr0 = 16 * pulse;
+    const hot = f < .3 && !p.pend;
+    ctx.shadowColor = hot ? 'rgba(239,68,68,.8)' : 'rgba(0,0,0,.35)'; ctx.shadowBlur = (hot ? 12 : 5) * VIEW.s * DPR;
     circ(ctx, x, y, rr0, '#fff'); ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
     ctx.lineWidth = 4.2; ctx.strokeStyle = '#e2e8f0'; ctx.beginPath(); ctx.arc(x, y, rr0 - 3, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(x, y, rr0 - 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke(); ctx.lineCap = 'butt';
     if (active) { ctx.strokeStyle = ACC(); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, rr0 + 3, 0, Math.PI * 2); ctx.stroke(); }
     ctx.fillStyle = '#0f172a'; ctx.font = '900 ' + (room.short.length > 1 ? 9 : 13) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(room.short, x, y + (room.short.length > 1 ? 3.2 : 4.6));
+    if (p.pend) { ctx.font = '11px system-ui,sans-serif'; ctx.fillText('📝', x + 14, y - 10); }
   }
   ctx.restore();
 }
@@ -1050,6 +1148,8 @@ function updateHud() {
   $('modeIcon').textContent = M.icon; $('modeName').textContent = M.name.toUpperCase();
   $('score').textContent = G.score;
   $('streak').textContent = G.streak >= 2 ? '🔥×' + G.streak : '';
+  const np = G.rooms.filter(r => r.pat && r.pat.pend).length;
+  $('pendHud').innerHTML = (np ? '<span title="Orders to sign at the computer">📝 ' + np + '</span>' : '') + (G.queue.length ? '<span class="q" title="Waiting for a room">' + (G.mode === 'clinic' ? '🪑 ' : '🛏️ ') + G.queue.length + '</span>' : '');
   let h = ''; for (let k = 0; k < LIVES; k++) h += k < G.lives ? '♥' : '<span class="lost">♥</span>';
   $('hearts').innerHTML = h;
   $('prog').textContent = G.seen + '/' + G.total;
@@ -1072,27 +1172,42 @@ function tapify(el, fn) {   // fires on release over the same button; works whil
 }
 let chartSig = '';
 function setBar(i, f) { if (!i) return; i.style.width = clamp(f * 100, 0, 100) + '%'; i.style.background = f > .6 ? '#22c55e' : f > .3 ? '#f59e0b' : '#ef4444'; }
+const ccShort = c => (c.p.age != null ? c.p.age + c.p.sex + ' · ' : '') + c.p.text;
 function renderPanel() {
-  const i = (G.state === 'play' || G.state === 'paused') ? activeRoom() : -1, p = i >= 0 ? G.rooms[i].pat : null;
-  const occ = G.rooms.map((r, k) => ({ r, k })).filter(o => o.r.pat).sort((a, b) => a.r.pat.left - b.r.pat.left);
-  const sig = (G.mode || '') + '|' + G.state + '|' + i + '|' + (p ? p.id : 'c' + occ.map(o => o.r.pat.id).join(','));
+  const playing = G.state === 'play' || G.state === 'paused';
+  const i = playing ? activeRoom() : -1, p = i >= 0 ? G.rooms[i].pat : null, atPC = playing && atComputer();
+  const occ = G.rooms.map((r, k) => ({ r, k })).filter(o => o.r.pat && !o.r.pat.pend).sort((a, b) => a.r.pat.left - b.r.pat.left);
+  const pend = playing ? pendedRooms() : [];
+  const sig = (G.mode || '') + '|' + G.state + '|' + i + '|' + (p ? p.id + (p.pend || '') : 'c' + occ.map(o => o.r.pat.id).join(',')) + '|q' + G.queue.map(q => q.id).join(',') + '|p' + pend.join(',') + '|' + atPC + '|' + G.signLog.length + (G.signLog.length ? G.signLog[G.signLog.length - 1].room : '');
   if (sig !== chartSig) {
     chartSig = sig;
     ordersEl.classList.toggle('off', !p);
+    ordersEl.querySelectorAll('.ord').forEach(b => b.classList.toggle('pend', !!(p && p.pend === b.dataset.act)));
     if (!G.mode) { chart.innerHTML = '<div class="hint">Charts show up here.</div>'; return; }
-    if (p) {
+    if (atPC && !p) {   // at the computer: what's going in, and what just came back
+      chart.innerHTML = '<div class="comp"><div class="ch-top"><span class="room">🖥 ' + esc(G.L.computer.label) + '</span><span class="sp"></span><span>' + (pend.length ? 'signing ' + pend.length : 'all signed') + '</span></div>'
+        + (pend.length ? '<span class="bar"><i id="signBar"></i></span>' + pend.map(k => { const q = G.rooms[k].pat, a = actOf(G.mode, q.pend); return '<div class="row"><b>' + esc(G.L.rooms[k].short) + '</b><span>' + a.icon + ' ' + esc(a.name) + ' · ' + esc(ccShort(q.c)) + '</span></div>'; }).join('')
+          : '<div class="hint" style="margin:6px 0 0">No orders waiting. Go see patients.</div>')
+        + G.signLog.slice().reverse().map(r => { const a = actOf(G.mode, r.chose), b = actOf(G.mode, r.ans); return '<div class="row"><b>' + esc(r.room) + '</b><span class="res ' + (r.ok ? 'ok' : 'bad') + '">' + (r.ok ? '✓ ' + a.icon + ' ' + esc(a.name) : '✗ ' + a.icon + ' → needed ' + b.icon + ' ' + esc(b.name)) + '</span></div>'; }).join('')
+        + '</div>';
+    } else if (p) {
       const room = G.L.rooms[i], P = p.c.p, loc = P.loc || (G.mode === 'clinic' ? 'EXAM' : room.type);
       chart.innerHTML = '<div class="ch-top"><span class="room">' + esc(room.label) + '</span><span class="loc ' + loc + '">' + (loc === 'FLOOR' ? 'Floor' : loc === 'EXAM' ? 'Clinic' : loc) + '</span><span class="sp"></span><span>' + (G.mode === 'consult' ? '📟 consult' : '📋 new visit') + '</span></div>'
         + '<span class="bar"><i></i></span><div class="cc">' + (P.age != null ? '<span class="who">' + P.age + ' ' + P.sex + '</span>' : '') + esc(P.text) + '</div>'
+        + (p.pend ? '<div class="pendline">📝 ' + actOf(G.mode, p.pend).icon + ' ' + esc(actOf(G.mode, p.pend).name) + ' pended. Sign it at the ' + esc(G.L.computer.label) + ' (tap another order to change it).</div>' : '')
         + (DEBUG ? '<div class="dbg">key: ' + p.c.ans + (p.c.alt ? ' / ' + p.c.alt.join(' / ') : '') + '</div>' : '');
     } else {
       const head = i >= 0 ? '<div class="hint">' + esc(G.L.rooms[i].label) + ' is empty.</div>' : '<div class="hint">' + (TOUCH ? 'Drag on the map to walk' : 'WASD / arrows to walk') + ' into a room to order.</div>';
-      chart.innerHTML = head + (!occ.length ? '<div class="census empty">' + (G.mode === 'clinic' ? 'Waiting for patients to check in…' : 'The pager is quiet… for now.') + '</div>'
-        : '<div class="census">' + occ.map(o => '<div class="cz" data-room="' + o.k + '"><b>' + esc(G.L.rooms[o.k].label) + '</b><span>' + esc((o.r.pat.c.p.age != null ? o.r.pat.c.p.age + o.r.pat.c.p.sex + ' · ' : '') + o.r.pat.c.p.text) + '</span><em class="bar"><i></i></em></div>').join('') + '</div>');
+      const signLine = pend.length ? '<div class="pendline" style="margin:0 0 6px">📝 ' + pend.length + ' order' + (pend.length > 1 ? 's' : '') + ' to sign at the ' + esc(G.L.computer.label) + '</div>' : '';
+      const rows = G.queue.map((q, k) => '<div class="cz qz" data-q="' + k + '"><b>' + (G.mode === 'clinic' ? '🪑 Waiting' : '🛏️ Hallway') + '</b><span>' + esc(ccShort(q.c)) + '</span><em class="bar"><i></i></em></div>')
+        .concat(occ.map(o => '<div class="cz" data-room="' + o.k + '"><b>' + esc(G.L.rooms[o.k].label) + '</b><span>' + esc(ccShort(o.r.pat.c)) + '</span><em class="bar"><i></i></em></div>'));
+      chart.innerHTML = head + signLine + (!rows.length ? (pend.length ? '' : '<div class="census empty">' + (G.mode === 'clinic' ? 'Waiting for patients to check in…' : 'The pager is quiet… for now.') + '</div>')
+        : '<div class="census">' + rows.join('') + '</div>');
     }
   }
   if (p) setBar(chart.querySelector('.bar i'), p.left / p.max);
-  else chart.querySelectorAll('.cz').forEach(el => { const q = G.rooms[+el.dataset.room] && G.rooms[+el.dataset.room].pat; if (q) setBar(el.querySelector('i'), q.left / q.max); });
+  else if (atPC) { const sb = $('signBar'); if (sb) { sb.style.width = clamp(G.signT / SIGN_TIME * 100, 0, 100) + '%'; sb.style.background = '#3b82f6'; } }
+  else chart.querySelectorAll('.cz').forEach(el => { const q = el.dataset.q != null ? G.queue[+el.dataset.q] : G.rooms[+el.dataset.room] && G.rooms[+el.dataset.room].pat; if (q) setBar(el.querySelector('i'), q.left / q.max); });
 }
 function flashChart(kind) { chart.classList.remove('flash-ok', 'flash-bad'); void chart.offsetWidth; chart.classList.add('flash-' + kind); }
 let toastT = null;
@@ -1111,7 +1226,8 @@ function showTitle() {
   G.state = 'title';
   showScr('<div class="logo"><span>🏥</span><span class="swap">⇄</span><span>📟</span></div><h1>Uro Rush</h1><p class="sub">Clinic and the consult pager. One shift, switching at random.</p>'
     + '<ul class="how"><li>' + (TOUCH ? '<b>Drag anywhere on the map</b>: a joystick appears under your thumb.' : '<b>WASD / arrow keys</b> to walk (or drag on the map).') + '</li>'
-    + '<li>Walk into a room, read the chart, ' + (TOUCH ? 'tap' : 'click or press the key for') + ' the right <b>first step</b>.</li>'
+    + '<li>Walk into a room, read the chart, ' + (TOUCH ? 'tap' : 'click or press the key for') + ' the right <b>first step</b>. It\'s 📝 pended.</li>'
+    + '<li><b>Sign orders at the 🖥 computer</b> (nurses\' station / workstation). Results come back as they\'re signed, and only then does the room free up. Batch a few, but a full house backs new patients up into the hall, and their clock is running.</li>'
     + '<li><b>Clinic and consults have different orders</b>, and you won\'t know which one comes next.</li>'
     + '<li>' + LIVES + ' ♥: a wrong order or a patient who gives up costs one.</li></ul>'
     + (G.best ? '<div class="tiny">Best shift: ' + G.best + '</div>' : '')
@@ -1244,6 +1360,9 @@ const sfx = {
   urgent() { tone(988, 0, .06, { type: 'square', vol: .03 }); tone(988, .1, .06, { type: 'square', vol: .03 }); },
   pager() { for (let k = 0; k < 6; k++) tone(k % 2 ? 1760 : 2093, k * .12, .1, { type: 'square', vol: .045 }); },
   bell() { tone(880, 0, 1.1, { vol: .11 }); tone(1318, 0, .7, { vol: .04 }); tone(659, .26, 1.2, { vol: .1 }); },
+  pend() { tone(880, 0, .05, { type: 'triangle', vol: .07 }); tone(1175, .05, .06, { type: 'triangle', vol: .06 }); },
+  key() { tone(1400 + Math.random() * 300, 0, .025, { type: 'square', vol: .025 }); tone(1600, .07, .025, { type: 'square', vol: .02 }); },
+  queued() { tone(523, 0, .14, { type: 'sine', vol: .06 }); tone(440, .12, .2, { type: 'sine', vol: .06 }); },
   fanfare() { [0, 4, 7, 12].forEach((s, k) => tone(440 * Math.pow(2, s / 12), k * .09, .32, { type: 'triangle', vol: .11 })); },
 };
 
@@ -1288,11 +1407,16 @@ window.__rush = {
   wrongFor(i) { const p = G.rooms[i].pat; return visActs().find(a => a.id !== p.c.ans && (p.c.alt || []).indexOf(a.id) < 0).id; },
   setJoy(x, y) { G.autoJoy = x == null ? null : { x, y }; },
   _view() { return VIEW; },
+  undecided() { return G.rooms.map((r, i) => r.pat && !r.pat.pend ? i : -1).filter(i => i >= 0); },
+  pended: () => pendedRooms(),
+  atComputer: () => atComputer(),
+  toComputer() { Object.assign(G.doc, { x: G.L.computer.x, y: G.L.computer.y, vx: 0, vy: 0 }); },
+  signAll() { this.toComputer(); let g = 0; while (pendedRooms().length && G.state === 'play' && g++ < 400) this.step(.05); return pendedRooms().length === 0; },
   put(i, match) {   // seat a specific case (substring of its cc) in room i of the current setting
     const c = MODES[G.mode].cases.find(x => x.cc.indexOf(match) >= 0); if (!c) return false;
     G.rooms[i].pat = { c, max: PATIENCE[G.tier - 1], left: PATIENCE[G.tier - 1], t0: G.time, look: lookFor(c), id: ++G.pid, warned: false }; return true;
   },
-  forceBlock(mode, tier) { G.blocks[G.bi + 1] = { mode, n: 5, tier }; G.blocks[G.bi].n = G.blockSpawned; G.rooms.forEach(r => { r.pat = null; }); nextBlock(); },
+  forceBlock(mode, tier) { G.blocks[G.bi + 1] = { mode, n: 6, tier }; G.blocks[G.bi].n = G.blockSpawned; G.rooms.forEach(r => { r.pat = null; }); G.queue = []; nextBlock(); },
 };
 layoutView();
 updateHud();

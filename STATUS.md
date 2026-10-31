@@ -3,6 +3,54 @@
 **Updated:** 2026-10-31
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-10-31 (later 2) — 🏥 Uro Rush: orders go in at the computer
+
+Andrew: a central computer you sit at to put orders in before people leave rooms. You can batch
+some, but if every room is full you have to sign before new patients get a room.
+**Done:**
+- In the room you only **pend** the order (📝, changeable by walking back in). A pended
+  patient's clock stops.
+- Stand at the 🖥 spot in front of the nurses' station (clinic) / workstation (hospital).
+  - Pended orders sign oldest first, `SIGN_TIME` 0.5 s each; walking away pauses.
+  - Results come back as each one signs: ✓/✗, hearts, streak, score. Then the patient leaves.
+  - The chart panel there lists what's signing and the last 4 results.
+- Rooms stay full until signed. Arrivals with no free room wait in the hall:
+  - clinic: the two benches
+  - hospital: gurney, wheelchair, then standing
+  - Their clock runs at 60% (`QUEUE_RATE`); if it runs out they leave: −1 ♥, logged as
+    "left without being seen".
+  - A consult in the hall takes its own kind of room first.
+- So the hall can actually back up, blocks now have **more patients than rooms**:
+  - 4 blocks of 6–7 (`BLOCK_N`), was 5 of 4–5.
+  - Tiers `[1, 2, 3, 3]`.
+  - 2+2 or 3+1 settings, still ≥2 random switches.
+  - ~26 patients a shift.
+- On screen:
+  - Blue rings + 📝 on room badges.
+  - A "📝 n to sign" bubble + pulsing ring at the computer.
+  - HUD shows 📝 n / 🪑 n (🛏️ n in the hospital).
+  - The hall census lists who's waiting, with timers.
+  - Title text explains the computer.
+- Coin rate .13 → .105 (XP .065 → .053) so a clean, longer shift still pays ≈ 120 💰 / 60 XP.
+
+**Verified:** `tools/uro-rush.drive.mjs` **38/38**, with 10 new checks:
+- the clock stops when pended
+- nothing scores until signed
+- changing a pended order
+- walking away pauses signing
+- signing resolves a patient
+- a full house sends the next arrival to the hall
+- the hall clock runs at 60%
+- signing seats the waiting patient
+- a wrong order costs a heart once signed
+- someone leaving the hall costs a heart
+
+Also: 8 seeded full shifts (bot batches 3 per trip), phones, embed. Parses as ES2020.
+
+**Next steps:** play-test the batching tension: `SIGN_TIME`, `QUEUE_RATE`, `BLOCK_N`.
+**Open questions:** should a pended patient's clock keep running slowly (more pressure to sign) or
+stay frozen as now?
+
 ## 2026-10-31 (later) — 🏥 Uro Rush: patients wait longer
 
 Andrew after playing: joystick feels good; patients need ~10% longer, especially early on.
