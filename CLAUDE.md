@@ -38,6 +38,7 @@ inside another workspace; nothing here depends on that one any more.)
 ## Git
 
 - PUBLIC repo: nothing personal or secret in any file or commit message.
-- Never push on your own — pushing deploys to Pages; push only when Andrew asks in the session.
-  Side branches (`proto/*` and the like) stay local.
+- `git push` is pre-approved (Andrew, 2026-10-31; allow rule in `.claude/settings.json`): push the
+  session's working branch when finished work is committed. Merging to `main` is what deploys to
+  Pages — open the PR and merge only when Andrew asks. Side branches (`proto/*` and the like) stay local.
 - End a non-trivial session with a `STATUS.md` entry at the top (Done / Next steps / Open questions).
