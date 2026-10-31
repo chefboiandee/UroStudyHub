@@ -1,7 +1,83 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-10-25
+**Updated:** 2026-10-31
 **Tool:** Claude Code (Opus 5.5)
+
+## 2026-10-31 — 🏥 Uro Rush: Clinic Rush + Inpatient Consults merged into one game, with a joystick
+
+Andrew: joystick on iPad/iPhone instead of just WASD, a graphical upgrade, bring Clinic Rush back,
+and make it one game that alternates clinic/consults randomly; then "send to ED" in clinic for what
+an office can't manage (GH needing CBI, stones needing a stent ASAP).
+**Done:**
+- New page `games/uro-rush.html` (canvas, vanilla JS, no deps), framed by the arcade like Pre-Op
+  (`UroRush()` in `UroStudyHub.html`; postMessage `rush:claim` capped 150 💰 / 80 XP, `rush:exit`).
+  The old `UroClinicRush` + `InpatientConsults` React games are deleted (−960 lines). Their 2 tiles
+  are now one 🏥 **Uro Rush** tile (150 💰). Anyone who unlocked either old game has it unlocked.
+- **Shift:** 5 blocks of 4–5 patients. It's 3 of one setting + 2 of the other, shuffled until it
+  switches at least twice. A pager card ("📟 Paged!") or clinic sign ("🏥 Back to clinic") announces
+  each switch. New orders unlock at blocks 2 and 4 (tier 1→3). 4 ♥. Wrong order or timeout = −1 ♥.
+  HUD shows done blocks + "?" for the rest.
+- **Clinic:** 🚑 **Send to ED** replaces "CBI / irrigate". Keyed ED cases: GH + clot retention,
+  febrile obstructing stone, sudden scrotal pain + high-riding testis, post-TURP bleed with clots,
+  solitary kidney + obstructing stone with rising Cr. AUR is still a Foley in clinic (ED = wrong).
+- **Consults:** ED cases go to an ED bay, ICU to the ICU, floor to 4N/6S.
+- **Touch:** floating joystick: drag anywhere on the map, the stick appears under the thumb and
+  follows past its rim. Door assist slides you into doorways. Orders fire on release, so a second
+  finger can order while the first steers. On touch the map pins to the top and the strip under it
+  is a thumb zone. Phones get a 4-column order grid with short labels. Desktop: WASD/arrows +
+  1–9 0 - =.
+- **Graphics:** top-down diorama.
+  - Clinic: wood corridor + rug, exam tables with paper, counters/sinks, nurses' station.
+  - Hospital: curtained ED bays, glass ICU, beds, live ECG monitors, elevator, wayfinding stripes.
+  - Lit rooms; empty ones go dark.
+  - Patients with moods and age/sex looks, who walk out happy/angry. The doctor in a white coat
+    walks with arm/foot swing.
+  - Patience rings on room badges; red pulse when urgent. Sparks/puffs, floating points, shake on
+    a miss.
+  - A clipboard chart shows the complaint, or the waiting list when you're in the hall.
+- **End of shift:** score, best, Clinic x/y · Consults x/y, best streak, and a review list of every
+  miss (what you ordered → the right one).
+- **Answer-key changes, please check** (the merged game shows full order sets more often):
+  - New `alt` = also right, full credit:
+    - LUTS (PSA ↔ UA)
+    - smoker GH (cysto ↔ CT)
+    - PSA 4.2→8.1 (biopsy ↔ repeat PSA)
+    - Cr 4.2 flank pain (CT ↔ US)
+    - febrile pyelo (labs ↔ CT)
+    - 14M scrotal pain (US ↔ OR)
+    - torsion (OR ↔ manual detorsion)
+    - septic/obstructed stone and post-URS edema (stent ↔ nephrostomy)
+  - Rewritten:
+    - "OAB, failed behavioral → UDS" is now SCI neurogenic bladder → UDS.
+    - "SUI index pt → UDS" is now recurrent SUI after a sling → UDS.
+    - "80M retention, Cr rising" is now Foley, was CT.
+    - "8M high-riding testis → US" is now a hydrocele → US; torsion is now Send to ED.
+    - "3 cm renal mass → biopsy" is now PI-RADS 5 → biopsy.
+    - "Grade IV varicocele → SA" is now 1 yr infertility → SA.
+    - "58F T 103 obstructing stone → abx" is now pyelo, no hydro → abx (obstruction = decompress).
+    - "12M no flow" is keyed OR, with detorsion also right.
+- Harness `tools/uro-rush.drive.mjs` (raw CDP like Pre-Op's; `CHROME=` env, finds Linux Chromium too):
+  **28/28** pass:
+  - content self-test
+  - real-touch joystick walk and doorway entry
+  - second-finger order while steering
+  - hearts / timeout / alt / Send to ED rules
+  - 8 seeded full shifts (both settings, ≥2 switches, 6 different plans)
+  - embed claim/exit
+  - every order on screen at iPhone 390×664, 390×844 and 844×390
+  - no page errors
+
+  The game script parses as ES2020 (acorn).
+- Built app checked headless (React/Babel served from npm copies; cdnjs is blocked in the cloud
+  sandbox):
+  - Only the known Babel 500KB note + the refused LM Studio request in the console.
+  - A Clinic-Rush-only player sees one unlocked Uro Rush tile.
+  - Claim paid +39 💰 / +20 XP for 300 pts and closed the frame.
+
+**Next steps:** play it on the iPad + iPhone (joystick feel, speed `SPEED`/`ACCEL`, timer lengths
+`PATIENCE`); tune `LIVES`/block sizes if a shift feels long.
+**Open questions:** keep the name "Uro Rush"? Teaching lines ("why") on the review list? A Boox pass
+isn't needed for an action game, but the page should at least load there (not tested on device).
 
 ## 2026-10-30 (late 5) — 🛩️ Stone Squadron: peristalsis you actually ride through
 
