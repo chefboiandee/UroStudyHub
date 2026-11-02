@@ -3,6 +3,57 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later) — 🧠 Tutor: live replies that stay at the top; Quick Ask ✕ you can hit
+
+Andrew:
+- Long tutor replies left him at the bottom, so he scrolled back up every time (all devices).
+- Wants the text to show as it's written.
+- The Quick Ask window sometimes couldn't be closed and covered the tutor.
+
+**Done:**
+- **Scrolling:** after you send, the chat shows your message + "Thinking...". When the reply
+  comes, its **first line goes to the top** and stays there. Nothing scrolls you to the bottom
+  of a long block any more.
+  - While it streams, the chat follows the text only until the reply's top reaches the top.
+  - If you scroll up mid-reply, it stops following. Reading ahead is never undone.
+  - Loading a saved or resumed session lands on the start of the last reply.
+- **Live replies:** `callAI(..., { onDelta, signal })` streams over SSE for all five providers.
+  - `readSSE()` reads the stream.
+  - Anthropic: `content_block_delta` events.
+  - OpenAI / OpenRouter / Gemini / LM Studio: `choices[0].delta.content`.
+  - A server that answers with plain JSON instead still works.
+  - Screen updates at most every 120 ms, with a ▍ cursor while writing.
+  - If the stream drops, the partial text stays with "⚠ Reply cut off — tap 🔄".
+  - Only the main tutor streams; Quick Ask answers are short, so they still arrive in one piece.
+- **Switch:** "⚡ Show replies as they're written" in the tutor's ✏️ panel, default on, saved as
+  `s.tutorStream`. Turn it off if live text flickers on the Boox.
+- **One reply at a time:** a newer send, Clear, or loading a session drops and aborts the reply in
+  flight (`chatReq` id + `AbortController`), so a stale reply can't refill a cleared chat.
+- **Quick Ask:** the ✕ / ⤢ / 🗑 header buttons are now 34 px tap targets (✕ boxed), and Esc closes
+  the panel.
+  - Why it wouldn't close before: the old scroll bug (fixed this morning) pushed the panel header
+    off-screen, so ✕ wasn't reachable.
+
+**Verified:** 19/19 in headless Chrome at iPad (1180×760) and phone (390×760) sizes, against the
+built page and a fake streaming LM Studio on :1234. Checked:
+- text arrives in steps
+- cursor shown, "Thinking..." hidden while streaming
+- reply top pinned at 8 px while text grows, and on finish, for 2 replies
+- page never scrolls
+- scrolling up mid-reply isn't undone
+- Clear mid-reply stays empty
+- a cut-off stream keeps the partial text
+- the JSON fallback
+- streaming off (and it's remembered)
+- a stubbed Claude SSE stream
+- Quick Ask ✕ size, ✕ and Esc closing it
+
+The earlier Quick Ask iPad-keyboard check still passes. No console errors beyond the known Babel note.
+
+**Next steps:** Andrew to test on the iPad with a real provider. Check on the Boox whether live text
+flickers; if it does, the ⚡ switch turns it off.
+**Open questions:** should Quick Ask stream too? Its answers are short, so it's left as is for now.
+
 ## 2026-11-02 — 💬 Tutor Quick Ask: readable on iPad
 
 Andrew: on iPad, from the 2nd Quick Ask question on, the side chat showed about one line of the
