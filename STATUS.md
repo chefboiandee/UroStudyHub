@@ -3,6 +3,46 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 3) — 📐 Tutor: the tab bar can't cover the typing box
+
+Andrew (iPad): scrolled to the bottom, the bottom tab bar seems to grow and covers more of the
+tutor's typing box.
+**Cause:**
+- The tutor was `calc(100vh - 60px)` tall under an ~80 px header, with the tab bar
+  `position: fixed` over it. The typing box was kept clear only by a hard-coded 68 px bottom pad.
+- So the page (`#root`, the app's scroller) was taller than the window, and the box and the bar
+  were positioned independently.
+- Even in desktop Chrome the box sat 9 px under the bar (20 px on a phone). On iPad, iOS changes
+  the visible height as you scroll, so the overlap shifted, worst at the bottom.
+
+**Done:**
+- On the tutor tab the app is one column that exactly fills the window: header, tutor
+  (`flex: 1`), then the tab bar **in the column** (`position: relative`), not floating.
+  - The typing box always sits directly above the bar.
+  - The tutor page has nothing to scroll at page level.
+  - The bar keeps its full width.
+  - Other tabs are unchanged (floating bar, `minHeight: 100vh`, 820 px column).
+- Dropped the 68 px pad.
+- Chat boxes get `overscroll-behavior: contain`, so scrolling past the end stays in the chat.
+- Quick Ask:
+  - The pill and the panel sit at `bottom: 72` (was 132).
+  - Big mode: `calc(100% - 176px)`.
+  - Default height `min(56%, 460px)`, which keeps about its old size in the now correctly sized
+    tutor area.
+- Reply pin offset 8 → 6 px, so the edge of your question no longer peeks above the answer.
+
+**Verified:** headless Chrome at 820×1080, 1180×740, 1024×1290 and 390×760:
+- Tutor: `#root` has 0 px to scroll, and the typing box is 10 px above the tab bar (was 9–20 px
+  under it).
+- The bar is full width; the Hub still has the floating bar.
+- Streaming suite 27/27 at iPad and phone sizes.
+- Quick Ask keyboard checks pass (the emulation now holds the column's height).
+
+**Next steps:** Andrew to check on the iPad, at the bottom of a long chat, with and without the
+keyboard.
+**Open questions:** whether the iPad runs the app from the home screen or in Safari — worth knowing
+if anything iOS-specific is left.
+
 ## 2026-11-02 (later 2) — 💬 Quick Ask streams too
 
 Andrew: make Quick Ask stream like the tutor.
