@@ -100,6 +100,15 @@ def main():
     print(f"  Obfuscated:      {len(processed):,} chars ({len(processed) // 1024}KB)")
     print(f"  Reduction:       {100 - len(processed) * 100 // orig_len}%")
 
+    # The In-Service sprint logic ships as its own plain-ES5 script (no Babel pass on the Boox);
+    # strip it the same way.
+    ise_pattern = r'(<script id="ise-logic">)([\s\S]*?)(</script>)'
+    ise_match = re.search(ise_pattern, before)
+    if ise_match:
+        ise_processed = obfuscate_script(ise_match.group(2))
+        before = before[:ise_match.start()] + ise_match.group(1) + '\n' + ise_processed + '\n' + ise_match.group(3) + before[ise_match.end():]
+        print(f"  ISE logic script: {len(ise_match.group(2)):,} → {len(ise_processed):,} chars")
+
     # Reassemble
     output = before + script_tag + '\n' + processed + '\n' + close_tag + after
 

@@ -108,6 +108,1093 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 
+<script id="ise-logic">
+var ISE_GROUPS = {
+void:   { w: 12, label: "Voiding",        read: "Core Curriculum OAB, SUI, BPH, IC/BPS, fistula · AUA: OAB; SUI; LUTS/BPH; IC/BPS" },
+peds:   { w: 10, label: "Peds",           read: "Core Curriculum pediatric chapters · AUA: Vesicoureteral Reflux; Cryptorchidism" },
+stones: { w: 10, label: "Stones",         read: "Core Curriculum urolithiasis · AUA: Medical Management of Kidney Stones; Surgical Management of Stones" },
+pros:   { w: 9,  label: "Prostate",       read: "Core Curriculum prostate cancer chapters · AUA: Early Detection of Prostate Cancer; Clinically Localized Prostate Cancer; Advanced Prostate Cancer" },
+andro:  { w: 8,  label: "Andrology",      read: "Core Curriculum sexual medicine and infertility · AUA: ED; Priapism; Peyronie's; Testosterone Deficiency; Male Infertility" },
+basic:  { w: 8,  label: "Basic science",  read: "Core Curriculum anatomy, embryology, renal physiology, transplant" },
+blad:   { w: 7,  label: "Bladder/UTUC",   read: "Core Curriculum hematuria and urothelial carcinoma · AUA: Microhematuria; NMIBC; MIBC; Upper Tract Urothelial Carcinoma" },
+neuro:  { w: 7,  label: "Neurogenic",     read: "Core Curriculum neurogenic bladder and urodynamics · AUA/SUFU: Adult Neurogenic LUTD; Urodynamics" },
+trauma: { w: 7,  label: "Trauma/recon",   read: "Core Curriculum trauma and reconstruction · AUA: Urotrauma; Urethral Stricture" },
+inf:    { w: 6,  label: "Infections",     read: "Core Curriculum infections · AUA: Recurrent Uncomplicated UTI in Women; antimicrobial prophylaxis best practice statement" },
+kid:    { w: 5,  label: "Kidney",         read: "Core Curriculum renal neoplasms · AUA: Renal Mass and Localized Renal Cancer" },
+img:    { w: 5,  label: "Imaging/pharm",  read: "Core Curriculum imaging, radiation safety, pharmacology" },
+testis: { w: 3,  label: "Testis",         read: "Core Curriculum testis neoplasms · AUA: Early Stage Testicular Cancer" },
+pen:    { w: 3,  label: "Penile/adrenal", read: "Core Curriculum penile, urethral and adrenal neoplasms · NCCN penile algorithm (no AUA guideline)" }
+};
+var ISE_GROUP_KEYS = Object.keys(ISE_GROUPS);
+var ISE_BLOCKS = [
+{ id: "void1", g: "void", k: 0, label: "Voiding 1: OAB, SUI, incontinence", know: ["voiding"], topics: ["Overactive Bladder: Evaluation and Treatment", "OAB Treatment: Minimally Invasive and Invasive Therapies", "Stress Urinary Incontinence: Surgery (Female)", "Stress Urinary Incontinence: Surgery (Male)", "Urinary Incontinence: Etiology and Pathophysiology"] },
+{ id: "void2", g: "void", k: 1, label: "Voiding 2: BPH, IC/BPS, fistula, prolapse", know: ["voiding"], topics: ["Medical Treatment", "Surgical Treatment", "Interstitial Cystitis/Bladder Pain Syndrome", "Urinary Fistulas", "Pelvic Organ Prolapse Evaluation and Treatment"] },
+{ id: "peds1", g: "peds", k: 0, label: "Peds 1: hydronephrosis, UPJO, VUR, PUV, duplication", know: ["peds1"], topics: ["Hydronephrosis and Hydroureteronephrosis", "Vesicoureteral Reflux", "Posterior Urethral Valves", "Congenital Anomalies of the Kidney and Urinary Tract"] },
+{ id: "peds2", g: "peds", k: 1, label: "Peds 2: cryptorchidism, torsion, hypospadias, DSD, tumors, enuresis", know: ["peds2"], topics: ["Undescended Testis", "Common Pediatric Scrotal Conditions", "Hypospadias", "Differences of Sex Development", "Genitourinary Oncology", "Voiding Dysfunction"] },
+{ id: "ston1", g: "stones", k: 0, label: "Stones 1: metabolic evaluation and medical management", know: ["stones"], topics: ["Medical Management of Urolithiasis", "Pathology & Evaluation: Urolithiasis"] },
+{ id: "ston2", g: "stones", k: 1, label: "Stones 2: SWL, URS, PCNL, MET, pregnancy", know: ["stones"], topics: ["Surgical Treatment: Urolithiasis", "Urologic Considerations in Pregnancy"] },
+{ id: "pros1", g: "pros", k: 0, label: "Prostate 1: early detection, MRI, biopsy, risk groups", know: ["prostate"], topics: ["Prostate Cancer Screening, Diagnosis and Risk Stratification"] },
+{ id: "pros2", g: "pros", k: 1, label: "Prostate 2: active surveillance, RP, RT + ADT, BCR", know: ["prostate"], topics: ["Prostate Cancer Localized and Locally Advanced Treatment"] },
+{ id: "pros3", g: "pros", k: 2, label: "Prostate 3: mHSPC, CRPC, PSMA PET", know: ["prostate"], topics: ["Prostate Cancer: Advanced and Metastatic Disease"] },
+{ id: "andr1", g: "andro", k: 0, label: "Andrology 1: ED, priapism, Peyronie's", know: ["andro"], topics: ["Priapism", "Erectile Dysfunction: Medical and Surgical Management", "Peyronie's Disease Treatment"] },
+{ id: "andr2", g: "andro", k: 1, label: "Andrology 2: hypogonadism, infertility, ejaculatory disorders", know: ["andro"], topics: ["Physiology, Epidemiology, Pathophysiology, Evaluation", "Testosterone Deficiency: Medical Treatment", "Infertility: Surgical Management", "Ejaculation and Orgasm Disorders"] },
+{ id: "bs1", g: "basic", k: 0, label: "Basic science 1: renal physiology, renovascular, transplant, fluids", know: ["physio"], topics: ["Renal Physiology", "Post Obstructive Diuresis", "Hypertension, Renal Failure, and Kidney Transplant", "Metabolic Acidosis", "Hyperkalemia"] },
+{ id: "bs2", g: "basic", k: 1, label: "Basic science 2: anatomy and embryology", know: ["anat"], topics: ["Kidney, Adrenal, Ureter", "Bladder", "Prostate and Seminal Vesicle", "Testis, Epididymis, Vas Deferens", "Genital System and Urethra"] },
+{ id: "blad1", g: "blad", k: 0, label: "Bladder 1: microhematuria, NMIBC, BCG", know: ["bladder"], topics: ["Bladder Neoplasms: Non-Muscle Invasive Bladder Cancer", "Hematuria"] },
+{ id: "blad2", g: "blad", k: 1, label: "Bladder 2: MIBC, diversion, UTUC", know: ["bladder"], topics: ["Bladder Neoplasms: Muscle Invasive and Advanced Bladder Cancer", "Upper Tract Neoplasms"] },
+{ id: "neur1", g: "neuro", k: 0, label: "Neurogenic 1: neuroanatomy, lesion patterns, urodynamics", know: ["neuro"], topics: ["Adult Urodynamics", "Bladder Physiology"] },
+{ id: "neur2", g: "neuro", k: 1, label: "Neurogenic 2: SCI and dysreflexia, MS, spina bifida, augmentation", know: ["neuro"], topics: ["Neurogenic Lower Urinary Tract Dysfunction", "Spina Bifida and Neurogenic Bladder"] },
+{ id: "trau1", g: "trauma", k: 0, label: "Trauma and reconstruction", know: ["trauma"], topics: ["Lower Urinary Tract Trauma: Bladder, Urethra, Genitalia", "Upper Urinary Tract Trauma: Kidney and Ureters", "Urethral Stricture Disease"] },
+{ id: "inf1", g: "inf", k: 0, label: "Infections", know: ["infection"], topics: ["Urinary Tract Infection (Adult)", "Genital Infections", "Chronic Pelvic Pain Syndrome/Prostatitis", "UTIs: Pediatrics"] },
+{ id: "kid1", g: "kid", k: 0, label: "Kidney: renal mass, RCC staging and treatment, hereditary syndromes", know: ["kidney"], topics: ["Renal Neoplasms: Localized and Locally Advanced", "Renal Neoplasms: Tumor Thrombus and Advanced Disease"] },
+{ id: "img1", g: "img", k: 0, label: "Imaging, contrast, radiation, pharmacology", know: ["imaging", "pharm"], topics: ["Radiation Safety", "Pharmacology", "Computed Tomography (CT)", "Magnetic Resonance Imaging (MRI)"] },
+{ id: "tes1", g: "testis", k: 0, must: 1, label: "Testis cancer", know: ["testis"], topics: ["Testis Neoplasms"] },
+{ id: "pen1", g: "pen", k: 0, label: "Penile, urethral, adrenal", know: ["penile", "adrenal"], topics: ["Penile Neoplasms", "Urethral Neoplasms", "Adrenal Neoplasms"] }
+];
+ISE_BLOCKS.forEach(function (b, i) { b.i = i; });
+var ISE_BY_ID = Object.create(null); ISE_BLOCKS.forEach(function (b) { ISE_BY_ID[b.id] = b; });
+var ISE_LABEL = { "Medical Treatment": "BPH: Medical Treatment", "Surgical Treatment": "BPH: Surgical Treatment",
+"Physiology, Epidemiology, Pathophysiology, Evaluation": "Infertility: Physiology, Epidemiology, Pathophysiology, Evaluation",
+"Genitourinary Oncology": "Pediatric Genitourinary Oncology", "Voiding Dysfunction": "Pediatric Voiding Dysfunction and Enuresis",
+"Pharmacology": "Urologic Pharmacology", "Bladder": "Bladder Anatomy and Embryology",
+"Kidney, Adrenal, Ureter": "Kidney, Adrenal, Ureter: Anatomy and Embryology",
+"Prostate and Seminal Vesicle": "Prostate and Seminal Vesicle: Anatomy and Embryology",
+"Testis, Epididymis, Vas Deferens": "Testis, Epididymis, Vas Deferens: Anatomy and Embryology",
+"Genital System and Urethra": "Genital System and Urethra: Anatomy and Embryology" };
+var ISE_KNOW = {
+prostate: { t: "Prostate", items: [
+"Start the screening talk at 40–45 for Black men, germline carriers (BRCA2 especially) and strong family history. MRI before biopsy in the biopsy-naive.",
+"Risk groups: low = T1–T2a, GG1, PSA <10. High = T3a, or GG4–5, or PSA >20. Intermediate splits favorable/unfavorable.",
+"Low risk → active surveillance preferred. Germline testing for high-risk, metastatic, intraductal/cribriform, or suggestive family history.",
+"RT + ADT: unfavorable intermediate 4–6 mo; high risk 18–36 mo.",
+"BCR: post-RP PSA ≥0.2 confirmed; post-RT nadir + 2 (Phoenix). PSMA PET for BCR and high-risk staging.",
+"mHSPC: ADT + ARPI (abiraterone, enzalutamide, apalutamide, darolutamide); add docetaxel for high volume. CRPC: olaparib for HRR mutations, Lu-177 PSMA-617 after ARPI + taxane, radium-223 for symptomatic bone-only, sipuleucel-T for asymptomatic.",
+"LHRH flare: antiandrogen lead-in or an antagonist (degarelix, relugolix) if cord compression risk. Bone health on ADT: denosumab or zoledronic acid."
+] },
+bladder: { t: "Bladder and upper tract", items: [
+"Microhematuria = ≥3 RBC/HPF on one properly collected specimen. Low risk → repeat UA or shared decision; intermediate → cysto + renal US; high → cysto + CT urogram.",
+"Single post-TURBT intravesical gemcitabine or mitomycin for presumed low/intermediate-risk NMIBC.",
+"Repeat TURBT for T1, incomplete resection, or no muscle in the specimen.",
+"High-risk NMIBC: BCG induction + maintenance. BCG-unresponsive → cystectomy is standard; know pembrolizumab, nadofaragene firadenovec, N-803 + BCG.",
+"MIBC: cisplatin-based neoadjuvant chemo then cystectomy + bilateral PLND. Cis-ineligible: GFR <60, ECOG ≥2, hearing loss, neuropathy, NYHA III. Adjuvant nivolumab for high-risk pathology. EV + pembrolizumab first line metastatic.",
+"Diversion metabolics: ileum/colon → hyperchloremic metabolic acidosis; jejunum → hyponatremia, hyperkalemia, acidosis; stomach → hypochloremic hypokalemic alkalosis. Terminal ileum loss → B12, bile salts.",
+"UTUC: CTU + ureteroscopy with biopsy. Low risk → kidney-sparing; high risk → RNU with bladder cuff + single postop intravesical chemo. Adjuvant platinum (POUT). Think Lynch."
+] },
+kidney: { t: "Kidney", items: [
+"T1a ≤4 cm; T1b 4–7; T2 >7 confined; T3a renal vein or perinephric/sinus fat; T3b IVC below diaphragm; T3c above diaphragm or wall; T4 beyond Gerota or contiguous adrenal.",
+"cT1a: partial preferred; ablation for <3 cm; active surveillance for small masses in older/comorbid. Biopsy when it changes management.",
+"Hereditary: VHL (clear cell, pheo, hemangioblastoma; belzutifan), BHD/FLCN (chromophobe, oncocytic), HLRCC/FH (aggressive, no surveillance), HPRC/MET (papillary), TSC (AML).",
+"Adjuvant pembrolizumab for high-risk clear cell after nephrectomy. Metastatic: IO-based combinations, IMDC risk.",
+"Paraneoplastic: Stauffer, hypercalcemia (PTHrP), polycythemia (EPO), hypertension.",
+"AML: symptomatic, >4 cm or childbearing age → embolization or partial. Wunderlich = spontaneous retroperitoneal bleed."
+] },
+testis: { t: "Testis", items: [
+"Workup: scrotal US, AFP/hCG/LDH before and after radical inguinal orchiectomy, CT A/P and chest imaging. Offer sperm banking first.",
+"Half-lives: AFP 5–7 days, hCG 24–36 h. Pure seminoma never raises AFP.",
+"Stage I seminoma: surveillance preferred (carboplatin ×1 or RT alternatives). Stage I NSGCT: surveillance, RPLND, or BEP ×1 for LVI.",
+"IGCCCG good → BEP ×3 or EP ×4. Intermediate/poor → BEP ×4.",
+"Post-chemo mass: NSGCT >1 cm with normal markers → RPLND. Seminoma >3 cm → PET ≥6 weeks after chemo.",
+"Bleomycin: PFTs, low FiO2 under anesthesia."
+] },
+penile: { t: "Penile and urethral", items: [
+"Penile-sparing for Tis/Ta/T1 low grade. Nonpalpable nodes + high-risk primary (≥T1b, high grade, LVI) → dynamic sentinel node biopsy or modified inguinal LND. Palpable nodes → biopsy/FNA, no antibiotic trial first.",
+"≥2 positive inguinal nodes or extranodal extension → pelvic LND. Bulky nodes → neoadjuvant TIP."
+] },
+adrenal: { t: "Adrenal", items: [
+"Every incidentaloma: 1 mg dex suppression (cortisol >1.8 μg/dL abnormal) + plasma free metanephrines; aldosterone/renin if hypertensive or hypokalemic.",
+"<10 HU unenhanced = lipid-rich adenoma. Washout absolute >60%, relative >40%. Surgery for functional, >4 cm, or suspicious.",
+"Pheo: alpha blockade 10–14 days first, then beta if needed, plus volume. Genetic testing for all.",
+"Primary aldosteronism: adrenal vein sampling before adrenalectomy in most.",
+"Suspected ACC → open adrenalectomy. After a cortisol-secreting adenoma, perioperative steroids."
+] },
+neuro: { t: "Neurogenic bladder", items: [
+"Wiring: pelvic nerve S2–4 → M3 → detrusor; hypogastric T10–L2 → β3 relaxes body, α1 closes neck; pudendal S2–4 → external sphincter; pons coordinates.",
+"Above the pons (stroke, Parkinson's, dementia): overactive, coordinated, low upper tract risk.",
+"Spinal above S2 (SCI, MS): overactive + DSD, high upper tract risk.",
+"Sacral/peripheral (conus, cauda, pelvic surgery, diabetes): underactive or areflexic; watch compliance.",
+"Spinal shock: areflexic for weeks to months. CIC through it.",
+"Autonomic dysreflexia at/above T6: sit up, loosen clothes, drain bladder; nifedipine or nitrates if SBP stays >150.",
+"Danger signs: DLPP >40 cm H2O, poor compliance, DSD, high-grade VUR.",
+"Ladder: CIC → antimuscarinic or β3 → botox 200 U (100 U idiopathic OAB) → augmentation → diversion.",
+"Augment + CIC + abdominal pain + sepsis = perforation until proven otherwise. CT cystogram.",
+"Spina bifida deterioration → tethered cord or shunt. Don't treat asymptomatic bacteriuria in CIC. Chronic indwelling → SCC risk.",
+"Diabetic cystopathy: poor sensation, large capacity, weak contraction. Fowler: young woman in retention, responds to SNM."
+] },
+voiding: { t: "OAB, SUI, BPH, IC/BPS", items: [
+"OAB: behavioral first. Prefer β3 over antimuscarinics in older or cognitively at-risk patients. Third line: botox 100 U, PTNS, SNM. Check PVR.",
+"Index SUI patient: urodynamics not required before a midurethral sling.",
+"Post-prostatectomy SUI: male sling for mild, no RT; AUS for moderate-severe or irradiated.",
+"α-blockers: floppy iris, tell the ophthalmologist. 5-ARIs halve PSA after 6–12 months and cut retention/surgery risk. Tadalafil for LUTS ± ED.",
+"Ejaculation preserved → Rezūm, UroLift. Size-independent → HoLEP/ThuLEP. Anticoagulated → laser enucleation or PVP.",
+"IC/BPS: exclusion diagnosis; no long-term antibiotics or systemic steroids. Pentosan → maculopathy, eye exams.",
+"VVF: usually post-hysterectomy; small early ones may heal with drainage."
+] },
+peds1: { t: "Peds: upper tract", items: [
+"First postnatal US after 48 h; sooner if bilateral, solitary kidney or PUV suspected. VCUG for suspected PUV, bilateral hydro, or ureteral dilation.",
+"UPJO: MAG3. Pyeloplasty for split <40%, a drop >10%, symptoms, infection, or worsening dilation.",
+"VUR: CAP for infants. RIVUR: fewer recurrent UTIs, no less scarring. Treat BBD. Then injection or reimplant.",
+"PUV: dilated posterior urethra, keyhole bladder. Ablation, lifelong bladder follow-up. Nadir creatinine >1.0 in year one predicts renal failure.",
+"Weigert–Meyer: upper pole inserts inferomedial (obstructs, ureterocele, ectopic); lower pole superolateral (refluxes).",
+"Ectopic ureter: girls can dribble continuously with normal voids; boys always insert above the external sphincter (epididymitis, not incontinence).",
+"Prune belly: abdominal wall laxity, bilateral cryptorchidism, dilated urinary tract."
+] },
+peds2: { t: "Peds: genitalia, tumors, enuresis", items: [
+"Cryptorchidism: no US before referral; refer by 6 mo; orchiopexy by 18 mo; no hormones. Bilateral nonpalpable or UDT + hypospadias → DSD workup now (CAH).",
+"Torsion: classic story → explore without imaging; detorsion within 6 h; fix the other side.",
+"Hypospadias: no circumcision; repair at 6–18 months.",
+"CAH (21-hydroxylase) = most common 46,XX DSD; salt wasting in week 1–2; 17-OH progesterone. Y material in dysgenetic gonads → germ cell tumor risk.",
+"Wilms: WAGR, Denys–Drash, Beckwith–Wiedemann (US every 3 months to age 8). Spill and preop biopsy upstage.",
+"Neuroblastoma: crosses midline, calcified, VMA/HVA, MYCN = bad, opsoclonus-myoclonus.",
+"Paratesticular rhabdo ≥10 years → ipsilateral RPLND. Prepubertal testis tumors: teratoma (testis-sparing) or yolk sac (AFP; infant AFP is normally high).",
+"Enuresis: alarm most durable; desmopressin fast but relapses. Daytime wetting → BBD first."
+] },
+stones: { t: "Stones", items: [
+"Hypercalciuria → thiazide, moderate sodium, normal calcium. Hypocitraturia → potassium citrate.",
+"Enteric hyperoxaluria (bowel resection, bariatric, IBD) → calcium with meals, low oxalate, fluids.",
+"Hyperuricosuria with CaOx → allopurinol if urine calcium normal. Uric acid stones → alkalinize to 6.0–6.5.",
+"Cystine: hexagonal, nitroprusside +; >3 L/day, pH ~7, tiopronin. Struvite: urease splitters, staghorn → complete PCNL removal.",
+"Calcium phosphate: high urine pH, dRTA, hyperparathyroidism. Indinavir stones are radiolucent on CT.",
+"Metabolic eval: one or two 24-h urines on random diet for high-risk or recurrent formers.",
+"Obstructed + infected → decompress first. Distal ≤10 mm → MET. Renal >20 mm → PCNL. Lower pole >10 mm → PCNL or URS, not SWL. Pregnancy → US, stent/PCN/URS, no SWL."
+] },
+infection: { t: "Infections", items: [
+"Treat asymptomatic bacteriuria only in pregnancy and before mucosa-breaching procedures.",
+"Recurrent UTI = ≥2 in 6 mo or ≥3 in a year, culture-documented. Vaginal estrogen peri/postmenopause.",
+"Emphysematous pyelo: diabetic, gas in parenchyma; drain or nephrectomy. XGP: staghorn + Proteus, bear paw, foamy macrophages; nephrectomy.",
+"Fournier's: emergent wide debridement + broad-spectrum. Don't wait on imaging.",
+"GU TB: sterile pyuria, golf-hole orifices, thimble bladder, putty kidney. S. haematobium → bladder SCC.",
+"Epididymitis: <35 sexually active → ceftriaxone + doxycycline; insertive anal → ceftriaxone + levofloxacin; older/enteric → levofloxacin.",
+"Prophylaxis per AUA best practice: TRUS biopsy, PCNL, prosthesis yes; simple cysto without risk factors no. Transperineal biopsy = fewer infections."
+] },
+andro: { t: "Andrology", items: [
+"PDE5i first line; nitrates and riociguat absolute contraindications. ED = cardiovascular risk marker.",
+"Ischemic priapism: dark blood, pO2 <30, pH <7.25 → aspirate + phenylephrine, then distal shunts. Nonischemic: trauma, bright red, fistula on Doppler → observe, embolize if persistent.",
+"Peyronie's: collagenase for stable 30–90° with palpable plaque. Plication for good rigidity; grafting for severe curvature; IPP if ED.",
+"Testosterone deficiency: two morning total T <300 + symptoms. Wants fertility → no exogenous T; clomiphene, hCG, AI. Hold for Hct >54%.",
+"Infertility: evaluate at 12 mo (6 if female partner >35). Karyotype + Y microdeletion for NOA or <5 million/mL. AZFa/b complete → retrieval futile; AZFc → possible. CBAVD → CFTR both partners.",
+"Repair palpable varicoceles with abnormal semen, not subclinical. NOA → microTESE.",
+"Retrograde ejaculation → post-void urine sperm, pseudoephedrine. SCI anejaculation → vibratory stimulation, then electroejaculation."
+] },
+trauma: { t: "Trauma and reconstruction", items: [
+"Renal CT with delays: stable penetrating, blunt + gross hematuria, or microhematuria + hypotension. Stable → nonop; active bleed in stable patient → embolize. Reimage IV–V.",
+"Ureter by level: distal → reimplant ± psoas hitch or Boari; mid → ureteroureterostomy; long proximal → TUU, ileal ureter, autotransplant. Late → nephrostomy or stent first.",
+"Bladder: CT cystogram with ≥300 mL retrograde fill. Extraperitoneal → catheter unless bone fragments, bladder neck, or going to ORIF. Intraperitoneal → repair.",
+"Blood at meatus → RUG first. PFUI → SP tube or primary realignment, urethroplasty ~3 months. Straddle → bulbar.",
+"Penile fracture → emergent repair; check urethra if blood or retention. Testicular rupture → explore and repair.",
+"Stricture: one urethrotomy/dilation for short bulbar is fine; repeating it isn't. Lichen sclerosus → buccal, never genital skin."
+] },
+anat: { t: "Anatomy and embryology", items: [
+"Ureteral blood supply: proximal from medial, pelvic from lateral.",
+"Lithotomy → common peroneal; retractor on psoas → femoral; PLND → obturator; psoas hitch → genitofemoral.",
+"Ureteric bud from mesonephric duct → collecting system; metanephric blastema → nephrons.",
+"Sertoli → AMH → Müllerian regression. Leydig → testosterone → Wolffian. DHT → external genitalia and prostate."
+] },
+physio: { t: "Physiology, renovascular, transplant", items: [
+"Unilateral obstruction: RBF rises first, then ureteral pressure and RBF fall over hours.",
+"Post-obstructive diuresis: monitor; replace a fraction with hypotonic fluid, don't chase 1:1.",
+"FMD: young women, string of beads, angioplasty works. Atherosclerotic: older, proximal, revascularization helps less often.",
+"Donor nephrectomy: left (longer vein). Transplant: leak early, lymphocele weeks, stricture and BK later."
+] },
+imaging: { t: "Imaging and radiation", items: [
+"Iodinated contrast: hydration prevents nephropathy; metformin per eGFR rules. Gadolinium: NSF with eGFR <30, much lower with group II agents.",
+"ALARA: time, distance, shielding; pulsed and last-image-hold fluoro. Pregnancy: US, then MRI, then low-dose CT."
+] },
+pharm: { t: "Pharmacology", items: [
+"Retention: anticholinergics, opioids, α-agonists, tricyclics.",
+"Priapism: trazodone, α-blockers, antipsychotics, intracavernosal agents, sickle cell.",
+"Hemorrhagic cystitis: cyclophosphamide/ifosfamide (acrolein, mesna), BK virus, radiation, ketamine.",
+"Gynecomastia: spironolactone, 5-ARIs, antiandrogens, estrogens. Lithium → nephrogenic DI.",
+"PDE5i + α-blocker: start one low to avoid hypotension."
+] }
+};
+var ISE_CFG_DEFAULT = { exam: null, minsWk: 120, minsWe: 180, off: [], skip: [], pace: 3, qbank: "SASP", boost: {} };
+var ISE_KIND_LABEL = { block: "Content", catchup: "Catch-up", buffer: "Catch-up", second: "Second pass", mock: "Mock",
+weak: "Weak spots", allknow: "Know-cold", misslog: "Miss log", final: "Final review", rest: "Rest", exam: "Exam",
+off: "Off", extra: "Extra", none: "" };
+var ISE_DECAY = [1, 0.7, 0.5], ISE_MUST = 7.5, ISE_LONG = 180;
+var ISE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var ISE_WD_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var ISE_TAIL_K = { mock: 1, weak: 1, allknow: 1, misslog: 1, final: 1 };
+var ISE_TAIL_ORDER = ["mock", "weak", "allknow", "misslog", "final"];
+var ISE_TAIL_NAME = { mock: "Mocks", weak: "Weak-spots days", allknow: "Know-cold days", misslog: "Miss-log days", final: "Final review" };
+var ISE_TAIL_NOUN = { mock: ["mock", "mocks"], weak: ["weak-spots day", "weak-spots days"], allknow: ["Know-cold day", "Know-cold days"],
+misslog: ["miss-log day", "miss-log days"], final: ["final review", "final reviews"] };
+function iseIsObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+function iseHas(o, k) { return !!o && typeof o === "object" && typeof k === "string" && !!Object.getOwnPropertyDescriptor(o, k); }
+function iseUniq(a) { var seen = Object.create(null), out = []; (a || []).forEach(function (x) { if (!seen[x]) { seen[x] = 1; out.push(x); } }); return out; }
+function iseR5(x) { return Math.round(x / 5) * 5; }
+function iseClamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+function iseMs(x) { return typeof x === "number" && isFinite(x) && x > 0 ? Math.floor(x) : 0; }
+function iseTier(g) { var w = iseHas(ISE_GROUPS, g) ? ISE_GROUPS[g].w : 0; return w >= 9 ? "HIGH" : w >= 5 ? "MED" : "LOW"; }
+function iseShort(id, ctx) {
+if (ctx && iseIsObj(ctx.labels) && iseHas(ctx.labels, id)) return String(ctx.labels[id]);
+var b = ISE_BY_ID[id]; return b ? b.label.split(":")[0] : String(id);
+}
+function iseFull(id, ctx) {
+if (ctx && iseIsObj(ctx.labels) && iseHas(ctx.labels, id)) return String(ctx.labels[id]);
+var b = ISE_BY_ID[id]; return b ? b.label : String(id);
+}
+function iseGLabel(g, ctx) {
+if (ctx && iseIsObj(ctx.labels) && iseHas(ctx.labels, g)) return String(ctx.labels[g]);
+return iseHas(ISE_GROUPS, g) ? ISE_GROUPS[g].label : String(g);
+}
+function iseGList(gs, ctx) { return (gs || []).map(function (g) { return iseGLabel(g, ctx); }).join(" and "); }
+function iseTopicLabel(t) { return t ? (iseHas(ISE_LABEL, t) ? ISE_LABEL[t] : t) : "the main topic"; }
+function iseLoopTopic(x) {
+var b = x ? ISE_BY_ID[x.b] : null;
+if (!b || x.lvl === "light") return null;
+return x.part === 2 ? (b.topics[Math.ceil(b.topics.length / 2)] || b.topics[0]) : b.topics[0];
+}
+function iseStableByD(list) {
+return list.map(function (m, i) { return { m: m, i: i }; })
+.sort(function (a, b) { return a.m.d < b.m.d ? -1 : a.m.d > b.m.d ? 1 : a.i - b.i; })
+.map(function (x) { return x.m; });
+}
+function iseYmd(dt) { var m = dt.getMonth() + 1, d = dt.getDate(); return dt.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (d < 10 ? "0" : "") + d; }
+function iseDate(y) { return new Date(y + "T00:00:00"); }
+function iseAdd(y, n) { var t = iseDate(y); t.setDate(t.getDate() + n); return iseYmd(t); }
+function iseDiff(a, b) { return Math.round((iseDate(b) - iseDate(a)) / 864e5); }
+function iseValidYmd(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && iseYmd(iseDate(s)) === s; }
+function iseFmt(y) { var t = iseDate(y); return ISE_WD[t.getDay()] + " " + (t.getMonth() + 1) + "/" + t.getDate(); }
+function iseThirdSat(year) { var first = 1 + (6 - new Date(year, 10, 1).getDay() + 7) % 7; return iseYmd(new Date(year, 10, first + 14)); }
+function iseDefaultExam(today) {
+var y = parseInt(String(today).slice(0, 4), 10), e = iseThirdSat(y);
+return today > e ? iseThirdSat(y + 1) : e;
+}
+function iseNowYmd() { return iseYmd(new Date(Date.now() - 4 * 3600e3)); }
+function iseMissWindow(misses, d) {
+var ds = Object.create(null), list = [];
+(misses || []).forEach(function (m) { if (m && typeof m.d === "string" && m.d < d) ds[m.d] = 1; });
+var keys = Object.keys(ds).sort(), from = keys.length ? keys[Math.max(0, keys.length - 2)] : null;
+(misses || []).forEach(function (m) {
+if (m && typeof m.d === "string" && m.d <= d && (from ? m.d >= from : m.d === d)) list.push(m);
+});
+return { from: from, list: list };
+}
+function iseRecentMisses(misses, d) { return iseMissWindow(misses, d).list; }
+function iseAnyMisses(misses, d) { return (misses || []).some(function (m) { return !!m && typeof m.d === "string" && m.d < d; }); }
+function iseFirstMiss(misses) { var f = null; (misses || []).forEach(function (m) { if (m && iseValidYmd(m.d) && (!f || m.d < f)) f = m.d; }); return f; }
+function iseDayCtx(ise, d) {
+var ms = (ise && ise.misses) || [], w = iseMissWindow(ms, d);
+return { qbank: (ise && ise.cfg && ise.cfg.qbank) || "SASP", recentMisses: w.list.length, missFrom: w.from, anyMisses: iseAnyMisses(ms, d) };
+}
+function iseMissText(n, ctx) {
+if (ctx && ctx.anyMisses === false) return "No misses yet: put these minutes into questions";
+if (n > 0) return ctx && iseValidYmd(ctx.missFrom) ? "Re-read misses since " + iseFmt(ctx.missFrom) + " (" + n + ")" : "Re-read misses from the last 2 days (" + n + ")";
+return "Re-read your miss log (nothing new in the last 2 days)";
+}
+function iseMins(cfg, d) {
+if (!cfg) return 0;
+if ((cfg.skip || []).indexOf(d) >= 0) return 0;
+var wd = iseDate(d).getDay();
+if ((cfg.off || []).indexOf(wd) >= 0) return 0;
+return ((wd === 0 || wd === 6) ? cfg.minsWe : cfg.minsWk) || 0;
+}
+function iseCap(M) { return M <= 0 ? 0 : M < 90 ? 0.5 : M < 150 ? 1 : M < 210 ? 1.5 : 2; }
+function iseGroupStats(log, plan) {
+var out = {}, byD = Object.create(null);
+(plan || []).forEach(function (e) { if (e && e.it) byD[e.d] = e; });
+Object.keys(log || {}).forEach(function (d) {
+var e = log[d];
+if (!e || !(e.q > 0) || typeof e.pct !== "number") return;
+var w = Object.create(null), gl = [], tot = 0;
+var add = function (g, x) { if (!iseHas(ISE_GROUPS, g)) return; if (!w[g]) { w[g] = 0; gl.push(g); } w[g] += x; tot += x; };
+var bs = Array.isArray(e.b) ? e.b : [];
+if (bs.length) {
+var lv = Object.create(null);
+if (byD[d]) byD[d].it.forEach(function (x) { lv[x.b] = x.lvl === "light" || x.part ? 0.5 : 1; });
+bs.forEach(function (id) { if (ISE_BY_ID[id]) add(ISE_BY_ID[id].g, lv[id] || 1); });
+}
+if (!tot && Array.isArray(e.gs)) e.gs.forEach(function (g) { add(g, 1); });
+if (!tot) add(e.g, 1);
+gl.forEach(function (g) {
+var x = out[g] || (out[g] = { q: 0, r: 0 }), s = w[g] / tot;
+x.q += e.q * s; x.r += e.q * e.pct / 100 * s;
+});
+});
+return out;
+}
+function iseScore(b, gs, cfg) {
+var sc = ISE_GROUPS[b.g].w * ISE_DECAY[b.k], x = gs[b.g];
+if (x && x.q >= 10) sc *= 1 + (iseClamp((1 - x.r / x.q) / 0.35, 0.5, 1.8) - 1) * Math.min(1, x.q / 40);
+else if (cfg && cfg.boost && cfg.boost[b.g]) sc *= 1.25;
+if (b.must) sc = Math.max(sc, ISE_MUST);
+return Math.round(sc * 100) / 100;
+}
+function iseProt(b) { return b.k === 0 && (ISE_GROUPS[b.g].w >= 7 || !!b.must); }
+function iseNewTail(cfg, study) {
+var S = study.length;
+var tailK = S >= 21 ? ["mock", "mock", "weak", "weak", "allknow", "misslog"]
+: S >= 14 ? ["mock", "mock", "weak", "final"]
+: S >= 8 ? ["mock", "weak", "final"]
+: S >= 1 ? ["final"] : [];
+var T = tailK.length, tailDates = study.slice(S - T);
+var nM = tailK.filter(function (k) { return k === "mock"; }).length, mockDates = [];
+if (nM) {
+var w0 = Math.max(0, S - T - 3), win = study.slice(w0, S - T + nM);
+mockDates = win.slice().sort(function (a, b) { return iseMins(cfg, b) - iseMins(cfg, a) || (a < b ? 1 : -1); })
+.slice(0, nM).sort();
+}
+var nonMockK = tailK.slice(nM), nonMockDates = tailDates.slice(T - nonMockK.length);
+return mockDates.map(function (d) { return { d: d, k: "mock" }; })
+.concat(nonMockDates.map(function (d, i) { return { d: d, k: nonMockK[i] }; }))
+.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+}
+function iseTailDrop(P) {
+var at = function (k, last) { var r = -1; P.forEach(function (x, i) { if (x.k === k && (last || r < 0)) r = i; }); return r; };
+var n = function (k) { return P.filter(function (x) { return x.k === k; }).length; };
+var ak = at("allknow", false), ml = at("misslog", true);
+if (ak >= 0 && ml >= 0) { P[ml].k = "final"; return ak; }
+if (n("weak") >= 2) return at("weak", true);
+if (n("mock") >= 2) return at("mock", false);
+if (n("weak")) return at("weak", true);
+if (n("mock")) return at("mock", false);
+return P.length > 1 ? 0 : -1;
+}
+function iseKeepTail(tail, study, mayShrink) {
+var P = tail.filter(function (x) { return iseIsObj(x) && iseValidYmd(x.d) && iseHas(ISE_TAIL_K, x.k); })
+.map(function (x) { return { d: x.d, k: x.k }; })
+.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+var avail = Object.create(null), used = Object.create(null), dates = [], lost = [];
+study.forEach(function (x) { avail[x] = 1; });
+P.forEach(function (x) { if (avail[x.d] && !used[x.d]) { used[x.d] = 1; dates.push(x.d); } else lost.push(x.d); });
+lost.forEach(function (ld) {
+var r = null, i;
+for (i = study.length - 1; i >= 0 && !r; i--) if (study[i] < ld && !used[study[i]]) r = study[i];
+for (i = 0; i < study.length && !r; i++) if (study[i] > ld && !used[study[i]]) r = study[i];
+if (r) { used[r] = 1; dates.push(r); }
+});
+dates.sort();
+while (P.length > dates.length) { var j = iseTailDrop(P); P.splice(j < 0 ? 0 : j, 1); }
+P.forEach(function (x, i) { x.d = dates[i]; });
+while (mayShrink && P.length > 1 && study.length - P.length < 2) { var j2 = iseTailDrop(P); if (j2 < 0) break; P.splice(j2, 1); }
+var has = function (k) { return P.some(function (x) { return x.k === k; }); };
+if (P.length && !has("final") && !(has("allknow") && has("misslog"))) {
+for (var z = P.length - 1; z >= 0; z--) if (P[z].k === "allknow" || P[z].k === "misslog") { P[z].k = "final"; break; }
+}
+return P;
+}
+function buildIsePlan(cfg, hist, from) {
+var out = { plan: [], cut: [], light: [] };
+if (!cfg || !cfg.exam || from >= cfg.exam) return out;
+hist = hist || {};
+var hDone = hist.done || {}, hLog = hist.log || {}, hPin = hist.pin || null;
+var resume = iseUniq((Array.isArray(hist.resume) ? hist.resume : []).filter(function (id) { return iseHas(ISE_BY_ID, id) && !hDone[id]; }));
+var resSet = Object.create(null); resume.forEach(function (id) { resSet[id] = 1; });
+var days = [];
+for (var d = from; d < cfg.exam; d = iseAdd(d, 1)) days.push(d);
+var restDay = days.pop();
+var study = days.filter(function (x) { return iseMins(cfg, x) > 0; });
+var tail = Array.isArray(hist.tail) && hist.tail.length ? iseKeepTail(hist.tail, study, (hist.behind || 0) > 0) : iseNewTail(cfg, study);
+var tailAt = Object.create(null); tail.forEach(function (t) { tailAt[t.d] = t.k; });
+var content = study.filter(function (x) { return !tailAt[x]; });
+var nextStudy = Object.create(null); study.forEach(function (x, i) { nextStudy[x] = study[i + 1] || ""; });
+var preMock = content.map(function (x) { return tailAt[nextStudy[x]] === "mock"; });
+var L = content.length;
+var caps = content.map(function (x) { return iseCap(iseMins(cfg, x)); });
+var fullCap = caps.reduce(function (a, b) { return a + b; }, 0);
+var gs = iseGroupStats(hLog, hist.plan);
+var gBest = {};
+ISE_BLOCKS.forEach(function (b) { var sc = iseScore(b, gs, cfg); if (!(gBest[b.g] >= sc)) gBest[b.g] = sc; });
+var gKeys = ISE_GROUP_KEYS.slice();
+var gOrder = gKeys.slice().sort(function (a, b) { return gBest[b] - gBest[a] || gKeys.indexOf(a) - gKeys.indexOf(b); });
+var nBuf0 = L >= 10 ? Math.floor(L / 7) : 0, budget = fullCap, entries, cand, nBuf, queue, fullTry = false, resU = 0.5 * resume.length;
+var demand = function () { return cand.reduce(function (a, x) { return a + x.lvl; }, 0) + nBuf + resU; };
+for (;;) {
+out.cut = []; out.light = [];
+nBuf = nBuf0;
+cand = ISE_BLOCKS.filter(function (b) { return !hDone[b.id] && !resSet[b.id]; })
+.map(function (b) { return { b: b, sc: iseScore(b, gs, cfg), lvl: 1, prot: iseProt(b) }; });
+while (demand() > budget && nBuf > 0) nBuf--;
+while (demand() > budget && cand.length) {
+var best = null, bestLoss = Infinity, bestAct = "";
+cand.forEach(function (x) {
+var act = x.lvl === 1 ? "light" : "cut";
+var loss = act === "light" ? 0.8 * x.sc : 1.2 * x.sc * (x.prot ? 3 : 1);
+if (loss < bestLoss - 1e-9 || (Math.abs(loss - bestLoss) < 1e-9 && (x.b.i > best.b.i || (x.b.i === best.b.i && act === "light")))) { best = x; bestLoss = loss; bestAct = act; }
+});
+if (bestAct === "light") best.lvl = 0.5; else { cand.splice(cand.indexOf(best), 1); out.cut.push(best.b.id); }
+}
+cand.sort(function (x, y) { return y.sc - x.sc || x.b.i - y.b.i; });
+if (hPin) {
+var pi = -1; cand.forEach(function (x, j) { if (x.b.id === hPin) pi = j; });
+if (pi > 0 && cand[pi].lvl === 1) cand.unshift(cand.splice(pi, 1)[0]);
+}
+out.light = cand.filter(function (x) { return x.lvl < 1; }).map(function (x) { return x.b.id; });
+var isBuf = {};
+for (var j = 1; j <= nBuf; j++) isBuf[Math.floor(j * L / nBuf) - 1] = 1;
+var need = cand.reduce(function (a, x) { return a + x.lvl; }, 0) + resU;
+var dayCap = caps.map(function (cp, i) { return isBuf[i] ? 0 : Math.min(cp, 1); });
+var have = dayCap.reduce(function (a, b) { return a + b; }, 0);
+for (var i = 0; i < L && (fullTry || have < need); i++) {
+if (!isBuf[i] && caps[i] > dayCap[i]) { var add = fullTry ? caps[i] - dayCap[i] : Math.min(caps[i] - dayCap[i], need - have); dayCap[i] += add; have += add; }
+}
+queue = resume.map(function (id) { return { b: id, lvl: 1, left: 0.5 }; })
+.concat(cand.map(function (x) { return { b: x.b.id, lvl: x.lvl, left: x.lvl }; }));
+entries = {};
+var bufOwed = 0, spare = 0;
+content.forEach(function (dd, i) {
+if (isBuf[i]) bufOwed++;
+var open = queue.length && queue[0].left < queue[0].lvl - 1e-9;
+if (bufOwed && !open) { bufOwed--; entries[dd] = { d: dd, k: "buffer" }; return; }
+var cap = isBuf[i] ? Math.min(caps[i], 1) : dayCap[i], room = cap, it = [];
+while (room > 1e-9 && queue.length) {
+var cur = queue[0], idx = 0;
+if (cur.left > room + 1e-9) {
+var mustFit = room < cap - 1e-9 || cur.left < cur.lvl - 1e-9;
+if (mustFit || preMock[i]) {
+idx = -1;
+for (var z = 1; z < queue.length; z++) if (queue[z].left <= room + 1e-9 && queue[z].left === queue[z].lvl) { idx = z; break; }
+if (idx < 0 && mustFit) break;
+if (idx < 0) idx = 0;
+cur = queue[idx];
+}
+}
+var take = Math.min(room, cur.left);
+var part = cur.left < cur.lvl - 1e-9 ? 2 : take < cur.lvl - 1e-9 ? 1 : 0;
+it.push({ b: cur.b, lvl: cur.lvl === 1 ? "full" : "light", part: part });
+cur.left -= take; room -= take;
+if (cur.left <= 1e-9) queue.splice(idx, 1);
+}
+if (it.length) entries[dd] = { d: dd, k: "block", it: it };
+else { entries[dd] = { d: dd, k: "second", g: [gOrder[(2 * spare) % gOrder.length], gOrder[(2 * spare + 1) % gOrder.length]] }; spare++; }
+});
+if (!queue.length || budget <= 0) break;
+if (!fullTry) { fullTry = true; continue; }
+fullTry = false; budget -= 0.5;
+}
+queue.forEach(function (x) { if (out.cut.indexOf(x.b) < 0) out.cut.push(x.b); });
+var mn = 0, wn = 0;
+tail.forEach(function (t) { entries[t.d] = t.k === "mock" ? { d: t.d, k: "mock", n: ++mn } : t.k === "weak" ? { d: t.d, k: "weak", n: ++wn } : { d: t.d, k: t.k }; });
+out.plan = Object.keys(entries).sort().map(function (k) { return entries[k]; });
+if (restDay) out.plan.push({ d: restDay, k: "rest" });
+out.plan.push({ d: cfg.exam, k: "exam" });
+return out;
+}
+function iseItemSteps(x, lecture, ctx, S) {
+var lab = iseShort(x.b, ctx);
+if (x.lvl === "light") { S("Light: read the Know-cold list for " + lab, 15); return; }
+var t = iseLoopTopic(x);
+if (x.part) {
+S(lab + ", part " + x.part + " of 2: skim " + (x.part === 1 ? "the first half of" : "the rest of") + " the Core chapter", 10);
+S("Deep Dive: " + iseTopicLabel(t), 12);
+return;
+}
+S("Skim the Core chapter for " + lab + " (see READ)", lecture ? 30 : 20);
+S((lecture ? "Lecture: " : "Deep Dive: ") + iseTopicLabel(t), lecture ? 45 : 25);
+}
+function iseDayPlan(e, M, pace, ctx) {
+e = e || { k: "none" }; ctx = ctx || {};
+M = +M || 0; pace = pace > 0 ? pace : 3;
+var qb = ctx.qbank || "SASP", nMiss = +ctx.recentMisses || 0, k = e.k, steps = [], noMiss = ctx.anyMisses === false;
+var R = noMiss ? 0 : iseClamp(iseR5(0.1 * M), 5, 15), slow = Math.max(2, pace - 1), q = 0, learn = 0, mode = null, qKind = null;
+var S = function (t, m) { steps.push({ t: t, m: typeof m === "number" ? m : null }); };
+var missStep = function () {
+S(iseMissText(nMiss, ctx), noMiss ? null : R);
+if (!noMiss && nMiss > 15) S("Turn 5 of them into Anki cards", null);
+};
+var logStep = function () { S("Log your score, add each miss to the miss log", 5); };
+var fit = function (x, fixed, per) {
+var n = iseClamp(x, 0, 75);
+while (n > 5 && fixed + n * per > M + 5) n -= 5;
+return n > 0 && fixed + n * per > M + 5 ? 0 : n;
+};
+var isCatch = k === "catchup" || (k === "buffer" && !!e.catchup);
+if (k === "block" || isCatch) {
+var small = iseCap(M) < 1;
+var it = (e.it || [{ b: e.catchup, lvl: "full", part: 0 }]).map(function (x) {
+return small && x.lvl !== "light" && !x.part ? { b: x.b, lvl: "light", part: 0 } : x;
+});
+it.forEach(function (x) { learn += x.lvl === "light" ? 15 : x.part ? 22 : (it.length === 1 && M >= ISE_LONG ? 75 : 45); });
+var lecture = it.length === 1 && it[0].lvl === "full" && !it[0].part && M >= ISE_LONG;
+var allLight = it.every(function (x) { return x.lvl === "light"; });
+mode = lecture ? "lecture" : allLight ? "mastery" : "deep";
+q = fit(iseClamp(iseR5((M - R - 5 - learn) / pace), 10, 75), R + learn + 5, pace); qKind = "new";
+if (isCatch) S("Catch-up: " + iseFull(it[0].b, ctx), null);
+missStep();
+it.forEach(function (x) { iseItemSteps(x, lecture, ctx, S); });
+if (q > 0) S(q + " " + qb + " questions, tutor mode, read every critique", q * pace);
+logStep();
+} else if (k === "buffer") {
+q = fit(iseClamp(iseR5((M - R - 5 - 20) / pace), 10, 75), R + 25, pace); qKind = "mixed";
+missStep();
+S(noMiss ? "Rewrite one staging or algorithm table from memory" : "Redo last week's misses, then rewrite one staging or algorithm table from memory", 20);
+if (q > 0) S(q + " mixed " + qb + " questions, tutor mode, read every critique", q * pace);
+logStep();
+} else if (k === "second") {
+var rd = Math.round(0.35 * M), gl = iseGList(e.g, ctx) || "two groups";
+q = fit(iseClamp(iseR5((M - R - 5 - rd) / slow), 10, 75), R + rd + 5, slow); mode = "mastery"; qKind = "redo";
+missStep();
+S("Reread the guideline algorithms and Know-cold lists for " + gl, rd);
+if (q > 0) S(q + " " + qb + " redo questions (" + gl + "): ones you missed or guessed", q * slow);
+logStep();
+} else if (k === "weak") {
+var rw = Math.round(0.3 * M), dr = M < 60 ? 10 : 20, wl = iseGList(e.g, ctx) || "your weakest group";
+q = fit(iseClamp(iseR5((M - R - 5 - rw - dr) / slow), 10, 75), R + rw + dr + 5, slow); mode = "mastery"; qKind = "redo";
+missStep();
+S("Reread the Core chapter for " + wl, rw);
+S("Mastery Drill on " + wl + ", seeded with your misses", dr);
+if (q > 0) S(q + " " + qb + " redo questions (" + wl + ")", q * slow);
+logStep();
+} else if (k === "mock") {
+var rvOf = function (n) { return Math.min(Math.round(1.2 * n), Math.max(M - 10 - n - R, Math.round(0.6 * n))); };
+q = iseClamp(iseR5((M - 10) / 2.2), 20, 75); qKind = "timed";
+while (q > 5 && R + q + rvOf(q) + 10 > M + 5) q -= 5;
+missStep();
+S((e.n ? "Mock " + e.n + ": " : "") + (q < 75 ? q + " of 75" : String(q)) + " timed " + qb + " questions, about 1 min each, closed book", q);
+S("Review every critique", rvOf(q));
+S("Log your score, add every miss to the miss log", 10);
+} else if (k === "allknow" || k === "misslog" || k === "final") {
+var fr = Math.round((k === "final" ? 0.6 : 0.45) * M), left = Math.max(0, fr - R);
+q = fit(iseClamp(iseR5((M - 5 - fr) / slow), 10, 75), R + left + 5, slow); qKind = "redo";
+missStep();
+if (k === "allknow" || noMiss) S(k === "final" ? "Read every Know-cold list, cut and light topics first" : "Read every Know-cold list", left);
+else if (k === "misslog") S("Read the rest of the miss log, oldest first", left);
+else { var kc = Math.round(0.6 * left); S("Read every Know-cold list, cut and light topics first", kc); S("Read the rest of the miss log", left - kc); }
+if (q > 0) S(q + " " + qb + " redo questions, any topic", q * slow);
+logStep();
+} else if (k === "rest") {
+R = 30;
+S("Re-read the miss log for 30 min, nothing new", 30);
+S("Lay out tomorrow, then an early night", null);
+} else if (k === "exam") {
+R = 0;
+S("ISE today. Good luck.", null);
+} else if (k === "off") {
+R = 0;
+S("Off day. Optional: 10 min of the miss log.", 10);
+} else {
+R = 0;
+}
+return { q: q, qKind: qKind, R: R, mode: mode, steps: steps };
+}
+function iseFloorSteps(q, R, qbank, pace, nMiss, ctx) {
+var t = Math.min(15, q || 0), p = pace > 0 ? pace : 3, steps = [];
+if (!(ctx && ctx.anyMisses === false)) steps.push({ t: nMiss > 0 ? iseMissText(nMiss, ctx) : "Re-read misses from the last 2 days", m: R > 0 ? R : 5 });
+steps.push({ t: "Read one Know-cold list", m: 15 });
+if (t > 0) steps.push({ t: t + " " + (qbank || "SASP") + " questions, tutor mode", m: t * p });
+steps.push({ t: "Log your score (a floor day counts as met)", m: 5 });
+return steps;
+}
+function iseMet(L) {
+if (!L) return false;
+var t = typeof L.t === "number" ? L.t : 0, q = typeof L.q === "number" ? L.q : 0;
+if (t <= 0) return true;
+return q >= (L.floor ? Math.min(15, t) : t);
+}
+function iseLastDates(plan) { var m = {}; (plan || []).forEach(function (e) { (e.it || []).forEach(function (x) { m[x.b] = e.d; }); }); return m; }
+function iseStatus(ise, today) {
+var cfg = ise && ise.cfg, plan = (ise && ise.plan) || [], log = (ise && ise.log) || {}, done = (ise && ise.done) || {}, cut = (ise && ise.cut) || [];
+var out = { state: "setup", behind: [], assign: {}, unabsorbed: 0, pace: null, qDone: 0, qDoneCapped: 0, qPlanned: 0, qPlannedAll: 0,
+streak: 0, daysLeft: 0, studyLeft: 0, aheadDays: [], hasBuffers: false };
+Object.keys(log).forEach(function (d) { var L = log[d]; if (L && typeof L.q === "number" && L.q > 0) out.qDone += L.q; });
+if (!cfg) return out;
+var pace = cfg.pace || 3, sumT = 0, sumQ = 0, fm = iseFirstMiss(ise.misses);
+plan.forEach(function (e) {
+if (e.k === "buffer") out.hasBuffers = true;
+if (e.k === "rest" || e.k === "exam") return;
+var L = log[e.d], past = e.d < today || (e.d === today && !!L);
+var t = L && typeof L.t === "number" ? L.t : iseDayPlan(e, iseMins(cfg, e.d), pace, { anyMisses: !!fm && fm < e.d }).q;
+out.qPlannedAll += t;
+if (past) { out.qPlanned += t; sumT += t; sumQ += Math.min(L && typeof L.q === "number" ? L.q : 0, t); }
+else out.studyLeft++;
+});
+out.pace = sumT > 0 ? sumQ / sumT : null;
+out.qDoneCapped = sumQ;
+for (var i = plan.length - 1; i >= 0; i--) {
+var e = plan[i];
+if (e.d > today || e.k === "rest" || e.k === "exam") continue;
+var met = iseMet(log[e.d]);
+if (e.d === today) { if (met) out.streak++; continue; }
+if (met) out.streak++; else break;
+}
+out.daysLeft = cfg.exam ? Math.max(0, iseDiff(today, cfg.exam)) : 0;
+if (!cfg.exam || today >= cfg.exam) { out.state = "exam"; return out; }
+var last = iseLastDates(plan), gs = iseGroupStats(log, plan);
+var behind = Object.keys(last).filter(function (b) { return ISE_BY_ID[b] && last[b] < today && !done[b] && cut.indexOf(b) < 0; })
+.sort(function (a, b) { return iseScore(ISE_BY_ID[b], gs, cfg) - iseScore(ISE_BY_ID[a], gs, cfg) || ISE_BY_ID[a].i - ISE_BY_ID[b].i; });
+var slots = plan.filter(function (e) {
+return (e.d > today || (e.d === today && !log[today])) &&
+(e.k === "buffer" || (e.k === "block" && e.it.every(function (x) { return !!done[x.b]; })));
+});
+slots.forEach(function (e, i) { if (behind[i]) out.assign[e.d] = behind[i]; });
+out.aheadDays = slots.filter(function (e) { return e.k === "block"; }).map(function (e) { return e.d; });
+out.behind = behind;
+out.unabsorbed = Math.max(0, behind.length - slots.length);
+out.state = behind.length === 0 ? (out.aheadDays.length ? "ahead" : "on") : out.unabsorbed === 0 ? "absorb" : "behind";
+return out;
+}
+function iseTailOf(plan, from) {
+return (plan || []).filter(function (e) { return e.d >= from && iseHas(ISE_TAIL_K, e.k); }).map(function (e) { return { d: e.d, k: e.k }; });
+}
+function iseResumeIds(ise, from) {
+var plan = (ise && ise.plan) || [], log = (ise && ise.log) || {}, done = (ise && ise.done) || {};
+var p1 = Object.create(null), p2 = Object.create(null);
+plan.forEach(function (e) {
+var L = log[e.d];
+if (e.d >= from || e.k !== "block" || !L || L.floor || (L.k && L.k !== "block")) return;
+(e.it || []).forEach(function (x) { if (x.part === 1) p1[x.b] = 1; else if (x.part === 2) p2[x.b] = 1; });
+});
+return ISE_BLOCKS.filter(function (b) { return p1[b.id] && !p2[b.id] && !done[b.id]; }).map(function (b) { return b.id; });
+}
+function iseReshuffle(ise, today, cfgOver, nowMs) {
+if (!ise || !ise.cfg) return ise;
+var cfg = Object.assign({}, ise.cfg, cfgOver || {});
+if (!cfg.exam || today >= cfg.exam) return ise;  // nothing left to plan (keeps the exam entry); a later exam date may re-plan
+var log = ise.log || {}, done = ise.done || {}, plan = ise.plan || [];
+var from = log[today] ? iseAdd(today, 1) : today;
+var st = iseStatus(ise, today), resume = iseResumeIds(ise, from);
+var old = null; plan.forEach(function (e) { if (e.d === from && e.k === "block") old = e; });
+var pin = old && old.it[0] && !done[old.it[0].b] ? old.it[0].b : null;
+if (pin && (st.behind.length || resume.indexOf(pin) >= 0)) pin = null;
+var hist = { done: done, log: log, plan: plan, pin: pin, resume: resume, behind: st.behind.length,
+tail: cfg.exam === ise.cfg.exam ? iseTailOf(plan, from) : [] };
+var r = buildIsePlan(cfg, hist, from);
+var keep = plan.filter(function (e) { return e.d < from; });
+var sh = (ise.shuffles || []).slice(); if (sh.indexOf(today) < 0) sh.push(today);
+return Object.assign({}, ise, { cfg: cfg, plan: keep.concat(r.plan), cut: r.cut, light: r.light, built: today, builtTs: iseMs(nowMs), shuffles: sh });
+}
+function iseSetup(ise, cfg, preDone, today, removeDone, nowMs) {
+ise = ise || iseNorm(null);
+var c = iseNormCfg(Object.assign({}, ISE_CFG_DEFAULT, cfg || {}));
+if (!c) return ise;
+var done = Object.assign({}, ise.done || {}), log = ise.log || {};
+Object.keys(removeDone || {}).forEach(function (id) { if (removeDone[id] && iseHas(done, id)) delete done[id]; });
+Object.keys(preDone || {}).forEach(function (id) { if (preDone[id] && ISE_BY_ID[id] && !done[id]) done[id] = "pre"; });
+var from = log[today] ? iseAdd(today, 1) : today;
+var base = Object.assign({}, ise, { done: done });
+var r = buildIsePlan(c, { done: done, log: log, plan: ise.plan || [], pin: null, resume: iseResumeIds(base, from) }, from);
+var keep = (ise.plan || []).filter(function (e) { return e.d < from; });
+return Object.assign({}, ise, { cfg: c, plan: keep.concat(r.plan), cut: r.cut, light: r.light, built: today, builtTs: iseMs(nowMs), done: done });
+}
+function iseUncover(ise, id) {
+var done = Object.assign({}, (ise && ise.done) || {});
+if (iseHas(done, id)) delete done[id];
+return Object.assign({}, ise, { done: done });
+}
+function iseNewSprint(ise, today) {
+ise = ise || iseNorm(null);
+var src = iseIsObj(ise.cfg) ? ise.cfg : ise.prefs, prefs = null;
+if (iseIsObj(src)) {
+var p = {};
+Object.keys(src).forEach(function (k) { if (k !== "exam" && k !== "skip") p[k] = src[k]; });
+prefs = iseNormPrefs(p);
+}
+return { kind: "uroISE", v: 1, cfg: null, prefs: prefs, built: null, builtTs: 0, since: today, plan: [], cut: [], light: [], done: {}, log: {},
+misses: (ise.misses || []).slice(), shuffles: [] };
+}
+function iseFuture(plan, from) {
+var lvl = {}, first = {};
+(plan || []).forEach(function (e) {
+if (e.d < from) return;
+(e.it || []).forEach(function (x) { if (!first[x.b]) { first[x.b] = e.d; lvl[x.b] = x.lvl; } });
+});
+return { lvl: lvl, first: first };
+}
+function iseDayDesc(e) {
+if (!e) return "a day off";
+var m = { mock: "a mock", weak: "a weak-spots day", allknow: "a Know-cold day", misslog: "a miss-log day", final: "the final review", rest: "the rest day", exam: "exam day" };
+return iseHas(m, e.k) ? m[e.k] : "a content day";
+}
+function iseTailDiff(oldPlan, newPlan, from) {
+var lines = [], byD = Object.create(null);
+(newPlan || []).forEach(function (e) { byD[e.d] = e; });
+ISE_TAIL_ORDER.forEach(function (k) {
+var pick = function (p) { return (p || []).filter(function (e) { return e.d >= from && e.k === k; }).map(function (e) { return e.d; }); };
+var o = pick(oldPlan), n = pick(newPlan);
+if (o.join(",") === n.join(",")) return;
+var gone = o.filter(function (d) { return n.indexOf(d) < 0; }), added = n.filter(function (d) { return o.indexOf(d) < 0; });
+if (o.length !== n.length) {
+var det = gone.map(function (d) { return iseFmt(d) + " becomes " + iseDayDesc(byD[d]); }).concat(added.map(function (d) { return iseFmt(d) + " added"; }));
+lines.push(ISE_TAIL_NAME[k] + ": " + o.length + " → " + n.length + (det.length ? " (" + det.join("; ") + ")" : ""));
+} else lines.push(ISE_TAIL_NAME[k] + ": " + gone.map(iseFmt).join(", ") + " → " + added.map(iseFmt).join(", "));
+});
+return lines;
+}
+function iseDiffPlans(oldIse, nextIse, today) {
+var st = iseStatus(oldIse, today), log = (nextIse && nextIse.log) || {};
+var from = log[today] ? iseAdd(today, 1) : today;
+var fo = iseFuture(oldIse && oldIse.plan, from), fn = iseFuture(nextIse && nextIse.plan, from);
+var oCut = (oldIse && oldIse.cut) || [], nCut = (nextIse && nextIse.cut) || [];
+var byNext = function (a, b) { return fn.first[a] < fn.first[b] ? -1 : fn.first[a] > fn.first[b] ? 1 : ISE_BY_ID[a].i - ISE_BY_ID[b].i; };
+var ids = Object.keys(fn.first).filter(function (b) { return ISE_BY_ID[b]; }).sort(byNext);
+var moved = 0;
+ids.forEach(function (b) { if (fo.first[b] && fo.first[b] !== fn.first[b]) moved++; });
+return {
+back: st.behind.filter(function (b) { return fn.first[b]; }).sort(byNext).map(function (b) { return { b: b, d: fn.first[b] }; }),
+light: ids.filter(function (b) { return fn.lvl[b] === "light" && fo.lvl[b] !== "light"; }),
+full: ids.filter(function (b) { return fn.lvl[b] === "full" && fo.lvl[b] === "light"; }),
+cut: nCut.filter(function (b) { return oCut.indexOf(b) < 0; }),
+uncut: oCut.filter(function (b) { return nCut.indexOf(b) < 0; }),
+moved: moved,
+tail: iseTailDiff(oldIse && oldIse.plan, nextIse && nextIse.plan, from),
+preview: ((nextIse && nextIse.plan) || []).filter(function (e) { return e.d >= from; }).slice(0, 3)
+};
+}
+function iseTailCounts(plan, from) {
+var c = {}; ISE_TAIL_ORDER.forEach(function (k) { c[k] = 0; });
+(plan || []).forEach(function (e) { if (e.d >= from && iseHas(c, e.k)) c[e.k]++; });
+return c;
+}
+function iseWhatIfs(ise, today, nowMs) {
+if (!ise || !ise.cfg || today >= ise.cfg.exam) return [];
+var cfg = ise.cfg, base = iseReshuffle(ise, today, null, nowMs);
+var from = (ise.log || {})[today] ? iseAdd(today, 1) : today, bt = iseTailCounts(base.plan, from);
+var tailN = function (c) { return ISE_TAIL_ORDER.reduce(function (a, k) { return a + c[k]; }, 0); };
+var loss = function (x, c) { return x.cut.length + 0.5 * x.light.length + tailN(bt) - tailN(c); };
+var bl = loss(base, bt), vs = [];
+var addMins = function (key, delta, word) {
+var cur = cfg[key] || 0; if (cur <= 0) return;
+var nv = Math.min(360, cur + delta); if (nv <= cur) return;
+var o = {}; o[key] = nv; vs.push({ over: o, label: "+" + (nv - cur) + " min on " + word });
+};
+addMins("minsWk", 30, "weekdays"); addMins("minsWk", 60, "weekdays"); addMins("minsWe", 60, "weekends");
+var off = (cfg.off || []).slice().sort(function (a, b) { return a - b; });
+if (off.length) {
+var day = off[0];
+vs.push({ over: { off: (cfg.off || []).filter(function (x) { return x !== day; }) }, label: "Study on " + ISE_WD_LONG[day] + "s too" });
+}
+var skip = cfg.skip || [];
+if (skip.some(function (x) { return x >= today; })) vs.push({ over: { skip: skip.filter(function (x) { return x < today; }) }, label: "Undo can't-study days" });
+var key = function (x, c) { return x.cut.slice().sort().join(",") + "|" + x.light.slice().sort().join(",") + "|" + tailN(c); };
+var kept = [], seen = Object.create(null);
+vs.forEach(function (v, i) {
+var next = iseReshuffle(ise, today, v.over, nowMs), c = iseTailCounts(next.plan, from), l = loss(next, c), kk = key(next, c);
+if (!(l < bl - 1e-9) || seen[kk]) return;
+seen[kk] = 1; kept.push({ v: v, i: i, l: l, next: next, c: c });
+});
+kept.sort(function (a, b) { return a.l - b.l || a.i - b.i; });
+return kept.slice(0, 3).map(function (x) {
+var cN = x.next.cut.length, lN = x.next.light.length, note = "";
+ISE_TAIL_ORDER.forEach(function (k) {
+var n = x.c[k], b = bt[k], nn = ISE_TAIL_NOUN[k];
+if (n === b) return;
+note += n > b ? " · keeps " + n + " " + nn[n === 1 ? 0 : 1] : n === 0 ? " · no " + nn[1] : " · only " + n + " " + nn[n === 1 ? 0 : 1];
+});
+return { label: x.v.label + " → " + cN + " cut, " + lN + " light" + note, over: x.v.over, next: x.next, cutN: cN, lightN: lN };
+});
+}
+function iseSetSkip(ise, d, on, today, nowMs) {
+if (!ise || !ise.cfg) return { next: ise, diff: iseDiffPlans(ise, ise, today) };
+var skip = (ise.cfg.skip || []).filter(function (x) { return x !== d; });
+if (on) skip.push(d);
+skip.sort();
+var next = iseReshuffle(ise, today, { skip: skip }, nowMs);
+return { next: next, diff: iseDiffPlans(ise, next, today) };
+}
+function iseWeakGroups(log, misses, today, plan) {
+var gs = iseGroupStats(log, plan), w = function (g) { return ISE_GROUPS[g].w; }, ix = function (g) { return ISE_GROUP_KEYS.indexOf(g); };
+var withQ = ISE_GROUP_KEYS.filter(function (g) { return gs[g] && gs[g].q >= 10; }).sort(function (a, b) {
+return gs[a].r / gs[a].q - gs[b].r / gs[b].q || w(b) - w(a) || ix(a) - ix(b);
+});
+var mc = {};
+(misses || []).forEach(function (m) {
+if (!m || !iseHas(ISE_GROUPS, m.g) || !iseValidYmd(m.d)) return;
+var age = iseDiff(m.d, today);
+if (age >= 0 && age <= 13) mc[m.g] = (mc[m.g] || 0) + 1;
+});
+var rest = ISE_GROUP_KEYS.filter(function (g) { return withQ.indexOf(g) < 0; }).sort(function (a, b) {
+return (mc[b] || 0) - (mc[a] || 0) || w(b) - w(a) || ix(a) - ix(b);
+});
+return withQ.concat(rest);
+}
+function iseBlocksOf(groups) { return ISE_BLOCKS.filter(function (b) { return groups.indexOf(b.g) >= 0; }); }
+function iseStart(ise) {
+var plan = (ise && ise.plan) || [];
+if (!plan.length) return null;
+var p0 = plan[0].d, b = ise.built;
+return iseValidYmd(b) && b < p0 ? b : p0;
+}
+function iseResolve(ise, d, st, today) {
+var cfg = ise && ise.cfg, plan = (ise && ise.plan) || [], log = (ise && ise.log) || {}, done = (ise && ise.done) || {};
+var res = { d: d, k: "none", kindLabel: "", items: [], groups: [], M: 0, q: 0, qKind: null, R: 0, mode: null, steps: [],
+know: [], read: [], readG: [], topics: [], loopTopics: [], entry: null, catchupFor: null, itemDone: {} };
+if (!cfg || !plan.length || d < iseStart(ise) || d > plan[plan.length - 1].d) return res;
+st = st || iseStatus(ise, today);
+var e = null; plan.forEach(function (x) { if (x.d === d) e = x; });
+var M = iseMins(cfg, d), small = iseCap(M) < 1;
+var L = log[d], k, items = [], groups = [], catchup = null, know = [], blocks = [];
+var asItem = function (x) { return { b: x.b, lvl: small && x.lvl !== "light" && !x.part ? "light" : x.lvl, part: x.part }; };
+if (!e) k = "off";
+else if (e.k === "block" || e.k === "buffer") {
+var open = d > today || (d === today && !L);
+var left = e.k !== "block" ? [] : open ? e.it.filter(function (x) { return !done[x.b]; }) : e.it;
+if (L && (L.k === "catchup" || L.k === "buffer")) {
+catchup = L.k === "catchup" && L.b && ISE_BY_ID[L.b[0]] ? L.b[0] : null;
+k = catchup ? "catchup" : "buffer";
+} else if (left.length) {
+k = "block"; items = left.map(asItem);
+} else {
+catchup = open && st.assign && st.assign[d] ? st.assign[d] : null;
+k = catchup ? "catchup" : "buffer";
+}
+if (k === "catchup") items = [{ b: catchup, lvl: small ? "light" : "full", part: 0 }];
+} else k = e.k;
+if (k === "block" || k === "catchup") {
+blocks = items.map(function (x) { return ISE_BY_ID[x.b]; }).filter(function (b) { return !!b; });
+groups = iseUniq(blocks.map(function (b) { return b.g; }));
+} else if (k === "second") {
+groups = (e.g || []).filter(function (g) { return iseHas(ISE_GROUPS, g); }); blocks = iseBlocksOf(groups);
+} else if (k === "weak") {
+var wg = iseWeakGroups(log, ise.misses || [], today, plan);
+groups = e.n === 2 ? [wg[1], wg[2]] : [wg[0]]; blocks = iseBlocksOf(groups);
+}
+blocks.forEach(function (b) { know = know.concat(b.know); });
+if (k === "final" || k === "allknow") {
+((ise.cut || []).concat(ise.light || [])).forEach(function (id) { if (ISE_BY_ID[id]) know = know.concat(ISE_BY_ID[id].know); });
+know = know.concat(Object.keys(ISE_KNOW));
+}
+var topics = [];
+blocks.forEach(function (b) { topics = topics.concat(b.topics); });
+var dpE = k === "block" ? { k: "block", it: items } : k === "catchup" ? { k: "catchup", it: items }
+: k === "weak" ? { k: "weak", n: e.n, g: groups } : e ? Object.assign({}, e, { k: k }) : { k: k };
+res.M = M;
+var dp = iseDayPlan(dpE, M, cfg.pace, iseDayCtx(ise, d));
+items.forEach(function (x) { if (done[x.b]) res.itemDone[x.b] = done[x.b]; });
+res.k = k; res.kindLabel = ISE_KIND_LABEL[k] || ""; res.items = items; res.groups = groups;
+res.q = dp.q; res.qKind = dp.qKind; res.R = dp.R; res.mode = dp.mode; res.steps = dp.steps;
+res.know = iseUniq(know).filter(function (x) { return iseHas(ISE_KNOW, x); });
+var rg = groups.filter(function (g) { return iseHas(ISE_GROUPS, g) && !!ISE_GROUPS[g].read; });
+res.read = iseUniq(rg.map(function (g) { return ISE_GROUPS[g].read; }));
+res.readG = rg.map(function (g) { return { g: g, label: ISE_GROUPS[g].label, read: ISE_GROUPS[g].read }; });
+res.topics = iseUniq(topics);
+res.loopTopics = k === "block" || k === "catchup" ? iseUniq(items.map(iseLoopTopic).filter(function (t) { return !!t; })) : [];
+res.entry = e; res.catchupFor = catchup;
+return res;
+}
+function iseWhat(r) {
+var k = r.k;
+if (k === "block") return r.items.map(function (x) { return iseShort(x.b); }).join(" + ");
+if (k === "catchup") return "catch-up " + iseShort(r.catchupFor);
+if (k === "buffer") return "catch-up day";
+if (k === "second") return "second pass " + r.groups.map(function (g) { return iseGLabel(g); }).join(" + ");
+if (k === "weak") return "weak spots " + r.groups.map(function (g) { return iseGLabel(g); }).join(" + ");
+if (k === "mock") return "Mock" + (r.entry && r.entry.n ? " " + r.entry.n : "");
+if (k === "allknow") return "Know-cold review";
+if (k === "misslog") return "miss log review";
+if (k === "final") return "final review";
+if (k === "rest") return "rest day, miss log only";
+if (k === "exam") return "ISE";
+if (k === "off") return "off day";
+return "";
+}
+function iseTodaySummary(ise, today) {
+var cfg = ise && ise.cfg;
+if (!cfg || !cfg.exam || today > cfg.exam) return null;
+if (today === cfg.exam) return { line: "ISE today. Good luck.", hub: "ISE today. Good luck.", state: "exam", q: 0 };
+var st = iseStatus(ise, today), r = iseResolve(ise, today, st, today), qb = cfg.qbank || "SASP";
+var days = st.daysLeft + (st.daysLeft === 1 ? " day" : " days");
+if (st.state === "behind") {
+var n = st.behind.length, nb = n + (n === 1 ? " block" : " blocks") + " behind";
+return { line: nb + ": tap to reshuffle", hub: "ISE plan: " + nb + " — tap to catch up", state: st.state, q: r.q };
+}
+var plan = ise.plan || [];
+if (r.k === "none") {
+var nx = null; plan.forEach(function (e) { if (!nx && e.d > today) nx = e; });
+var s = nx ? "plan starts " + iseFmt(nx.d) : "no plan yet";
+return { line: days + " · " + s, hub: "ISE: " + s, state: st.state, q: 0 };
+}
+var L = (ise.log || {})[today];
+var what = r.k === "off" && L && L.k === "extra" && L.b && ISE_BY_ID[L.b[0]] ? "extra " + iseShort(L.b[0]) : iseWhat(r);
+var tgt = !(r.q > 0) ? "" : r.qKind === "timed" ? r.q + " timed Qs" : r.qKind === "redo" ? r.q + " redo Qs" : r.q + " " + qb + " Qs";
+if (L) {
+var got = (L.q || 0) + "/" + (typeof L.t === "number" ? L.t : r.q) + " Qs";
+var ok = iseMet(L);
+return { line: days + " · today: " + what + " · " + (ok ? "done ✓ " : "logged ") + got,
+hub: "ISE: " + what + " · " + (ok ? "done today ✓" : got + " logged"), state: st.state, q: r.q };
+}
+return { line: days + " · today: " + what + (tgt ? " · " + tgt : ""), hub: "ISE: " + what + (tgt ? " · " + tgt + " today" : ""), state: st.state, q: r.q };
+}
+function iseDefaultTicks(res, logEntry) {
+var out = {};
+if (!res || (res.k !== "block" && res.k !== "catchup")) return out;
+var x = logEntry || null, rule = !x || (!x.floor && (x.q || 0) >= 0.6 * (x.t || 0));
+res.items.forEach(function (it) {
+if (it.part === 1) return;
+var dn = res.itemDone ? res.itemDone[it.b] : null;
+if (dn === res.d) out[it.b] = true;
+else if (dn) out[it.b] = false;
+else if (x && x.ts) out[it.b] = false;
+else if (res.k === "catchup") out[it.b] = !(x && x.floor);
+else out[it.b] = rule;
+});
+return out;
+}
+function iseApplyLog(ise, d, entry, ticks) {
+var log = Object.assign({}, ise.log || {}), done = Object.assign({}, ise.done || {});
+log[d] = entry;
+Object.keys(ticks || {}).forEach(function (b) {
+if (!ISE_BY_ID[b]) return;
+if (ticks[b]) done[b] = d; else if (done[b] === d) delete done[b];
+});
+return Object.assign({}, ise, { log: log, done: done });
+}
+function iseParseMisses(text, g, d, idBase) {
+var s = typeof text === "string" ? text : "", gg = iseHas(ISE_GROUPS, g) ? g : "mixed";
+var lines = s.split(/\r?\n/).map(function (ln) { return ln.replace(/^\s+/, ""); }).filter(function (ln) { return !!ln.trim(); });
+var allBul = lines.length > 0 && lines.every(function (ln) { return ln.indexOf("- ") === 0; });
+var texts = allBul ? lines.map(function (ln) { return ln.slice(2).trim(); }).filter(function (t) { return !!t; })
+: (s.trim() ? [s.trim()] : []);
+return texts.map(function (t, i) { return { id: idBase + "_" + i, d: d, g: gg, t: t }; });
+}
+function iseAddMisses(ise, list) {
+var cur = (ise.misses || []).slice(), ids = Object.create(null);
+cur.forEach(function (m) { ids[m.id] = 1; });
+(list || []).forEach(function (m) { if (m && m.id && m.t && !ids[m.id]) { ids[m.id] = 1; cur.push(m); } });
+return Object.assign({}, ise, { misses: iseStableByD(cur) });
+}
+function iseDelMiss(ise, id) {
+return Object.assign({}, ise, { misses: (ise.misses || []).filter(function (m) { return m.id !== id; }) });
+}
+function iseNormCfg(c) {
+if (!iseIsObj(c) || !iseValidYmd(c.exam)) return null;
+var out = Object.assign({}, ISE_CFG_DEFAULT, c);
+var mins = function (v, dflt) { return typeof v === "number" && isFinite(v) ? iseClamp(Math.round(v), 0, 360) : dflt; };
+out.minsWk = mins(c.minsWk, ISE_CFG_DEFAULT.minsWk);
+out.minsWe = mins(c.minsWe, ISE_CFG_DEFAULT.minsWe);
+out.off = Array.isArray(c.off) ? iseUniq(c.off.filter(function (x) { return x === 0 || x === 1 || x === 2 || x === 3 || x === 4 || x === 5 || x === 6; })) : [];
+out.skip = Array.isArray(c.skip) ? iseUniq(c.skip.filter(iseValidYmd)).sort() : [];
+out.pace = c.pace === 2 || c.pace === 3 || c.pace === 4 ? c.pace : 3;
+out.qbank = typeof c.qbank === "string" && c.qbank.trim() ? c.qbank.trim().slice(0, 24) : "SASP";
+var boost = {};
+if (iseIsObj(c.boost)) Object.keys(c.boost).forEach(function (g) { if (iseHas(ISE_GROUPS, g) && c.boost[g]) boost[g] = 1; });
+out.boost = boost;
+return out;
+}
+function iseNormPrefs(p) {
+if (!iseIsObj(p)) return null;
+var c = iseNormCfg(Object.assign({}, p, { exam: "2000-01-01", skip: [] }));
+return c ? { minsWk: c.minsWk, minsWe: c.minsWe, off: c.off, pace: c.pace, qbank: c.qbank, boost: c.boost } : null;
+}
+function iseNormEntry(e) {
+if (!iseIsObj(e) || !iseValidYmd(e.d) || typeof e.k !== "string") return null;
+var k = e.k;
+if (k === "block") {
+var it = (Array.isArray(e.it) ? e.it : []).filter(function (x) { return iseIsObj(x) && iseHas(ISE_BY_ID, x.b); })
+.map(function (x) { return { b: x.b, lvl: x.lvl === "light" ? "light" : "full", part: x.part === 1 || x.part === 2 ? x.part : 0 }; });
+return it.length ? { d: e.d, k: k, it: it } : null;
+}
+if (k === "second") return { d: e.d, k: k, g: (Array.isArray(e.g) ? e.g : []).filter(function (g) { return iseHas(ISE_GROUPS, g); }) };
+if (k === "mock" || k === "weak") return { d: e.d, k: k, n: typeof e.n === "number" ? e.n : 1 };
+if (k === "buffer" || k === "allknow" || k === "misslog" || k === "final" || k === "rest" || k === "exam") return { d: e.d, k: k };
+return null;
+}
+function iseNormLog(L) {
+if (!iseIsObj(L)) return null;
+var num = function (v) { return typeof v === "number" && isFinite(v) && v >= 0 ? v : 0; };
+var out = { q: num(L.q), pct: typeof L.pct === "number" && isFinite(L.pct) ? iseClamp(L.pct, 0, 100) : null, floor: !!L.floor,
+t: num(L.t), k: typeof L.k === "string" ? L.k : null,
+b: (Array.isArray(L.b) ? L.b : []).filter(function (b) { return iseHas(ISE_BY_ID, b); }),
+g: iseHas(ISE_GROUPS, L.g) ? L.g : null, ts: num(L.ts), rw: L.rw ? 1 : 0 };
+var gs = iseUniq((Array.isArray(L.gs) ? L.gs : []).filter(function (g) { return iseHas(ISE_GROUPS, g); }));
+if (gs.length) out.gs = gs;
+return out;
+}
+function iseNorm(v) {
+var out = { kind: "uroISE", v: 1, cfg: null, prefs: null, built: null, builtTs: 0, since: null, plan: [], cut: [], light: [], done: {}, log: {}, misses: [], shuffles: [] };
+if (!iseIsObj(v) || v.kind !== "uroISE") return out;
+out.cfg = iseNormCfg(v.cfg);
+out.prefs = iseNormPrefs(v.prefs);
+out.built = iseValidYmd(v.built) ? v.built : null;
+out.builtTs = iseMs(v.builtTs);
+out.since = iseValidYmd(v.since) ? v.since : null;
+var seenD = Object.create(null);
+out.plan = (Array.isArray(v.plan) ? v.plan : []).map(iseNormEntry).filter(function (e) { return !!e; })
+.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; })
+.filter(function (e) { if (seenD[e.d]) return false; seenD[e.d] = 1; return true; });
+var ids = function (a) { return iseUniq((Array.isArray(a) ? a : []).filter(function (x) { return iseHas(ISE_BY_ID, x); })); };
+out.cut = ids(v.cut); out.light = ids(v.light);
+if (iseIsObj(v.done)) Object.keys(v.done).forEach(function (b) {
+var x = v.done[b]; if (iseHas(ISE_BY_ID, b) && (x === "pre" || iseValidYmd(x))) out.done[b] = x;
+});
+if (iseIsObj(v.log)) Object.keys(v.log).forEach(function (d) { var L = iseNormLog(v.log[d]); if (iseValidYmd(d) && L) out.log[d] = L; });
+var mIds = Object.create(null);
+(Array.isArray(v.misses) ? v.misses : []).forEach(function (m, i) {
+if (!iseIsObj(m) || !iseValidYmd(m.d) || typeof m.t !== "string" || !m.t.trim()) return;
+var id = typeof m.id === "string" && m.id ? m.id : "imp" + i + "_" + m.d;
+if (mIds[id]) return; mIds[id] = 1;
+out.misses.push({ id: id, d: m.d, g: iseHas(ISE_GROUPS, m.g) ? m.g : "mixed", t: m.t });
+});
+out.misses = iseStableByD(out.misses);
+out.shuffles = iseUniq((Array.isArray(v.shuffles) ? v.shuffles : []).filter(iseValidYmd)).sort();
+return out;
+}
+function iseEarlier(x, y) { if (x === "pre" || y === "pre") return "pre"; return x <= y ? x : y; }
+function iseRecency(x) {
+var t = x.builtTs > 0 ? x.builtTs : (x.built ? iseDate(x.built).getTime() : 0);
+Object.keys(x.log).forEach(function (d) { var L = x.log[d]; if (L && L.ts > t) t = L.ts; });
+return t;
+}
+function iseSinceCut(x, since) {
+if (!since || x.since === since) return x;
+var keepLog = {}; Object.keys(x.log).forEach(function (d) { if (d >= since) keepLog[d] = x.log[d]; });
+return Object.assign({}, x, { cfg: x.cfg && x.cfg.exam > since ? x.cfg : null, since: since, built: null, builtTs: 0,
+plan: x.plan.filter(function (e) { return e.d >= since; }), cut: [], light: [], done: {}, log: keepLog });
+}
+function iseMerge(a, b) {
+a = iseNorm(a); b = iseNorm(b);
+var since = (a.since || "") > (b.since || "") ? a.since : b.since;
+a = iseSinceCut(a, since); b = iseSinceCut(b, since);
+var w = iseRecency(a) >= iseRecency(b) ? a : b, o = w === a ? b : a;
+if (!w.cfg && o.cfg) { var t = w; w = o; o = t; }
+var log = {}, won = Object.create(null);
+iseUniq(Object.keys(a.log).concat(Object.keys(b.log))).forEach(function (d) {
+var x = a.log[d], y = b.log[d];
+var useB = !x || (!!y && (y.ts || 0) > (x.ts || 0));
+log[d] = useB ? y : x; won[d] = useB ? b : a;
+});
+var byD = function (p) { var m = Object.create(null); p.forEach(function (e) { m[e.d] = e; }); return m; };
+var pa = byD(a.plan), pb = byD(b.plan), pw = w === a ? pa : pb, po = w === a ? pb : pa, w0 = w.plan.length ? w.plan[0].d : null;
+var plan = [];
+iseUniq(Object.keys(pa).concat(Object.keys(pb))).sort().forEach(function (d) {
+var e;
+if (won[d]) { var X = won[d] === a ? pa : pb, Y = X === pa ? pb : pa; e = X[d] || Y[d]; }
+else if (!w0 || d < w0) e = po[d] || pw[d];
+else e = pw[d];
+if (e) plan.push(e);
+});
+var done = {};
+[a, b].forEach(function (S) {
+var other = S === a ? b : a;
+Object.keys(S.done).forEach(function (k) {
+var v = S.done[k];
+if (v !== "pre" && won[v] && won[v] !== S && other.done[k] !== v) return;
+done[k] = done[k] ? iseEarlier(done[k], v) : v;
+});
+});
+var ids = Object.create(null), dt = Object.create(null), misses = [];
+a.misses.concat(b.misses).forEach(function (m) {
+var key = m.d + "\n" + m.t;
+if (ids[m.id] || dt[key]) return;
+ids[m.id] = 1; dt[key] = 1; misses.push(m);
+});
+return { kind: "uroISE", v: 1, cfg: w.cfg, prefs: w.prefs || o.prefs, built: w.built, builtTs: w.builtTs, since: since || null, plan: plan, cut: w.cut, light: w.light,
+done: done, log: log, misses: iseStableByD(misses), shuffles: iseUniq(a.shuffles.concat(b.shuffles)).sort() };
+}
+function iseProgress(ise, today) {
+var log = (ise && ise.log) || {}, done = (ise && ise.done) || {}, cfg = ise && ise.cfg, plan = (ise && ise.plan) || [];
+var gs = iseGroupStats(log, plan), fm = iseFirstMiss(ise && ise.misses);
+var groups = ISE_GROUP_KEYS.map(function (g, gi) {
+var x = gs[g], q = x ? x.q : 0, bl = ISE_BLOCKS.filter(function (b) { return b.g === g; });
+return { g: g, label: ISE_GROUPS[g].label, tier: iseTier(g), q: Math.round(q), pct: x && q >= 10 ? Math.round(100 * x.r / q) : null,
+done: bl.filter(function (b) { return !!done[b.id]; }).length, total: bl.length, gi: gi };
+}).sort(function (a, b) {
+return (a.pct === null) - (b.pct === null) || (a.pct || 0) - (b.pct || 0) || ISE_GROUPS[b.g].w - ISE_GROUPS[a.g].w || a.gi - b.gi;
+}).map(function (x) { return { g: x.g, label: x.label, tier: x.tier, q: x.q, pct: x.pct, done: x.done, total: x.total }; });
+var mocks = Object.keys(log).sort().filter(function (d) { return log[d] && log[d].k === "mock"; })
+.map(function (d) { return { d: d, q: log[d].q || 0, pct: typeof log[d].pct === "number" ? log[d].pct : null }; });
+var byD = {}; plan.forEach(function (e) { byD[e.d] = e; });
+var last14 = [];
+for (var i = 13; i >= 0; i--) {
+var d = iseAdd(today, -i), e = byD[d], L = log[d];
+if (!e && !L) continue;
+if (!L && (d === today || e.k === "rest" || e.k === "exam")) continue;
+var t = L && typeof L.t === "number" ? L.t : (e && cfg ? iseDayPlan(e, iseMins(cfg, d), cfg.pace, { anyMisses: !!fm && fm < d }).q : 0);
+last14.push({ d: d, q: L ? (L.q || 0) : 0, t: t, met: iseMet(L), floor: !!(L && L.floor) });
+}
+return { groups: groups, mocks: mocks, last14: last14 };
+}
+</script>
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useRef, useMemo } = React;
 const ENABLE_SURGILOG = true;   // Set to false to hide all SurgiLog integration
@@ -229,6 +1316,17 @@ return flat;
 }
 const AUA_FLAT = buildFlat(AUA_PHASES);
 const MED_TOTAL = MED_STUDENT.length;
+var AUA_BY_NAME = {}; AUA_FLAT.forEach(function(f) { AUA_BY_NAME[f.t] = f; });
+(function() { var miss = []; ISE_BLOCKS.forEach(function(b) { b.topics.forEach(function(t) { if (!AUA_BY_NAME[t]) miss.push(t); }); }); if (miss.length) console.warn("ISE plan: topics not in AUA_PHASES:", miss); })();
+function iseLoad() {
+var raw = null;
+try { raw = localStorage.getItem("uroStudyHub_ise"); } catch(e) { return iseNorm(null); }
+if (!raw) return iseNorm(null);
+var v = null;
+try { v = JSON.parse(raw); } catch(e) { v = null; }
+if (!v || typeof v !== "object" || v.kind !== "uroISE") { try { localStorage.setItem("uroStudyHub_ise_bad", raw); } catch(e) {} }
+return iseNorm(v);
+}
 function loadCustomPlans() {
 try { var v = localStorage.getItem("uroStudyHub_customPlans"); return v ? JSON.parse(v) : []; } catch(e) { console.warn("Failed to load custom plans from localStorage:", e); return []; }
 }
@@ -1494,6 +2592,1023 @@ tx.onabort = tx.onerror = function() { db.close(); reject(tx.error); };
 });
 });
 }
+function iseBtn(c, on) {
+return { minHeight: 34, padding: "6px 12px", background: on ? c.a + "18" : c.cd, border: "2px solid " + (on ? "var(--c-tx)" : "var(--c-br2)"), borderRadius: 8, color: "var(--c-tx)", fontSize: 12, fontWeight: on ? 800 : 600, cursor: "pointer", boxSizing: "border-box", lineHeight: 1.25, fontFamily: "inherit" };
+}
+function iseCard(c) {
+return { background: c.cd, border: "1px solid var(--c-br2)", borderRadius: 10, padding: 12, marginBottom: 12, boxSizing: "border-box" };
+}
+function iseInput(c) {
+return { padding: "8px 10px", background: c.cd, border: "1px solid var(--c-br2)", borderRadius: 8, color: "var(--c-tx)", fontSize: 13, outline: "none", boxSizing: "border-box", minHeight: 36, fontFamily: "inherit" };
+}
+function iseVMain(c, off) {
+return { width: "100%", minHeight: 44, padding: 12, background: off ? "var(--c-br)" : "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 10, color: off ? "var(--c-mut)" : "#fff", fontSize: 14, fontWeight: 800, cursor: off ? "default" : "pointer", boxSizing: "border-box", fontFamily: "inherit" };
+}
+function iseVSum() {
+return { minHeight: 32, padding: "8px 0", fontSize: 13, fontWeight: 800, color: "var(--c-tx)", cursor: "pointer", boxSizing: "border-box" };
+}
+function iseVSmallBtn(c) {
+return Object.assign(iseBtn(c, false), { minHeight: 32, padding: "4px 10px", fontSize: 11 });
+}
+var ISE_V_SMALL = { fontSize: 11, color: "var(--c-mut)", lineHeight: 1.4 };
+var ISE_V_BODY = { fontSize: 12, color: "var(--c-tx)", lineHeight: 1.45 };
+var ISE_V_H = { fontSize: 13, fontWeight: 800, color: "var(--c-tx)", marginBottom: 8 };
+var ISE_V_EYE = { fontSize: 11, fontWeight: 700, color: "var(--c-mut)", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 };
+var ISE_V_PILL = { fontSize: 11, fontWeight: 700, padding: "2px 6px", border: "1px solid var(--c-br2)", borderRadius: 4, whiteSpace: "nowrap", color: "var(--c-tx)" };
+var ISE_V_WEEK = [1, 2, 3, 4, 5, 6, 0];
+var ISE_V_DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var ISE_V_MODES = [{ id: "deep", l: "Deep Dive" }, { id: "lecture", l: "Lecture" }, { id: "mastery", l: "Drill" }];
+var ISE_V_DRILL = "Rules I missed on practice questions. Drill me on each until I can state it cold:\n";
+function iseVShort(id) {
+var b = ISE_BY_ID[id];
+if (!b) return String(id);
+var n = 0;
+ISE_BLOCKS.forEach(function (x) { if (x.g === b.g) n++; });
+if (n === 1) return ISE_GROUPS[b.g].label;
+var i = b.label.indexOf(":");
+return i > 0 ? b.label.slice(0, i) : b.label;
+}
+function iseVShortList(ids) { return (ids || []).map(iseVShort).join(", "); }
+function iseVGLabel(g) { return g === "mixed" ? "Mixed" : ISE_GROUPS[g] ? ISE_GROUPS[g].label : String(g || ""); }
+function iseVNote(p, m) { if (p.notify) p.notify(m); }
+function iseVSkip(ise) { return (ise.cfg && ise.cfg.skip) || []; }
+function iseVCtx(ise, d) { return iseDayCtx(ise, d); }
+function iseVDrafts(ref) {
+var x = ref && ref.current;
+if (!x) return null;
+if (!x.log || typeof x.log !== "object") x.log = {};
+if (!x.mode || typeof x.mode !== "object") x.mode = {};
+return x;
+}
+function iseVKeepLog(dk, d, key, v) {
+if (!dk) return;
+if (!dk.log || typeof dk.log !== "object") dk.log = {};
+var x = Object.assign({}, dk.log[d] || {});
+x[key] = v;
+dk.log[d] = x;
+}
+function iseVLogDirty(dk, ise, d) {
+var x = dk && dk.log ? dk.log[d] : null;
+if (!x) return false;
+var lg = (ise.log || {})[d] || null;
+if (x.q != null && String(x.q) !== (lg ? String(lg.q) : "0")) return true;
+if (x.pct != null && String(x.pct) !== (lg && typeof lg.pct === "number" ? String(lg.pct) : "")) return true;
+if (typeof x.floor === "boolean" && x.floor !== !!(lg && lg.floor)) return true;
+return !!x.ticks && Object.keys(x.ticks).length > 0;
+}
+function iseVScrollTop(el) {
+try {
+for (var n = el ? el.parentNode : null; n && n.nodeType === 1 && n !== document.body && n !== document.documentElement; n = n.parentNode) {
+var oy = window.getComputedStyle(n).overflowY;
+if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight) { n.scrollTop = 0; return; }
+}
+window.scrollTo(0, 0);
+} catch (e) {}
+}
+function iseVPrefsOf(cfg) {
+if (!cfg) return null;
+var o = Object.assign({}, cfg);
+delete o.exam;
+delete o.skip;
+return o;
+}
+function iseVLoopTopics(res) {
+if (!res) return [];
+if (Array.isArray(res.loopTopics)) return res.loopTopics.filter(function (t) { return !!t; });
+var out = [];
+(res.items || []).forEach(function (x) {
+var b = ISE_BY_ID[x.b];
+if (!b || x.lvl === "light") return;
+var tp = b.topics, t = x.part === 2 ? (tp[Math.ceil(tp.length / 2)] || tp[0]) : tp[0];
+if (t && out.indexOf(t) < 0) out.push(t);
+});
+return out;
+}
+function iseVReadG(res) {
+if (!res) return [];
+if (Array.isArray(res.readG)) return res.readG.filter(function (x) { return x && x.read; });
+return (res.groups || []).filter(function (g) { return ISE_GROUPS[g] && ISE_GROUPS[g].read; }).map(function (g) { return { g: g, label: ISE_GROUPS[g].label, read: ISE_GROUPS[g].read }; });
+}
+function iseVMissLines(ise, g, n) {
+var out = [], ms = ise.misses || [];
+for (var i = ms.length - 1; i >= 0 && out.length < n; i--) if (ms[i].g === g) out.push("- " + ms[i].t);
+return out;
+}
+function iseVEntryWhat(e) {
+if (e.it && e.it.length) return e.it.map(function (x) { return iseVShort(x.b) + (x.part ? " (" + x.part + "/2)" : "") + (x.lvl === "light" ? " (light)" : ""); }).join(" + ");
+if (e.g && e.g.length) return e.g.map(iseVGLabel).join(" + ");
+return "";
+}
+function iseVWhat(r) {
+if (!r) return "";
+if (r.items && r.items.length) return r.items.map(function (x) { return iseVShort(x.b) + (x.part ? " (" + x.part + "/2)" : "") + (x.lvl === "light" ? " (light)" : ""); }).join(" + ");
+if (r.groups && r.groups.length && r.k !== "final" && r.k !== "allknow" && r.k !== "misslog") return r.groups.map(iseVGLabel).join(" + ");
+return "";
+}
+function iseVKind(ise, d, r) {
+if (r.k === "off" && iseVSkip(ise).indexOf(d) >= 0) return "Can't study";
+return r.kindLabel || ISE_KIND_LABEL[r.k] || "";
+}
+function iseVPill(ise, d, today, r) {
+var lg = ise.log[d], k = r ? r.k : "none";
+if (lg) {
+if (iseMet(lg)) return lg.floor ? "Floor met" : "Done";
+return lg.q + "/" + lg.t;
+}
+if (k === "off" || k === "none") return iseVSkip(ise).indexOf(d) >= 0 ? "Can't study" : "Off";
+if (k === "rest") return "Rest";
+if (k === "exam") return "Exam";
+if (d === today) return "Today";
+if (d < today) return "Missed";
+return "Upcoming";
+}
+function iseVQLabel(r, qbank, floor) {
+if (floor) return qbank + " Qs (floor day)";
+if (r.qKind === "redo") return "redo Qs (missed or flagged)";
+if (r.qKind === "timed") return "timed " + qbank + " Qs, unseen" + (r.q < 75 ? " (" + r.q + " of 75)" : "");
+if (r.qKind === "mixed") return "mixed " + qbank + " Qs";
+return qbank + " Qs";
+}
+function iseVStatusLine(st, ise, today) {
+if (st.state === "exam") return ise.cfg.exam === today ? "ISE today" : "Exam date passed";
+var dl = st.daysLeft, parts = [dl + " day" + (dl === 1 ? "" : "s") + " to ISE", "pace " + (st.pace == null ? "—" : Math.round(st.pace * 100) + "%")];
+if ((st.qPlanned || 0) > 0) parts.push((st.qDone || 0) + " Qs done · " + st.qPlanned + " due so far");
+parts.push("ISE streak " + (st.streak || 0));
+return parts.join(" · ");
+}
+function iseVHasBuffers(ise, st) {
+if (st && typeof st.hasBuffers === "boolean") return st.hasBuffers;
+return (ise.plan || []).some(function (e) { return e.k === "buffer"; });
+}
+function iseVBanner(ise, st, today) {
+var n = st.behind.length, s = n === 1 ? "" : "s";
+if (st.state === "exam") return ise.cfg.exam === today ? "Exam day. Good luck. When you are ready, start a new sprint for next year." : "This plan's exam date has passed. Start a new sprint to plan for the next one.";
+if (st.state === "absorb") {
+var ds = Object.keys(st.assign || {}).sort();
+return n + " block" + s + " behind; " + ds.map(function (d) { return "the " + iseFmt(d) + " catch-up day covers " + iseVShort(st.assign[d]); }).join("; ") + ".";
+}
+if (st.state === "behind") {
+var names = st.behind.slice(0, 4).map(iseVShort).join(", ") + (n > 4 ? ", …" : "");
+var cov = n - (st.unabsorbed || 0);
+var tail = cov > 0 ? " Catch-up days cover " + cov + "; reshuffle to fit the rest."
+: !iseVHasBuffers(ise, st) ? " This plan has no catch-up days: reshuffle from today."
+: " No catch-up days left to absorb " + (n === 1 ? "it" : "them") + ": reshuffle from today.";
+return n + " block" + s + " behind (" + names + ")." + tail;
+}
+if (st.state === "ahead") {
+var ah = st.aheadDays ? st.aheadDays.slice() : [];
+if (!st.aheadDays) ise.plan.forEach(function (e) {
+if ((e.d > today || (e.d === today && !ise.log[today])) && e.k === "block" && e.it.every(function (x) { return !!ise.done[x.b]; })) ah.push(e.d);
+});
+return ah.length ? "Ahead by " + (ah.length === 1 ? "one day" : ah.length + " days") + "; " + iseFmt(ah[0]) + " becomes a catch-up day." : "Ahead of plan.";
+}
+return "On track." + (typeof st.studyLeft === "number" ? " " + st.studyLeft + " study day" + (st.studyLeft === 1 ? "" : "s") + " left." : "");
+}
+function iseVAnyway(ise, d, st, ctx) {
+var lg = ise.log[d], b = lg && lg.k === "extra" && lg.b && lg.b[0] ? lg.b[0] : null;
+if (!b && st && st.behind && st.behind.length) b = st.behind[0];
+for (var i = 0; i < ise.plan.length && !b; i++) {
+var e = ise.plan[i];
+if (e.d > d && e.k === "block") {
+for (var j = 0; j < e.it.length; j++) if (!ise.done[e.it[j].b]) { b = e.it[j].b; break; }
+}
+}
+var blk = b ? ISE_BY_ID[b] : null;
+if (!blk || !ise.cfg) return null;
+var cfg = ise.cfg, wd = iseDate(d).getDay();
+var M = ((wd === 0 || wd === 6) ? cfg.minsWe : cfg.minsWk) || cfg.minsWk || cfg.minsWe || 120;
+var it = [{ b: b, lvl: "full", part: 0 }];
+var dp = iseDayPlan({ d: d, k: "block", it: it }, M, cfg.pace, ctx);
+var gr = ISE_GROUPS[blk.g];
+return { d: d, k: "extra", kindLabel: "Extra", items: it, groups: [blk.g], M: M, q: dp.q, qKind: dp.qKind || "new", R: dp.R, mode: dp.mode || "deep", steps: dp.steps || [], know: blk.know.slice(), read: [gr.read], readG: gr.read ? [{ g: blk.g, label: gr.label, read: gr.read }] : [], topics: blk.topics.slice(), loopTopics: blk.topics.length ? [blk.topics[0]] : [], entry: null, catchupFor: b };
+}
+function iseVRows(ise, st, today) {
+var out = { next: [], all: [] };
+if (!ise.cfg || !ise.plan.length) return out;
+var plan = ise.plan, first = iseStart(ise) || plan[0].d, end = plan[plan.length - 1].d, cut = ise.cut || [];
+if (ise.cfg.exam && ise.cfg.exam > end) end = ise.cfg.exam;
+var fut = {}, asg = {};
+plan.forEach(function (e) { if (e.d >= today) (e.it || []).forEach(function (x) { if (!fut[x.b]) fut[x.b] = e.d; }); });
+Object.keys((st && st.assign) || {}).forEach(function (dd) { asg[st.assign[dd]] = dd; });
+var lgT = ise.log[today], loggedT = {}, over = !!(st && st.state === "exam");
+if (lgT) (lgT.b || []).forEach(function (b) { loggedT[b] = 1; });
+function row(d) {
+var r = iseResolve(ise, d, st, today), notes = [], lg = ise.log[d];
+if (r.k === "off" && lg && lg.k === "extra") { var xr = iseVAnyway(ise, d, st, iseVCtx(ise, d)); if (xr) r = xr; }
+if (d < today && r.items) r.items.forEach(function (x) {
+if (x.part === 1) return;
+if (ise.done[x.b] === today && !loggedT[x.b]) { notes.push({ b: x.b, t: iseVShort(x.b) + " → marked covered today", undo: true }); return; }
+if (ise.done[x.b]) return;
+var where = fut[x.b] ? "moved to " + iseFmt(fut[x.b]) : asg[x.b] ? "catch-up " + iseFmt(asg[x.b]) : cut.indexOf(x.b) >= 0 ? "cut (Know-cold on final day)" : over ? "not covered" : "not placed yet: reshuffle";
+notes.push({ b: x.b, t: iseVShort(x.b) + " → " + where });
+});
+return { d: d, res: r, pill: iseVPill(ise, d, today, r), notes: notes };
+}
+var n = 0, d;
+for (d = first; d <= end && n < 400; d = iseAdd(d, 1)) { out.all.push(row(d)); n++; }
+for (var i = 0; i < 6; i++) { d = iseAdd(today, i); if (d > end) break; out.next.push(row(d)); }
+return out;
+}
+function iseVRowEl(c, ise, row, isSel, onTap, acts, tag) {
+var r = row.res, what = iseVWhat(r), kind = iseVKind(ise, row.d, r);
+var q = r.q > 0 && r.k !== "rest" && r.k !== "exam" ? r.q + (r.qKind === "redo" ? " redo" : r.qKind === "timed" ? " timed" : "") + " Qs" : "";
+return (
+<div key={row.d} data-ise={tag || undefined} data-date={row.d} onClick={function () { onTap(row.d); }} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 36, padding: "6px 8px", marginBottom: 4, border: "2px solid " + (isSel ? "var(--c-tx)" : "var(--c-br)"), borderRadius: 6, cursor: "pointer", boxSizing: "border-box", background: c.cd }}>
+<div style={{ minWidth: 74, fontSize: 12, fontWeight: 700, color: "var(--c-tx)", whiteSpace: "nowrap" }}>{(isSel ? "✓ " : "") + iseFmt(row.d)}</div>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={{ fontSize: 12, color: "var(--c-tx)", lineHeight: 1.35 }}>{kind + (what ? ": " + what : "")}</div>
+{row.notes.map(function (nt) {
+return (
+<div key={nt.b} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+<span style={ISE_V_SMALL}>{nt.t}</span>
+{acts && !nt.undo && <button onClick={function (e) { e.stopPropagation(); acts.mark(nt.b); }} style={iseVSmallBtn(c)}>Mark covered</button>}
+{acts && nt.undo && <button data-ise={"uncover-" + nt.b} onClick={function (e) { e.stopPropagation(); acts.unmark(nt.b); }} style={iseVSmallBtn(c)}>Undo</button>}
+</div>
+);
+})}
+</div>
+{q ? <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: "var(--c-tx)" }}>{q}</div> : null}
+<span style={ISE_V_PILL}>{row.pill}</span>
+</div>
+);
+}
+function iseVDraft(cfg, today, prefs) {
+var b = cfg || (prefs && typeof prefs === "object" ? prefs : null) || ISE_CFG_DEFAULT;
+var ex = cfg && cfg.exam && cfg.exam > today ? cfg.exam : iseDefaultExam(today);
+return { exam: ex, minsWk: typeof b.minsWk === "number" ? b.minsWk : 120, minsWe: typeof b.minsWe === "number" ? b.minsWe : 180, off: (Array.isArray(b.off) ? b.off : []).slice(), pace: b.pace === 2 || b.pace === 3 || b.pace === 4 ? b.pace : 3, qbank: typeof b.qbank === "string" && b.qbank ? b.qbank : "SASP", boost: Object.assign({}, b.boost && typeof b.boost === "object" ? b.boost : {}), pre: {} };
+}
+function iseVPreOn(ise, dr, id) {
+return Object.prototype.hasOwnProperty.call(dr.pre, id) ? !!dr.pre[id] : !!(ise.done || {})[id];
+}
+function iseVPreSplit(ise, dr) {
+var add = {}, rem = {}, done = ise.done || {};
+ISE_BLOCKS.forEach(function (b) {
+if (!Object.prototype.hasOwnProperty.call(dr.pre, b.id)) return;
+if (dr.pre[b.id] && !done[b.id]) add[b.id] = true;
+else if (!dr.pre[b.id] && done[b.id]) rem[b.id] = true;
+});
+return { add: add, rem: rem };
+}
+function iseVWithPre(ise, sp) {
+var ad = Object.keys(sp.add), rm = Object.keys(sp.rem);
+if (!ad.length && !rm.length) return ise;
+var dn = Object.assign({}, ise.done || {});
+rm.forEach(function (id) { delete dn[id]; });
+ad.forEach(function (id) { dn[id] = "pre"; });
+return Object.assign({}, ise, { done: dn });
+}
+function iseVBuildCfg(dr) { return Object.assign({}, ISE_CFG_DEFAULT, iseVCfgOf(dr), { skip: [] }); }
+function iseVCfgOf(dr) {
+var qb = String(dr.qbank || "").trim().slice(0, 24) || "SASP";
+return { exam: dr.exam, minsWk: dr.minsWk, minsWe: dr.minsWe, off: dr.off.slice(), pace: dr.pace, qbank: qb, boost: Object.assign({}, dr.boost) };
+}
+function iseVPreview(ise, dr, today) {
+var sp = iseVPreSplit(ise, dr), log = ise.log || {};
+var from = log[today] ? iseAdd(today, 1) : today;
+var nx = ise.cfg ? iseReshuffle(iseVWithPre(ise, sp), today, iseVCfgOf(dr), 0) : iseSetup(ise, iseVBuildCfg(dr), sp.add, today, sp.rem, 0);
+var cfg = nx && nx.cfg;
+if (!cfg) return null;
+var plan = (nx.plan || []).filter(function (e) { return e.d >= from; }), done = nx.done || {}, nPre = 0;
+ISE_BLOCKS.forEach(function (b) { if (done[b.id]) nPre++; });
+var S = 0, wk = [0, 0], we = [0, 0], total = 0, full = {}, byK = {};
+plan.forEach(function (e) {
+if (e.k === "mock" || e.k === "weak" || e.k === "allknow" || e.k === "misslog" || e.k === "final" || e.k === "rest") (byK[e.k] = byK[e.k] || []).push(iseFmt(e.d));
+if (e.k === "rest" || e.k === "exam") return;
+S++;
+var ctx = { qbank: cfg.qbank, recentMisses: 0, anyMisses: iseAnyMisses(nx.misses, e.d) };
+var M = iseMins(cfg, e.d), q = iseDayPlan(e, M, cfg.pace, ctx).q || 0;
+total += q;
+if (e.k !== "mock") { var wd = iseDate(e.d).getDay(), a = (wd === 0 || wd === 6) ? we : wk; a[0] += q; a[1]++; }
+(e.it || []).forEach(function (x) { if (x.lvl === "full") full[x.b] = 1; });
+});
+function avg(a) { return a[1] ? Math.round(a[0] / a[1] / 5) * 5 : null; }
+var aw = avg(wk), ae = avg(we), qs = [], nFull = Object.keys(full).length, cut = nx.cut || [], light = nx.light || [];
+if (aw != null) qs.push(aw + " Qs weekdays");
+if (ae != null) qs.push(ae + (aw != null ? " weekends" : " Qs weekends"));
+var l1 = S + " study day" + (S === 1 ? "" : "s") + (qs.length ? " · ≈" + qs.join(" / ") : "") + " · ≈" + total + " Qs total";
+var l2 = nFull + " full block" + (nFull === 1 ? "" : "s") + " · " + light.length + " light · " + (cut.length ? "cut: " + iseVShortList(cut) : "nothing cut") + (nPre ? " · " + nPre + " already covered" : "");
+var tl = [];
+if (byK.mock) tl.push(byK.mock.length + " mock" + (byK.mock.length === 1 ? "" : "s") + " (" + byK.mock.join(", ") + ")");
+if (byK.weak) tl.push("weak spots " + byK.weak.join(", "));
+if (byK.allknow) tl.push("Know-cold " + byK.allknow.join(", "));
+if (byK.misslog) tl.push("miss log " + byK.misslog.join(", "));
+if (byK.final) tl.push("final review " + byK.final.join(", "));
+if (byK.rest) tl.push("rest " + byK.rest.join(", "));
+return { S: S, days: iseDiff(today, cfg.exam), l1: l1, l2: l2, l3: tl.join(" · ") };
+}
+function IseSheet(p) {
+var c = p.c, sh = p.sheet, df = sh.diff || {}, nx = sh.next || {};
+var back = (df.back || []).map(function (x) { return iseVShort(x.b) + " (" + iseFmt(x.d) + ")"; }).join(", ");
+var tail = (df.tail || []).filter(function (t) { return !!t; }), unc = sh.uncover || [];
+var nothing = !back && !(df.light || []).length && !(df.full || []).length && !(df.cut || []).length && !(df.uncut || []).length && !df.moved && !tail.length && !unc.length;
+function line(lbl, val) {
+if (!val) return null;
+return <div style={Object.assign({}, ISE_V_BODY, { marginBottom: 6 })}><b>{lbl}</b>{" " + val}</div>;
+}
+return (
+<div data-ise="sheet" onClick={p.onCancel} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,.6)", zIndex: 250, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+<div onClick={function (e) { e.stopPropagation(); }} style={{ background: c.bg, borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 520, padding: "16px 16px 24px", border: "2px solid var(--c-br2)", borderBottom: "none", maxHeight: "85vh", overflowY: "auto", boxSizing: "border-box", color: "var(--c-tx)" }}>
+<div style={{ fontSize: 15, fontWeight: 800, color: "var(--c-tx0)", marginBottom: 4 }}>{sh.title}</div>
+{sh.sub && <div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 10 })}>{sh.sub}</div>}
+{tail.map(function (t, i) { return <div key={"t" + i} style={Object.assign({}, ISE_V_BODY, { marginBottom: 6, fontWeight: 700 })}>{t}</div>; })}
+{line("Planned again (no longer covered):", iseVShortList(unc))}
+{line("Back in:", back)}
+{line("Light (Know-cold + Qs):", iseVShortList(df.light))}
+{line("Full again:", iseVShortList(df.full))}
+{line("Cut (Know-cold on the final day):", iseVShortList(df.cut))}
+{line("Back from cut:", iseVShortList(df.uncut))}
+{df.moved ? line("Moved:", df.moved + " block" + (df.moved === 1 ? "" : "s") + " to new dates") : null}
+{nothing && <div style={Object.assign({}, ISE_V_BODY, { marginBottom: 6 })}>No block changes.</div>}
+{nx.cut && <div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 8 })}>{"After this: " + (nx.light || []).length + " light · " + nx.cut.length + " cut in total"}</div>}
+{(df.preview || []).length > 0 && (
+<div style={{ border: "1px solid var(--c-br2)", borderRadius: 8, padding: 8, marginBottom: 12 }}>
+<div style={ISE_V_EYE}>Next days</div>
+{df.preview.map(function (e) {
+var w = iseVEntryWhat(e);
+return <div key={e.d} style={ISE_V_BODY}>{iseFmt(e.d) + " · " + (ISE_KIND_LABEL[e.k] || e.k) + (w ? ": " + w : "")}</div>;
+})}
+</div>
+)}
+<button data-ise="sheet-apply" onClick={p.onApply} style={iseVMain(c, false)}>Apply</button>
+<button data-ise="sheet-cancel" onClick={p.onCancel} style={Object.assign(iseBtn(c, false), { width: "100%", marginTop: 8, minHeight: 40 })}>Cancel</button>
+</div>
+</div>
+);
+}
+function IseSetupForm(p) {
+var c = p.c, ise = p.ise, today = p.today, has = !!ise.cfg;
+var [dr, setDr] = useState(function () { return iseVDraft(ise.cfg, today, ise.prefs); });
+var valid = iseValidYmd(dr.exam) && dr.exam > today;
+var pv = useMemo(function () { return valid ? iseVPreview(ise, dr, today) : null; }, [ise, dr, today, valid]);
+function set(k, v) { setDr(function (d) { var n = Object.assign({}, d); n[k] = v; return n; }); }
+function step(k, by) { setDr(function (d) { var n = Object.assign({}, d); n[k] = Math.max(0, Math.min(360, (d[k] || 0) + by)); return n; }); }
+function togOff(wd) {
+setDr(function (d) {
+var o = d.off.indexOf(wd) >= 0 ? d.off.filter(function (x) { return x !== wd; }) : d.off.concat([wd]).sort();
+return Object.assign({}, d, { off: o });
+});
+}
+function togMap(k, id) {
+setDr(function (d) {
+var m = Object.assign({}, d[k]), n = Object.assign({}, d);
+if (m[id]) delete m[id]; else m[id] = k === "boost" ? 1 : true;
+n[k] = m;
+return n;
+});
+}
+function togPre(id) {
+setDr(function (d) {
+var m = Object.assign({}, d.pre), base = !!(ise.done || {})[id], on = !iseVPreOn(ise, d, id);
+if (on === base) delete m[id]; else m[id] = on;
+return Object.assign({}, d, { pre: m });
+});
+}
+function build() {
+if (!valid) return;
+var cfg = iseVBuildCfg(dr), sp = iseVPreSplit(ise, dr);
+p.setIse(function (cur) { return iseSetup(cur, cfg, sp.add, today, sp.rem, Date.now()); });
+iseVNote(p, "In-Service plan built");
+p.onDone();
+}
+function review() {
+if (!valid) return;
+var sp = iseVPreSplit(ise, dr);
+var next = iseReshuffle(iseVWithPre(ise, sp), today, iseVCfgOf(dr), Date.now());
+p.onSheet({ title: "Review setup changes", sub: "Re-plans from " + (ise.log[today] ? "tomorrow" : "today") + " with the new settings. Days already past stay as they are.", next: next, diff: iseDiffPlans(ise, next, today), uncover: Object.keys(sp.rem), closeSetup: true });
+}
+function del() {
+if (!confirm("Delete this In-Service plan? Your miss log and logged days are kept.")) return;
+var nDone = 0;
+ISE_BLOCKS.forEach(function (b) { if ((ise.done || {})[b.id]) nDone++; });
+var clr = nDone > 0 && confirm("Also clear the " + nDone + " block" + (nDone === 1 ? "" : "s") + " marked covered?\nOK: clear them, so the next plan includes them again.\nCancel: keep them covered.");
+p.setIse(function (cur) {
+var o = { cfg: null, plan: [], cut: [], light: [], prefs: iseVPrefsOf(cur.cfg) || cur.prefs || null };
+if (clr) o.done = {};
+return Object.assign({}, cur, o);
+});
+iseVNote(p, clr ? "Plan deleted, covered blocks cleared" : "Plan deleted");
+p.onDone();
+}
+var nPre = 0, nBoost = Object.keys(dr.boost).length;
+ISE_BLOCKS.forEach(function (b) { if (iseVPreOn(ise, dr, b.id)) nPre++; });
+function stepper(k, key, label, sub) {
+return (
+<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+<div style={{ flex: 1 }}>
+<div style={ISE_V_BODY}>{label}</div>
+<div style={ISE_V_SMALL}>{sub}</div>
+</div>
+<button data-ise={key + "-minus"} onClick={function () { step(k, -15); }} style={Object.assign(iseBtn(c, false), { minWidth: 52, minHeight: 40, fontSize: 14 })}>−15</button>
+<div data-ise={key} style={{ minWidth: 48, textAlign: "center", fontSize: 18, fontWeight: 800, color: "var(--c-tx0)" }}>{dr[k]}</div>
+<button data-ise={key + "-plus"} onClick={function () { step(k, 15); }} style={Object.assign(iseBtn(c, false), { minWidth: 52, minHeight: 40, fontSize: 14 })}>+15</button>
+</div>
+);
+}
+return (
+<div data-ise="setup" style={iseCard(c)}>
+<div style={ISE_V_H}>{has ? "⚙ Plan settings" : "Set up your sprint"}</div>
+{!has && <div style={Object.assign({}, ISE_V_BODY, { marginBottom: 10 })}>Plan the weeks before the ISE: high-yield first, daily question targets, catch-up when you fall behind.</div>}
+<div style={ISE_V_EYE}>Exam date</div>
+<input type="date" data-ise="exam-date" value={dr.exam || ""} onChange={function (e) { set("exam", e.target.value); }} style={Object.assign(iseInput(c), { width: "100%", padding: "10px 14px", fontSize: 13 })} />
+<div style={Object.assign({}, ISE_V_SMALL, { margin: "4px 0 12px" })}>{valid ? (pv ? pv.days + " days left · " + pv.S + " study days" : "") : "Pick an exam date after today."}</div>
+<div style={ISE_V_EYE}>Minutes per day</div>
+{stepper("minsWk", "mins-wk", "Weekdays", "0 = no study on weekdays")}
+{stepper("minsWe", "mins-we", "Weekends", "0 = no study on weekends")}
+<div style={Object.assign({}, ISE_V_EYE, { marginTop: 6 })}>Days off (never study)</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+{ISE_V_WEEK.map(function (wd) {
+var on = dr.off.indexOf(wd) >= 0;
+return <button key={wd} data-ise={"off-" + wd} onClick={function () { togOff(wd); }} style={Object.assign(iseBtn(c, on), { minWidth: 54 })}>{on ? "✓ " + ISE_V_DOW[wd] + " off" : ISE_V_DOW[wd]}</button>;
+})}
+</div>
+<div style={ISE_V_EYE}>Minutes per question</div>
+<div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+{[2, 3, 4].map(function (n) {
+var on = dr.pace === n;
+return <button key={n} data-ise={"pace-" + n} onClick={function () { set("pace", n); }} style={Object.assign(iseBtn(c, on), { flex: 1 })}>{(on ? "✓ " : "") + n + " min"}</button>;
+})}
+</div>
+<div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 12 })}>3 = tutor mode, reading every critique</div>
+<div style={ISE_V_EYE}>Question bank</div>
+<input data-ise="qbank" value={dr.qbank} maxLength={24} onChange={function (e) { set("qbank", e.target.value.slice(0, 24)); }} style={Object.assign(iseInput(c), { width: "100%", marginBottom: 8 })} />
+<details style={{ marginBottom: 4 }}>
+<summary style={iseVSum()}>{"Already covered" + (nPre ? " (" + nPre + " ticked)" : "")}</summary>
+<div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 6 })}>Tick blocks you have already studied well; the plan skips them. Untick one to plan it again.</div>
+{ISE_BLOCKS.map(function (b) {
+var core = p.coreDone ? b.topics.every(function (t) { return p.coreDone(t); }) : false;
+var was = (ise.done || {})[b.id], on = iseVPreOn(ise, dr, b.id);
+return (
+<label key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 34, fontSize: 12, color: "var(--c-tx)", cursor: "pointer" }}>
+<input type="checkbox" data-ise={"pre-" + b.id} checked={on} onChange={function () { togPre(b.id); }} style={{ width: 18, height: 18, flex: "0 0 auto" }} />
+<span style={{ flex: 1 }}>{b.label + (core ? " (✓ in Core)" : "") + (was ? (on ? " (covered " + (was === "pre" ? "before" : iseFmt(was)) + ")" : " (was covered: will be planned again)") : "")}</span>
+</label>
+);
+})}
+</details>
+<details style={{ marginBottom: 8 }}>
+<summary style={iseVSum()}>{"I know I'm weak in…" + (nBoost ? " (" + nBoost + ")" : "")}</summary>
+<div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 6 })}>These go earlier in the plan until you have logged 10 Qs in them; after that your scores decide.</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+{ISE_GROUP_KEYS.map(function (g) {
+var on = !!dr.boost[g];
+return <button key={g} data-ise={"boost-" + g} onClick={function () { togMap("boost", g); }} style={iseBtn(c, on)}>{(on ? "✓ " : "") + ISE_GROUPS[g].label}</button>;
+})}
+</div>
+</details>
+<div data-ise="setup-preview" style={{ border: "1px solid var(--c-br2)", borderRadius: 8, padding: 10, margin: "8px 0 12px", background: "var(--c-bg)" }}>
+<div style={ISE_V_EYE}>Preview</div>
+{!pv && <div style={ISE_V_BODY}>Pick a valid exam date to see the plan.</div>}
+{pv && pv.S === 0 && <div style={ISE_V_BODY}>No study days before the exam with these settings.</div>}
+{pv && pv.S > 0 && <div style={ISE_V_BODY}>{pv.l1}</div>}
+{pv && pv.S > 0 && <div style={ISE_V_BODY}>{pv.l2}</div>}
+{pv && pv.l3 && <div style={ISE_V_BODY}>{pv.l3}</div>}
+{pv && pv.S > 0 && <div style={Object.assign({}, ISE_V_SMALL, { marginTop: 4 })}>full = a study session · light = Know-cold list + questions · cut = Know-cold list only, on the final review day</div>}
+</div>
+{has
+? <button data-ise="review" disabled={!valid} onClick={review} style={iseVMain(c, !valid)}>Review changes</button>
+: <button data-ise="build" disabled={!valid} onClick={build} style={iseVMain(c, !valid)}>Build plan</button>}
+{has && <button onClick={function () { p.onDone(); }} style={Object.assign(iseBtn(c, false), { width: "100%", marginTop: 8, minHeight: 40 })}>Cancel</button>}
+{has && (
+<div style={{ marginTop: 16, paddingTop: 10, borderTop: "1px solid var(--c-br2)" }}>
+<div style={ISE_V_EYE}>Danger zone</div>
+<button data-ise="delete-plan" onClick={del} style={Object.assign(iseBtn(c, false), { width: "100%" })}>Delete plan (keeps miss log and logged days)</button>
+</div>
+)}
+</div>
+);
+}
+function IseLogForm(p) {
+var c = p.c, ise = p.ise, d = p.d, res = p.res, lg = ise.log[d] || null, floor = !!p.floor;
+var dk = p.drafts || null, df0 = dk && dk.log ? dk.log[d] : null;
+var [qs, setQs0] = useState(df0 && df0.q != null ? String(df0.q) : lg ? String(lg.q) : "0");
+var [pct, setPct0] = useState(df0 && df0.pct != null ? String(df0.pct) : lg && typeof lg.pct === "number" ? String(lg.pct) : "");
+var [over, setOver0] = useState(df0 && df0.ticks && typeof df0.ticks === "object" ? Object.assign({}, df0.ticks) : {});
+function setQs(v) { setQs0(v); iseVKeepLog(dk, d, "q", v); }
+function setPct(v) { setPct0(v); iseVKeepLog(dk, d, "pct", v); }
+function setOver(o) { setOver0(o); iseVKeepLog(dk, d, "ticks", o); }
+var qn = parseInt(qs, 10);
+if (!(qn >= 0)) qn = 0;
+if (qn > 500) qn = 500;
+var t = res.q || 0;
+var ids = [];
+if (res.k !== "mock") (res.items || []).forEach(function (x) { if (x.part !== 1 && ids.indexOf(x.b) < 0) ids.push(x.b); });
+var defs = {};
+if (ids.length) {
+try { defs = iseDefaultTicks(res, lg || { q: qn, t: t, floor: floor, k: res.k }) || {}; } catch (e) { defs = {}; }
+}
+var ticks = {};
+ids.forEach(function (b) {
+var dv = typeof defs[b] === "boolean" ? defs[b] : (ise.done[b] === d || (!floor && (res.catchupFor === b || (t > 0 && qn >= 0.6 * t))));
+if (ise.done[b] === d) dv = true;
+ticks[b] = typeof over[b] === "boolean" ? over[b] : dv;
+});
+function save() {
+var pv = String(pct).trim() === "" ? null : parseInt(pct, 10);
+if (pv != null && (isNaN(pv) || pv < 0)) pv = null;
+if (pv != null && pv > 100) pv = 100;
+var g = null;
+if (res.k !== "mock" && res.k !== "buffer" && res.k !== "final" && res.k !== "allknow" && res.k !== "misslog") {
+g = (res.groups && res.groups[0]) || ((res.items && res.items[0] && ISE_BY_ID[res.items[0].b]) ? ISE_BY_ID[res.items[0].b].g : null);
+}
+var entry = { q: qn, pct: pv, floor: floor, t: t, k: res.k, b: (res.items || []).map(function (x) { return x.b; }), g: g, gs: g ? (res.groups || []).slice() : [], ts: Date.now(), rw: lg && lg.rw ? 1 : 0 };
+var first = d === p.today && !(lg && lg.rw) && iseMet(entry);
+if (first) entry.rw = 1;
+var tk = {};
+ids.forEach(function (b) { tk[b] = !!ticks[b]; });
+p.setIse(function (cur) { return iseApplyLog(cur, d, entry, tk); });
+if (dk && dk.log) delete dk.log[d];
+if (first && p.onReward) p.onReward("ISE: " + qn + " Qs");
+iseVNote(p, first ? "Target met: " + qn + " Qs logged" : "Logged " + qn + " Qs");
+}
+var stepS = Object.assign(iseBtn(c, false), { minWidth: 52, minHeight: 40, fontSize: 14 });
+return (
+<div style={{ borderTop: "1px solid var(--c-br2)", marginTop: 12, paddingTop: 10 }}>
+<div style={ISE_V_H}>{"Log " + (d === p.today ? "today" : iseFmt(d)) + (lg ? " (saved: " + lg.q + " Qs" + (typeof lg.pct === "number" ? ", " + lg.pct + "%" : "") + ")" : "")}</div>
+<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+<div style={Object.assign({}, ISE_V_BODY, { minWidth: 72 })}>Questions</div>
+<button data-ise="log-minus" onClick={function () { setQs(String(Math.max(0, qn - 5))); }} style={stepS}>−5</button>
+<input data-ise="log-q" inputMode="numeric" value={qs} onChange={function (e) { setQs(e.target.value.replace(/[^0-9]/g, "").slice(0, 3)); }} style={Object.assign(iseInput(c), { width: 64, minHeight: 40, textAlign: "center", fontSize: 18, fontWeight: 800 })} />
+<button data-ise="log-plus" onClick={function () { setQs(String(Math.min(500, qn + 5))); }} style={stepS}>+5</button>
+<div style={ISE_V_SMALL}>{"of " + (floor ? Math.min(15, t) : t)}</div>
+</div>
+<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+<div style={Object.assign({}, ISE_V_BODY, { minWidth: 72 })}>% correct</div>
+<input data-ise="log-pct" inputMode="numeric" placeholder="—" value={pct} onChange={function (e) { setPct(e.target.value.replace(/[^0-9]/g, "").slice(0, 3)); }} style={Object.assign(iseInput(c), { width: 72, textAlign: "center" })} />
+<div style={ISE_V_SMALL}>optional, 0–100</div>
+</div>
+<button data-ise="log-floor" onClick={function () { p.setFloor(!floor); setOver({}); }} style={Object.assign(iseBtn(c, floor), { width: "100%", marginBottom: 8 })}>{(floor ? "✓ " : "") + "Floor day: " + Math.min(15, t) + " Qs + one Know-cold list"}</button>
+{ids.map(function (b) {
+var blk = ISE_BY_ID[b], other = ise.done[b] && ise.done[b] !== d;
+return (
+<label key={b} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 34, fontSize: 12, color: "var(--c-tx)", cursor: "pointer" }}>
+<input type="checkbox" data-ise={"covered-" + b} checked={!!ticks[b]} onChange={function (e) { var o = Object.assign({}, over); o[b] = e.target.checked; setOver(o); }} style={{ width: 18, height: 18, flex: "0 0 auto" }} />
+<span style={{ flex: 1 }}>{"Covered: " + (blk ? blk.label : b) + (other ? " (already covered " + (ise.done[b] === "pre" ? "before" : iseFmt(ise.done[b])) + ")" : "")}</span>
+</label>
+);
+})}
+<button data-ise="log-save" onClick={save} style={Object.assign(iseVMain(c, false), { marginTop: 8 })}>{lg ? "Save changes" : "Save"}</button>
+</div>
+);
+}
+function IseMissLog(p) {
+var c = p.c, ise = p.ise, today = p.today, dk = p.drafts || null;
+var [txt, setTxt0] = useState(dk && typeof dk.miss === "string" ? dk.miss : "");
+var [grp, setGrp0] = useState(dk && typeof dk.missG === "string" && (dk.missG === "mixed" || ISE_GROUP_KEYS.indexOf(dk.missG) >= 0) ? dk.missG : null);
+function setTxt(v) { setTxt0(v); if (dk) dk.miss = v; }
+function setGrp(v) { setGrp0(v); if (dk) dk.missG = v; }
+var [flt, setFlt] = useState("recent");
+var [fg, setFg] = useState("");
+var [copyTxt, setCopyTxt] = useState(null);
+var copyRef = useRef(null);
+useEffect(function () {
+if (copyTxt != null && copyRef.current) { try { copyRef.current.focus(); copyRef.current.select(); } catch (e) {} }
+}, [copyTxt]);
+var g = grp || p.defGroup || "mixed";
+var win = useMemo(function () { return iseMissWindow(ise.misses || [], today) || { from: null, list: [] }; }, [ise.misses, today]);
+var shown = (flt === "all" ? (ise.misses || []) : (win.list || [])).filter(function (m) { return !fg || m.g === fg; });
+shown = shown.slice().reverse();
+shown.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
+var drillG = fg && fg !== "mixed" && ISE_GROUPS[fg] ? fg : null;
+function add() {
+var idBase = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+var list = iseParseMisses(txt, g, today, idBase);
+if (!list.length) { iseVNote(p, "Type the rule first"); return; }
+p.setIse(function (cur) { return iseAddMisses(cur, list); });
+setTxt("");
+iseVNote(p, list.length === 1 ? "Miss added" : list.length + " misses added");
+}
+function del(id) {
+if (!confirm("Delete this miss?")) return;
+p.setIse(function (cur) { return iseDelMiss(cur, id); });
+}
+function copy() {
+var text = shown.map(function (m) { return "- " + m.t; }).join("\n");
+if (!text) { iseVNote(p, "Nothing to copy"); return; }
+var settled = false, n = shown.length;
+function fb() { if (settled) return; settled = true; setCopyTxt(text); }
+try {
+if (navigator.clipboard && navigator.clipboard.writeText) {
+setTimeout(fb, 1500);
+navigator.clipboard.writeText(text).then(function () {
+if (settled) return;
+settled = true;
+setCopyTxt(null);
+iseVNote(p, "Copied " + n + (n === 1 ? " miss" : " misses"));
+}, fb);
+} else fb();
+} catch (e) { fb(); }
+}
+function drill() {
+var blk = null;
+ISE_BLOCKS.forEach(function (b) { if (!blk && b.g === drillG) blk = b; });
+if (!blk) return;
+var t = blk.topics[0], lines = [];
+shown.forEach(function (m) { if (m.g === drillG && lines.length < 8) lines.push("- " + m.t); });
+p.onStart(ISE_LABEL[t] || t, "mastery", lines.length ? ISE_V_DRILL + lines.join("\n") : undefined);
+}
+var gOpts = ISE_GROUP_KEYS.map(function (k) { return <option key={k} value={k}>{ISE_GROUPS[k].label}</option>; });
+var selS = Object.assign(iseInput(c), { minHeight: 36, fontSize: 12 });
+return (
+<div style={iseCard(c)}>
+<div style={ISE_V_H}>📝 Miss log</div>
+<textarea data-ise="miss-text" value={txt} onChange={function (e) { setTxt(e.target.value); }} rows={3} placeholder="The rule that would have gotten it right, with the why" style={Object.assign(iseInput(c), { width: "100%", minHeight: 72, resize: "vertical", lineHeight: 1.4 })} />
+<div style={Object.assign({}, ISE_V_SMALL, { margin: "4px 0 8px" })}>Pasting two or more lines that start with "- " adds one miss per line (the Sprint Board's Copy format).</div>
+<div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+<select data-ise="miss-group" value={g} onChange={function (e) { setGrp(e.target.value); }} style={Object.assign({}, selS, { flex: 1 })}>
+{gOpts}
+<option value="mixed">Mixed</option>
+</select>
+<button data-ise="miss-add" onClick={add} style={Object.assign(iseBtn(c, false), { minWidth: 72, minHeight: 36 })}>Add</button>
+</div>
+<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+<button data-ise="miss-filter-recent" onClick={function () { setFlt("recent"); }} style={iseBtn(c, flt === "recent")}>{(flt === "recent" ? "✓ " : "") + (win.from ? "Since " + iseFmt(win.from) : "Recent")}</button>
+<button data-ise="miss-filter-all" onClick={function () { setFlt("all"); }} style={iseBtn(c, flt === "all")}>{(flt === "all" ? "✓ " : "") + "All"}</button>
+<select data-ise="miss-filter-group" value={fg} onChange={function (e) { setFg(e.target.value); }} style={Object.assign({}, selS, { flex: 1, minWidth: 120 })}>
+<option value="">All groups</option>
+{gOpts}
+<option value="mixed">Mixed</option>
+</select>
+</div>
+{shown.length === 0 && <div style={Object.assign({}, ISE_V_SMALL, { padding: "6px 0" })}>{(ise.misses || []).length ? "No misses match this filter." : "No misses yet. After each question set, add the rule you missed."}</div>}
+{shown.map(function (m) {
+return (
+<div key={m.id} data-ise="miss-item" data-id={m.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--c-br)" }}>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={ISE_V_SMALL}>{iseFmt(m.d) + " · " + iseVGLabel(m.g)}</div>
+<div style={Object.assign({}, ISE_V_BODY, { whiteSpace: "pre-wrap", wordBreak: "break-word" })}>{m.t}</div>
+</div>
+<button data-ise="miss-delete" data-id={m.id} onClick={function () { del(m.id); }} style={iseVSmallBtn(c)}>Delete</button>
+</div>
+);
+})}
+<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+<button data-ise="miss-copy" onClick={copy} style={iseBtn(c, false)}>{"Copy shown (" + shown.length + ")"}</button>
+{drillG && shown.length > 0 && <button data-ise="miss-drill" onClick={drill} style={iseBtn(c, false)}>{"Drill these ▶"}</button>}
+</div>
+{copyTxt != null && (
+<div style={{ marginTop: 8 }}>
+<div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 4 })}>Press copy (the text is selected):</div>
+<textarea ref={copyRef} readOnly value={copyTxt} rows={5} onFocus={function (e) { e.target.select(); }} style={Object.assign(iseInput(c), { width: "100%", minHeight: 96 })} />
+<button onClick={function () { setCopyTxt(null); }} style={Object.assign(iseBtn(c, false), { marginTop: 6 })}>Done</button>
+</div>
+)}
+</div>
+);
+}
+function IsePlanView(p) {
+var c = p.c, ise = p.ise, has = !!ise.cfg;
+var ownDrafts = useRef(null);
+if (!ownDrafts.current) ownDrafts.current = { miss: "", log: {}, sel: null, mode: {} };
+var dk = iseVDrafts(p.drafts && p.drafts.current ? p.drafts : ownDrafts);
+var rootRef = useRef(null);
+var [tick, setTick] = useState(0);
+var [editing, setEditing] = useState(false);
+var today = p.today, nowYmd = iseNowYmd();
+if (nowYmd > today) today = nowYmd;
+var initRef = useRef(null);
+if (!initRef.current) {
+var s0 = dk.sel, keep = null, hold = null;
+if (s0 && iseValidYmd(s0) && s0 !== today) {
+if (dk.selOn === today) keep = s0;
+else if (iseVLogDirty(dk, ise, s0)) { keep = s0; if (s0 < today) hold = s0; }
+}
+var sn = dk.seen && iseValidYmd(dk.seen) ? dk.seen : today;
+if (!keep && sn < today && iseVLogDirty(dk, ise, sn)) { keep = sn; hold = sn; }
+dk.sel = keep;
+if (keep) dk.selOn = today;
+initRef.current = { sel: keep, held: hold };
+}
+var [sel, setSel0] = useState(initRef.current.sel);
+var [held, setHeld] = useState(initRef.current.held);
+var [seen, setSeen] = useState(today);
+var [sheet, setSheet] = useState(null);
+var [anyway, setAnyway] = useState(null);
+var [modes, setModes] = useState(function () { return Object.assign({}, dk.mode); });
+var [floorP, setFloorP] = useState(null);
+var todayRef = useRef(null);
+function setSel(v) { setSel0(v); setHeld(null); dk.sel = v; dk.selOn = today; }
+if (seen !== today) {
+var was = seen;
+setSeen(today);
+if (was < today && sel == null && iseVLogDirty(dk, ise, was)) {
+setSel0(was); setHeld(was); dk.sel = was; dk.selOn = today; sel = was;
+}
+}
+useEffect(function () { dk.seen = today; }, [today, dk]);
+useEffect(function () {
+function onVis() { if (!document.hidden) setTick(Date.now()); }
+document.addEventListener("visibilitychange", onVis);
+return function () { document.removeEventListener("visibilitychange", onVis); };
+}, []);
+var date = sel || today;
+var st = useMemo(function () { return has ? iseStatus(ise, today) : null; }, [ise, today, has]);
+var whatifs = useMemo(function () { return st && st.state === "behind" ? (iseWhatIfs(ise, today, Date.now()) || []) : []; }, [ise, today, st]);
+var base = useMemo(function () { return st && st.state === "behind" ? iseReshuffle(ise, today, {}, 0) : null; }, [ise, today, st]);
+var ctx = useMemo(function () { return iseVCtx(ise, date); }, [ise, date]);
+var res = useMemo(function () {
+if (!has) return null;
+var r = iseResolve(ise, date, st, today);
+if (r && r.k === "off" && (anyway === date || (ise.log[date] && ise.log[date].k === "extra"))) {
+var x = iseVAnyway(ise, date, st, ctx);
+if (x) r = x;
+}
+return r;
+}, [ise, date, st, today, anyway, ctx, has]);
+var resT = useMemo(function () { return !has ? null : date === today ? res : iseResolve(ise, today, st, today); }, [ise, today, st, res, date, has]);
+var rows = useMemo(function () { return has ? iseVRows(ise, st, today) : { next: [], all: [] }; }, [ise, st, today, has]);
+var prog = useMemo(function () { return has ? iseProgress(ise, today) : null; }, [ise, today, has]);
+var showSetup = !has || editing;
+var qbank = (ise.cfg && ise.cfg.qbank) || "SASP";
+var lg = ise.log[date] || null, dlog = dk.log[date] || null;
+var floorOn = floorP && floorP.d === date ? floorP.on : dlog && typeof dlog.floor === "boolean" ? dlog.floor : !!(lg && lg.floor);
+var mode = modes[date] || (res && res.mode) || "deep";
+useEffect(function () {
+if (!p.autoReshuffle) return;
+if (st && st.state === "behind" && !editing) openReshuffle();
+if (p.onAutoDone) p.onAutoDone();
+}, [p.autoReshuffle]);
+var layoutKey = (showSetup ? "s" : "p") + (has ? "1" : "0");
+var layoutRef = useRef(layoutKey);
+React.useLayoutEffect(function () {
+if (layoutRef.current === layoutKey) return;
+layoutRef.current = layoutKey;
+iseVScrollTop(rootRef.current);
+}, [layoutKey]);
+function openSheet(sh) { setSheet(sh); }
+function applySheet() {
+var sh = sheet;
+setSheet(null);
+if (!sh) return;
+var nx = sh.next && sh.next.cfg ? Object.assign({}, sh.next, { builtTs: Date.now() }) : sh.next;
+p.setIse(nx);
+if (sh.closeSetup) setEditing(false);
+iseVNote(p, "Plan updated");
+}
+function openReshuffle() {
+var next = iseReshuffle(ise, today, {}, Date.now());
+openSheet({ title: "Reshuffle from " + (ise.log[today] ? "tomorrow" : "today"), sub: "Re-plans the days left; days already past stay as they are. No coins or streak lost.", next: next, diff: iseDiffPlans(ise, next, today) });
+}
+function openWhatIf(w) {
+var bs = base ? " Reshuffle alone: " + base.cut.length + " cut, " + base.light.length + " light." : "";
+openSheet({ title: w.label, sub: "Changes your settings, then re-plans from today." + bs, next: w.next, diff: iseDiffPlans(ise, w.next, today) });
+}
+function toggleSkip(d, on) {
+var r = iseSetSkip(ise, d, on, today, Date.now());
+openSheet({ title: on ? "Can't study " + iseFmt(d) : "Study on " + iseFmt(d) + " after all", sub: "Re-plans from today around this date. Cancel keeps everything as it is.", next: r.next, diff: r.diff });
+}
+function tapRow(d) {
+setSel(d === today ? null : d);
+if (todayRef.current && todayRef.current.scrollIntoView) { try { todayRef.current.scrollIntoView(true); } catch (e) {} }
+}
+function markCovered(b) {
+p.setIse(function (cur) { var dn = Object.assign({}, cur.done); dn[b] = today; return Object.assign({}, cur, { done: dn }); });
+iseVNote(p, iseVShort(b) + " marked covered");
+}
+function unmarkCovered(b) {
+p.setIse(function (cur) { return iseUncover(cur, b); });
+iseVNote(p, iseVShort(b) + " is not covered any more");
+}
+function pickMode(d, m) {
+var n = Object.assign({}, modes);
+n[d] = m;
+setModes(n);
+dk.mode = n;
+}
+function newSprint() {
+if (!confirm("Start a new sprint?\nThis clears this plan, its covered blocks and its logged days. Your miss log and settings are kept. Back up first if you want a copy of this one.")) return;
+p.setIse(function (cur) { return iseNewSprint(cur, today); });
+dk.log = {}; dk.mode = {}; dk.sel = null;
+setSel0(null); setHeld(null); setModes({}); setFloorP(null); setAnyway(null); setEditing(false);
+iseVNote(p, "New sprint: pick the exam date");
+}
+function startExtra(t) {
+if (!res || res.k !== "weak") return undefined;
+var g = null;
+ISE_BLOCKS.forEach(function (b) { if (!g && b.topics.indexOf(t) >= 0 && (res.groups || []).indexOf(b.g) >= 0) g = b.g; });
+if (!g) g = (res.groups || [])[0];
+var lines = g ? iseVMissLines(ise, g, 8) : [];
+return lines.length ? ISE_V_DRILL + lines.join("\n") : undefined;
+}
+var prevD = null, nextD = null;
+(ise.plan || []).forEach(function (e) { if (e.d < date) prevD = e.d; else if (e.d > date && !nextD) nextD = e.d; });
+var k = res ? res.k : "none";
+var isSkip = iseVSkip(ise).indexOf(date) >= 0;
+var canSkip = has && date >= today && !lg && (isSkip || (k !== "off" && k !== "rest" && k !== "exam" && k !== "none" && k !== "extra"));
+var canLog = has && res && date <= today && k !== "rest" && k !== "exam" && k !== "off" && k !== "none";
+var floorDay = !!(floorOn && canLog);
+var steps = !res || k === "off" || k === "exam" || k === "none" ? [] : (floorDay ? iseFloorSteps(res.q, res.R, qbank, ise.cfg.pace, ctx.recentMisses, ctx) : res.steps) || [];
+var floorMins = 0;
+if (floorDay) steps.forEach(function (s) { floorMins += typeof s.m === "number" ? s.m : 0; });
+var shownM = floorDay ? floorMins : res ? res.M : 0;
+var tgt = res ? (floorDay ? Math.min(15, res.q) : res.q) : 0;
+var navS = Object.assign(iseBtn(c, false), { minHeight: 34, padding: "4px 10px" });
+var loopT = iseVLoopTopics(res), allT = res ? (res.topics || []) : [];
+var moreT = allT.filter(function (t) { return loopT.indexOf(t) < 0; });
+var firstT = loopT.length ? loopT : moreT;
+var readG = iseVReadG(res);
+function topicRow(t, inLoop) {
+var lbl = ISE_LABEL[t] || t, inCore = p.coreDone ? p.coreDone(t) : false;
+return (
+<div key={t} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 40, padding: "4px 0", borderTop: "1px solid var(--c-br)" }}>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={Object.assign({}, ISE_V_BODY, inLoop ? { fontWeight: 700 } : {})}>{lbl}</div>
+{(inLoop || inCore) && <div style={ISE_V_SMALL}>{[inLoop ? "In today's loop" : "", inCore ? "✓ in Core" : ""].filter(function (x) { return !!x; }).join(" · ")}</div>}
+</div>
+<button data-ise="start" data-topic={t} onClick={function () { p.onStart(lbl, mode, startExtra(t)); }} style={Object.assign(iseBtn(c, false), { minHeight: 40, fontWeight: 800, whiteSpace: "nowrap" })}>▶ Start</button>
+</div>
+);
+}
+var todayCard = has && res ? (
+<div ref={todayRef} data-ise="today" data-date={date} data-kind={k} style={Object.assign(iseCard(c), { border: "2px solid var(--c-br2)", scrollMarginTop: 44 })}>
+<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+<button data-ise="prev" disabled={!prevD} onClick={function () { if (prevD) setSel(prevD === today ? null : prevD); }} style={Object.assign({}, navS, { opacity: prevD ? 1 : 0.4 })}>◀ prev</button>
+<div style={{ flex: 1, textAlign: "center" }}>
+{date !== today && <button onClick={function () { setSel(null); }} style={navS}>Back to today</button>}
+</div>
+<button data-ise="next" disabled={!nextD} onClick={function () { if (nextD) setSel(nextD === today ? null : nextD); }} style={Object.assign({}, navS, { opacity: nextD ? 1 : 0.4 })}>next ▶</button>
+</div>
+{held && held === date && date < today && iseVLogDirty(dk, ise, date) && <div style={Object.assign({}, ISE_V_BODY, { fontWeight: 700, marginBottom: 8 })}>{"Still on " + iseFmt(date) + " — your unsaved log is here"}</div>}
+<div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+{iseVKind(ise, date, res) && <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", border: "2px solid var(--c-tx)", borderRadius: 4, textTransform: "uppercase", letterSpacing: ".5px", color: "var(--c-tx)" }}>{iseVKind(ise, date, res)}</span>}
+<span style={{ fontSize: 13, fontWeight: 800, color: "var(--c-tx0)" }}>{iseFmt(date) + (date === today ? " · today" : "")}</span>
+{(res.groups || []).length > 0 && <span style={ISE_V_SMALL}>{res.groups.map(function (g) { return iseVGLabel(g) + (ISE_GROUPS[g] ? " " + iseTier(g) : ""); }).join(" · ")}</span>}
+</div>
+{tgt > 0 && (
+<div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 6, margin: "8px 0 4px" }}>
+<span data-ise="target" style={{ fontSize: 28, fontWeight: 800, color: "var(--c-tx0)", lineHeight: 1.1 }}>{tgt}</span>
+<span style={{ fontSize: 13, fontWeight: 700, color: "var(--c-tx)" }}>{iseVQLabel(res, qbank, floorDay)}</span>
+{shownM > 0 && <span style={ISE_V_SMALL}>{"· " + shownM + " min"}</span>}
+</div>
+)}
+{k === "off" && <div style={Object.assign({}, ISE_V_BODY, { margin: "8px 0" })}>{isSkip ? "Marked can't study. Optional: 10 min of the miss log." : "Off day. Optional: 10 min of the miss log."}</div>}
+{k === "off" && date <= today && !lg && <button data-ise="study-anyway" onClick={function () { setAnyway(date); }} style={Object.assign(iseBtn(c, false), { marginBottom: 8 })}>Study anyway</button>}
+{k === "none" && <div style={Object.assign({}, ISE_V_BODY, { margin: "8px 0" })}>Nothing planned for this date.</div>}
+{k === "exam" && <div style={{ fontSize: 15, fontWeight: 800, margin: "8px 0", color: "var(--c-tx0)" }}>ISE today. Good luck.</div>}
+{(res.items || []).length > 0 && (
+<div style={{ margin: "8px 0" }}>
+{res.items.map(function (x, i) {
+var blk = ISE_BY_ID[x.b];
+return (
+<div key={x.b + i} style={Object.assign({}, ISE_V_BODY, { fontWeight: 700, marginBottom: 2 })}>
+{(k === "catchup" ? "Catch-up: " : "") + (blk ? blk.label : x.b) + (x.part ? " (part " + x.part + " of 2)" : "") + (x.lvl === "light" ? " (light: Know-cold + Qs)" : "") + (ise.done[x.b] ? " ✓" : "")}
+</div>
+);
+})}
+</div>
+)}
+{(res.items || []).length === 0 && (res.groups || []).length > 0 && (k === "second" || k === "weak") && <div style={Object.assign({}, ISE_V_BODY, { fontWeight: 700, margin: "8px 0" })}>{res.groups.map(iseVGLabel).join(" + ")}</div>}
+{steps.length > 0 && (
+<div style={{ margin: "8px 0", border: "1px solid var(--c-br)", borderRadius: 8, padding: "6px 8px" }}>
+<div style={ISE_V_EYE}>{"Daily loop" + (floorDay ? (floorMins > 0 ? " · " + floorMins + " min" : "") : res.M > 0 && res.q > 0 ? " · " + res.M + " min" : "")}</div>
+{steps.map(function (s, i) {
+return (
+<div key={i} style={{ display: "flex", gap: 8, padding: "3px 0", borderTop: i ? "1px solid var(--c-br)" : "none" }}>
+<div style={Object.assign({}, ISE_V_BODY, { flex: 1 })}>{s.t}</div>
+{s.m ? <div style={Object.assign({}, ISE_V_SMALL, { whiteSpace: "nowrap" })}>{s.m + " min"}</div> : null}
+</div>
+);
+})}
+</div>
+)}
+{allT.length + loopT.length > 0 && (
+<div style={{ margin: "10px 0" }}>
+<div style={ISE_V_EYE}>Study with the tutor</div>
+<div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+{ISE_V_MODES.map(function (m) {
+var on = mode === m.id;
+return <button key={m.id} data-ise={"mode-" + m.id} onClick={function () { pickMode(date, m.id); }} style={Object.assign(iseBtn(c, on), { flex: 1 })}>{(on ? "✓ " : "") + m.l}</button>;
+})}
+</div>
+{res.mode && <div style={Object.assign({}, ISE_V_SMALL, { marginBottom: 6 })}>{"Recommended today: " + (res.mode === "lecture" ? "Lecture" : res.mode === "mastery" ? "Drill" : "Deep Dive")}</div>}
+{firstT.map(function (t) { return topicRow(t, loopT.length > 0); })}
+{loopT.length > 0 && moreT.length > 0 && (
+<details data-ise="more-topics" style={{ marginTop: 4 }}>
+<summary style={iseVSum()}>{"More topics (" + moreT.length + ")"}</summary>
+{moreT.map(function (t) { return topicRow(t, false); })}
+</details>
+)}
+</div>
+)}
+{readG.length > 0 && (
+<div style={{ margin: "8px 0" }}>
+<div style={ISE_V_EYE}>Read</div>
+{readG.map(function (x) { return <div key={x.g} style={Object.assign({}, ISE_V_BODY, { marginBottom: 4 })}><b>{x.label + ":"}</b>{" " + x.read}</div>; })}
+</div>
+)}
+{(res.know || []).length > 0 && (
+<details data-ise="know" style={{ margin: "6px 0" }}>
+<summary style={iseVSum()}>{"Know cold" + (res.know.length > 1 ? " (" + res.know.length + " lists)" : ISE_KNOW[res.know[0]] ? ": " + ISE_KNOW[res.know[0]].t : "")}</summary>
+{res.know.map(function (kk) {
+var kn = ISE_KNOW[kk];
+if (!kn) return null;
+return (
+<div key={kk} style={{ marginBottom: 8 }}>
+{res.know.length > 1 && <div style={Object.assign({}, ISE_V_BODY, { fontWeight: 800 })}>{kn.t}</div>}
+<ul style={{ margin: "4px 0", paddingLeft: 18 }}>
+{kn.items.map(function (it, i) { return <li key={i} style={Object.assign({}, ISE_V_BODY, { marginBottom: 4 })}>{it}</li>; })}
+</ul>
+</div>
+);
+})}
+</details>
+)}
+{canSkip && <button data-ise="cant-study" onClick={function () { toggleSkip(date, !isSkip); }} style={Object.assign(iseBtn(c, false), { marginTop: 8 })}>{isSkip ? "Undo can't study" : "Can't study this day"}</button>}
+{canLog && <IseLogForm key={date + ":" + k} c={c} ise={ise} setIse={p.setIse} d={date} res={res} today={today} onReward={p.onReward} notify={p.notify} drafts={dk} floor={floorOn} setFloor={function (on) { setFloorP({ d: date, on: on }); iseVKeepLog(dk, date, "floor", on); }} />}
+</div>
+) : null;
+var bannerBtns = st && st.state === "behind" ? (
+<div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+<button data-ise="reshuffle" onClick={openReshuffle} style={Object.assign(iseBtn(c, false), { minHeight: 40, fontWeight: 800 })}>{"↻ Reshuffle from today" + (base ? " → " + base.cut.length + " cut, " + base.light.length + " light" : "")}</button>
+{whatifs.map(function (w, i) {
+return <button key={i} data-ise="whatif" onClick={function () { openWhatIf(w); }} style={Object.assign(iseBtn(c, false), { textAlign: "left" })}>{w.label}</button>;
+})}
+</div>
+) : st && st.state === "exam" ? (
+<button data-ise="new-sprint" onClick={newSprint} style={Object.assign(iseVMain(c, false), { marginTop: 8 })}>Start a new sprint</button>
+) : null;
+return (
+<div ref={rootRef} data-ise-view="1" style={{ maxWidth: 640, margin: "0 auto", color: "var(--c-tx)", overflowAnchor: "none" }}>
+<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+<button data-ise="back" onClick={function () { p.onBack(); }} style={iseBtn(c, false)}>← Plans</button>
+<div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 800, color: "var(--c-tx0)" }}>🎯 In-Service Exam Sprint</div>
+<button data-ise="setup-open" onClick={function () { setEditing(has ? !editing : true); }} style={iseBtn(c, has && editing)}>{(has && editing ? "✓ " : "") + "⚙ Setup"}</button>
+</div>
+{p.saveFail && (
+<div data-ise="save-error" style={{ border: "2px solid var(--a-red)", borderRadius: 8, padding: 10, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+<div style={Object.assign({}, ISE_V_BODY, { flex: 1, fontWeight: 700 })}>⚠ Not saved: storage full. Back up now.</div>
+<button onClick={function () { p.onShare(); }} style={iseBtn(c, false)}>Back up</button>
+</div>
+)}
+{showSetup && <IseSetupForm key={has ? "edit" : "new"} c={c} ise={ise} setIse={p.setIse} today={today} coreDone={p.coreDone} notify={p.notify} onSheet={openSheet} onDone={function () { setEditing(false); }} />}
+{!showSetup && st && <div data-ise="status" style={Object.assign({}, ISE_V_BODY, { fontWeight: 700, marginBottom: 8 })}>{iseVStatusLine(st, ise, today)}</div>}
+{!showSetup && st && (
+<div data-ise="banner" data-state={st.state} style={{ border: "2px solid " + (st.state === "behind" ? "var(--c-tx)" : "var(--c-br2)"), borderRadius: 8, padding: 10, marginBottom: 12 }}>
+<div style={Object.assign({}, ISE_V_BODY, { fontWeight: st.state === "behind" ? 800 : 600 })}>{iseVBanner(ise, st, today)}</div>
+{bannerBtns}
+</div>
+)}
+{!showSetup && todayCard}
+{!showSetup && rows.next.length > 0 && (
+<div data-ise="next6" style={iseCard(c)}>
+<div style={ISE_V_H}>Next 6 days</div>
+{rows.next.map(function (r) { return iseVRowEl(c, ise, r, r.d === date, tapRow, null, "dayrow"); })}
+</div>
+)}
+{!showSetup && has && (
+<details data-ise="full-schedule" style={iseCard(c)}>
+<summary style={iseVSum()}>{"🗓 Full schedule (" + rows.all.length + " days)"}</summary>
+<div style={{ marginTop: 6 }}>
+{rows.all.map(function (r) { return iseVRowEl(c, ise, r, r.d === date, tapRow, { mark: markCovered, unmark: unmarkCovered }, null); })}
+</div>
+{st && st.state !== "exam" && <button data-ise="reshuffle" onClick={openReshuffle} style={Object.assign(iseBtn(c, false), { width: "100%", minHeight: 40, margin: "8px 0" })}>↻ Reshuffle from today</button>}
+<div style={ISE_V_BODY}>{"Light: " + ((ise.light || []).length ? iseVShortList(ise.light) : "none")}</div>
+<div style={ISE_V_BODY}>{"Cut: " + ((ise.cut || []).length ? iseVShortList(ise.cut) + " (Know-cold on the final day)" : "none")}</div>
+</details>
+)}
+{!showSetup && has && <IseMissLog c={c} ise={ise} setIse={p.setIse} today={today} drafts={dk} defGroup={resT && resT.groups && resT.groups[0] && ISE_GROUPS[resT.groups[0]] ? resT.groups[0] : "mixed"} onStart={p.onStart} notify={p.notify} />}
+{!showSetup && prog && st && (
+<details data-ise="progress" style={iseCard(c)}>
+<summary style={iseVSum()}>📈 Progress</summary>
+<div style={Object.assign({}, ISE_V_BODY, { margin: "6px 0" })}>
+{[st.state === "exam" ? "Exam: " + iseFmt(ise.cfg.exam) : st.daysLeft + " days left",
+"pace " + (st.pace == null ? "—" : Math.round(st.pace * 100) + "%"),
+"ISE streak " + (st.streak || 0)].join(" · ")}
+</div>
+<div style={ISE_V_BODY}>{"Questions: " + (st.qDone || 0) + " done" + (typeof st.qDoneCapped === "number" && st.qDoneCapped !== (st.qDone || 0) ? " (" + st.qDoneCapped + " toward the daily targets)" : "") + " · " + (st.qPlanned || 0) + " due to date · " + (st.qPlannedAll || 0) + " planned to the exam"}</div>
+{(ise.shuffles || []).length > 0 && <div style={ISE_V_SMALL}>{"Reshuffled " + ise.shuffles.length + "×"}</div>}
+<div style={Object.assign({}, ISE_V_EYE, { marginTop: 10 })}>By group (lowest % first)</div>
+<div style={{ display: "flex", gap: 6, fontSize: 11, fontWeight: 700, color: "var(--c-mut)", padding: "2px 0" }}>
+<div style={{ flex: 1 }}>Group</div><div style={{ width: 40 }}>Tier</div><div style={{ width: 40, textAlign: "right" }}>Qs</div><div style={{ width: 40, textAlign: "right" }}>%</div><div style={{ width: 48, textAlign: "right" }}>Blocks</div>
+</div>
+{(prog.groups || []).map(function (gr) {
+return (
+<div key={gr.g} style={{ display: "flex", gap: 6, fontSize: 12, color: "var(--c-tx)", padding: "3px 0", borderTop: "1px solid var(--c-br)" }}>
+<div style={{ flex: 1 }}>{gr.label}</div>
+<div style={{ width: 40 }}>{gr.tier}</div>
+<div style={{ width: 40, textAlign: "right" }}>{Math.round(gr.q || 0)}</div>
+<div style={{ width: 40, textAlign: "right" }}>{gr.pct == null || gr.q < 10 ? "—" : Math.round(gr.pct) + "%"}</div>
+<div style={{ width: 48, textAlign: "right" }}>{gr.done + "/" + gr.total}</div>
+</div>
+);
+})}
+<div style={Object.assign({}, ISE_V_EYE, { marginTop: 10 })}>Mocks</div>
+{(prog.mocks || []).length === 0 && <div style={ISE_V_SMALL}>No mock logged yet.</div>}
+{(prog.mocks || []).map(function (m) { return <div key={m.d} style={ISE_V_BODY}>{iseFmt(m.d) + " · " + m.q + " Qs · " + (m.pct == null ? "—" : Math.round(m.pct) + "%")}</div>; })}
+<div style={Object.assign({}, ISE_V_EYE, { marginTop: 10 })}>Last 14 days</div>
+{(prog.last14 || []).length === 0 && <div style={ISE_V_SMALL}>Nothing logged yet.</div>}
+{(prog.last14 || []).map(function (x) { return <div key={x.d} style={Object.assign({}, ISE_V_BODY, { fontFamily: "monospace" })}>{x.d.slice(5).replace("-", "/") + " " + (x.q || 0) + "/" + (x.t || 0) + (x.met ? " ✓" : "")}</div>; })}
+<div style={Object.assign({}, ISE_V_SMALL, { marginTop: 10 })}>Weights are estimates from the ABU Qualifying Exam content outline (the AUA publishes no ISE blueprint); only Peds, Stones, Andrology, Neurogenic and Trauma are published figures.</div>
+</details>
+)}
+<div style={Object.assign(iseCard(c), { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 })}>
+<button data-ise="backup" onClick={function () { p.onShare(); }} style={iseBtn(c, false)}>💾 Back up / move device</button>
+<button data-ise="import" onClick={function () { p.onImport(); }} style={iseBtn(c, false)}>Import</button>
+<div style={Object.assign({}, ISE_V_SMALL, { flexBasis: "100%" })}>The backup includes your scores and miss log.</div>
+</div>
+{sheet && <IseSheet c={c} sheet={sheet} onApply={applySheet} onCancel={function () { setSheet(null); }} />}
+</div>
+);
+}
 export default function UroStudyHub() {
 var [s, setS] = useState(function() {
 try {
@@ -1518,6 +3633,11 @@ try { var v = localStorage.getItem("uroStudyHub_cardPacks"); return v ? JSON.par
 var [activePack, setActivePack] = useState(function() {
 try { return localStorage.getItem("uroStudyHub_activePack") || ""; } catch(e) { return ""; }
 });
+var [ise, setIse] = useState(iseLoad);
+var [iseSaveFail, setIseSaveFail] = useState(false);
+var [iseToday, setIseToday] = useState(iseNowYmd);
+var iseDraft = useRef({ miss: "", log: {}, sel: null, mode: {} });
+var [iseAutoShuffle, setIseAutoShuffle] = useState(false);
 var [caseLogForm, setCaseLogForm] = useState({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
 var [caseLogEdit, setCaseLogEdit] = useState(null);
 var [caseLogFilter, setCaseLogFilter] = useState("");
@@ -1663,6 +3783,27 @@ try { localStorage.setItem("uroStudyHub_cardPacks", JSON.stringify(cardPacks)); 
 useEffect(function() {
 try { localStorage.setItem("uroStudyHub_activePack", activePack); } catch(e) {}
 }, [activePack]);
+useEffect(function() {
+try { localStorage.setItem("uroStudyHub_ise", JSON.stringify(ise)); setIseSaveFail(false); }
+catch(e) { setIseSaveFail(true); }
+}, [ise]);
+useEffect(function() {
+function chk() {
+if (document.hidden) return;
+var d = iseNowYmd();
+setIseToday(function(o) { return o === d ? o : d; });
+}
+document.addEventListener("visibilitychange", chk);
+window.addEventListener("focus", chk);
+window.addEventListener("pageshow", chk);
+var iv = setInterval(chk, 60000);
+return function() {
+document.removeEventListener("visibilitychange", chk);
+window.removeEventListener("focus", chk);
+window.removeEventListener("pageshow", chk);
+clearInterval(iv);
+};
+}, []);
 var [shareModal, setShareModal] = useState(null); // { type, title, data } or null
 var [importModal, setImportModal] = useState(false);
 var [importText, setImportText] = useState("");
@@ -1706,6 +3847,10 @@ if (type === "PACK") {
 var packs = data.packs || [];
 return { title: "Card Packs", summary: packs.length + " pack" + (packs.length !== 1 ? "s" : "") + ": " + packs.map(function(p) { return p.name; }).slice(0, 3).join(", ") };
 }
+if (type === "ISE") {
+var iv = iseNorm(data);
+return { title: "In-Service plan", summary: Object.keys(iv.log).length + " days logged · " + iv.misses.length + " misses" + (iv.cfg && iv.cfg.exam ? " · exam " + iv.cfg.exam : "") };
+}
 return { title: type, summary: "Shared content" };
 }
 function openShareModal(type, title, data) {
@@ -1725,12 +3870,30 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 });
 }
 }
+function copyTextFallback(text) {
+try {
+var ta = document.createElement("textarea");
+ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+document.body.appendChild(ta); ta.focus(); ta.select();
+var ok = document.execCommand("copy");
+document.body.removeChild(ta);
+return !!ok;
+} catch(e) { return false; }
+}
 function doCopyCode(type, data) {
 var code = encodeShareable(type, data);
 if (!code) return;
+function done(ok) {
+setSaveFeedback(ok ? "Share code copied!" : "Couldn't copy here. Use Export JSON File instead.");
+setTimeout(function() { setSaveFeedback(""); }, ok ? 1500 : 4000);
+}
+if (!(navigator.clipboard && navigator.clipboard.writeText)) { done(copyTextFallback(code)); return; }
+var settled = false;
+var tm = setTimeout(function() { if (!settled) { settled = true; done(copyTextFallback(code)); } }, 1500);
 navigator.clipboard.writeText(code).then(function() {
-setSaveFeedback("Share code copied!");
-setTimeout(function() { setSaveFeedback(""); }, 1500);
+if (settled) return; settled = true; clearTimeout(tm); done(true);
+}, function() {
+if (settled) return; settled = true; clearTimeout(tm); done(copyTextFallback(code));
 });
 }
 function doExportFile(type, data, filename) {
@@ -1786,6 +3949,10 @@ return prev.concat(newPacks);
 if (data.currentHidden) setHiddenCards(data.currentHidden);
 if (data.activePack) setActivePack(data.activePack);
 setSaveFeedback("Imported " + (data.packs || []).length + " card pack(s)!");
+} else if (type === "ISE") {
+if (!confirm("Merge this In-Service plan into yours? Logged days and misses are combined; the newer plan wins.")) return;
+setIse(function(cur) { return iseMerge(cur, iseNorm(data)); });
+setSaveFeedback("Imported In-Service plan");
 }
 setTimeout(function() { setSaveFeedback(""); }, 2000);
 setImportModal(false);
@@ -3824,6 +5991,42 @@ _sendFromMsgs(msgs, ctx);
 function exitSkills() {
 setSkillsCtx(null);
 try { sessionStorage.removeItem("uroStudyHub_skillsCtx"); } catch(e) {}
+}
+var [planKick, setPlanKick] = useState(null);
+function startPlanTopic(topic, mode, extra) {
+if (pendingResume) {
+var ps = pendingResume;
+setPendingResume(null);
+if ((ps.messages || []).filter(function(m) { return m.role === "user"; }).length > 1) {
+saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
+}
+idbDel("activeSession").catch(function() {});
+}
+if (chatMsgs.some(function(m) { return m.role === "assistant"; }) && chatMsgs.filter(function(m) { return m.role === "user"; }).length > 1) {
+saveLectureSession(lectureTopic, chatMsgs);
+setSaveFeedback("Previous tutor session saved to 📚 Saved sessions");
+setTimeout(function() { setSaveFeedback(""); }, 2500);
+}
+stopChatReply(); resetSidekick(); exitSkills(); setUpText("");
+setLectureTopic(topic); setLecturePhase(0);
+setLectureMode(mode === "lecture"); setMasteryMode(mode === "mastery");
+setChatMsgs([{ role: "system", content: (mode === "mastery" ? "Starting mastery drill: " : mode === "lecture" ? "Starting structured lecture: " : "Starting Deep Dive: ") + topic }]);
+setChatView("chat"); setPage("chat");
+var open = mode === "mastery" ? "Mastery drill on: " + topic + ". Probe my edge of understanding first — don't teach yet."
+: mode === "lecture" ? "Let's study: " + topic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."
+: "Let's deep dive on: " + topic + ". Begin Phase 1 (Framework).";
+setPlanKick({ text: open + (extra ? "\n\n" + extra : "") });
+}
+useEffect(function() {
+if (!planKick) return;
+var k = planKick;
+setPlanKick(null);
+sendChat(k.text);
+}, [planKick]);
+function iseCoreDone(name) {
+if (activePlanId !== "aua") return false;
+var f = AUA_BY_NAME[name];
+return !!(f && s.done && s.done[f.key]);
 }
 var ANKI_SYS_PROMPT = [
 "You generate Anki flashcards for urology board exam prep. Follow these rules STRICTLY:",
@@ -6658,7 +8861,7 @@ return (
 <h3 style={{ fontSize: 15, fontWeight: 800, color: "var(--c-tx0)", margin: 0 }}>{"📥 Import"}</h3>
 <button onClick={function() { setImportModal(false); setImportText(""); setImportPreview(null); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 18 }}>{"×"}</button>
 </div>
-<div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 10 }}>Paste a share code from a colleague to import their attending prefs, site notes, or card packs.</div>
+<div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 10 }}>Paste a share code from a colleague to import their attending prefs, site notes, or card packs — or your own In-Service plan backup.</div>
 <textarea value={importText} onChange={function(e) {
 var val = e.target.value;
 setImportText(val);
@@ -6667,7 +8870,7 @@ setImportPreview(parseImport(val));
 } else {
 setImportPreview(null);
 }
-}} placeholder={"Paste share code here...\n(starts with URO:ATT: or URO:SITE: or URO:PACK:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+}} placeholder={"Paste share code here...\n(starts with URO:ATT:, URO:SITE:, URO:PACK: or URO:ISE:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
 {importPreview && (
 <div style={{ marginTop: 10, padding: 10, background: c.a + "10", border: "1px solid " + c.a + "30", borderRadius: 8 }}>
 <div style={{ fontSize: 11, fontWeight: 700, color: c.a }}>{importPreview.title}</div>
@@ -6689,7 +8892,8 @@ reader.onload = function(res) {
 try {
 var data = JSON.parse(res.target.result);
 var type = null;
-if (data.packs && Array.isArray(data.packs)) type = "PACK";
+if (data && data.kind === "uroISE") type = "ISE";
+else if (data.packs && Array.isArray(data.packs)) type = "PACK";
 else if (data.name && (data.notes || data.organized)) type = Object.keys(data).indexOf("organized") >= 0 ? "ATT1" : "SITE1";
 else if (typeof data === "object" && Object.keys(data).length > 0) {
 var firstVal = data[Object.keys(data)[0]];
@@ -7204,13 +9408,16 @@ var ankiDone = (s.ankiReviews || 0) >= (s.ankiReviewGoal || 50);
 var hours = new Date().getHours();
 var greeting = hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
 var tasks = [];
+var iseSum = iseTodaySummary(ise, iseToday);
+if (iseSum) tasks.push({ icon: "🎯", text: iseSum.hub, col: iseSum.state === "behind" ? "var(--a-red0)" : c.a, big: true, action: function() { if (iseSum.state === "behind") setIseAutoShuffle(true); setPage("tracker"); setTView("ise"); } });
 if (dueData.overdue.length > 0) tasks.push({ icon: "🔴", text: dueData.overdue.length + " overdue topic" + (dueData.overdue.length > 1 ? "s" : "") + " need review", col: "#ef4444" });
 if (dueData.due.length > 0) tasks.push({ icon: "🟡", text: dueData.due.length + " topic" + (dueData.due.length > 1 ? "s" : "") + " due for review", col: "#fbbf24" });
 if (s.ankiEnabled !== false && !ankiDone) tasks.push({ icon: "📇", text: "Anki: " + (s.ankiReviews || 0) + "/" + (s.ankiReviewGoal || 50) + " reviews", col: "#fb923c" });
 if (next) tasks.push({ icon: "📚", text: "Next new topic: " + next.t, col: c.a });
 if (weakList.length > 0) tasks.push({ icon: "⚠️", text: "Weakest: " + weakList[0].cat + " (" + weakList[0].pct + "%)", col: "#f97316" });
 var schedStatus = getScheduleStatus();
-if (schedStatus.status === "behind" || schedStatus.status === "far_behind") tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
+var iseSprintOn = !!(iseSum && ise.cfg && ise.cfg.exam && iseDiff(iseToday, ise.cfg.exam) <= 56);
+if (!iseSprintOn && (schedStatus.status === "behind" || schedStatus.status === "far_behind")) tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
 return (
 <div style={{ background: "linear-gradient(135deg, " + c.cd + ", var(--c-bg))", borderRadius: 12, padding: 14, marginBottom: 12, border: "1px solid " + c.a + "22" }}>
 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -7236,9 +9443,9 @@ return (
 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 {tasks.map(function(task, ti) {
 return (
-<div key={ti} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: (task.action || (task.icon === "📚" && next)) ? "pointer" : "default" }} onClick={function() { if (task.action) task.action(); else if (task.icon === "📚" && next) goStudyTopic(next.t); }}>
+<div key={ti} data-ise={task.big ? "hub-task" : undefined} style={{ display: "flex", alignItems: "center", gap: 8, padding: task.big ? "6px 10px" : "4px 0", minHeight: (task.action || (task.icon === "📚" && next)) ? 36 : undefined, boxSizing: "border-box", border: task.big ? "2px solid " + (task.col === "var(--a-red0)" ? "var(--a-red0)" : "var(--c-br2)") : "none", borderRadius: task.big ? 8 : 0, cursor: (task.action || (task.icon === "📚" && next)) ? "pointer" : "default" }} onClick={function() { if (task.action) task.action(); else if (task.icon === "📚" && next) goStudyTopic(next.t); }}>
 <span style={{ fontSize: 11 }}>{task.icon}</span>
-<span style={{ fontSize: 10, color: task.col, fontWeight: 500 }}>{task.text}</span>
+<span style={{ fontSize: (task.action || (task.icon === "📚" && next)) ? 11 : 10, color: task.col, fontWeight: task.big ? 700 : 500 }}>{task.text}</span>
 </div>
 );
 })}
@@ -7441,8 +9648,9 @@ return (
 <div style={{ padding: "0 0 80px" }}>
 <div style={{ display: "flex", borderBottom: "1px solid " + c.cd, padding: "0 2px", background: c.bg, position: "sticky", top: 0, zIndex: 10, overflowX: "auto" }}>
 {[{ id: "schedule", i: "📅", l: "Schedule" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, ENABLE_SURGILOG && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
+var on = tView === v.id || (v.id === "plans" && tView === "ise");
 return (
-<button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: 9, cursor: "pointer", color: tView === v.id ? c.a : "#64748b", borderBottom: tView === v.id ? "2px solid " + c.a : "2px solid transparent", fontWeight: tView === v.id ? 700 : 400, whiteSpace: "nowrap" }}>
+<button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: 9, cursor: "pointer", color: on ? c.a : "#64748b", borderBottom: on ? "2px solid " + c.a : "2px solid transparent", fontWeight: on ? 700 : 400, whiteSpace: "nowrap" }}>
 {v.i} {v.l}
 </button>
 );
@@ -7459,6 +9667,20 @@ return (
 {activePlan && activePlan.examDate && " · Exam: " + activePlan.examDate}
 </div>
 </div>
+{(function() {
+var iseSumCard = iseTodaySummary(ise, iseToday);
+var behindCard = iseSumCard && iseSumCard.state === "behind";
+return (
+<button data-ise="card" onClick={function() { setTView("ise"); }} style={{ width: "100%", textAlign: "left", background: c.cd, border: "2px solid " + (behindCard ? "var(--a-red)" : "var(--c-br2)"), borderRadius: 10, padding: 12, marginBottom: 14, minHeight: 44, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: "var(--c-tx)" }}>
+<span style={{ fontSize: 22 }}>{"🎯"}</span>
+<span style={{ flex: 1, minWidth: 0 }}>
+<span style={{ display: "block", fontSize: 13, fontWeight: 800, color: c.a }}>{"In-Service Exam Sprint"}</span>
+<span style={{ display: "block", fontSize: 11, color: behindCard ? "var(--a-red0)" : "var(--c-mut)", marginTop: 2, lineHeight: 1.4 }}>{iseSumCard ? iseSumCard.line : "Plan the weeks before the ISE: high-yield first, daily question targets, miss review, and catch-up when you fall behind."}</span>
+</span>
+<span style={{ fontSize: 12, fontWeight: 700, color: c.a, whiteSpace: "nowrap" }}>{"Open ›"}</span>
+</button>
+);
+})()}
 <button onClick={function() { setShowPlanBuilder(true); setPlanBuilderStep("upload"); setPlanBuilderError(""); }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{"📋 Create New Study Plan from Syllabus"}</button>
 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--c-mut)", marginBottom: 8 }}>Available Plans</div>
 <div onClick={function() { switchPlan("aua"); }} style={{ background: activePlanId === "aua" ? c.a + "15" : c.cd, borderRadius: 10, padding: 12, marginBottom: 8, border: "1px solid " + (activePlanId === "aua" ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
@@ -7523,6 +9745,17 @@ return (
 </div>
 </div>
 </div>
+)}
+{tView === "ise" && (
+<IsePlanView c={c} ise={ise} setIse={setIse} today={iseToday} coreDone={iseCoreDone}
+onStart={startPlanTopic}
+onShare={function() { openShareModal("ISE", "In-Service plan", ise); }}
+onImport={function() { setImportModal(true); setImportText(""); setImportPreview(null); }}
+onReward={function(label) { earnTokens("sasp", label); }}
+notify={function(m) { setSaveFeedback(m); setTimeout(function() { setSaveFeedback(""); }, 2500); }}
+saveFail={iseSaveFail} drafts={iseDraft}
+autoReshuffle={iseAutoShuffle} onAutoDone={function() { setIseAutoShuffle(false); }}
+onBack={function() { setTView("plans"); }} />
 )}
 {tView === "schedule" && (
 <div>
