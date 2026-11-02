@@ -462,6 +462,35 @@ if (!pane) return;
 top = Math.max(0, Math.min(top, pane.scrollHeight - pane.clientHeight));
 try { pane.scrollTo({ top: top, behavior: "smooth" }); } catch (e) { pane.scrollTop = top; }
 }
+function pinReplyTop(pane, sel, f, live) {
+if (f.away) return;
+var bubbles = pane.querySelectorAll(sel);
+var b = bubbles[bubbles.length - 1];
+if (!b) return;
+var top = pane.scrollTop + b.getBoundingClientRect().top - pane.getBoundingClientRect().top - 8;
+var target = Math.min(top, pane.scrollHeight - pane.clientHeight);
+if (target <= pane.scrollTop + 1) return;
+if (live) { pane.scrollTop = target; f.set = pane.scrollTop; }
+else scrollPaneTo(pane, target);
+}
+function streamBatcher(apply) {
+var b = { text: "" }, pending = null, t = null;
+b.push = function(txt) {
+b.text = txt; pending = txt;
+if (!t) t = setTimeout(function() { t = null; if (pending !== null) { var x = pending; pending = null; apply(x); } }, 120);
+};
+b.cancel = function() { if (t) clearTimeout(t); t = null; pending = null; };
+return b;
+}
+function nextReply(reqRef, abortRef) {
+dropReply(reqRef, abortRef);
+abortRef.current = typeof AbortController !== "undefined" ? new AbortController() : null;
+return reqRef.current;
+}
+function dropReply(reqRef, abortRef) {
+reqRef.current++;
+if (abortRef.current) { try { abortRef.current.abort(); } catch (e) {} abortRef.current = null; }
+}
 function readSSE(r, onData) {
 var buf = "";
 function feed(chunk) {
@@ -2070,6 +2099,9 @@ var chatPane = useRef(null);
 var chatReq = useRef(0);
 var chatAbort = useRef(null);
 var chatFollow = useRef({ set: -1, away: false });
+var sideReq = useRef(0);   // same three for the Quick Ask reply
+var sideAbort = useRef(null);
+var sideFollow = useRef({ set: -1, away: false });
 var fileRef = useRef(null);
 var ankiFileRef = useRef(null);
 var [pendingResume, setPendingResume] = useState(null);
@@ -2106,7 +2138,7 @@ return function() { document.removeEventListener("visibilitychange", onHide); };
 function resumeInterrupted() {
 var sess = pendingResume; if (!sess) return;
 setPendingResume(null);
-stopChatReply();
+stopChatReply(); stopSideReply();
 setLectureTopic(sess.topic || "");
 setChatMsgs(sess.messages || []);
 setSideMsgs(sess.sideMsgs || []);
@@ -2768,7 +2800,7 @@ setS(function(p) { return Object.assign({}, p, { savedLectures: (p.savedLectures
 return session.id;
 }
 function resumeSavedSession(item) {
-stopChatReply();
+stopChatReply(); stopSideReply();
 setLectureTopic(item.topic || "");
 setChatMsgs(item.messages || []);
 setSideMsgs(item.sideMsgs || []);
@@ -3192,29 +3224,19 @@ f.away = false; f.set = -1;
 scrollPaneTo(pane, pane.scrollHeight);
 return;
 }
-if (f.away) return;
-var bubbles = pane.querySelectorAll("[data-chat-msg]");
-var b = bubbles[bubbles.length - 1];
-if (!b) return;
-var top = pane.scrollTop + b.getBoundingClientRect().top - pane.getBoundingClientRect().top - 8;
-var target = Math.min(top, pane.scrollHeight - pane.clientHeight);
-if (target <= pane.scrollTop + 1) return;  // already there, or you've read ahead
-if (chatLoad) { pane.scrollTop = target; f.set = pane.scrollTop; }  // streaming: step, no animation
-else scrollPaneTo(pane, target);
+pinReplyTop(pane, "[data-chat-msg]", f, chatLoad);
 }, [chatMsgs, chatLoad]);
 useEffect(function() {
 var pane = sidePane.current;
 if (!pane) return;
+var f = sideFollow.current;
 var last = sideMsgs[sideMsgs.length - 1];
-if (!sideLoad && last && last.role === "assistant") {
-var bubbles = pane.querySelectorAll("[data-side-msg]");
-var b = bubbles[bubbles.length - 1];
-if (b) {
-scrollPaneTo(pane, pane.scrollTop + b.getBoundingClientRect().top - pane.getBoundingClientRect().top - 8);
+if (!last || last.role !== "assistant") {
+f.away = false; f.set = -1;
+scrollPaneTo(pane, pane.scrollHeight);
 return;
 }
-}
-scrollPaneTo(pane, pane.scrollHeight);
+pinReplyTop(pane, "[data-side-msg]", f, sideLoad);
 }, [sideMsgs, sideLoad, sideOpen, sideBig]);
 useEffect(function() {
 try { localStorage.setItem("uroStudyHub_sideBig", sideBig ? "1" : "0"); } catch (e) {  }
@@ -3403,31 +3425,21 @@ sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject +
 sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
 }
 sysContent += MATH_FORMAT_RULE;
-var reqId = ++chatReq.current;
-if (chatAbort.current) { try { chatAbort.current.abort(); } catch (e) {} }
-var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-chatAbort.current = ctrl;
-var streamed = "", pending = null, flushT = null;
-function flush() {
-flushT = null;
-if (pending === null || chatReq.current !== reqId) return;
-var t = pending; pending = null;
-setChatMsgs(msgs.concat([{ role: "assistant", content: t }]));
-}
-var onDelta = s.tutorStream === false ? null : function(t) {
-streamed = t; pending = t;
-if (!flushT) flushT = setTimeout(flush, 120);
-};
-function settle() { if (flushT) { clearTimeout(flushT); flushT = null; } pending = null; if (chatAbort.current === ctrl) chatAbort.current = null; }
-callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: onDelta, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
+var reqId = nextReply(chatReq, chatAbort);
+var ctrl = chatAbort.current;
+var live = s.tutorStream === false ? null : streamBatcher(function(t) {
+if (chatReq.current === reqId) setChatMsgs(msgs.concat([{ role: "assistant", content: t }]));
+});
+callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
 if (chatReq.current !== reqId) return;
-settle();
+if (live) live.cancel();
 setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
 setChatLoad(false);
 if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
 }, function(err) {
 if (chatReq.current !== reqId) return;
-settle();
+if (live) live.cancel();
+var streamed = live ? live.text : "";
 var provNames = { claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "OpenRouter", lmstudio: "LM Studio" };
 var errMsg = streamed
 ? streamed + "\n\n⚠ Reply cut off (" + (err.message || "connection lost") + ") — tap 🔄 to regenerate."
@@ -3439,8 +3451,7 @@ setChatLoad(false);
 });
 }
 function stopChatReply() {
-chatReq.current++;
-if (chatAbort.current) { try { chatAbort.current.abort(); } catch (e) {} chatAbort.current = null; }
+dropReply(chatReq, chatAbort);
 setChatLoad(false);
 }
 function regenerateResponse() {
@@ -3453,7 +3464,12 @@ setChatMsgs(msgs);
 setChatLoad(true);
 _sendFromMsgs(msgs);
 }
+function stopSideReply() {
+dropReply(sideReq, sideAbort);
+setSideLoad(false);
+}
 function resetSidekick() {
+stopSideReply();
 setSideMsgs([]);
 setSideIn("");
 setSideOpen(false);
@@ -3511,11 +3527,21 @@ var msgs = sideMsgs.concat([{ role: "user", content: text.trim() }]);
 setSideMsgs(msgs);
 setSideIn("");
 setSideLoad(true);
-callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4 }, function(reply) {
+var reqId = nextReply(sideReq, sideAbort);
+var ctrl = sideAbort.current;
+var live = s.tutorStream === false ? null : streamBatcher(function(t) {
+if (sideReq.current === reqId) setSideMsgs(msgs.concat([{ role: "assistant", content: t }]));
+});
+callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
+if (sideReq.current !== reqId) return;
+if (live) live.cancel();
 setSideMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try again." }]));
 setSideLoad(false);
 }, function(err) {
-setSideMsgs(msgs.concat([{ role: "assistant", content: "⚠ " + (err.message || "AI error — check Settings.") }]));
+if (sideReq.current !== reqId) return;
+if (live) live.cancel();
+var why = err.message || "AI error — check Settings.";
+setSideMsgs(msgs.concat([{ role: "assistant", content: live && live.text ? live.text + "\n\n⚠ Reply cut off (" + why + ")." : "⚠ " + why }]));
 setSideLoad(false);
 });
 }
@@ -3524,6 +3550,7 @@ try {
 var sel = (window.getSelection ? window.getSelection().toString() : "").trim();
 if (sel && sel.length <= 300 && !sideIn.trim()) setSideIn('"' + sel + '" — ');
 } catch (e) {  }
+sideFollow.current.away = false;
 setSideOpen(true);
 }
 function startSkillsModule(mod, mode) {
@@ -8270,7 +8297,7 @@ return (
 <div style={{ fontSize: 9, color: "var(--c-mut)", marginBottom: 4 }}>Personal note for the AI tutor — tell it about your background, learning style, what you struggle with, etc.</div>
 <textarea value={s.tutorCustomNote || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { tutorCustomNote: e.target.value }); }); }} placeholder={"e.g. \"I'm a PGY-3 who's strong on oncology but weak on infertility. I learn best with clinical scenarios. Don't go easy on me.\""} style={{ width: "100%", minHeight: 50, padding: 8, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: 10, resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
-<label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--c-mut)", cursor: "pointer", minHeight: 28 }} title="Replies appear word by word as the AI writes them. Turn off if live text makes an e-ink screen flicker.">
+<label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--c-mut)", cursor: "pointer", minHeight: 28 }} title="Tutor and Quick Ask replies appear word by word as the AI writes them. Turn off if live text makes an e-ink screen flicker.">
 <input type="checkbox" checked={s.tutorStream !== false} onChange={function(e) { var on = e.target.checked; setS(function(p) { return Object.assign({}, p, { tutorStream: on }); }); }} style={{ width: 16, height: 16, margin: 0 }} />
 {"⚡ Show replies as they're written"}
 </label>
@@ -8737,11 +8764,11 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px 4px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "70", flexShrink: 0 }}>
 <span style={{ fontSize: 11, fontWeight: 800, color: c.a }}>{"💬 Quick Ask"}</span>
 <span style={{ fontSize: 8, color: "#64748b", flex: 1, lineHeight: 1.3 }}>side chat — the lecture won't see this</span>
-{sideMsgs.length > 0 && <button onClick={function() { setSideMsgs([]); }} title="Clear side chat" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13, minWidth: 34, minHeight: 34, padding: 0 }}>{"🗑"}</button>}
+{sideMsgs.length > 0 && <button onClick={function() { stopSideReply(); setSideMsgs([]); }} title="Clear side chat" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13, minWidth: 34, minHeight: 34, padding: 0 }}>{"🗑"}</button>}
 <button onClick={function() { setSideBig(!sideBig); }} title={sideBig ? "Shrink the side chat" : "Make the side chat bigger"} style={{ background: "none", border: "none", color: "var(--c-mut)", cursor: "pointer", fontSize: 16, minWidth: 34, minHeight: 34, padding: 0, fontWeight: 700 }}>{sideBig ? "⤡" : "⤢"}</button>
 <button data-side-close onClick={function() { setSideOpen(false); }} title="Close (your side chat is kept)" style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 9, color: "var(--c-tx)", cursor: "pointer", fontSize: 15, minWidth: 36, minHeight: 34, padding: 0, fontWeight: 700 }}>{"✕"}</button>
 </div>
-<div ref={sidePane} style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+<div ref={sidePane} onScroll={function(e) { var f = sideFollow.current; if (sideLoad && f.set >= 0 && e.currentTarget.scrollTop < f.set - 30) f.away = true; }} style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
 {sideMsgs.length === 0 && (
 <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6, padding: "6px 2px" }}>
 {"Quick definitions, abbreviations, \"wait, why?\" questions — answered short, right here, without breaking the lecture."}
@@ -8757,11 +8784,11 @@ return <button key={q} onClick={function() { sendSide(q); }} style={{ padding: "
 {sideMsgs.map(function(m, i) {
 return (
 <div key={i} data-side-msg style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-<div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "var(--c-tx)", fontSize: sideBig ? 12.5 : 11.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}</div>
+<div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "var(--c-tx)", fontSize: sideBig ? 12.5 : 11.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}{sideLoad && m.role === "assistant" && i === sideMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}</div>
 </div>
 );
 })}
-{sideLoad && <div style={{ alignSelf: "flex-start", background: c.cd, border: "1px solid var(--c-br)", borderRadius: "11px 11px 11px 2px", padding: "7px 10px", color: "#64748b", fontSize: 11 }}>{"Thinking..."}</div>}
+{sideLoad && !(sideMsgs.length > 0 && sideMsgs[sideMsgs.length - 1].role === "assistant") && <div style={{ alignSelf: "flex-start", background: c.cd, border: "1px solid var(--c-br)", borderRadius: "11px 11px 11px 2px", padding: "7px 10px", color: "#64748b", fontSize: 11 }}>{"Thinking..."}</div>}
 </div>
 <div style={{ display: "flex", gap: 5, padding: 8, borderTop: "1px solid " + c.cd, flexShrink: 0 }}>
 <input value={sideIn} onChange={function(e) { setSideIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendSide(sideIn); } else if (e.key === "Escape") { setSideOpen(false); } }} placeholder="Quick question..." style={{ flex: 1, minWidth: 0, padding: "8px 11px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, outline: "none" }} />
