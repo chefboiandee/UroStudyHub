@@ -3484,8 +3484,13 @@ export default function UroStudyHub() {
   });
   // In-Service Exam sprint plan: its own key, kept out of the progress blob (see IsePlanView)
   var [ise, setIse] = useState(iseLoad);
-  var iseSaveErr = useRef(false);
-  var iseToday = iseYmd(new Date());
+  var [iseSaveFail, setIseSaveFail] = useState(false);
+  // Sprint "today" starts at 4am (late-night study counts for the day it belongs to). Kept in
+  // state and re-checked on wake so the Hub, the Plans card and the view all roll over together.
+  var [iseToday, setIseToday] = useState(iseNowYmd);
+  // Unsaved sprint drafts (miss text, log entries, selected day) survive Setup and navigation
+  var iseDraft = useRef({ miss: "", log: {}, sel: null, mode: {} });
+  var [iseAutoShuffle, setIseAutoShuffle] = useState(false);
   var [caseLogForm, setCaseLogForm] = useState({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
   var [caseLogEdit, setCaseLogEdit] = useState(null);
   var [caseLogFilter, setCaseLogFilter] = useState("");
@@ -3648,9 +3653,26 @@ export default function UroStudyHub() {
     try { localStorage.setItem("uroStudyHub_activePack", activePack); } catch(e) {}
   }, [activePack]);
   useEffect(function() {
-    try { localStorage.setItem("uroStudyHub_ise", JSON.stringify(ise)); iseSaveErr.current = false; }
-    catch(e) { iseSaveErr.current = true; }
+    try { localStorage.setItem("uroStudyHub_ise", JSON.stringify(ise)); setIseSaveFail(false); }
+    catch(e) { setIseSaveFail(true); }
   }, [ise]);
+  useEffect(function() {
+    function chk() {
+      if (document.hidden) return;
+      var d = iseNowYmd();
+      setIseToday(function(o) { return o === d ? o : d; });
+    }
+    document.addEventListener("visibilitychange", chk);
+    window.addEventListener("focus", chk);
+    window.addEventListener("pageshow", chk);
+    var iv = setInterval(chk, 60000);
+    return function() {
+      document.removeEventListener("visibilitychange", chk);
+      window.removeEventListener("focus", chk);
+      window.removeEventListener("pageshow", chk);
+      clearInterval(iv);
+    };
+  }, []);
 
   // ═══ UNIVERSAL SHARE SYSTEM ═══
   var [shareModal, setShareModal] = useState(null); // { type, title, data } or null
@@ -3726,12 +3748,32 @@ export default function UroStudyHub() {
     }
   }
 
+  // Copy a share code. Old e-reader browsers may lack navigator.clipboard or never settle the
+  // promise, so fall back to execCommand("copy") on a temporary textarea inside the same tap.
+  function copyTextFallback(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch(e) { return false; }
+  }
   function doCopyCode(type, data) {
     var code = encodeShareable(type, data);
     if (!code) return;
+    function done(ok) {
+      setSaveFeedback(ok ? "Share code copied!" : "Couldn't copy here. Use Export JSON File instead.");
+      setTimeout(function() { setSaveFeedback(""); }, ok ? 1500 : 4000);
+    }
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) { done(copyTextFallback(code)); return; }
+    var settled = false;
+    var tm = setTimeout(function() { if (!settled) { settled = true; done(copyTextFallback(code)); } }, 1500);
     navigator.clipboard.writeText(code).then(function() {
-      setSaveFeedback("Share code copied!");
-      setTimeout(function() { setSaveFeedback(""); }, 1500);
+      if (settled) return; settled = true; clearTimeout(tm); done(true);
+    }, function() {
+      if (settled) return; settled = true; clearTimeout(tm); done(copyTextFallback(code));
     });
   }
 
@@ -6170,7 +6212,8 @@ export default function UroStudyHub() {
       saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
       idbDel("activeSession").catch(function() {});
     }
-    if (chatMsgs.some(function(m) { return m.role === "assistant"; })) {
+    // Save the live chat only once the learner has said something beyond the opener
+    if (chatMsgs.some(function(m) { return m.role === "assistant"; }) && chatMsgs.filter(function(m) { return m.role === "user"; }).length > 1) {
       saveLectureSession(lectureTopic, chatMsgs);
       setSaveFeedback("Previous tutor session saved to 📚 Saved sessions");
       setTimeout(function() { setSaveFeedback(""); }, 2500);
@@ -10032,15 +10075,16 @@ export default function UroStudyHub() {
             var greeting = hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
             var tasks = [];
             var iseSum = iseTodaySummary(ise, iseToday);
-            if (iseSum) tasks.push({ icon: "🎯", text: iseSum.hub, col: iseSum.state === "behind" ? "#ef4444" : c.a, action: function() { setPage("tracker"); setTView("ise"); } });
+            if (iseSum) tasks.push({ icon: "🎯", text: iseSum.hub, col: iseSum.state === "behind" ? "var(--a-red0)" : c.a, big: true, action: function() { if (iseSum.state === "behind") setIseAutoShuffle(true); setPage("tracker"); setTView("ise"); } });
             if (dueData.overdue.length > 0) tasks.push({ icon: "🔴", text: dueData.overdue.length + " overdue topic" + (dueData.overdue.length > 1 ? "s" : "") + " need review", col: "#ef4444" });
             if (dueData.due.length > 0) tasks.push({ icon: "🟡", text: dueData.due.length + " topic" + (dueData.due.length > 1 ? "s" : "") + " due for review", col: "#fbbf24" });
             if (s.ankiEnabled !== false && !ankiDone) tasks.push({ icon: "📇", text: "Anki: " + (s.ankiReviews || 0) + "/" + (s.ankiReviewGoal || 50) + " reviews", col: "#fb923c" });
             if (next) tasks.push({ icon: "📚", text: "Next new topic: " + next.t, col: c.a });
             if (weakList.length > 0) tasks.push({ icon: "⚠️", text: "Weakest: " + weakList[0].cat + " (" + weakList[0].pct + "%)", col: "#f97316" });
             var schedStatus = getScheduleStatus();
-            // During an In-Service sprint the sprint has its own catch-up; skip the Core reorganize nag
-            if (!iseSum && (schedStatus.status === "behind" || schedStatus.status === "far_behind")) tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
+            // During the last 8 weeks of an In-Service sprint the sprint has its own catch-up; skip the Core reorganize nag
+            var iseSprintOn = !!(iseSum && ise.cfg && ise.cfg.exam && iseDiff(iseToday, ise.cfg.exam) <= 56);
+            if (!iseSprintOn && (schedStatus.status === "behind" || schedStatus.status === "far_behind")) tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
             return (
               <div style={{ background: "linear-gradient(135deg, " + c.cd + ", var(--c-bg))", borderRadius: 12, padding: 14, marginBottom: 12, border: "1px solid " + c.a + "22" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -10067,9 +10111,9 @@ export default function UroStudyHub() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {tasks.map(function(task, ti) {
                       return (
-                        <div key={ti} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: (task.action || (task.icon === "📚" && next)) ? "pointer" : "default" }} onClick={function() { if (task.action) task.action(); else if (task.icon === "📚" && next) goStudyTopic(next.t); }}>
+                        <div key={ti} data-ise={task.big ? "hub-task" : undefined} style={{ display: "flex", alignItems: "center", gap: 8, padding: task.big ? "6px 10px" : "4px 0", minHeight: (task.action || (task.icon === "📚" && next)) ? 36 : undefined, boxSizing: "border-box", border: task.big ? "2px solid " + (task.col === "var(--a-red0)" ? "var(--a-red0)" : "var(--c-br2)") : "none", borderRadius: task.big ? 8 : 0, cursor: (task.action || (task.icon === "📚" && next)) ? "pointer" : "default" }} onClick={function() { if (task.action) task.action(); else if (task.icon === "📚" && next) goStudyTopic(next.t); }}>
                           <span style={{ fontSize: 11 }}>{task.icon}</span>
-                          <span style={{ fontSize: 10, color: task.col, fontWeight: 500 }}>{task.text}</span>
+                          <span style={{ fontSize: (task.action || (task.icon === "📚" && next)) ? 11 : 10, color: task.col, fontWeight: task.big ? 700 : 500 }}>{task.text}</span>
                         </div>
                       );
                     })}
@@ -10317,11 +10361,11 @@ export default function UroStudyHub() {
                   var iseSumCard = iseTodaySummary(ise, iseToday);
                   var behindCard = iseSumCard && iseSumCard.state === "behind";
                   return (
-                    <button data-ise="card" onClick={function() { setTView("ise"); }} style={{ width: "100%", textAlign: "left", background: c.cd, border: "2px solid " + (behindCard ? "#ef4444" : "var(--c-br2, var(--c-br))"), borderRadius: 10, padding: 12, marginBottom: 14, minHeight: 44, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: "var(--c-tx)" }}>
+                    <button data-ise="card" onClick={function() { setTView("ise"); }} style={{ width: "100%", textAlign: "left", background: c.cd, border: "2px solid " + (behindCard ? "var(--a-red)" : "var(--c-br2)"), borderRadius: 10, padding: 12, marginBottom: 14, minHeight: 44, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: "var(--c-tx)" }}>
                       <span style={{ fontSize: 22 }}>{"🎯"}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: c.a }}>{"In-Service Exam Sprint"}</span>
-                        <span style={{ display: "block", fontSize: 11, color: behindCard ? "#ef4444" : "var(--c-mut)", marginTop: 2, lineHeight: 1.4 }}>{iseSumCard ? iseSumCard.line : "Plan the weeks before the ISE: high-yield first, daily question targets, miss review, and catch-up when you fall behind."}</span>
+                        <span style={{ display: "block", fontSize: 11, color: behindCard ? "var(--a-red0)" : "var(--c-mut)", marginTop: 2, lineHeight: 1.4 }}>{iseSumCard ? iseSumCard.line : "Plan the weeks before the ISE: high-yield first, daily question targets, miss review, and catch-up when you fall behind."}</span>
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: c.a, whiteSpace: "nowrap" }}>{"Open ›"}</span>
                     </button>
@@ -10413,7 +10457,9 @@ export default function UroStudyHub() {
                 onImport={function() { setImportModal(true); setImportText(""); setImportPreview(null); }}
                 onReward={function(label) { earnTokens("sasp", label); }}
                 notify={function(m) { setSaveFeedback(m); setTimeout(function() { setSaveFeedback(""); }, 2500); }}
-                saveErr={iseSaveErr} onBack={function() { setTView("plans"); }} />
+                saveFail={iseSaveFail} drafts={iseDraft}
+                autoReshuffle={iseAutoShuffle} onAutoDone={function() { setIseAutoShuffle(false); }}
+                onBack={function() { setTView("plans"); }} />
             )}
             {/* Schedule */}
             {tView === "schedule" && (
