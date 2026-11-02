@@ -1,7 +1,8 @@
 // Unit tests for the In-Service Exam sprint planner (the ISE-LOGIC block of UroStudyHub.html).
-// Dependency-free. Run in two time zones:
+// Dependency-free. Run in three time zones:
 //   TZ=America/New_York node tools/ise-plan.test.mjs
 //   TZ=UTC node tools/ise-plan.test.mjs
+//   TZ=Pacific/Auckland node tools/ise-plan.test.mjs
 // ISE_SRC=/path/to/file.js picks another source that holds the block between the markers.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -19,7 +20,8 @@ const NAMES = ["ISE_GROUPS", "ISE_GROUP_KEYS", "ISE_BLOCKS", "ISE_BY_ID", "ISE_L
   "buildIsePlan", "iseDayPlan", "iseFloorSteps", "iseMet", "iseStatus", "iseResolve", "iseTodaySummary", "iseSetup",
   "iseReshuffle", "iseDiffPlans", "iseWhatIfs", "iseWeakGroups", "iseDefaultTicks", "iseApplyLog", "iseSetSkip",
   "iseParseMisses", "iseAddMisses", "iseDelMiss", "iseNorm", "iseMerge", "iseGroupStats", "iseProgress", "iseScore",
-  "iseRecentMisses"];
+  "iseRecentMisses", "iseNowYmd", "iseHas", "iseCap", "iseMissWindow", "iseAnyMisses", "iseDayCtx", "iseUncover", "iseNewSprint",
+  "iseStart", "iseLoopTopic", "iseTailOf", "iseResumeIds"];
 const I = new Function(BLOCK + "\n;return {" + NAMES.map((n) => JSON.stringify(n) + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + "};")();
 
 // AUA topic names come from the real app file, whatever ISE_SRC says.
@@ -59,6 +61,28 @@ const placedOnce = (plan, cut) => {
   return seen;
 };
 const SLASH_STAR = "/" + "*", BACKTICK = String.fromCharCode(96), BOXBAR = "═";
+const TAILK = ["mock", "weak", "allknow", "misslog", "final"];
+const tailOf = (plan, from) => plan.filter((e) => e.d >= from && TAILK.indexOf(e.k) >= 0).map((e) => e.d + ":" + e.k);
+const stepSum = (d) => d.steps.reduce((a, s) => a + (s.m || 0), 0);
+// logs day d the way IseLogForm does (target t = the day's q, default ticks); q defaults to the target
+function logDay(ise, d, today, q, opts) {
+  opts = opts || {};
+  const st = I.iseStatus(ise, today), res = I.iseResolve(ise, d, st, today), t = res.q || 0, qq = q == null ? t : q;
+  const defs = I.iseDefaultTicks(res, { q: qq, t, floor: !!opts.floor, k: res.k });
+  const tk = {}; (res.items || []).filter((x) => x.part !== 1).forEach((x) => { tk[x.b] = defs[x.b] === true; });
+  const entry = { q: qq, pct: opts.pct == null ? 70 : opts.pct, floor: !!opts.floor, t, k: res.k, b: (res.items || []).map((x) => x.b),
+    g: res.groups[0] || null, gs: res.groups.slice(), ts: opts.ts || 1, rw: 0 };
+  return freeze(I.iseApplyLog(ise, d, entry, tk));
+}
+// a part 1 on one block day immediately followed (next block day) by a mock before its part 2
+const straddles = (plan) => {
+  let n = 0;
+  plan.forEach((e, i) => (e.it || []).forEach((x) => {
+    if (x.part !== 1) return;
+    for (let j = i + 1; j < plan.length; j++) { if (plan[j].k === "mock") { n++; break; } if (plan[j].k === "block") break; }
+  }));
+  return n;
+};
 
 console.log("ISE plan tests · src " + SRC_PATH.split("/").slice(-2).join("/") + " · TZ " + (process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone));
 
@@ -106,8 +130,12 @@ test("1 catalogue: 23 ids, topics in AUA_PHASES, know keys, reads, weights, sour
   kk.forEach((k) => { assert.ok(I.ISE_KNOW[k].t); I.ISE_KNOW[k].items.forEach((s) => assert.ok(typeof s === "string" && s.length > 5)); });
   assert.equal(I.iseTier("void"), "HIGH"); assert.equal(I.iseTier("pros"), "HIGH");
   assert.equal(I.iseTier("andro"), "MED"); assert.equal(I.iseTier("kid"), "MED"); assert.equal(I.iseTier("testis"), "LOW");
+  // the clock is read in exactly one place: iseNowYmd (4 am day start)
+  const clockLines = BLOCK.split("\n").filter((l) => /Date\.now|new Date\(\)/.test(l));
+  assert.deepEqual(clockLines.map((l) => l.trim()), ["function iseNowYmd() { return iseYmd(new Date(Date.now() - 4 * 3600e3)); }"], "clock read outside iseNowYmd");
+  const rest = BLOCK.split("\n").filter((l) => clockLines.indexOf(l) < 0).join("\n");
   const bad = [SLASH_STAR, BACKTICK, BOXBAR, ".at(", "hasOwn", "structuredClone", "findLast", "toSorted", "Date.now", "Math.random", "toISOString", "new Date()", "localStorage", "AUA_"]
-    .filter((s) => BLOCK.indexOf(s) >= 0);
+    .filter((s) => rest.indexOf(s) >= 0);
   assert.deepEqual(bad, [], "forbidden text in the block");
   const lines = BLOCK.split("\n").filter((l) => /^\s*\/\//.test(l) && /["']\s*[,+\]]/.test(l));
   assert.deepEqual(lines, [], "a // line that looks like string content");
@@ -187,14 +215,17 @@ test("7 zero study days (every weekday off): [rest, exam], everything cut", () =
   assert.equal(r.cut.length, 23);
 });
 
-test("8 two study days (from 11-18): no tail, 2 content days of top blocks light, rest, exam", () => {
+test("8 two study days (from 11-18): 1 content day of top blocks light, then the final review, rest, exam", () => {
+  // CHANGED deliberately (c-6): a final day exists whenever S >= 1, so the cut blocks' Know-cold lists really land on a day.
+  // Before: [block, block, rest, exam] with 4 lights and 19 cut and no final day at all.
   const r = I.buildIsePlan(C(), H0, "2026-11-18");
-  assert.deepEqual(r.plan.map((e) => e.k), ["block", "block", "rest", "exam"]);
-  const items = r.plan.slice(0, 2).flatMap((e) => e.it);
+  assert.deepEqual(r.plan.map((e) => e.k), ["block", "final", "rest", "exam"]);
+  assert.equal(ent(r.plan, "2026-11-19").k, "final");
+  const items = r.plan[0].it;
   assert.ok(items.every((x) => x.lvl === "light"), "all light");
-  assert.deepEqual(items.map((x) => x.b), ["void1", "peds1", "ston1", "pros1"]);
-  assert.equal(r.cut.length, 19);
-  return "light " + items.map((x) => x.b).join(",");
+  assert.deepEqual(items.map((x) => x.b), ["void1", "peds1"]);
+  assert.equal(r.cut.length, 21);
+  return "CHANGED (c-6): final day on 11-19 instead of a second content day; light " + items.map((x) => x.b).join(",") + ", 21 cut";
 });
 
 test("9 behind by 1 day: absorb, ston1 -> 10-27 and pros1 -> 11-04", () => {
@@ -213,12 +244,20 @@ test("9 behind by 1 day: absorb, ston1 -> 10-27 and pros1 -> 11-04", () => {
   const res = I.iseResolve(ise, "2026-10-27", st, "2026-10-24");
   assert.equal(res.k, "catchup"); assert.equal(res.catchupFor, "ston1");
   assert.deepEqual(res.items, [{ b: "ston1", lvl: "full", part: 0 }]);
-  assert.equal(res.q, 25); assert.equal(res.steps[0].t, "Catch-up: " + I.ISE_BY_ID.ston1.label);
+  // CHANGED deliberately (c-23): with no misses logged yet the miss-review minutes go to questions (R = 0): 30, not 25
+  assert.equal(res.R, 0); assert.equal(res.q, 30); assert.equal(res.steps[0].t, "Catch-up: " + I.ISE_BY_ID.ston1.label);
+  const withMiss = withFields(ise, { misses: [{ id: "m", d: "2026-10-22", g: "void", t: "a rule" }] });
+  const resM = I.iseResolve(withMiss, "2026-10-27", st, "2026-10-24");
+  assert.equal(resM.R, 15); assert.equal(resM.q, 25, "the old 25 when there is a miss log to re-read");
   assert.deepEqual(I.iseDefaultTicks(res, null), { ston1: true });
   assert.equal(I.iseResolve(ise, "2026-11-13", st, "2026-10-24").k, "buffer");
+  return "CHANGED (c-23): q 30 with no misses yet (R 0), 25 once a miss exists";
 });
 
-test("10 behind by 4 days: 6 behind, reshuffle restores order, cuts 9, what-ifs", () => {
+test("10 behind by 4 days: 6 behind, reshuffle restores order, keeps both mocks, cuts 10, what-ifs", () => {
+  // CHANGED deliberately (c-0/c-21): the taper is fixed once built, so this reshuffle keeps BOTH mocks (11-14, 11-15).
+  // Before: one mock (spec example 3) and 9 cut with void1/peds1/ston1 full on 11-09..11-11. Now the second mock
+  // costs content: 10 cut, and peds1 + ston1 come back light together on 11-10. Hub wording: "tap to catch up".
   const cfg = C();
   const ise = setup(cfg, "2026-11-05");
   assert.deepEqual(ise.plan, I.buildIsePlan(cfg, H0, "2026-11-05").plan);
@@ -228,10 +267,11 @@ test("10 behind by 4 days: 6 behind, reshuffle restores order, cuts 9, what-ifs"
   assert.deepEqual(st.behind, ["void1", "peds1", "ston1", "pros1", "tes1", "peds2"]);
   const next = freeze(I.iseReshuffle(ise, "2026-11-09"));
   assert.deepEqual(next.plan.filter((e) => e.d < "2026-11-09"), ise.plan.filter((e) => e.d < "2026-11-09"));
-  [["2026-11-09", "void1"], ["2026-11-10", "peds1"], ["2026-11-11", "ston1"]].forEach(([d, b]) => {
-    assert.deepEqual(ent(next.plan, d).it, [{ b, lvl: "full", part: 0 }], d);
-  });
-  assert.equal(next.cut.length, 9);
+  assert.deepEqual(ent(next.plan, "2026-11-09").it, [{ b: "void1", lvl: "full", part: 0 }]);
+  assert.deepEqual(ent(next.plan, "2026-11-10").it.map((x) => x.b), ["peds1", "ston1"]);
+  assert.deepEqual(tailOf(next.plan, "2026-11-09"), tailOf(ise.plan, "2026-11-09"), "tail untouched");
+  assert.deepEqual(datesOf(next.plan, "mock"), ["2026-11-14", "2026-11-15"]);
+  assert.equal(next.cut.length, 10);
   assert.deepEqual(next.shuffles, ["2026-11-09"]);
   assert.equal(next.built, "2026-11-09");
   const seen = placedOnce(next.plan.filter((e) => e.d >= "2026-11-09"), next.cut);
@@ -241,19 +281,20 @@ test("10 behind by 4 days: 6 behind, reshuffle restores order, cuts 9, what-ifs"
   const diff = I.iseDiffPlans(ise, next, "2026-11-09");
   assert.deepEqual(diff.back.map((x) => x.b).sort(), st.behind.slice().sort());
   assert.deepEqual(diff.back[0], { b: "void1", d: "2026-11-09" });
-  assert.deepEqual(diff.cut, ["bs2", "andr2", "inf1"]);
+  assert.deepEqual(diff.cut, ["bs2", "andr2", "inf1", "pros2"]);
   assert.deepEqual(diff.uncut, []);
+  assert.deepEqual(diff.tail, [], "no tail change to report");
   assert.deepEqual(diff.preview.map((e) => e.d), ["2026-11-09", "2026-11-10", "2026-11-11"]);
   const w = I.iseWhatIfs(ise, "2026-11-09");
   assert.ok(w.length >= 1);
-  assert.deepEqual(w[0].over, { minsWk: 150 }); assert.equal(w[0].cutN, 6);
-  assert.ok(/^\+30 min on weekdays → cuts 6 instead of 9/.test(w[0].label), w[0].label);
+  assert.deepEqual(w[0].over, { minsWk: 150 }); assert.equal(w[0].cutN, 7);
+  assert.equal(w[0].label, "+30 min on weekdays → 7 cut, 11 light");
   assert.ok(!w.some((x) => x.over.minsWk === 180), "+60 weekdays should merge into +30");
   w.forEach((x) => assert.ok(x.cutN + 0.5 * x.lightN < next.cut.length + 0.5 * next.light.length));
   const sum = I.iseTodaySummary(ise, "2026-11-09");
-  assert.equal(sum.hub, "ISE plan: 6 blocks behind — tap to reshuffle");
+  assert.equal(sum.hub, "ISE plan: 6 blocks behind — tap to catch up");
   assert.equal(sum.line, "6 blocks behind: tap to reshuffle");
-  return w.map((x) => x.label).join(" | ");
+  return "CHANGED (c-0, c-24, hub): 2 mocks kept, 10 cut; " + w.map((x) => x.label).join(" | ");
 });
 
 test("11 today already logged: reshuffle starts tomorrow, today's entry untouched", () => {
@@ -387,7 +428,8 @@ test("17 iseDayPlan table + step texts", () => {
 });
 
 test("18 iseNorm: null, {}, junk all give the full defaults; idempotent", () => {
-  const D = { kind: "uroISE", v: 1, cfg: null, built: null, plan: [], cut: [], light: [], done: {}, log: {}, misses: [], shuffles: [] };
+  // CHANGED deliberately (c-4, c-10): two new fields, prefs (settings kept for the next sprint) and builtTs (merge recency)
+  const D = { kind: "uroISE", v: 1, cfg: null, prefs: null, built: null, builtTs: 0, since: null, plan: [], cut: [], light: [], done: {}, log: {}, misses: [], shuffles: [] };
   assert.deepEqual(I.iseNorm(null), D);
   assert.deepEqual(I.iseNorm({}), D);
   assert.deepEqual(I.iseNorm(freeze({ kind: "uroISE", log: null, misses: "x", cfg: { off: "x" } })), D);
@@ -415,7 +457,10 @@ test("19 iseMerge: newer built wins plan, log by ts, done union, misses dedup", 
       { id: "m3", d: "2026-11-01", g: "peds", t: "rule B" }], shuffles: ["2026-11-05"] }));
   const m = I.iseMerge(a, b);
   assert.equal(m.cfg.minsWk, 150); assert.equal(m.built, "2026-11-05");
-  assert.deepEqual(m.plan, b.plan);
+  // CHANGED deliberately (c-4): the logged 11-03 keeps a's entry (a's log won that date) and a's 11-04 entry stays,
+  // because b's plan only starts on 11-05; b (more recent) gives everything from 11-05 on. Before: m.plan === b.plan.
+  assert.deepEqual(m.plan, a.plan.filter((e) => e.d < "2026-11-05").concat(b.plan));
+  assert.equal(I.iseResolve(m, "2026-11-03", null, "2026-11-05").k, "block", "history still resolves");
   assert.equal(m.log["2026-11-03"].q, 10); assert.equal(m.log["2026-11-05"].q, 30);
   assert.deepEqual(m.done, { void1: "pre", peds1: "2026-11-05" });
   assert.deepEqual(m.misses.map((x) => x.id), ["m3", "m1"]);
@@ -432,7 +477,9 @@ test("20 property sweep: -2..60 days x 11 x 11 minutes", () => {
   const t0 = Date.now();
   for (let dl = -2; dl <= 60; dl++) for (let a = 0; a < mins.length; a++) for (let b = 0; b < mins.length; b++) {
     const from = I.iseAdd("2026-11-21", -dl), cfg = C({ minsWk: mins[a], minsWe: mins[b] });
-    const t = Date.now(); const r = I.buildIsePlan(cfg, H0, from); maxMs = Math.max(maxMs, Date.now() - t); n++;
+    let t = Date.now(); const r = I.buildIsePlan(cfg, H0, from); let ms = Date.now() - t; n++;
+    if (ms >= 20) { t = Date.now(); I.buildIsePlan(cfg, H0, from); ms = Math.min(ms, Date.now() - t); } // a GC pause is not a slow build
+    maxMs = Math.max(maxMs, ms);
     const bad = [];
     r.plan.forEach((e, i) => { if (i && e.d <= r.plan[i - 1].d) bad.push("order"); if (e.d > cfg.exam) bad.push("after exam"); });
     if (dl >= 1) {
@@ -466,7 +513,10 @@ test("20 property sweep: -2..60 days x 11 x 11 minutes", () => {
       r.plan.forEach((e) => {
         const res = I.iseResolve(ise, e.d, st, from);
         if (res.k !== e.k && !(e.k === "buffer" && res.k === "catchup")) bad.push("resolve kind " + e.d);
-        if (["rest", "exam"].indexOf(res.k) < 0 && !res.steps.some((s) => s.t.indexOf("Re-read") === 0 && s.m === res.R)) bad.push("no R step " + e.d);
+        // CHANGED deliberately (c-23): with no misses yet the step says so and R is 0 (its minutes go to questions)
+        if (["rest", "exam"].indexOf(res.k) < 0 && !res.steps.some((s) => (s.t.indexOf("Re-read") === 0 && s.m === res.R) ||
+          (res.R === 0 && s.t === "No misses yet: put these minutes into questions"))) bad.push("no R step " + e.d);
+        if (stepSum(res) > res.M + 5 && ["rest", "exam", "off"].indexOf(res.k) < 0) bad.push("loop over M+5 " + e.d);
       });
       I.iseTodaySummary(ise, from); I.iseProgress(ise, from);
       if (bad.length && !first) { fails++; first = from + " " + mins[a] + "/" + mins[b] + ": " + bad[0]; }
@@ -479,22 +529,27 @@ test("20 property sweep: -2..60 days x 11 x 11 minutes", () => {
 
 // ---- extra coverage for the rest of the contract ----
 test("21 iseParseMisses / iseAddMisses / iseDelMiss / iseRecentMisses", () => {
-  const three = "Misses from today:\n- Cystine: hexagonal\n  - Uric acid: alkalinize\n- Struvite: urease splitters\n";
+  // CHANGED deliberately (c-27): a paste with a non-bullet line is now ONE miss (nothing dropped); a single "- x" loses its dash.
+  const mixedPaste = "Misses from today:\n- Cystine: hexagonal\n  - Uric acid: alkalinize\n- Struvite: urease splitters\n";
+  assert.deepEqual(I.iseParseMisses(mixedPaste, "stones", "2026-11-03", "h").map((m) => m.t), [mixedPaste.trim()]);
+  const three = "- Cystine: hexagonal\n  - Uric acid: alkalinize\n\n- Struvite: urease splitters\n";
   const ms = I.iseParseMisses(three, "stones", "2026-11-03", "m1");
   assert.deepEqual(ms.map((m) => m.id), ["m1_0", "m1_1", "m1_2"]);
   assert.deepEqual(ms.map((m) => m.t), ["Cystine: hexagonal", "Uric acid: alkalinize", "Struvite: urease splitters"]);
   assert.ok(ms.every((m) => m.g === "stones" && m.d === "2026-11-03"));
-  assert.deepEqual(I.iseParseMisses("  - one bullet only  ", null, "2026-11-03", "x"), [{ id: "x_0", d: "2026-11-03", g: "mixed", t: "- one bullet only" }]);
+  assert.deepEqual(I.iseParseMisses("  - one bullet only  ", null, "2026-11-03", "x"), [{ id: "x_0", d: "2026-11-03", g: "mixed", t: "one bullet only" }]);
   assert.deepEqual(I.iseParseMisses("   \n ", "void", "2026-11-03", "x"), []);
   let ise = setup(C(), "2026-11-02");
   ise = freeze(I.iseAddMisses(ise, ms));
   ise = freeze(I.iseAddMisses(ise, [{ id: "z", d: "2026-11-01", g: "void", t: "older" }, ms[0]]));
   assert.deepEqual(ise.misses.map((m) => m.id), ["z", "m1_0", "m1_1", "m1_2"]);
-  assert.equal(I.iseRecentMisses(ise.misses, "2026-11-04").length, 3);
-  assert.equal(I.iseRecentMisses(ise.misses, "2026-11-06").length, 0);
+  // CHANGED deliberately (c-23): the window is the last two miss dates before d (+ d), so a gap no longer hides them
+  assert.equal(I.iseRecentMisses(ise.misses, "2026-11-04").length, 4);
+  assert.equal(I.iseRecentMisses(ise.misses, "2026-11-06").length, 4, "two days later the 11-01 and 11-03 misses still count");
   ise = freeze(I.iseDelMiss(ise, "m1_1"));
   assert.deepEqual(ise.misses.map((m) => m.id), ["z", "m1_0", "m1_2"]);
-  assert.equal(I.iseResolve(ise, "2026-11-04", null, "2026-11-04").steps[0].t, "Re-read misses from the last 2 days (2)");
+  assert.equal(I.iseResolve(ise, "2026-11-04", null, "2026-11-04").steps[0].t, "Re-read misses since Sun 11/1 (3)");
+  return "CHANGED (c-27, c-23): mixed paste = 1 miss; window counts 4 on 11-04 and 11-06";
 });
 
 test("22 iseDefaultTicks / iseApplyLog: defaults, part-2 only, untick deletes", () => {
@@ -546,11 +601,16 @@ test("24 iseResolve / iseTodaySummary / iseStatus fields on a normal plan", () =
   const r = I.iseResolve(on, "2026-11-04", st2, "2026-11-04");
   assert.equal(r.k, "block"); assert.equal(r.kindLabel, "Content"); assert.deepEqual(r.groups, ["stones"]);
   assert.deepEqual(r.know, ["stones"]); assert.equal(r.read[0], I.ISE_GROUPS.stones.read);
-  assert.deepEqual(r.topics, I.ISE_BY_ID.ston1.topics); assert.equal(r.q, 20); assert.equal(r.M, 120);
+  // CHANGED deliberately (c-23): no misses yet, so R = 0 and the 10 minutes go to questions: 25, not 20
+  assert.deepEqual(r.topics, I.ISE_BY_ID.ston1.topics); assert.equal(r.q, 25); assert.equal(r.R, 0); assert.equal(r.M, 120);
+  assert.deepEqual(r.loopTopics, ["Medical Management of Urolithiasis"]);
+  assert.deepEqual(r.readG, [{ g: "stones", label: "Stones", read: I.ISE_GROUPS.stones.read }]);
   const s = I.iseTodaySummary(on, "2026-11-04");
-  assert.equal(s.line, "17 days · today: Stones 1 · 20 SASP Qs");
-  assert.equal(s.hub, "ISE: Stones 1 · 20 SASP Qs today");
-  assert.equal(s.q, 20);
+  assert.equal(s.line, "17 days · today: Stones 1 · 25 SASP Qs");
+  assert.equal(s.hub, "ISE: Stones 1 · 25 SASP Qs today");
+  assert.equal(s.q, 25);
+  const onM = withFields(on, { misses: [{ id: "m", d: "2026-11-03", g: "peds", t: "a rule" }] });
+  assert.equal(I.iseTodaySummary(onM, "2026-11-04").q, 20, "the old 20 once there is a miss to re-read");
   const fin = I.iseResolve(on, "2026-11-19", st2, "2026-11-04");
   assert.equal(fin.k, "final");
   assert.deepEqual(fin.know.slice(0, 2), ["penile", "adrenal"], "cut groups' Know-cold first");
@@ -570,6 +630,7 @@ test("24 iseResolve / iseTodaySummary / iseStatus fields on a normal plan", () =
   assert.equal(I.iseResolve(ahead, "2026-11-05", sa, "2026-11-04").k, "buffer");
   const logged = withFields(on, { log: { "2026-11-04": { q: 20, pct: 75, floor: false, t: 20, k: "block", b: ["ston1"], g: "stones", ts: 3, rw: 1 } } });
   assert.equal(I.iseTodaySummary(logged, "2026-11-04").hub, "ISE: Stones 1 · done today ✓");
+  return "CHANGED (c-23): 25 Qs with no misses yet (20 with one)";
 });
 
 test("25 iseProgress and iseWeakGroups", () => {
@@ -588,6 +649,393 @@ test("25 iseProgress and iseWeakGroups", () => {
   assert.deepEqual(p.mocks, []);
   const wg = I.iseWeakGroups(ise.log, ise.misses, "2026-11-05");
   assert.deepEqual(wg.slice(0, 3), ["peds", "void", "kid"]);
+});
+
+// ---- review fixes (ids refer to the review findings: c-n confirmed, s-n split) ----
+test("26 c-0/c-21 the taper is fixed once built: a diligent user can reshuffle any day and keep every tail day", () => {
+  let ise = setup(C(), "2026-11-02"), chained = ise;
+  const built = tailOf(ise.plan, "2026-11-02");
+  assert.deepEqual(built, ["2026-11-14:mock", "2026-11-15:mock", "2026-11-18:weak", "2026-11-19:final"]);
+  for (let d = "2026-11-02"; d <= "2026-11-19"; d = I.iseAdd(d, 1)) {
+    const r = I.iseReshuffle(ise, d), rc = freeze(I.iseReshuffle(chained, d));
+    assert.deepEqual(tailOf(r.plan, d), tailOf(ise.plan, d), "plain reshuffle on " + d);
+    assert.deepEqual(tailOf(rc.plan, d), built.filter((x) => x >= d), "chained reshuffles on " + d);
+    assert.deepEqual(I.iseDiffPlans(ise, r, d).tail, [], "no tail line on " + d);
+    ise = logDay(ise, d, d); chained = logDay(rc, d, d);
+  }
+  // s7 replica: everything covered through 11-17, reshuffle on the weak day keeps weak + final, pen1/pros3 stay cut
+  let s7 = setup(C(), "2026-11-02");
+  for (let d = "2026-11-02"; d <= "2026-11-17"; d = I.iseAdd(d, 1)) s7 = logDay(s7, d, d, 40);
+  const r18 = I.iseReshuffle(s7, "2026-11-18");
+  assert.deepEqual(tailOf(r18.plan, "2026-11-18"), ["2026-11-18:weak", "2026-11-19:final"]);
+  assert.deepEqual(r18.cut.slice().sort(), ["pen1", "pros3"]);
+  // s6 replica: covered through 11-13; on the mock day 11-14, Can't study Mon 11-16 keeps both mocks (content pays)
+  let s6 = setup(C(), "2026-11-02");
+  for (let d = "2026-11-02"; d <= "2026-11-13"; d = I.iseAdd(d, 1)) s6 = logDay(s6, d, d, 40);
+  const sk = I.iseSetSkip(s6, "2026-11-16", true, "2026-11-14");
+  assert.deepEqual(tailOf(sk.next.plan, "2026-11-14"), ["2026-11-14:mock", "2026-11-15:mock", "2026-11-18:weak", "2026-11-19:final"]);
+  assert.deepEqual(sk.diff.tail, []);
+  // iseSetSkip on a content day keeps both mocks; on a mock day the mock moves to the nearest earlier free study day
+  const base = setup(C(), "2026-11-02");
+  assert.deepEqual(datesOf(I.iseSetSkip(base, "2026-11-04", true, "2026-11-02").next.plan, "mock"), ["2026-11-14", "2026-11-15"]);
+  const mv = I.iseSetSkip(base, "2026-11-15", true, "2026-11-10");
+  assert.deepEqual(datesOf(mv.next.plan, "mock"), ["2026-11-13", "2026-11-14"]);
+  assert.deepEqual(mv.diff.tail, ["Mocks: Sun 11/15 → Fri 11/13"]);
+  return "tail identical on every reshuffle 11-02..11-19; a skipped mock day moves (diff: " + mv.diff.tail[0] + ")";
+});
+
+test("27 c-0/c-21 the kept tail shrinks only when blocks are behind and < 2 content days remain; diff.tail lines", () => {
+  const ise = setup(C(), "2026-11-02");                  // nothing logged: everything is behind later on
+  const r17 = I.iseReshuffle(ise, "2026-11-17");          // study 17, 18, 19 with weak + final kept = 1 content day
+  assert.deepEqual(tailOf(r17.plan, "2026-11-17"), ["2026-11-19:final"]);
+  assert.deepEqual(I.iseDiffPlans(ise, r17, "2026-11-17").tail, ["Weak-spots days: 1 → 0 (Wed 11/18 becomes a content day)"]);
+  const r14 = I.iseReshuffle(ise, "2026-11-14", { skip: ["2026-11-16", "2026-11-17"] });
+  assert.deepEqual(tailOf(r14.plan, "2026-11-14"), ["2026-11-15:mock", "2026-11-19:final"]);
+  assert.deepEqual(I.iseDiffPlans(ise, r14, "2026-11-14").tail,
+    ["Mocks: 2 → 1 (Sat 11/14 becomes a content day)", "Weak-spots days: 1 → 0 (Wed 11/18 becomes a content day)"]);
+  assert.equal(ent(r14.plan, "2026-11-15").n, 1, "the remaining mock is renumbered");
+  // a changed exam date is a new taper (S-table): mocks move next to the new exam
+  const moved = I.iseReshuffle(ise, "2026-11-10", { exam: "2026-12-05" });
+  assert.deepEqual(datesOf(moved.plan, "mock"), ["2026-11-28", "2026-11-29"]);
+  assert.equal(ent(moved.plan, "2026-12-04").k, "rest");
+  // a what-if that gives back study days can keep a tail day the plain reshuffle loses
+  const wed = setup(C({ off: [3] }), "2026-11-02");
+  const base = I.iseReshuffle(wed, "2026-11-14");
+  assert.deepEqual(I.iseDiffPlans(wed, base, "2026-11-14").tail, ["Mocks: 2 → 1 (Sat 11/14 becomes a content day)"]);
+  const w = I.iseWhatIfs(wed, "2026-11-14").find((x) => x.over.off);
+  assert.ok(w && w.label === "Study on Wednesdays too → 19 cut, 4 light · keeps 2 mocks", w && w.label);
+  return r14.plan.filter((e) => e.d >= "2026-11-14").map((e) => e.d.slice(5) + ":" + e.k).join(" ");
+});
+
+test("28 c-1 a split block resumes at part 2 after its part 1 was logged", () => {
+  const cfg = C({ minsWk: 60, minsWe: 240 });
+  const built = setup(cfg, "2026-11-02");
+  assert.deepEqual(ent(built.plan, "2026-11-02").it, [{ b: "void1", lvl: "full", part: 1 }]);
+  const lg = logDay(built, "2026-11-02", "2026-11-02", 10);
+  assert.equal(lg.done.void1, undefined, "part 1 never ticks the block");
+  assert.deepEqual(I.iseResumeIds(lg, "2026-11-03"), ["void1"]);
+  const p2 = (x, d) => assert.deepEqual(ent(x.plan, d).it[0], { b: "void1", lvl: "full", part: 2 }, d);
+  const sameDay = I.iseSetSkip(lg, "2026-11-12", true, "2026-11-02").next;       // Can't study, same evening
+  p2(sameDay, "2026-11-03");
+  const tue = I.iseReshuffle(lg, "2026-11-03");                                 // part-2 day, before logging
+  p2(tue, "2026-11-03");
+  assert.ok(!tue.plan.some((e) => e.d >= "2026-11-03" && (e.it || []).some((x) => x.b === "void1" && x.part !== 2)), "never part 1 again");
+  assert.ok(tue.cut.length + 0.5 * tue.light.length <= built.cut.length + 0.5 * built.light.length, "no worse than the build");
+  const wed = I.iseReshuffle(lg, "2026-11-04");                                 // part 2 missed on 11-03: still part 2 first
+  p2(wed, "2026-11-04");
+  assert.ok(I.iseStatus(wed, "2026-11-04").behind.indexOf("void1") < 0);
+  let daily = lg;                                                               // repeated evening reshuffles
+  for (let d = "2026-11-02"; d <= "2026-11-05"; d = I.iseAdd(d, 1)) { if (d > "2026-11-02") daily = logDay(daily, d, d); daily = freeze(I.iseReshuffle(daily, d)); }
+  assert.equal(daily.done.void1, "2026-11-03");
+  const floorP1 = withFields(built, { log: { "2026-11-02": { q: 10, pct: 50, floor: true, t: 10, k: "block", b: ["void1"], g: "void", ts: 1, rw: 0 } } });
+  assert.deepEqual(I.iseResumeIds(floorP1, "2026-11-03"), [], "a floor day did not study part 1");
+  assert.deepEqual(ent(I.iseReshuffle(floorP1, "2026-11-03").plan, "2026-11-03").it[0].part, 1);
+});
+
+test("29 c-2 a failed fill retries with every long day at full cap before cutting or dropping catch-up days", () => {
+  const r = I.buildIsePlan(C({ minsWk: 60, minsWe: 240 }), H0, "2026-10-12");
+  assert.deepEqual(r.cut, []); assert.deepEqual(r.light, []);
+  assert.equal(datesOf(r.plan, "buffer").length, 4, "all 4 catch-up days kept");
+  const seen = placedOnce(r.plan, r.cut);
+  I.ISE_BLOCKS.forEach((b) => assert.equal(seen[b.id], 1, b.id));
+  const r2 = I.buildIsePlan(C({ minsWk: 30, minsWe: 180 }), H0, "2026-10-12");
+  assert.equal(r2.cut.length, 0); assert.ok(r2.light.length <= 1);
+  return "60/240 from 10-12: 0 cut, 0 light, 4 catch-up days (was 1 cut, 4 light, 0 catch-up)";
+});
+
+test("30 c-3/c-22 every loop fits in M + 5 min (M 30..360 x pace 2..4 x every kind); 5-question floor, 0 when it cannot fit", () => {
+  const F = (b) => ({ b, lvl: "full", part: 0 }), Lt = (b) => ({ b, lvl: "light", part: 0 }), P = (b, n) => ({ b, lvl: "full", part: n });
+  const unit = (x) => (x.lvl === "light" || x.part ? 0.5 : 1);
+  const shapes = [[F("ston1")], [F("ston1"), F("pros1")], [F("andr1"), Lt("ston2")], [Lt("kid1")], [Lt("kid1"), Lt("img1")],
+    [Lt("kid1"), Lt("img1"), Lt("pen1"), Lt("tes1")], [P("void1", 1)], [P("void1", 2)], [P("void1", 2), Lt("kid1")], [P("void1", 2), F("pros1")],
+    [F("ston1"), Lt("kid1"), Lt("img1")]];
+  const other = [{ k: "catchup", catchup: "pros1" }, { k: "buffer", catchup: "pros1" }, { k: "buffer" }, { k: "second", g: ["void", "peds"] },
+    { k: "weak", n: 1, g: ["stones"] }, { k: "weak", n: 2, g: ["void", "peds"] }, { k: "mock", n: 1 }, { k: "allknow" }, { k: "misslog" },
+    { k: "final" }, { k: "rest" }, { k: "off" }, { k: "exam" }];
+  let n = 0, worst = -999;
+  [30, 45, 60, 75, 90, 120, 135, 180, 240, 360].forEach((M) => [2, 3, 4].forEach((pace) => [{ recentMisses: 4 }, { anyMisses: false }, {}].forEach((ctx) => {
+    const cap = I.iseCap(M);
+    shapes.filter((s) => s.length === 1 || s.reduce((a, x) => a + unit(x), 0) <= cap + 1e-9).map((it) => ({ k: "block", it })).concat(other).forEach((e) => {
+      const d = I.iseDayPlan(e, M, pace, ctx), sum = stepSum(d), tag = e.k + JSON.stringify(e.it || "") + " M" + M + " p" + pace + " " + JSON.stringify(ctx);
+      n++; worst = Math.max(worst, sum - M);
+      assert.ok(sum <= M + 5, tag + ": steps " + sum);
+      assert.ok(d.q === 0 || (d.q >= 5 && d.q <= 75 && d.q % 5 === 0), tag + ": q " + d.q);
+      if (d.q === 0 && ["block", "catchup", "buffer", "second", "weak", "allknow", "misslog", "final"].indexOf(e.k) >= 0) {
+        const per = ["second", "weak", "allknow", "misslog", "final"].indexOf(e.k) >= 0 ? Math.max(2, pace - 1) : pace;
+        assert.ok(sum + 5 * per > M + 5, tag + ": 0 questions although 5 fit");
+      }
+    });
+  })));
+  // a catch-up on a day under 90 min is light (Know-cold + Qs), never a whole block
+  const ise = setup(C({ minsWk: 60, minsWe: 240 }), "2026-10-12");
+  const st = I.iseStatus(ise, "2026-10-18"), res = I.iseResolve(ise, "2026-10-19", st, "2026-10-18");
+  assert.equal(res.k, "catchup"); assert.equal(res.M, 60);
+  assert.deepEqual(res.items, [{ b: "void1", lvl: "light", part: 0 }]);
+  assert.deepEqual(res.loopTopics, []);
+  assert.ok(stepSum(res) <= 65, "catch-up loop " + stepSum(res));
+  // the pinned spec values still hold (r5 may run up to 5 over)
+  assert.equal(I.iseDayPlan({ k: "block", it: [F("ston1")] }, 240, 3).q, 50);
+  assert.equal(stepSum(I.iseDayPlan({ k: "block", it: [F("ston1")] }, 240, 3)), 245);
+  const short = I.iseDayPlan({ k: "block", it: [P("void1", 1)] }, 30, 3);
+  assert.equal(short.q, 0); assert.equal(stepSum(short), 32);
+  return n + " day plans, worst " + (worst >= 0 ? "+" : "") + worst + " min vs M";
+});
+
+test("31 c-4 iseMerge: past entries follow the winning log, recency = max(builtTs, latest log ts), unticks survive, pure", () => {
+  const day = (d) => I.iseDate(d).getTime() + 12 * 3600e3;
+  let A = freeze(I.iseSetup(blank(), C(), {}, "2026-11-02", null, day("2026-11-02")));
+  assert.equal(A.builtTs, day("2026-11-02"));
+  for (let d = "2026-11-02"; d <= "2026-11-04"; d = I.iseAdd(d, 1)) A = logDay(A, d, d, 40, { ts: day(d) });
+  let B = I.iseMerge(blank(), JSON.parse(JSON.stringify(A)));
+  B = freeze(I.iseReshuffle(B, "2026-11-05", { minsWk: 150 }, day("2026-11-05") - 6 * 3600e3));
+  assert.equal(B.builtTs, day("2026-11-05") - 6 * 3600e3);
+  for (let d = "2026-11-05"; d <= "2026-11-10"; d = I.iseAdd(d, 1)) A = logDay(A, d, d, 40, { ts: day(d) });
+  const aJson = JSON.stringify(A), bJson = JSON.stringify(B);
+  const M = I.iseMerge(A, JSON.parse(bJson));
+  assert.equal(JSON.stringify(A), aJson, "input untouched");
+  assert.equal(M.cfg.minsWk, 120, "the Boox logged after the phone's rebuild, so it is the newer side");
+  assert.equal(M.builtTs, A.builtTs);
+  const st = I.iseStatus(M, "2026-11-11");
+  assert.equal(st.state, "on"); assert.deepEqual(st.behind, []);
+  ["2026-11-06", "2026-11-08"].forEach((d) => {
+    assert.deepEqual(I.iseResolve(M, d, st, "2026-11-11").items.map((x) => x.b), M.log[d].b, d + " shows what was studied");
+  });
+  assert.deepEqual(I.iseMerge(JSON.parse(bJson), A).plan, M.plan, "order-independent");
+  // a plan freshly built elsewhere keeps this copy's history
+  const fresh = freeze(I.iseSetup(blank(), C(), {}, "2026-11-11", null, day("2026-11-11")));
+  const M2 = I.iseMerge(A, fresh);
+  assert.equal(M2.built, "2026-11-11");
+  assert.equal(M2.plan[0].d, "2026-11-02");
+  assert.equal(I.iseResolve(M2, "2026-11-03", null, "2026-11-11").k, "block");
+  assert.ok(I.iseStatus(M2, "2026-11-11").qPlanned > 0);
+  // an untick saved later on one side is not brought back by the other side's older tick
+  const tickedDay = Object.keys(A.done).find((b) => A.done[b] === "2026-11-04");
+  const A2 = freeze(I.iseApplyLog(A, "2026-11-04", Object.assign({}, A.log["2026-11-04"], { ts: day("2026-11-12") }), { [tickedDay]: false }));
+  assert.equal(A2.done[tickedDay], undefined);
+  assert.equal(I.iseMerge(A2, A).done[tickedDay], undefined);
+  assert.equal(I.iseMerge(A, A2).done[tickedDay], undefined);
+  // builtTs beats an older log; carried through iseNorm
+  assert.equal(I.iseNorm(JSON.parse(JSON.stringify(B))).builtTs, B.builtTs);
+  return "merged state on, " + Object.keys(M.log).length + " logged days kept with their own plan entries";
+});
+
+test("32 c-5 own-key checks: prototype keys never pass iseNorm and nothing throws", () => {
+  assert.equal(Object.getPrototypeOf(I.ISE_BY_ID), null);
+  assert.equal(I.ISE_BY_ID.constructor, undefined);
+  assert.equal(I.iseHas(I.ISE_GROUPS, "toString"), false); assert.equal(I.iseHas(I.ISE_GROUPS, "void"), true);
+  assert.equal(I.iseTier("constructor"), "LOW");
+  const raw = JSON.parse('{"kind":"uroISE","cfg":{"exam":"2026-11-21","boost":{"__proto__":1,"constructor":1,"kid":1}},"built":"2026-11-02",' +
+    '"plan":[{"d":"2026-11-03","k":"block","it":[{"b":"constructor"},{"b":"__proto__"},{"b":"toString"},{"b":"ston1"}]},' +
+    '{"d":"2026-11-04","k":"block","it":[{"b":"valueOf"}]},{"d":"2026-11-05","k":"second","g":["toString","void"]}],' +
+    '"cut":["valueOf","pen1"],"done":{"constructor":"pre","__proto__":"pre","pros1":"pre"},' +
+    '"log":{"2026-11-01":{"q":20,"pct":50,"g":"toString","b":["toString","void1"],"gs":["constructor","peds"],"t":20}},' +
+    '"misses":[{"id":"m","d":"2026-11-01","g":"constructor","t":"x"}]}');
+  const v = I.iseNorm(raw);
+  assert.deepEqual(v.plan, [{ d: "2026-11-03", k: "block", it: [{ b: "ston1", lvl: "full", part: 0 }] }, { d: "2026-11-05", k: "second", g: ["void"] }]);
+  assert.deepEqual(v.cfg.boost, { kid: 1 });
+  assert.deepEqual(v.cut, ["pen1"]);
+  assert.deepEqual(Object.keys(v.done), ["pros1"]);
+  assert.deepEqual(v.log["2026-11-01"].b, ["void1"]); assert.equal(v.log["2026-11-01"].g, null); assert.deepEqual(v.log["2026-11-01"].gs, ["peds"]);
+  assert.equal(v.misses[0].g, "mixed");
+  ["2026-11-01", "2026-11-03", "2026-11-05"].forEach((d) => { I.iseTodaySummary(v, d); I.iseStatus(v, d); I.iseResolve(v, d, null, d); I.iseProgress(v, d); });
+  const merged = I.iseMerge(blank(), raw);
+  assert.ok(merged.plan.every((e) => (e.it || []).every((x) => I.iseHas(I.ISE_BY_ID, x.b))));
+  I.iseTodaySummary(merged, "2026-11-03");
+  assert.deepEqual(I.iseGroupStats({ "2026-11-01": { q: 20, pct: 50, g: "constructor", t: 20 } }), {});
+});
+
+test("33 c-6 a final day whenever S >= 1, and it carries every cut block's Know-cold list", () => {
+  assert.deepEqual(I.buildIsePlan(C(), H0, "2026-11-19").plan.map((e) => e.k), ["final", "rest", "exam"]);
+  ["2026-11-17", "2026-11-18", "2026-11-19"].forEach((from) => {
+    const ise = setup(C(), from), fin = ise.plan.find((e) => e.k === "final");
+    assert.ok(fin, "final from " + from);
+    const know = I.iseResolve(ise, fin.d, null, from).know;
+    ise.cut.forEach((id) => I.ISE_BY_ID[id].know.forEach((k) => assert.ok(know.indexOf(k) >= 0, from + " " + id + " " + k)));
+  });
+  const fri = I.buildIsePlan(C({ off: [0, 1, 2, 3, 4, 6] }), H0, "2026-11-12");
+  assert.deepEqual(fri.plan.map((e) => e.k), ["final", "rest", "exam"], "one study day (Fri 11-13) is the final review");
+});
+
+test("34 c-7 an open day drops blocks already covered; nothing left -> catch-up / buffer", () => {
+  const base = setup(C(), "2026-11-02");
+  const plan = base.plan.map((e) => (e.d === "2026-11-07" ? { d: e.d, k: "block", it: [{ b: "ston1", lvl: "full", part: 0 }, { b: "tes1", lvl: "light", part: 0 }] } : e));
+  const ise = withFields(base, { plan, done: { ston1: "2026-11-04" } });
+  const r = I.iseResolve(ise, "2026-11-07", null, "2026-11-05");
+  assert.deepEqual(r.items, [{ b: "tes1", lvl: "light", part: 0 }]);
+  assert.ok(!r.steps.some((s) => s.t.indexOf("Stones 1") >= 0), "no Stones 1 step");
+  assert.equal(r.q, I.iseDayPlan({ k: "block", it: [{ b: "tes1", lvl: "light", part: 0 }] }, 180, 3, I.iseDayCtx(ise, "2026-11-07")).q);
+  assert.equal(r.q, 55, "180 min with one light item and no misses yet");
+  const both = withFields(ise, { done: { ston1: "2026-11-04", tes1: "2026-11-05" } });
+  const rb = I.iseResolve(both, "2026-11-07", null, "2026-11-05");
+  assert.equal(rb.k, "catchup", "all covered: the day becomes a catch-up for a behind block");
+  assert.deepEqual(rb.items.map((x) => x.b), [I.iseStatus(both, "2026-11-05").assign["2026-11-07"]]);
+  const allDone = withFields(both, { done: { void1: "pre", peds1: "pre", ston1: "2026-11-04", tes1: "2026-11-05" } });
+  assert.equal(I.iseResolve(allDone, "2026-11-07", null, "2026-11-05").k, "buffer", "nothing behind: a plain catch-up day");
+  const logged = withFields(ise, { log: { "2026-11-07": { q: 35, pct: 70, floor: false, t: 35, k: "block", b: ["ston1", "tes1"], g: "stones", ts: 1, rw: 0 } } });
+  assert.deepEqual(I.iseResolve(logged, "2026-11-07", null, "2026-11-08").items.map((x) => x.b), ["ston1", "tes1"], "history unchanged");
+});
+
+test("35 c-8 group stats split a day over its groups (full 1, light/part 0.5; gs evenly); gs survives iseNorm", () => {
+  const plan = [{ d: "2026-11-07", k: "block", it: [{ b: "andr1", lvl: "full", part: 0 }, { b: "ston2", lvl: "light", part: 0 }] }];
+  const log = { "2026-11-07": { q: 30, pct: 40, k: "block", b: ["andr1", "ston2"], g: "andro", t: 30 } };
+  const w = I.iseGroupStats(log, plan);
+  assert.ok(Math.abs(w.andro.q - 20) < 1e-9 && Math.abs(w.stones.q - 10) < 1e-9, JSON.stringify(w));
+  assert.ok(Math.abs(w.andro.r - 8) < 1e-9 && Math.abs(w.stones.r - 4) < 1e-9);
+  const even = I.iseGroupStats(log);
+  assert.ok(Math.abs(even.andro.q - 15) < 1e-9 && Math.abs(even.stones.q - 15) < 1e-9, "no plan: even split");
+  const sp = I.iseGroupStats({ "2026-11-09": { q: 40, pct: 50, k: "second", b: [], g: "void", gs: ["void", "peds"], t: 40 } });
+  assert.deepEqual(sp, { void: { q: 20, r: 10 }, peds: { q: 20, r: 10 } });
+  assert.deepEqual(I.iseGroupStats({ "2026-11-09": { q: 40, pct: 50, b: [], g: "void", t: 40 } }), { void: { q: 40, r: 20 } }, "falls back to g");
+  const ise = withFields(setup(C(), "2026-11-02"), { log: { "2026-11-09": { q: 40, pct: 50, floor: false, t: 40, k: "second", b: [], g: "void", gs: ["void", "peds"], ts: 1, rw: 0 } } });
+  assert.deepEqual(I.iseNorm(ise).log["2026-11-09"].gs, ["void", "peds"]);
+  const p = I.iseProgress(ise, "2026-11-10");
+  assert.equal(p.groups.find((g) => g.g === "peds").q, 20);
+});
+
+test("36 c-9 a block is not started right before a mock when a whole item fits", () => {
+  const cfg = C({ minsWk: 30, minsWe: 90, off: [1, 3] });
+  const r = I.buildIsePlan(cfg, H0, "2026-10-03");
+  assert.equal(straddles(r.plan), 0, "no split pair around the mocks");
+  const seen = placedOnce(r.plan, r.cut);
+  I.ISE_BLOCKS.forEach((b) => assert.equal(seen[b.id], 1, b.id));
+  return "30/90, Mon+Wed off, from 10-03: split pairs across a mock = 0 (was 1)";
+});
+
+test("37 c-10 coverage can be undone; a new sprint starts clean and keeps settings and misses", () => {
+  const ise = setup(C(), "2026-11-02", { void1: true, peds1: true });
+  assert.deepEqual(ise.done, { void1: "pre", peds1: "pre" });
+  const re = freeze(I.iseSetup(ise, C(), {}, "2026-11-02", { void1: true }));
+  assert.deepEqual(re.done, { peds1: "pre" });
+  assert.ok(re.plan.some((e) => (e.it || []).some((x) => x.b === "void1")), "void1 planned again");
+  const un = I.iseUncover(withFields(ise, { done: { void1: "pre", ston1: "2026-11-04" } }), "ston1");
+  assert.deepEqual(un.done, { void1: "pre" });
+  const old = withFields(ise, { cfg: C({ minsWk: 90, off: [3], skip: ["2026-11-10"], boost: { kid: 1 } }), misses: [{ id: "m", d: "2026-11-03", g: "void", t: "keep me" }],
+    log: { "2026-11-03": { q: 20, pct: 60, floor: false, t: 20, k: "block", b: [], g: "void", ts: 1, rw: 0 } }, shuffles: ["2026-11-05"] });
+  const ns = I.iseNewSprint(old, "2026-12-01");
+  assert.deepEqual(ns, { kind: "uroISE", v: 1, cfg: null, prefs: { minsWk: 90, minsWe: 180, off: [3], pace: 3, qbank: "SASP", boost: { kid: 1 } },
+    built: null, builtTs: 0, since: "2026-12-01", plan: [], cut: [], light: [], done: {}, log: {}, misses: old.misses, shuffles: [] });
+  assert.deepEqual(I.iseNorm(JSON.parse(JSON.stringify(ns))), ns, "prefs survive iseNorm");
+  assert.deepEqual(I.iseNewSprint(ns, "2026-12-02").prefs, ns.prefs, "a second new sprint keeps prefs");
+  assert.deepEqual(I.iseMerge(ns, blank()).prefs, ns.prefs);
+  const next = I.iseSetup(ns, Object.assign({}, ns.prefs, { exam: "2027-11-20" }), {}, "2026-12-01");
+  assert.equal(I.iseStatus(next, "2026-12-01").state, "on");
+  assert.deepEqual(next.cut, []);
+  assert.ok(next.plan.filter((e) => e.k === "block").length >= 20, "next year's plan has content again");
+});
+
+test("38 c-17 iseNowYmd is a local date with a 4 am day start", () => {
+  const a = I.iseYmd(new Date(Date.now() - 4 * 3600e3)), v = I.iseNowYmd(), b = I.iseYmd(new Date(Date.now() - 4 * 3600e3));
+  assert.ok(I.iseValidYmd(v)); assert.ok(v === a || v === b);
+  const late = new Date(2026, 10, 3, 0, 30), early = new Date(late.getTime() - 4 * 3600e3);
+  assert.equal(I.iseYmd(early), "2026-11-02", "00:30 on 11-03 still counts as 11-02");
+});
+
+test("39 c-23 miss window bridges gaps; no misses yet -> R 0 and the minutes go to questions", () => {
+  const ms = [];
+  for (let i = 0; i < 8; i++) ms.push({ id: "a_" + i, d: "2026-11-02", g: "void", t: "rule " + i });
+  const w5 = I.iseMissWindow(ms, "2026-11-05");                 // Tue skipped, Wed off, Thu opens the app
+  assert.equal(w5.from, "2026-11-02"); assert.equal(w5.list.length, 8);
+  assert.equal(I.iseMissWindow(ms, "2026-11-02").from, null, "misses added today: no earlier date");
+  assert.equal(I.iseMissWindow(ms, "2026-11-02").list.length, 8, "d itself is in the list");
+  const more = ms.concat([{ id: "b", d: "2026-11-06", g: "void", t: "x" }, { id: "c", d: "2026-11-09", g: "void", t: "y" }]);
+  assert.equal(I.iseMissWindow(more, "2026-11-10").from, "2026-11-06");
+  assert.equal(I.iseMissWindow(more, "2026-11-10").list.length, 2);
+  const ise = withFields(setup(C({ off: [3] }), "2026-11-02"), { misses: ms });
+  const r = I.iseResolve(ise, "2026-11-05", null, "2026-11-05");
+  assert.equal(r.steps[0].t, "Re-read misses since Mon 11/2 (8)"); assert.equal(r.steps[0].m, r.R); assert.ok(r.R > 0);
+  assert.deepEqual(I.iseDayCtx(ise, "2026-11-05"), { qbank: "SASP", recentMisses: 8, missFrom: "2026-11-02", anyMisses: true });
+  const day1 = I.iseResolve(withFields(ise, { misses: [] }), "2026-11-02", null, "2026-11-02");
+  assert.equal(day1.R, 0);
+  assert.deepEqual(day1.steps[0], { t: "No misses yet: put these minutes into questions", m: null });
+  assert.equal(I.iseAnyMisses(ms, "2026-11-02"), false); assert.equal(I.iseAnyMisses(ms, "2026-11-03"), true);
+  const fl = I.iseFloorSteps(20, 0, "SASP", 3, 0, { anyMisses: false });
+  assert.ok(!fl.some((s) => s.t.indexOf("misses") >= 0 && s.t.indexOf("Log") < 0), "floor day has no miss step without misses");
+  assert.equal(I.iseFloorSteps(20, 10, "SASP", 3, 8, { anyMisses: true, missFrom: "2026-11-02" })[0].t, "Re-read misses since Mon 11/2 (8)");
+});
+
+test("40 c-24 what-if labels give absolute numbers", () => {
+  const ise = setup(C(), "2026-11-05");
+  const w = I.iseWhatIfs(ise, "2026-11-09");
+  w.forEach((x) => assert.ok(/^.+ → \d+ cut, \d+ light( · .+)?$/.test(x.label) && x.label.indexOf("instead of") < 0, x.label));
+  w.forEach((x) => assert.ok(x.label.indexOf(x.cutN + " cut, " + x.lightN + " light") > 0));
+  return w.map((x) => x.label).join(" | ");
+});
+
+test("41 c-26/c-27/c-29/c-30/c-33 labels, paste, loop topics, status fields, build on a day off", () => {
+  assert.equal(I.ISE_LABEL["Kidney, Adrenal, Ureter"], "Kidney, Adrenal, Ureter: Anatomy and Embryology");
+  assert.equal(I.ISE_LABEL["Prostate and Seminal Vesicle"], "Prostate and Seminal Vesicle: Anatomy and Embryology");
+  assert.equal(I.ISE_LABEL["Testis, Epididymis, Vas Deferens"], "Testis, Epididymis, Vas Deferens: Anatomy and Embryology");
+  assert.equal(I.ISE_LABEL["Genital System and Urethra"], "Genital System and Urethra: Anatomy and Embryology");
+  // c-27
+  assert.deepEqual(I.iseParseMisses("From today:\n- Pentosan: maculopathy\n- IC/BPS: no long-term antibiotics", "void", "2026-11-03", "p").map((m) => m.t),
+    ["From today:\n- Pentosan: maculopathy\n- IC/BPS: no long-term antibiotics"]);
+  assert.deepEqual(I.iseParseMisses("- SNM needs a test phase first", "void", "2026-11-03", "p").map((m) => m.t), ["SNM needs a test phase first"]);
+  assert.deepEqual(I.iseParseMisses("- a\n- b\n- c\n- d", "void", "2026-11-03", "p").map((m) => m.id + "=" + m.t), ["p_0=a", "p_1=b", "p_2=c", "p_3=d"]);
+  // c-29: loop topics (part 2 uses the second half), READ by group
+  const sp = setup(C({ minsWk: 60, minsWe: 60 }), "2026-11-02");
+  const v1 = I.ISE_BY_ID.void1.topics;
+  assert.deepEqual(I.iseResolve(sp, "2026-11-02", null, "2026-11-02").loopTopics, [v1[0]]);
+  assert.deepEqual(I.iseResolve(sp, "2026-11-03", null, "2026-11-02").loopTopics, [v1[Math.ceil(v1.length / 2)]]);
+  const dflt = setup(C(), "2026-11-02");
+  const sat = I.iseResolve(dflt, "2026-11-07", null, "2026-11-02");
+  assert.deepEqual(sat.loopTopics, ["Priapism"]);
+  assert.deepEqual(sat.readG.map((x) => x.g + ":" + x.label), ["andro:Andrology", "stones:Stones"]);
+  assert.deepEqual(I.iseResolve(dflt, "2026-11-13", null, "2026-11-02").loopTopics, [], "an all-light day has no tutor step");
+  // c-30
+  const lg = withFields(setup(C({ minsWk: 30, minsWe: 30 }), "2026-11-02"), {
+    log: { "2026-11-02": { q: 25, pct: 70, floor: false, t: 10, k: "block", b: [], g: "void", ts: 1, rw: 0 } } });
+  const st = I.iseStatus(lg, "2026-11-04");
+  assert.equal(st.qDone, 25); assert.equal(st.qDoneCapped, 10);
+  assert.equal(st.hasBuffers, lg.plan.some((e) => e.k === "buffer"));
+  assert.equal(I.iseStatus(setup(C(), "2026-11-02"), "2026-11-04").hasBuffers, false, "the default 19-day plan has no catch-up days");
+  assert.equal(I.iseStatus(setup(C({ minsWk: 135, minsWe: 240 }), "2026-10-20"), "2026-10-21").hasBuffers, true);
+  // c-33: built on a day off -> today is Off (Study anyway works), not none
+  const offMon = setup(C({ off: [1] }), "2026-11-02");
+  assert.equal(offMon.plan[0].d, "2026-11-03"); assert.equal(I.iseStart(offMon), "2026-11-02");
+  assert.equal(I.iseResolve(offMon, "2026-11-02", null, "2026-11-02").k, "off");
+  assert.equal(I.iseTodaySummary(offMon, "2026-11-02").hub, "ISE: off day");
+  const satWe0 = setup(C({ minsWe: 0 }), "2026-11-07");
+  assert.equal(I.iseResolve(satWe0, "2026-11-07", null, "2026-11-07").k, "off");
+  assert.equal(I.iseResolve(satWe0, "2026-11-06", null, "2026-11-07").k, "none", "before the build day stays none");
+  const extra = withFields(offMon, { log: { "2026-11-02": { q: 20, pct: 70, floor: false, t: 20, k: "extra", b: ["void1"], g: "void", ts: 1, rw: 0 } } });
+  assert.equal(I.iseTodaySummary(extra, "2026-11-02").hub, "ISE: extra Voiding 1 · done today ✓");
+});
+
+test("42 c-32 no pin while anything is behind: every what-if puts the same block on today", () => {
+  const fx = setup(C(), "2026-11-05");
+  const plus30 = I.iseReshuffle(fx, "2026-11-09", { minsWk: 150 });
+  assert.equal(ent(plus30.plan, "2026-11-09").it[0].b, "void1");
+  const firstToday = (x) => ent(x.plan, "2026-11-09").it[0].b;
+  assert.equal(firstToday(I.iseReshuffle(fx, "2026-11-09")), "void1");
+  I.iseWhatIfs(fx, "2026-11-09").forEach((w) => assert.equal(firstToday(w.next), "void1", w.label));
+});
+
+test("43 reshuffle on or after the exam keeps the plan (and the exam entry); a later exam date re-plans", () => {
+  const fx = setup(C(), "2026-11-02");
+  assert.equal(I.iseReshuffle(fx, "2026-11-21"), fx, "exam day: unchanged");
+  assert.equal(I.iseReshuffle(fx, "2026-11-25"), fx, "after the exam: unchanged");
+  assert.equal(I.iseSetSkip(fx, "2026-11-22", true, "2026-11-21").next.plan.slice(-1)[0].k, "exam");
+  const later = I.iseReshuffle(fx, "2026-11-25", { exam: "2027-11-20" });
+  assert.notEqual(later, fx); assert.equal(later.plan.slice(-1)[0].d, "2027-11-20");
+});
+
+test("44 new sprint: merging a backup from before it keeps only the old misses", () => {
+  const old = withFields(setup(C(), "2026-11-02"), {
+    done: { void1: "2026-11-02", pros1: "pre" },
+    log: { "2026-11-02": { q: 25, pct: 70, floor: false, t: 25, k: "block", b: ["void1"], g: "void", ts: 5e12, rw: 1 } },
+    misses: [{ id: "m1", d: "2026-11-02", g: "void", t: "old rule" }] });
+  const fresh = I.iseNewSprint(old, "2026-11-25");
+  assert.equal(fresh.since, "2026-11-25"); assert.equal(I.iseNorm(fresh).since, "2026-11-25");
+  const fresh2 = I.iseSetup(fresh, Object.assign({}, C(), { exam: "2027-11-20" }), {}, "2026-11-26", null, 1);
+  [I.iseMerge(fresh2, old), I.iseMerge(old, fresh2), I.iseMerge(fresh, old)].forEach((m, i) => {
+    assert.deepEqual(Object.keys(m.done), [], "case " + i + ": no old covered blocks");
+    assert.deepEqual(Object.keys(m.log), [], "case " + i + ": no old logs");
+    assert.ok(m.plan.every((e) => e.d >= "2026-11-25"), "case " + i + ": no old plan entries");
+    assert.equal(m.since, "2026-11-25");
+    assert.deepEqual(m.misses.map((x) => x.t), ["old rule"], "case " + i + ": misses kept");
+  });
+  assert.equal(I.iseMerge(fresh2, old).cfg.exam, "2027-11-20");
+  assert.equal(I.iseMerge(old, fresh2).cfg.exam, "2027-11-20");
 });
 
 console.log((failed ? "FAILED " : "OK ") + passed + " passed, " + failed + " failed");

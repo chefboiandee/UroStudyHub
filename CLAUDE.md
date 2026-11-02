@@ -23,6 +23,8 @@ inside another workspace; nothing here depends on that one any more.)
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
+  In-Service sprint: `node tools/ise-plan.test.mjs` (pure Node, scheduler) and `node tools/ise-plan.drive.mjs`
+  (headless E2E; set `CDN_DIR` to a node_modules with react/react-dom 18.2.0, @babel/standalone 7.23.9, katex 0.16.9 when offline).
 
 ## Run and verify
 

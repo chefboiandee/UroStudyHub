@@ -1,7 +1,47 @@
 # Status — UroStudyHub
 
 **Updated:** 2026-11-02
-**Tool:** Claude Code (Opus 5.5)
+**Tool:** Claude Code
+
+## 2026-11-02 (later 10) — 🎯 In-Service Exam Sprint plan (Plans tab)
+
+Andrew asked for an in-service study plan in the Plans section, modelled on his "ISE Sprint Board" artifact:
+time per day, days to the exam, high-yield first, daily question and miss-review recommendations, and a
+catch-up / reshuffle when behind so the highest-yield material still lands before the exam.
+
+**Done:**
+- **Plans card** "🎯 In-Service Exam Sprint" opens its own view (`tView "ise"`); it never changes the active plan
+  or Core progress (`s.done/srs/conf/streak` untouched).
+- **Setup:** exam date (defaults to the third Saturday of November), weekday and weekend minutes, days off, minutes
+  per question, question-bank name, already-covered blocks (two-way), "weak in" chips, and a live preview
+  (study days, Qs per day, full/light/cut blocks, mock and review dates).
+- **Scheduler** (pure ES5, `// ISE-LOGIC-BEGIN…END` in its own `<script id="ise-logic">` so the Boox doesn't
+  Babel-compile it): 23 topic blocks in 14 groups, weighted by yield. Weights come from the ABU Qualifying Exam
+  outline because the AUA publishes no ISE blueprint; only Peds, Stones, Andrology, Neurogenic and Trauma are
+  published figures, the rest are estimates (footnoted in the view). Minutes become block capacity; when time is
+  short, low-yield blocks go light (Know-cold + Qs) or are cut (Know-cold on the final day) first. Taper: mocks,
+  weak-spot days, Know-cold / miss-log / final review, rest day, exam.
+- **Every day** has a daily loop sized to the day's minutes: miss review first, Core skim, a tutor step, N
+  questions at your pace, log. Today card has one-tap ▶ Start into the tutor (Deep Dive / Lecture / Drill;
+  `startPlanTopic` saves a live conversation first), READ lines, Know-cold lists (ported from the artifact).
+- **Log:** questions, % correct, floor day, covered ticks; first met target earns the usual SASP tokens.
+- **Catch-up:** catch-up days absorb small slips; when behind, a banner and a red Hub task offer "Reshuffle from
+  today" with a preview sheet (back in / light / cut / moved / taper changes) and up to 3 "add time" what-ifs.
+  "Can't study this day" re-plans around a date. Reshuffles keep logged history and the built taper, resume a
+  half-done split block at part 2, and never pin a block ahead of behind ones.
+- **Miss log:** rules with the why, Sprint Board bullet paste, recent / all / group filters, copy, "Drill these".
+- **Progress:** pace, Qs done vs due, streak, % by group (lowest first), mocks, last 14 days.
+- **Backup:** `URO:ISE:` share code / Load File (`kind: "uroISE"`), merging logs and misses; "Start a new sprint"
+  after the exam keeps misses and settings, and old backups can't bring last year's coverage back.
+- Sprint day starts at 4 am; Hub and Plans card roll over on wake. Share-code copy has an execCommand fallback.
+- **Tests:** `tools/ise-plan.test.mjs` (45 Node cases incl. a 7.6k-config property sweep; run in several TZs),
+  `tools/ise-plan.drive.mjs` (headless E2E; `CDN_DIR=<node_modules>` serves React/Babel/KaTeX locally).
+- Built with a design → implement → 5-lens review (2 skeptics per finding) → fix loop; 34 confirmed findings fixed.
+
+**Next steps:** Andrew to try it on the live site (and the Boox): build a plan, log a day, reshuffle, ▶ Start.
+**Open questions:** are the yield weights right for the ISE (Voiding 12, Peds 10, Stones 10, Prostate 9, …)?
+Should the existing tutor Ready-panel buttons move onto `startPlanTopic` (they send their opener via a 300 ms
+timeout)? Real cross-device sync is not built (share code only).
 
 ## 2026-11-02 (later 9) — 💲 Gemini 3.8 Flash price
 
