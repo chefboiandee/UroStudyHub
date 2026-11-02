@@ -3,6 +3,39 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 5) — 🧠 My hooks: your own mnemonics, saved and on Anki cards
+
+Andrew liked the idea of saving the hooks he builds with the tutor, for later sessions and Anki.
+**Done:**
+- When a hook is settled (built together, or his own), the tutor ends its reply with
+  `[[HOOK | topic | facts | hook]]`; the rule for this is in `MNEMONIC_RULE`.
+- The app (`parseHooks` / `saveHooks`):
+  - saves it to `s.myHooks`, deduped on topic + wording;
+  - adds a hook → facts Anki card tagged `My_Hook`;
+  - shows a hook card under the reply: ✓ Saved + Anki card (✕ removes both) / 💾 Save.
+- `renderMathText` hides the tag everywhere, including a half-written one mid-stream.
+- Saved hooks (newest 40) go back into later prompts:
+  - tutor and Quick Ask: reuse them in his words;
+  - the Anki generators: add "🧠 Your hook: …" to cards that test those facts.
+- List under 🧠 My hooks in the tutor's ✏️ panel, with ✕ to remove.
+- Bug fix: Anki "Generate Cards from Document" had `onClick={genAnkiBatch}`, which passed the
+  click event in as the document text. It threw "docText.trim is not a function" and was broken
+  on the live site.
+
+**Verified:** 13/13 in headless Chrome, with stubbed replies carrying a tag:
+- tag hidden, card shown, hook saved, Anki card made;
+- tagging the same hook again doesn't duplicate it;
+- the next tutor and Quick Ask requests carry the hook;
+- remove / re-save; the ✏️ list;
+- the document generator works again and carries the hooks.
+
+Unit checks of `parseHooks` / `stripHooks` (partial tags, pipes, quotes).
+
+**Next steps:** see whether the real models tag hooks reliably. If not, add a manual "save as hook"
+action.
+**Open questions:** `genAnki()` (topic → cards) has no button anywhere. Dead code, or a lost
+feature?
+
 ## 2026-11-02 (later 4) — 🧠 Tutor mnemonics: established ones, or built with you
 
 Andrew: AI-made mnemonics are often lame. For Birt-Hogg-Dubé it gave "B – Bullae, H – Hair
