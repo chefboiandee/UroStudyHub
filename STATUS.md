@@ -3,6 +3,36 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 2) — 💬 Quick Ask streams too
+
+Andrew: make Quick Ask stream like the tutor.
+**Done:**
+- Quick Ask replies now appear as they're written, with the same rules as the main tutor:
+  - ▍ cursor; "Thinking..." until the first words arrive.
+  - The reply's first line is followed up to the top of the box, then stays there; scrolling up
+    stops the follow.
+  - A dropped stream keeps the partial text + "⚠ Reply cut off".
+  - Reopening the panel lands on the start of the last reply.
+- 🗑, a new session, or loading a session drops and aborts the side reply in flight.
+- The ✏️ panel's "⚡ Show replies as they're written" switch covers both chats.
+- The tutor and Quick Ask now share the same code, defined next to `scrollPaneTo()`:
+  - `pinReplyTop()`: the scroll rule
+  - `streamBatcher()`: 120 ms repaint throttle
+  - `nextReply()` / `dropReply()`: request id + `AbortController`
+
+**Verified:** the streaming suite, now **27/27** at iPad and phone sizes, against the built page
+and a fake streaming server.
+- New Quick Ask checks, run on 2 questions in a row:
+  - text arrives in steps with the cursor
+  - the first line is pinned once the box is past following
+  - it finishes with the first line at the top
+- 🗑 mid-reply; reopening lands on the start of the last reply.
+- The tutor checks from the last entry still pass, and so does the iPad-keyboard Quick Ask check
+  (a provider that ignores streaming).
+
+**Next steps:** Andrew to try both chats on the iPad with a real provider.
+**Open questions:** none.
+
 ## 2026-11-02 (later) — 🧠 Tutor: live replies that stay at the top; Quick Ask ✕ you can hit
 
 Andrew:
