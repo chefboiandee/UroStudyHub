@@ -651,6 +651,7 @@ var MODEL_PRICES = {
   // reachable — so verify at ai.google.dev/pricing; the 💲 panel overrides any of these.
   "gemini-3.1-flash-lite": [0.25, 1.5], "gemini-3-flash": [0.5, 3],
   "gemini-3.1-pro": [2, 12], "gemini-3-pro": [2, 12],
+  "gemini-3.8-flash": [0.75, 3.75],  // introductory rate through 2026-12-31; see builtinPrice
 };
 function builtinPrice(model, inTok) {
   var id = String(model || "").toLowerCase().replace(/^[a-z0-9-]+\//, "");  // "anthropic/claude-…" → "claude-…"
@@ -658,6 +659,7 @@ function builtinPrice(model, inTok) {
   Object.keys(MODEL_PRICES).forEach(function(k) { if (id.indexOf(k) === 0 && (!best || k.length > best.length)) best = k; });
   if (!best) return null;
   if (best === "claude-haiku-5-5" && inTok > 100000) return [0.5, 2.5];  // Haiku 5.5's long-prompt tier
+  if (best === "gemini-3.8-flash" && Date.now() >= 1798761600000) return [1.5, 7.5];  // intro rate ends 2027-01-01 (UTC)
   if (inTok > 200000) {  // Gemini Pro's long-prompt tier
     if (best === "gemini-2.5-pro") return [2.5, 15];
     if (best === "gemini-3-pro" || best === "gemini-3.1-pro") return [4, 18];

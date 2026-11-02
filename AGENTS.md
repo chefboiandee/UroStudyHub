@@ -23,7 +23,9 @@ roughly **Chromium ≤92**. Everything must run on that engine:
 - Verify by building and loading the page (check the browser console for
   `Uncaught SyntaxError`), not by a syntax pass alone.
 - Deploying = merging to `main` (Pages serves it). Pushing the working
-  branch is pre-approved (2026-10-31); **merge to `main` only when Andrew
-  asks.** Never add remotes.
+  branch is pre-approved (2026-10-31). **Andrew tests only on the live Pages
+  site (no local copy), so once finished work is built and pushed, open the PR
+  and merge it to `main` yourself (standing instruction, 2026-11-02);** don't
+  merge unfinished work or side branches. Never add remotes.
 - End any non-trivial session with a `STATUS.md` breadcrumb
   (Done / Next steps / Open questions).

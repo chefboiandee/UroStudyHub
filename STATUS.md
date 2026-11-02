@@ -3,6 +3,17 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 9) — 💲 Gemini 3.8 Flash price
+
+Andrew uses Gemini 3.8 Flash (`gemini-3.8-flash`), which had no built-in price.
+
+**Done:** added it at $0.75/$3.75 per million tokens, the introductory rate through 2026-12-31; `builtinPrice` switches to $1.50/$7.50 from 2027-01-01 (UTC).
+The figures come from several third-party pricing sites that agree (OpenRouter lists the intro rate too), not from Google's page. Verify at ai.google.dev/pricing.
+
+**Verified:** Node check of `builtinPrice` for the plain, `models/`-prefixed and `-preview` ids, and with the clock set to 2027-01-01. No browser run (sandbox blocks the CDN).
+
+**Next steps:** Andrew to confirm a 3.8 Flash tutoring session shows a cost. If Google changes the date or the post-intro price, update the two numbers in `builtinPrice`.
+
 ## 2026-11-02 (later 8) — 💲 Gemini 3 prices in the cost meter
 
 Andrew: Gemini pricing wasn't showing in tutoring sessions.
