@@ -679,13 +679,35 @@ var MNEMONIC_RULE = "\n\n" + [
   "- When they reply, tighten THEIR version in a line or two: keep their words and image, fix only what's inaccurate or missing. Their hook beats a cleverer one of yours (e.g. 'hogs get bumps, and HOCTs sound like hogs' for Birt-Hogg-Dubé: fibrofolliculomas + hybrid oncocytic tumors).",
   "- When the learner offers a hook of their own, use it, in their words, from then on (later recaps and cheat sheets too). Never swap it for one of yours. Correct it only if it encodes something wrong.",
   "- Skipping is fine. If there's no established mnemonic and the learner doesn't want to build one, or the fact is better held by understanding (the mechanism, or a side-by-side with its look-alike), teach that instead and move on.",
+  "- SAVING: when a hook is settled with the learner (one you built together, or their own they want to keep), or they ask you to save one, put this on its own line at the end of your message, one line per hook: [[HOOK | topic | the facts it encodes, short | the hook in the learner's words]]. The app saves it to their hooks and their Anki deck and shows it as a card, so a short lead-in is enough. Tag each hook once. Don't tag established mnemonics unless the learner asks to save one, and never tag a hook you made up on your own.",
 ].join("\n");
+
+// ═══ MY HOOKS — the learner's own mnemonics ═══
+// The tutor writes [[HOOK | topic | facts | hook]] when a hook is settled (see MNEMONIC_RULE).
+// The app saves each one (s.myHooks) with a hook→facts Anki card, feeds them back into later
+// tutor / Quick Ask / Anki prompts, and renderMathText hides the tag in the text.
+function parseHooks(text) {
+  var re = /\[\[HOOK\s*\|([^\]]*)\]\]/g, out = [], m;
+  while ((m = re.exec(text || ""))) {
+    var parts = m[1].split("|").map(function(x) { return x.trim(); });
+    var hook = parts.slice(2).join(" | ").replace(/^["“'*]+|["”'*]+$/g, "").trim();
+    if (parts.length < 3 || !parts[0] || !hook) continue;
+    out.push({ topic: parts[0], facts: parts[1], hook: hook });
+  }
+  return out;
+}
+function stripHooks(text) {
+  // Also hides a tag that's still being written while a reply streams in.
+  return text.replace(/\[\[HOOK[^\]]*(\]\]|$)/g, "").replace(/\[\[?H?O?O?K?$/, "").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+}
+function hookKey(h) { return (h.topic + " " + h.hook).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 
 var MATH_FORMAT_RULE = "\n\nMATH & SYMBOLS: This app typesets LaTeX. Write any formula, equation, or ratio in LaTeX delimited with \\( \\) for inline math or \\[ \\] for display math, e.g. \\( FENa = \\frac{U_{Na} \\times P_{Cr}}{P_{Na} \\times U_{Cr}} \\times 100 \\). Never emit bare LaTeX commands outside those delimiters. Simple values in prose (doses, stages, percentages) stay plain text.";
 
 function renderMathText(text) {
   if (text == null) return text;
   var s = String(text);
+  if (s.indexOf("[[") !== -1) s = stripHooks(s);
   // Fast path: no KaTeX or nothing math-shaped in the message.
   if (!window.katex || (s.indexOf("\\(") === -1 && s.indexOf("\\[") === -1 && s.indexOf("$") === -1)) return s;
   var re = /\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
@@ -3201,6 +3223,74 @@ export default function UroStudyHub() {
     });
   }
 
+  // Save hooks the tutor tagged (dedupe by topic + wording), each with a hook→facts Anki card.
+  function saveHooks(list) {
+    if (!list || !list.length) return;
+    setS(function(p) {
+      var have = p.myHooks || [], seen = {}, add = [], cards = [];
+      have.forEach(function(h) { seen[hookKey(h)] = true; });
+      list.forEach(function(h, i) {
+        var k = hookKey(h);
+        if (seen[k]) return;
+        seen[k] = true;
+        var cardId = Date.now() + i + Math.random();
+        add.push({ id: cardId + 0.5, topic: h.topic, facts: h.facts, hook: h.hook, date: new Date().toISOString(), cardId: cardId });
+        cards.push({ id: cardId, type: "basic", front: h.topic + " — your hook: “" + h.hook + "”. What does it stand for?", back: h.facts, tags: ankiTags.concat(["My_Hook"]), topic: h.topic });
+      });
+      if (!add.length) return p;
+      return Object.assign({}, p, { myHooks: have.concat(add), ankiCards: (p.ankiCards || []).concat(cards) });
+    });
+  }
+
+  // Remove a saved hook and the Anki card made for it (if it's still in the list).
+  function removeHook(h) {
+    var k = hookKey(h);
+    setS(function(p) {
+      var gone = (p.myHooks || []).filter(function(x) { return hookKey(x) === k; });
+      var cardIds = {}; gone.forEach(function(x) { cardIds[x.cardId] = true; });
+      return Object.assign({}, p, {
+        myHooks: (p.myHooks || []).filter(function(x) { return hookKey(x) !== k; }),
+        ankiCards: (p.ankiCards || []).filter(function(c2) { return !cardIds[c2.id]; }),
+      });
+    });
+  }
+
+  function hookSaved(h) {
+    var k = hookKey(h);
+    return (s.myHooks || []).some(function(x) { return hookKey(x) === k; });
+  }
+
+  // Saved hooks for prompts (newest 40). Tutor/Quick Ask: reuse them. Anki: put them on the cards.
+  function myHooksPrompt() {
+    var hs = (s.myHooks || []).slice(-40);
+    if (!hs.length) return "";
+    return "\n\nLEARNER'S SAVED HOOKS (their own mnemonics: whenever these facts come up, use the hook in their words, and don't make a new one for the same facts; they're already saved, so don't tag them again):\n" +
+      hs.map(function(h) { return "- " + h.topic + ": " + h.facts + " → “" + h.hook + "”"; }).join("\n");
+  }
+  function myHooksAnkiNote() {
+    var hs = (s.myHooks || []).slice(-40);
+    if (!hs.length) return "";
+    return "\n\nTHE LEARNER'S OWN HOOKS (mnemonics they made). When a card tests a fact one of these covers, add '🧠 Your hook: <hook>' in their exact words: on the back of a basic card, or after the sentence of a cloze card (outside the {{c::}} braces). Never invent mnemonics.\n" +
+      hs.map(function(h) { return "- " + h.topic + ": " + h.facts + " → “" + h.hook + "”"; }).join("\n");
+  }
+
+  // The card a saved (or tagged) hook shows as, under the reply that settled it.
+  function hookCard(h, key, compact) {
+    var saved = hookSaved(h);
+    return (
+      <div key={key} data-hook style={{ marginTop: 8, padding: compact ? "7px 9px" : "9px 12px", background: "#a78bfa14", border: "1px solid #a78bfa55", borderRadius: 10, whiteSpace: "normal" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+          <span style={{ fontSize: compact ? 9 : 10, fontWeight: 800, color: "var(--a-vio)", flex: 1 }}>{"🧠 Your hook · " + h.topic}</span>
+          {saved
+            ? <button onClick={function() { removeHook(h); }} title="Remove from My hooks and its Anki card" style={{ background: "none", border: "1px solid var(--c-br)", borderRadius: 7, color: "var(--a-grn)", cursor: "pointer", fontSize: 9, padding: "3px 7px", minHeight: 24 }}>{"✓ Saved + Anki card · ✕"}</button>
+            : <button onClick={function() { saveHooks([h]); }} title="Save to My hooks and add an Anki card" style={{ background: "#a78bfa25", border: "1px solid #a78bfa66", borderRadius: 7, color: "var(--a-vio)", cursor: "pointer", fontSize: 9, fontWeight: 700, padding: "3px 8px", minHeight: 24 }}>{"💾 Save"}</button>}
+        </div>
+        <div style={{ fontSize: compact ? 11.5 : 13, fontWeight: 700, color: "var(--c-tx)", lineHeight: 1.45 }}>{"“" + h.hook + "”"}</div>
+        {h.facts && <div style={{ fontSize: compact ? 9.5 : 10.5, color: "var(--c-mut)", marginTop: 3, lineHeight: 1.45 }}>{h.facts}</div>}
+      </div>
+    );
+  }
+
   function addAnkiCards(cards) {
     setS(function(p) {
       return Object.assign({}, p, { ankiCards: (p.ankiCards || []).concat(cards) });
@@ -3886,7 +3976,7 @@ export default function UroStudyHub() {
     } else {
       sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
     }
-    sysContent += MATH_FORMAT_RULE + MNEMONIC_RULE;
+    sysContent += MATH_FORMAT_RULE + MNEMONIC_RULE + myHooksPrompt();
 
     // One reply at a time: a newer send (or Clear) drops and aborts this one.
     var reqId = nextReply(chatReq, chatAbort);
@@ -3901,6 +3991,7 @@ export default function UroStudyHub() {
       if (live) live.cancel();
       setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
       setChatLoad(false);
+      saveHooks(parseHooks(reply));
       // If AI response has a clear phase signal, use it (overrides optimistic advance)
       if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
     }, function(err) {
@@ -3998,7 +4089,7 @@ export default function UroStudyHub() {
     }
     var tail = sidekickTranscriptTail();
     if (tail) lines.push("", "LECTURE TRANSCRIPT (most recent part — what the learner is reading right now):", "", tail);
-    return lines.join("\n") + MNEMONIC_RULE;
+    return lines.join("\n") + MNEMONIC_RULE + myHooksPrompt();
   }
 
   function sendSide(text) {
@@ -4019,6 +4110,7 @@ export default function UroStudyHub() {
       if (live) live.cancel();
       setSideMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try again." }]));
       setSideLoad(false);
+      saveHooks(parseHooks(reply));
     }, function(err) {
       if (sideReq.current !== reqId) return;
       if (live) live.cancel();
@@ -4105,7 +4197,7 @@ export default function UroStudyHub() {
     setAnkiGen(true);
     setAnkiProgress("Generating " + ankiCount + " cards...");
     var tagList = ankiTags.slice();
-    var sysPr = ANKI_SYS_PROMPT + "\n\nGenerate exactly " + ankiCount + " cards.";
+    var sysPr = ANKI_SYS_PROMPT + myHooksAnkiNote() + "\n\nGenerate exactly " + ankiCount + " cards.";
     var userMsg = [{ role: "user", content: "Generate " + ankiCount + " board-review Anki cards about: " + ankiTopic }];
     callAI(sysPr, userMsg, { temperature: 0.5 }, function(text) {
       var clean = (text || "[]").replace(/```json?\n?/g, "").replace(/```/g, "").trim();
@@ -4164,7 +4256,7 @@ export default function UroStudyHub() {
         return;
       }
       setAnkiProgress("Processing section " + (idx + 1) + " of " + chunks.length + "... (" + allCards.length + " cards so far)");
-      var sysPr = ANKI_SYS_PROMPT + "\n\nGenerate 5-15 cards from the provided curriculum section.";
+      var sysPr = ANKI_SYS_PROMPT + myHooksAnkiNote() + "\n\nGenerate 5-15 cards from the provided curriculum section.";
       var userMsg = [{ role: "user", content: "Generate board-review Anki cards from this curriculum section:\n\n" + chunks[idx] }];
       callAI(sysPr, userMsg, { temperature: 0.4 }, function(text) {
         var clean = (text || "[]").replace(/```json?\n?/g, "").replace(/```/g, "").trim();
@@ -9331,7 +9423,7 @@ export default function UroStudyHub() {
             })}
             <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-mut)", fontSize: 10, flexShrink: 0, minHeight: 28 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
             <div style={{ flex: 1 }} />
-            <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-mut)", fontSize: 11, flexShrink: 0, minHeight: 28 }} title="Tutor settings: personal note, live replies">{"✏️"}</button>
+            <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-mut)", fontSize: 11, flexShrink: 0, minHeight: 28 }} title="Tutor settings: personal note, live replies, my hooks">{"✏️"}</button>
           </div>
           {/* Style preview panel — shows how each style would sound on a sample BPH question */}
           {s.showStylePreview && (
@@ -9360,6 +9452,24 @@ export default function UroStudyHub() {
             <div style={{ padding: "6px 12px 8px", borderBottom: "1px solid " + c.cd, background: c.cd + "40" }}>
               <div style={{ fontSize: 9, color: "var(--c-mut)", marginBottom: 4 }}>Personal note for the AI tutor — tell it about your background, learning style, what you struggle with, etc.</div>
               <textarea value={s.tutorCustomNote || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { tutorCustomNote: e.target.value }); }); }} placeholder={"e.g. \"I'm a PGY-3 who's strong on oncology but weak on infertility. I learn best with clinical scenarios. Don't go easy on me.\""} style={{ width: "100%", minHeight: 50, padding: 8, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: 10, resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
+              {(s.myHooks || []).length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 9, color: "var(--c-mut)", marginBottom: 4 }}>{"🧠 My hooks (" + s.myHooks.length + ") — the tutor reuses these, and each one has an Anki card"}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
+                    {s.myHooks.slice().reverse().map(function(h) {
+                      return (
+                        <div key={h.id} data-my-hook style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 7, padding: "5px 8px" }}>
+                          <div style={{ flex: 1, lineHeight: 1.45, color: "var(--c-tx)" }}>
+                            <b style={{ color: "var(--a-vio)" }}>{h.topic}</b>{": “" + h.hook + "”"}
+                            {h.facts && <div style={{ color: "#64748b" }}>{h.facts}</div>}
+                          </div>
+                          <button onClick={function() { removeHook(h); }} title="Remove this hook and its Anki card" style={{ background: "none", border: "1px solid var(--c-br)", borderRadius: 6, color: "#64748b", cursor: "pointer", fontSize: 11, minWidth: 28, minHeight: 26, padding: 0 }}>{"✕"}</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--c-mut)", cursor: "pointer", minHeight: 28 }} title="Tutor and Quick Ask replies appear word by word as the AI writes them. Turn off if live text makes an e-ink screen flicker.">
                   <input type="checkbox" checked={s.tutorStream !== false} onChange={function(e) { var on = e.target.checked; setS(function(p) { return Object.assign({}, p, { tutorStream: on }); }); }} style={{ width: 16, height: 16, margin: 0 }} />
@@ -9788,6 +9898,7 @@ export default function UroStudyHub() {
                   <div style={{ background: msg.role === "user" ? "linear-gradient(135deg," + c.a + "," + c.a2 + ")" : c.cd, borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "10px 14px", color: "var(--c-tx)", fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid var(--c-br)" : "none" }}>
                     {renderMathText(msg.content)}
                     {chatLoad && msg.role === "assistant" && i === chatMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}
+                    {msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && parseHooks(msg.content).map(function(h, hi) { return hookCard(h, hi, false); })}
                   </div>
                   {msg.role === "assistant" && (
                     <div style={{ position: "absolute", top: 4, right: -28, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -9866,7 +9977,7 @@ export default function UroStudyHub() {
                 {sideMsgs.map(function(m, i) {
                   return (
                     <div key={i} data-side-msg style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-                      <div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "var(--c-tx)", fontSize: sideBig ? 12.5 : 11.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}{sideLoad && m.role === "assistant" && i === sideMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}</div>
+                      <div style={{ background: m.role === "user" ? "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")" : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "11px 11px 2px 11px" : "11px 11px 11px 2px", padding: "7px 10px", color: "var(--c-tx)", fontSize: sideBig ? 12.5 : 11.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}{sideLoad && m.role === "assistant" && i === sideMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}{m.role === "assistant" && !(sideLoad && i === sideMsgs.length - 1) && parseHooks(m.content).map(function(h, hi) { return hookCard(h, hi, true); })}</div>
                     </div>
                   );
                 })}
@@ -9974,7 +10085,7 @@ export default function UroStudyHub() {
                         <pre style={{ fontSize: 9, color: "var(--c-mut)", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "monospace" }}>{ankiBatchDoc.substring(0, 800)}{ankiBatchDoc.length > 800 ? "\n\n... (" + ((ankiBatchDoc.length - 800) / 1000).toFixed(1) + "k more chars)" : ""}</pre>
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={genAnkiBatch} disabled={ankiGen} style={{ flex: 1, padding: 10, background: ankiGen ? "var(--c-br)" : "linear-gradient(135deg," + c.a + "," + c.a2 + ")", color: "#fff", border: "none", borderRadius: 8, cursor: ankiGen ? "default" : "pointer", fontWeight: 700, fontSize: 12 }}>
+                        <button onClick={function() { genAnkiBatch(); }} disabled={ankiGen} style={{ flex: 1, padding: 10, background: ankiGen ? "var(--c-br)" : "linear-gradient(135deg," + c.a + "," + c.a2 + ")", color: "#fff", border: "none", borderRadius: 8, cursor: ankiGen ? "default" : "pointer", fontWeight: 700, fontSize: 12 }}>
                           {ankiGen ? "Processing..." : "Generate Cards from Document"}
                         </button>
                         <button onClick={function() { setAnkiBatchDoc(""); setAnkiBatchName(""); }} style={{ padding: "10px 14px", background: "var(--c-br)", border: "none", borderRadius: 8, color: "var(--c-mut)", cursor: "pointer", fontSize: 11 }}>Clear</button>
