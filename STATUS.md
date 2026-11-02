@@ -1,7 +1,39 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-10-31
+**Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
+
+## 2026-11-02 — 💬 Tutor Quick Ask: readable on iPad
+
+Andrew: on iPad, from the 2nd Quick Ask question on, the side chat showed about one line of the
+answer and the typing row took up the rest; lots of scrolling.
+**Cause:** after every message, the side chat (and the main chat) scrolled with `scrollIntoView`
+on a marker at the end of the chat. That also scrolls every scrollable ancestor. With the iPad
+keyboard up the page can pan, so the page moved too: the panel's top and the start of the answer
+went off-screen, and the box sat at the *end* of the answer.
+**Done:**
+- `scrollPaneTo()` moves only the chat box itself, never the page. Both chats use it.
+- Quick Ask: when a reply lands, or the panel opens, the reply's **first line** goes to the top of
+  the box. While waiting, the box shows your question + "Thinking...".
+- Panel is a bit bigger: 400 px wide (was 340), `min(50%, 440px)` tall (was `min(46%, 380px)`).
+  Text is 11.5 px (was 11).
+- Its height is capped to the visible area (`visualViewport`) minus 24 px, so with the keyboard
+  up the whole panel fits above it.
+- New ⤢ / ⤡ button in the panel header: big mode, up to 720 px wide, from below the Style row
+  down to the tutor input, 12.5 px text. Remembered per device (`uroStudyHub_sideBig`).
+
+**Verified:** headless Chrome (Playwright), built page, fake AI replies. The iPad keyboard is
+emulated: the layout keeps its full height, but the window is cut to what's left above the
+keyboard. Cases: iPad landscape (keyboard / no keyboard / big mode), iPad portrait + keyboard,
+phone with and without keyboard.
+- **Before:** panel top 54 px off-screen; the start of answer 2 133 px above the top of the box.
+- **After:** the page doesn't move between Enter and the reply; the panel stays fully on screen;
+  answer 2 starts 8 px from the top of the box.
+- No console errors beyond the known Babel 500 KB note.
+
+**Next steps:** Andrew to retry on the iPad: 2nd and 3rd questions with the keyboard up, then
+the ⤢ big mode.
+**Open questions:** none.
 
 ## 2026-10-31 (later 2) — 🏥 Uro Rush: orders go in at the computer
 
