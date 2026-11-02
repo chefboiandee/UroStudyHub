@@ -1698,6 +1698,10 @@ export default function UroStudyHub() {
   var [activePack, setActivePack] = useState(function() {
     try { return localStorage.getItem("uroStudyHub_activePack") || ""; } catch(e) { return ""; }
   });
+  // In-Service Exam sprint plan: its own key, kept out of the progress blob (see IsePlanView)
+  var [ise, setIse] = useState(iseLoad);
+  var iseSaveErr = useRef(false);
+  var iseToday = iseYmd(new Date());
   var [caseLogForm, setCaseLogForm] = useState({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
   var [caseLogEdit, setCaseLogEdit] = useState(null);
   var [caseLogFilter, setCaseLogFilter] = useState("");
@@ -1859,6 +1863,10 @@ export default function UroStudyHub() {
   useEffect(function() {
     try { localStorage.setItem("uroStudyHub_activePack", activePack); } catch(e) {}
   }, [activePack]);
+  useEffect(function() {
+    try { localStorage.setItem("uroStudyHub_ise", JSON.stringify(ise)); iseSaveErr.current = false; }
+    catch(e) { iseSaveErr.current = true; }
+  }, [ise]);
 
   // ═══ UNIVERSAL SHARE SYSTEM ═══
   var [shareModal, setShareModal] = useState(null); // { type, title, data } or null
@@ -1906,6 +1914,10 @@ export default function UroStudyHub() {
     if (type === "PACK") {
       var packs = data.packs || [];
       return { title: "Card Packs", summary: packs.length + " pack" + (packs.length !== 1 ? "s" : "") + ": " + packs.map(function(p) { return p.name; }).slice(0, 3).join(", ") };
+    }
+    if (type === "ISE") {
+      var iv = iseNorm(data);
+      return { title: "In-Service plan", summary: Object.keys(iv.log).length + " days logged · " + iv.misses.length + " misses" + (iv.cfg && iv.cfg.exam ? " · exam " + iv.cfg.exam : "") };
     }
     return { title: type, summary: "Shared content" };
   }
@@ -2000,6 +2012,11 @@ export default function UroStudyHub() {
       if (data.currentHidden) setHiddenCards(data.currentHidden);
       if (data.activePack) setActivePack(data.activePack);
       setSaveFeedback("Imported " + (data.packs || []).length + " card pack(s)!");
+    } else if (type === "ISE") {
+      // In-Service plan: merge (logged days and misses combine; the newer plan wins)
+      if (!confirm("Merge this In-Service plan into yours? Logged days and misses are combined; the newer plan wins.")) return;
+      setIse(function(cur) { return iseMerge(cur, iseNorm(data)); });
+      setSaveFeedback("Imported In-Service plan");
     }
 
     setTimeout(function() { setSaveFeedback(""); }, 2000);
@@ -4356,6 +4373,45 @@ export default function UroStudyHub() {
   function exitSkills() {
     setSkillsCtx(null);
     try { sessionStorage.removeItem("uroStudyHub_skillsCtx"); } catch(e) {}
+  }
+
+  // Start a tutor session on a Core topic from a plan (In-Service sprint Start buttons).
+  // Saves whatever conversation is live first, then sends the opener from an effect so the
+  // first request is built from the new mode and messages (not a stale closure).
+  var [planKick, setPlanKick] = useState(null);
+  function startPlanTopic(topic, mode, extra) {
+    if (pendingResume) {
+      var ps = pendingResume;
+      setPendingResume(null);
+      saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
+      idbDel("activeSession").catch(function() {});
+    }
+    if (chatMsgs.some(function(m) { return m.role === "assistant"; })) {
+      saveLectureSession(lectureTopic, chatMsgs);
+      setSaveFeedback("Previous tutor session saved to 📚 Saved sessions");
+      setTimeout(function() { setSaveFeedback(""); }, 2500);
+    }
+    stopChatReply(); resetSidekick(); exitSkills(); setUpText("");
+    setLectureTopic(topic); setLecturePhase(0);
+    setLectureMode(mode === "lecture"); setMasteryMode(mode === "mastery");
+    setChatMsgs([{ role: "system", content: (mode === "mastery" ? "Starting mastery drill: " : mode === "lecture" ? "Starting structured lecture: " : "Starting Deep Dive: ") + topic }]);
+    setChatView("chat"); setPage("chat");
+    var open = mode === "mastery" ? "Mastery drill on: " + topic + ". Probe my edge of understanding first — don't teach yet."
+      : mode === "lecture" ? "Let's study: " + topic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."
+      : "Let's deep dive on: " + topic + ". Begin Phase 1 (Framework).";
+    setPlanKick({ text: open + (extra ? "\n\n" + extra : "") });
+  }
+  useEffect(function() {
+    if (!planKick) return;
+    var k = planKick;
+    setPlanKick(null);
+    sendChat(k.text);
+  }, [planKick]);
+  // Whether a Core topic is checked off (only meaningful while the AUA Core plan is active)
+  function iseCoreDone(name) {
+    if (activePlanId !== "aua") return false;
+    var f = AUA_BY_NAME[name];
+    return !!(f && s.done && s.done[f.key]);
   }
 
   var ANKI_SYS_PROMPT = [
@@ -7578,7 +7634,7 @@ export default function UroStudyHub() {
               <button onClick={function() { setImportModal(false); setImportText(""); setImportPreview(null); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 18 }}>{"×"}</button>
             </div>
 
-            <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 10 }}>Paste a share code from a colleague to import their attending prefs, site notes, or card packs.</div>
+            <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 10 }}>Paste a share code from a colleague to import their attending prefs, site notes, or card packs — or your own In-Service plan backup.</div>
 
             <textarea value={importText} onChange={function(e) {
               var val = e.target.value;
@@ -7588,7 +7644,7 @@ export default function UroStudyHub() {
               } else {
                 setImportPreview(null);
               }
-            }} placeholder={"Paste share code here...\n(starts with URO:ATT: or URO:SITE: or URO:PACK:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+            }} placeholder={"Paste share code here...\n(starts with URO:ATT:, URO:SITE:, URO:PACK: or URO:ISE:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
 
             {/* Preview */}
             {importPreview && (
@@ -7616,7 +7672,8 @@ export default function UroStudyHub() {
                       var data = JSON.parse(res.target.result);
                       // Auto-detect type from data shape
                       var type = null;
-                      if (data.packs && Array.isArray(data.packs)) type = "PACK";
+                      if (data && data.kind === "uroISE") type = "ISE";
+                      else if (data.packs && Array.isArray(data.packs)) type = "PACK";
                       else if (data.name && (data.notes || data.organized)) type = Object.keys(data).indexOf("organized") >= 0 ? "ATT1" : "SITE1";
                       else if (typeof data === "object" && Object.keys(data).length > 0) {
                         var firstVal = data[Object.keys(data)[0]];
@@ -8190,13 +8247,16 @@ export default function UroStudyHub() {
             var hours = new Date().getHours();
             var greeting = hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
             var tasks = [];
+            var iseSum = iseTodaySummary(ise, iseToday);
+            if (iseSum) tasks.push({ icon: "🎯", text: iseSum.hub, col: iseSum.state === "behind" ? "#ef4444" : c.a, action: function() { setPage("tracker"); setTView("ise"); } });
             if (dueData.overdue.length > 0) tasks.push({ icon: "🔴", text: dueData.overdue.length + " overdue topic" + (dueData.overdue.length > 1 ? "s" : "") + " need review", col: "#ef4444" });
             if (dueData.due.length > 0) tasks.push({ icon: "🟡", text: dueData.due.length + " topic" + (dueData.due.length > 1 ? "s" : "") + " due for review", col: "#fbbf24" });
             if (s.ankiEnabled !== false && !ankiDone) tasks.push({ icon: "📇", text: "Anki: " + (s.ankiReviews || 0) + "/" + (s.ankiReviewGoal || 50) + " reviews", col: "#fb923c" });
             if (next) tasks.push({ icon: "📚", text: "Next new topic: " + next.t, col: c.a });
             if (weakList.length > 0) tasks.push({ icon: "⚠️", text: "Weakest: " + weakList[0].cat + " (" + weakList[0].pct + "%)", col: "#f97316" });
             var schedStatus = getScheduleStatus();
-            if (schedStatus.status === "behind" || schedStatus.status === "far_behind") tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
+            // During an In-Service sprint the sprint has its own catch-up; skip the Core reorganize nag
+            if (!iseSum && (schedStatus.status === "behind" || schedStatus.status === "far_behind")) tasks.push({ icon: "📅", text: schedStatus.topicsBehind + " topics behind pace — tap to reorganize", col: "#f97316", action: function() { setPage("tracker"); setTView("schedule"); setShowReorg(true); } });
             return (
               <div style={{ background: "linear-gradient(135deg, " + c.cd + ", var(--c-bg))", borderRadius: 12, padding: 14, marginBottom: 12, border: "1px solid " + c.a + "22" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -8446,8 +8506,9 @@ export default function UroStudyHub() {
         <div style={{ padding: "0 0 80px" }}>
           <div style={{ display: "flex", borderBottom: "1px solid " + c.cd, padding: "0 2px", background: c.bg, position: "sticky", top: 0, zIndex: 10, overflowX: "auto" }}>
             {[{ id: "schedule", i: "📅", l: "Schedule" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, ENABLE_SURGILOG && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
+              var on = tView === v.id || (v.id === "plans" && tView === "ise");
               return (
-                <button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: 9, cursor: "pointer", color: tView === v.id ? c.a : "#64748b", borderBottom: tView === v.id ? "2px solid " + c.a : "2px solid transparent", fontWeight: tView === v.id ? 700 : 400, whiteSpace: "nowrap" }}>
+                <button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: 9, cursor: "pointer", color: on ? c.a : "#64748b", borderBottom: on ? "2px solid " + c.a : "2px solid transparent", fontWeight: on ? 700 : 400, whiteSpace: "nowrap" }}>
                   {v.i} {v.l}
                 </button>
               );
@@ -8466,6 +8527,22 @@ export default function UroStudyHub() {
                     {activePlan && activePlan.examDate && " · Exam: " + activePlan.examDate}
                   </div>
                 </div>
+
+                {/* In-Service Exam sprint (its own view; does not change the active plan) */}
+                {(function() {
+                  var iseSumCard = iseTodaySummary(ise, iseToday);
+                  var behindCard = iseSumCard && iseSumCard.state === "behind";
+                  return (
+                    <button data-ise="card" onClick={function() { setTView("ise"); }} style={{ width: "100%", textAlign: "left", background: c.cd, border: "2px solid " + (behindCard ? "#ef4444" : "var(--c-br2, var(--c-br))"), borderRadius: 10, padding: 12, marginBottom: 14, minHeight: 44, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: "var(--c-tx)" }}>
+                      <span style={{ fontSize: 22 }}>{"🎯"}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: c.a }}>{"In-Service Exam Sprint"}</span>
+                        <span style={{ display: "block", fontSize: 11, color: behindCard ? "#ef4444" : "var(--c-mut)", marginTop: 2, lineHeight: 1.4 }}>{iseSumCard ? iseSumCard.line : "Plan the weeks before the ISE: high-yield first, daily question targets, miss review, and catch-up when you fall behind."}</span>
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.a, whiteSpace: "nowrap" }}>{"Open ›"}</span>
+                    </button>
+                  );
+                })()}
 
                 {/* Create new plan button */}
                 <button onClick={function() { setShowPlanBuilder(true); setPlanBuilderStep("upload"); setPlanBuilderError(""); }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{"📋 Create New Study Plan from Syllabus"}</button>
@@ -8543,6 +8620,16 @@ export default function UroStudyHub() {
                   </div>
                 </div>
               </div>
+            )}
+            {/* In-Service Exam sprint view */}
+            {tView === "ise" && (
+              <IsePlanView c={c} ise={ise} setIse={setIse} today={iseToday} coreDone={iseCoreDone}
+                onStart={startPlanTopic}
+                onShare={function() { openShareModal("ISE", "In-Service plan", ise); }}
+                onImport={function() { setImportModal(true); setImportText(""); setImportPreview(null); }}
+                onReward={function(label) { earnTokens("sasp", label); }}
+                notify={function(m) { setSaveFeedback(m); setTimeout(function() { setSaveFeedback(""); }, 2500); }}
+                saveErr={iseSaveErr} onBack={function() { setTView("plans"); }} />
             )}
             {/* Schedule */}
             {tView === "schedule" && (
