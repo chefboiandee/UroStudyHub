@@ -3,6 +3,41 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 4) — 🧠 Tutor mnemonics: established ones, or built with you
+
+Andrew: AI-made mnemonics are often lame. For Birt-Hogg-Dubé it gave "B – Bullae, H – Hair
+follicle tumors, D – Distal nephron tumors" and "a 17-year-old with a pneumothorax at a
+skin-care clinic". He wants:
+- established mnemonics only;
+- or one built together, since his own ("hogs get bumps; HOCTs sound like hogs") sticks better
+  for him;
+- or skip it.
+
+**Done:**
+- New `MNEMONIC_RULE`, next to `MATH_FORMAT_RULE`, added to every tutor system prompt (deep dive,
+  lecture, mastery, OR skills) and to Quick Ask's. It says:
+  - offer only established mnemonics, and say they're standard; if unsure, treat it as not
+    established;
+  - never invent acronyms, puns or staged scenes (the BHD output is quoted as the anti-example);
+  - otherwise build one WITH the learner: name the facts, offer at most one seed, ask, wait, then
+    tighten *their* version;
+  - when the learner offers their own hook, use it in their words from then on, recaps and cheat
+    sheets included;
+  - skipping is fine; teach the mechanism or a look-alike comparison instead.
+- Lecture Phase 7 "Memory Anchors": was "build 3-5 mnemonics… funny, crude, rhyming". Now:
+  established ones where they exist, co-build one hook at a time (2-3 rounds max), or teach by
+  understanding. The phase description shown in the app matches.
+- "Engaging" style: dropped "crude mnemonics". Deep Dive's memorization line now points at the
+  rule.
+
+**Verified:** in the built page, the rule is in the request for both the tutor and Quick Ask (stubbed
+replies), and none of the old wording is left. Prompt-only change; no page errors. How the real
+models follow it can't be tested here.
+
+**Next steps:** Andrew to see how the next Memory Anchors phase or "give me a mnemonic" goes.
+**Open questions:** should the hooks Andrew builds be saved per topic and fed back into later
+sessions (and Anki cards)? Not built yet.
+
 ## 2026-11-02 (later 3) — 📐 Tutor: the tab bar can't cover the typing box
 
 Andrew (iPad): scrolled to the bottom, the bottom tab bar seems to grow and covers more of the

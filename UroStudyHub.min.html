@@ -555,10 +555,19 @@ var LECTURE_PHASES = [
 { id: "checkpoint1", name: "Checkpoint", icon: "⚡", desc: "5 rapid-fire recall questions on what we just covered. No peeking." },
 { id: "deep2", name: "Core Details II", icon: "💊", desc: "Second half — treatment algorithms, surgical techniques, complications, follow-up, guidelines." },
 { id: "pimp", name: "Pimp Round", icon: "🔥", desc: "Classic attending pimp questions. The stuff that separates you from the med students." },
-{ id: "mnemonics", name: "Memory Anchors", icon: "🧠", desc: "Mnemonics, memory palace hooks, visual associations. Funny, vulgar, whatever sticks." },
+{ id: "mnemonics", name: "Memory Anchors", icon: "🧠", desc: "Established mnemonics, or hooks you build with the tutor — whatever sticks for you." },
 { id: "boards", name: "Board-Style Qs", icon: "📋", desc: "5 realistic board-style MCQs with full explanations and why wrong answers are wrong." },
 { id: "summary", name: "One-Page Summary", icon: "📄", desc: "Everything compressed to one rapid-review page you could read the morning of the exam." },
 ];
+var MNEMONIC_RULE = "\n\n" + [
+"MNEMONICS — these rules override anything else in this prompt about making mnemonics:",
+"- Only offer an ESTABLISHED mnemonic: one that is widely taught (board-review books, common resident lore), and say it's a standard one. If you aren't confident it's standard, treat it as not established. Never present an invented one as if it were known.",
+"- Don't invent mnemonics on your own. Forced acronyms and backronyms (e.g. Birt-Hogg-Dubé as 'B – Bullae, H – Hair follicle tumors, D – Distal nephron tumors'), puns that need explaining, and staged scenes ('Think: a 17-year-old with a pneumothorax at a skin-care clinic') don't stick. They're noise.",
+"- When a fact is worth anchoring and there's no established mnemonic, build one WITH the learner. Name the 2-4 facts to hook together, offer at most ONE short seed (a sound-alike, an image, or a link to something they already know), and ask what it makes them think of. Then STOP and wait for their answer.",
+"- When they reply, tighten THEIR version in a line or two: keep their words and image, fix only what's inaccurate or missing. Their hook beats a cleverer one of yours (e.g. 'hogs get bumps, and HOCTs sound like hogs' for Birt-Hogg-Dubé: fibrofolliculomas + hybrid oncocytic tumors).",
+"- When the learner offers a hook of their own, use it, in their words, from then on (later recaps and cheat sheets too). Never swap it for one of yours. Correct it only if it encodes something wrong.",
+"- Skipping is fine. If there's no established mnemonic and the learner doesn't want to build one, or the fact is better held by understanding (the mechanism, or a side-by-side with its look-alike), teach that instead and move on.",
+].join("\n");
 var MATH_FORMAT_RULE = "\n\nMATH & SYMBOLS: This app typesets LaTeX. Write any formula, equation, or ratio in LaTeX delimited with \\( \\) for inline math or \\[ \\] for display math, e.g. \\( FENa = \\frac{U_{Na} \\times P_{Cr}}{P_{Na} \\times U_{Cr}} \\times 100 \\). Never emit bare LaTeX commands outside those delimiters. Simple values in prose (doses, stages, percentages) stay plain text.";
 function renderMathText(text) {
 if (text == null) return text;
@@ -613,7 +622,7 @@ var SYSTEM_PROMPT_LECTURE = [
 "",
 "Phase 6 🔥 PIMP ROUND: Classic attending pimp questions — anatomy, blood supply, nerve pathways, surgical landmarks, the detail stuff. Ask one at a time, wait for the answer, give feedback with clinical context for why it matters. 5-7 questions. Then: 'Type or tap NEXT for memory anchors.'",
 "",
-"Phase 7 🧠 MEMORY ANCHORS: Build 3-5 memorable mnemonics for the toughest facts from this topic. Be creative — funny, crude, rhyming, visual, whatever makes it stick. Explain each one. Then: 'Type or tap NEXT for board questions.'",
+"Phase 7 🧠 MEMORY ANCHORS: Pick the 3-5 toughest facts from this topic. Give the established mnemonic for any that have one (see MNEMONICS below — never invent one). For the hardest fact without one, build a hook WITH the learner: lay out the facts, offer one short seed at most, ask what sticks for them, and wait; then tighten their version. One fact at a time, at most 2-3 rounds — don't make it a chore. Where a fact is better held by understanding or a side-by-side with its look-alike, give that instead. Then: 'Type or tap NEXT for board questions.'",
 "",
 "Phase 8 📋 BOARD-STYLE QUESTIONS: 5 realistic ABCDE multiple-choice questions in board format. Present one at a time, wait for the answer. Explain why the right answer is right AND why each tempting wrong answer is wrong. Use 'next best step' and 'most likely diagnosis' formats. Then: 'Type or tap NEXT for the rapid review.'",
 "",
@@ -682,7 +691,7 @@ var SYSTEM_PROMPT_DEEPDIVE = [
 "EFFICIENCY:",
 "- The user has 30–60 minutes. Don't waste time on low-yield tangents, excessive caveats, or restating things they clearly already know.",
 "- If the user demonstrates solid understanding of a subtopic, acknowledge it and move on. Spend time where the gaps are.",
-"- If a subtopic is purely memorization with no underlying reasoning (specific gene names, rare eponymous classifications, arbitrary numeric thresholds), acknowledge it briefly, give a quick mnemonic if one exists, and move on.",
+"- If a subtopic is purely memorization with no underlying reasoning (specific gene names, rare eponymous classifications, arbitrary numeric thresholds), acknowledge it briefly, give the established mnemonic if one exists (or offer to build a hook together — see MNEMONICS), and move on.",
 "",
 "INTERACTION RULES:",
 "- When the user names a topic, begin Phase 1 immediately.",
@@ -745,9 +754,9 @@ var TUTOR_STYLES = {
 engaging: {
 label: "Engaging",
 icon: "🔥",
-desc: "Dynamic, case-driven, uses humor and mnemonics. Like your favorite attending on a good day.",
+desc: "Dynamic, case-driven, uses humor and vivid cases. Like your favorite attending on a good day.",
 preview: "Alright, picture a 65-year-old guy waking up four times a night to pee — classic BPH. The prostate stroma is loaded with alpha-1A receptors, so smooth muscle tone is the main villain. Slap on tamsulosin and he's sleeping through the night within a week. If his prostate is the size of a softball, add finasteride, but tell him it's a 6-month wait — slow burn, big payoff.",
-inject: "\n\nSTYLE: Be energetic and engaging. Use vivid clinical scenarios, memorable analogies, and don't be afraid of humor or crude mnemonics if they make things stick. Make it feel like a great attending teaching over coffee, not a textbook. Celebrate good answers briefly, call out mistakes directly but constructively."
+inject: "\n\nSTYLE: Be energetic and engaging. Use vivid clinical scenarios, memorable analogies, and don't be afraid of humor if it makes things stick (mnemonics still follow the MNEMONICS rules). Make it feel like a great attending teaching over coffee, not a textbook. Celebrate good answers briefly, call out mistakes directly but constructively."
 },
 clinical: {
 label: "Clinical",
@@ -3424,7 +3433,7 @@ sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject +
 } else {
 sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
 }
-sysContent += MATH_FORMAT_RULE;
+sysContent += MATH_FORMAT_RULE + MNEMONIC_RULE;
 var reqId = nextReply(chatReq, chatAbort);
 var ctrl = chatAbort.current;
 var live = s.tutorStream === false ? null : streamBatcher(function(t) {
@@ -3519,7 +3528,7 @@ lines.push("CURRENT LECTURE PHASE: " + LECTURE_PHASES[lecturePhase].name + " —
 }
 var tail = sidekickTranscriptTail();
 if (tail) lines.push("", "LECTURE TRANSCRIPT (most recent part — what the learner is reading right now):", "", tail);
-return lines.join("\n");
+return lines.join("\n") + MNEMONIC_RULE;
 }
 function sendSide(text) {
 if (!text || !text.trim() || sideLoad) return;
