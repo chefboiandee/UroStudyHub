@@ -491,6 +491,27 @@ function dropReply(reqRef, abortRef) {
 reqRef.current++;
 if (abortRef.current) { try { abortRef.current.abort(); } catch (e) {} abortRef.current = null; }
 }
+var CLAUDE_MODELS = [
+{ id: "claude-opus-5-5", label: "Claude Opus 5.5 — smartest · $4 / $20 per M tokens" },
+{ id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 — balanced · $2 / $10" },
+{ id: "claude-haiku-5-5", label: "Claude Haiku 5.5 — fastest, cheapest · $0.10 / $0.50" },
+{ id: "claude-fable-5-1", label: "Claude Fable 5.1 — most capable, priciest · $10 / $50" },
+];
+var CLAUDE_DEFAULT = CLAUDE_MODELS[0].id;
+var CLAUDE_LEGACY = {
+"claude-sonnet-4-20250514": "claude-sonnet-5-5", "claude-sonnet-4-5-20250514": "claude-sonnet-5-5",
+"claude-opus-4-6": "claude-opus-5-5", "claude-haiku-4-5-20251001": "claude-haiku-5-5",
+};
+function claudeFallbackOk(model) { return /^claude-(opus-5|sonnet-5-5|fable-5)/.test(model || ""); }
+function claudeMaxTokens(model, maxTok) { return /^claude-(opus|sonnet|haiku|fable|mythos)-[4-9]/.test(model || "") ? Math.max(maxTok, 16000) : maxTok; }
+function claudeText(data) {
+return ((data && data.content) || []).filter(function(b) { return b && b.type === "text"; }).map(function(b) { return b.text || ""; }).join("");
+}
+function claudeRefusal() {
+var e = new Error("Claude's safety filter declined this one. Try rephrasing it, or pick another model in Settings.");
+e.refusal = true;
+return e;
+}
 var MODEL_PRICES = {
 "claude-fable-5": [10, 50], "claude-mythos-5": [10, 50],
 "claude-opus-5-5": [4, 20], "claude-opus-5": [5, 25],
@@ -1486,7 +1507,7 @@ var [upText, setUpText] = useState("");
 var [lm, setLm] = useState(function() {
 var defaults = {
 ep: "http://localhost:1234", model: "", on: false, provider: "lmstudio",
-claudeKey: "", claudeModel: "claude-sonnet-4-20250514",
+claudeKey: "", claudeModel: CLAUDE_DEFAULT,
 geminiKey: "", geminiModel: "gemini-2.5-flash",
 openaiKey: "", openaiModel: "gpt-4o",
 openrouterKey: "", openrouterModel: OR_DEFAULT_MODEL,
@@ -1495,6 +1516,8 @@ try {
 var saved = localStorage.getItem("uroStudyHub_lmSettings");
 if (saved) {
 var parsed = JSON.parse(saved);
+if (CLAUDE_LEGACY[parsed.claudeModel]) parsed.claudeModel = CLAUDE_LEGACY[parsed.claudeModel];
+if (CLAUDE_LEGACY[parsed.model]) parsed.model = CLAUDE_LEGACY[parsed.model];
 return Object.assign({}, defaults, parsed, { on: false });
 }
 } catch (e) {  }
@@ -3445,21 +3468,19 @@ done(text);
 .catch(fail);
 }
 if (prov === "claude" && lm.claudeKey) {
-fetch("https://api.anthropic.com/v1/messages", {
-method: "POST",
-headers: {
+var claudeHeaders = {
 "Content-Type": "application/json",
 "x-api-key": lm.claudeKey,
 "anthropic-version": "2023-06-01",
 "anthropic-dangerous-direct-browser-access": "true",
-},
-body: JSON.stringify({
-model: model,
-max_tokens: maxTok,
-system: sysPrompt,
-messages: messages,
-stream: !!onDelta,
-}),
+};
+var claudeBody = { model: model, max_tokens: claudeMaxTokens(model, maxTok), system: sysPrompt, messages: messages, stream: !!onDelta };
+if (claudeFallbackOk(model)) { claudeHeaders["anthropic-beta"] = "server-side-fallback-2026-07-01"; claudeBody.fallbacks = "default"; }
+var refused = false;
+fetch("https://api.anthropic.com/v1/messages", {
+method: "POST",
+headers: claudeHeaders,
+body: JSON.stringify(claudeBody),
 signal: signal,
 })
 .then(function(r) {
@@ -3470,15 +3491,20 @@ var j; try { j = JSON.parse(d); } catch (e) { return; }
 if (j.type === "error") throw new Error((j.error && j.error.message) || "Stream error");
 if (j.type === "message_start" && j.message && j.message.usage) usage = Object.assign({}, j.message.usage);
 if (j.type === "message_delta" && j.usage) usage = Object.assign(usage || {}, j.usage);
+if (j.type === "message_delta" && j.delta && j.delta.stop_reason === "refusal") refused = true;
 if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") { acc += j.delta.text; onDelta(acc); }
-}).then(function() { return { content: [{ text: acc }] }; });
+}).then(function() {
+if (refused) throw claudeRefusal();  // declined mid-stream: the partial is billed but not an answer
+return { content: [{ type: "text", text: acc }] };
+});
 }
 return r.json();
 })
 .then(function(data) {
 if (data.error) { fail(new Error(data.error.message || JSON.stringify(data.error))); return; }
 if (data.usage) usage = data.usage;
-var text = (data.content && data.content[0] && data.content[0].text) || "";
+var text = claudeText(data);
+if (data.stop_reason === "refusal") { acc = text; fail(claudeRefusal()); return; }
 if (!text) { fail(new Error("Empty response from Claude API")); return; }
 done(text);
 })
@@ -3496,7 +3522,7 @@ callOpenAICompat(lm.ep + "/v1/chat/completions", null);
 }
 function currentModel() {
 var prov = lm.provider;
-return prov === "claude" ? (lm.claudeModel || "claude-sonnet-4-20250514")
+return prov === "claude" ? (lm.claudeModel || CLAUDE_DEFAULT)
 : prov === "gemini" ? (lm.geminiModel || "gemini-2.5-flash")
 : prov === "openai" ? (lm.openaiModel || "gpt-4o")
 : prov === "openrouter" ? (lm.openrouterModel || OR_DEFAULT_MODEL)
@@ -3625,10 +3651,11 @@ if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0)
 }, function(err) {
 if (chatReq.current !== reqId) return;
 if (live) live.cancel();
-var streamed = live ? live.text : "";
+var streamed = live && !err.refusal ? live.text : "";
 var provNames = { claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "OpenRouter", lmstudio: "LM Studio" };
 var errMsg = streamed
 ? streamed + "\n\n⚠ Reply cut off (" + (err.message || "connection lost") + ") — tap 🔄 to regenerate."
+: err.refusal ? "⚠ " + err.message
 : (lm.provider === "lmstudio")
 ? "Connection Error: Could not reach LM Studio at " + lm.ep + ". Make sure LM Studio is running."
 : (provNames[lm.provider] || "AI") + " API Error: " + (err.message || "Check your API key in Settings.");
@@ -3730,7 +3757,7 @@ saveHooks(parseHooks(reply));
 if (sideReq.current !== reqId) return;
 if (live) live.cancel();
 var why = err.message || "AI error — check Settings.";
-setSideMsgs(msgs.concat([{ role: "assistant", content: live && live.text ? live.text + "\n\n⚠ Reply cut off (" + why + ")." : "⚠ " + why }]));
+setSideMsgs(msgs.concat([{ role: "assistant", content: live && live.text && !err.refusal ? live.text + "\n\n⚠ Reply cut off (" + why + ")." : "⚠ " + why }]));
 setSideLoad(false);
 });
 }
@@ -6044,7 +6071,7 @@ var [testing, setTesting] = useState(false);
 var [testMsg, setTestMsg] = useState("");
 var [prov, setProv] = useState(lm.provider || "lmstudio");
 var [cKey, setCKey] = useState(lm.claudeKey || "");
-var [cModel, setCModel] = useState(lm.claudeModel || "claude-sonnet-4-20250514");
+var [cModel, setCModel] = useState(lm.claudeModel || CLAUDE_DEFAULT);
 var [gKey, setGKey] = useState(lm.geminiKey || "");
 var [gModel, setGModel] = useState(lm.geminiModel || "gemini-2.5-flash");
 var [oKey, setOKey] = useState(lm.openaiKey || "");
@@ -6147,7 +6174,7 @@ setTesting(true); setTestMsg("");
 fetch("https://api.anthropic.com/v1/messages", {
 method: "POST",
 headers: { "Content-Type": "application/json", "x-api-key": cKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-body: JSON.stringify({ model: cModel, max_tokens: 20, messages: [{ role: "user", content: "Say hello in 3 words." }] }),
+body: JSON.stringify({ model: cModel, max_tokens: 256, messages: [{ role: "user", content: "Say hello in 3 words." }] }),
 })
 .then(function(r) { return r.json(); })
 .then(function(data) {
@@ -6238,10 +6265,8 @@ return (
 <input value={cKey} onChange={function(e) { setCKey(e.target.value); }} type="password" placeholder="sk-ant-..." style={inputStyle} />
 <label style={{ fontSize: 11, color: "var(--c-mut)", marginBottom: 4, display: "block" }}>Model</label>
 <select value={cModel} onChange={function(e) { setCModel(e.target.value); }} style={selectStyle}>
-<option value="claude-sonnet-4-20250514">Claude Sonnet 4.6 (latest)</option>
-<option value="claude-opus-4-6">Claude Opus 4.6 (smartest)</option>
-<option value="claude-sonnet-4-5-20250514">Claude Sonnet 4.5</option>
-<option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fast)</option>
+{CLAUDE_MODELS.map(function(m) { return <option key={m.id} value={m.id}>{m.label}</option>; })}
+{!CLAUDE_MODELS.some(function(m) { return m.id === cModel; }) && <option value={cModel}>{cModel}</option>}
 </select>
 <button onClick={testClaude} disabled={!cKey || testing} style={{ width: "100%", padding: 10, background: !cKey ? "var(--c-br)" : "linear-gradient(135deg, var(--a-pur), var(--a-ind))", color: "#fff", border: "none", borderRadius: 10, cursor: !cKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to Claude"}</button>
 <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
@@ -10574,7 +10599,9 @@ var endpoint, headers, body;
 if (provider === "claude") {
 endpoint = "https://api.anthropic.com/v1/messages";
 headers = { "Content-Type": "application/json", "x-api-key": lm.claudeKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
-body = JSON.stringify({ model: lm.claudeModel || "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] });
+var cm = lm.claudeModel || CLAUDE_DEFAULT, cb = { model: cm, max_tokens: claudeMaxTokens(cm, 2000), messages: [{ role: "user", content: prompt }] };
+if (claudeFallbackOk(cm)) { headers["anthropic-beta"] = "server-side-fallback-2026-07-01"; cb.fallbacks = "default"; }
+body = JSON.stringify(cb);
 } else if (provider === "gemini") {
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 headers = { "Content-Type": "application/json", "Authorization": "Bearer " + lm.geminiKey };
@@ -10597,7 +10624,7 @@ fetch(endpoint, { method: "POST", headers: headers, body: body })
 .then(function(data) {
 var text = "";
 if (provider === "claude") {
-text = data.content && data.content[0] ? data.content[0].text : "";
+text = claudeText(data);
 } else {
 text = data.choices && data.choices[0] ? (data.choices[0].message ? data.choices[0].message.content : "") : "";
 }
@@ -10856,7 +10883,9 @@ var endpoint, headers, body;
 if (provider === "claude") {
 endpoint = "https://api.anthropic.com/v1/messages";
 headers = { "Content-Type": "application/json", "x-api-key": lm.claudeKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
-body = JSON.stringify({ model: lm.claudeModel || "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] });
+var cm = lm.claudeModel || CLAUDE_DEFAULT, cb = { model: cm, max_tokens: claudeMaxTokens(cm, 2000), messages: [{ role: "user", content: prompt }] };
+if (claudeFallbackOk(cm)) { headers["anthropic-beta"] = "server-side-fallback-2026-07-01"; cb.fallbacks = "default"; }
+body = JSON.stringify(cb);
 } else if (provider === "gemini") {
 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 headers = { "Content-Type": "application/json", "Authorization": "Bearer " + lm.geminiKey };
@@ -10879,7 +10908,7 @@ fetch(endpoint, { method: "POST", headers: headers, body: body })
 .then(function(data) {
 var text = "";
 if (provider === "claude") {
-text = data.content && data.content[0] ? data.content[0].text : "";
+text = claudeText(data);
 } else {
 text = data.choices && data.choices[0] ? (data.choices[0].message ? data.choices[0].message.content : "") : "";
 }

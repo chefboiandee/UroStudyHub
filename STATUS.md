@@ -3,6 +3,58 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 7) — 🤖 Claude model list: current models, safe with thinking + refusals
+
+Andrew: fix the Claude model list.
+**Was:**
+- `claude-sonnet-4-20250514` was labelled "Sonnet 4.6 (latest)", but it's Sonnet 4.
+- `claude-sonnet-4-5-20250514` isn't a real id.
+- Opus 4.6 and Haiku 4.5 were the other choices.
+
+**Done:**
+- Settings picker = `CLAUDE_MODELS`, each with its price:
+  - Opus 5.5 (default, $4/$20)
+  - Sonnet 5.5 ($2/$10)
+  - Haiku 5.5 ($0.10/$0.50)
+  - Fable 5.1 ($10/$50)
+
+  Ids come from the claude-api skill's model table. A saved id not in the list still shows as an
+  option.
+- Saved settings migrate (`CLAUDE_LEGACY`), each to the same tier:
+  - Sonnet 4 and the bogus Sonnet "4.5" id → Sonnet 5.5
+  - Opus 4.6 → Opus 5.5
+  - Haiku 4.5 → Haiku 5.5
+- The new models think first, so the code changed to match:
+  - `claudeText()` joins the text blocks. Reading `content[0].text` would have hit the thinking
+    block: "Empty response" in non-streamed calls, and blank output in the two "organize with
+    AI" helpers.
+  - `claudeMaxTokens()` raises the output limit to 16k on 4.x+ models, since thinking counts
+    against it.
+  - The Settings connection test gets a 256-token limit.
+  - No `temperature` is sent to Claude, which these models reject.
+- Safety-filter declines:
+  - `fallbacks: "default"` + `anthropic-beta: server-side-fallback-2026-07-01` on Opus 5.x,
+    Sonnet 5.5 and Fable 5.x (`claudeFallbackOk`), so Anthropic retries a declined request on
+    another model. Not on Haiku 5.5, which has no fallback.
+  - `stop_reason: "refusal"` (streamed or not) shows "⚠ Claude's safety filter declined this one…",
+    drops the partial text, and still counts its cost.
+
+**Verified:** new suite 13/13 in headless Chrome, with stubbed Anthropic responses:
+- default Opus 5.5 with fallbacks + beta header, 16k limit, no temperature;
+- a thinking block ignored when streamed and when not;
+- a mid-stream decline;
+- Opus 5.5 pricing on the meter;
+- the legacy id migrating to Sonnet 5.5, and the picker showing the 4 models;
+- Haiku 5.5 sent without fallbacks.
+
+Streaming 27/27 at both sizes, cost 18/18 (its saved Sonnet 4 now prices as Sonnet 5.5), hooks
+13/13, mnemonic rule, Quick Ask keyboard: all pass.
+
+**Next steps:** Andrew to confirm a real Claude key works with the new models from the browser
+(including the beta header over CORS).
+**Open questions:** effort is left at each model's default (medium on Opus 5.5 / Haiku 5.5, high
+on Sonnet 5.5). Lower it for chattier, cheaper replies?
+
 ## 2026-11-02 (later 6) — 💲 Live AI cost meter in the tutor
 
 Andrew: show what a session costs on paid models, running and updated as it goes.
