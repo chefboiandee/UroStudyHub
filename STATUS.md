@@ -3,6 +3,22 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 8) — 💲 Gemini 3 prices in the cost meter
+
+Andrew: Gemini pricing wasn't showing in tutoring sessions.
+**Cause:** `MODEL_PRICES` only knew Gemini 2.0/2.5, so any Gemini 3 model had no price and the meter showed "unknown".
+Gemini's models endpoint carries no pricing, and `ai.google.dev` is blocked in the cloud sandbox, so prices couldn't be read from Google directly.
+
+**Done:**
+- Added `gemini-3-flash` ($0.50/$3), `gemini-3.1-flash-lite` ($0.25/$1.50), `gemini-3-pro` and `gemini-3.1-pro` ($2/$12).
+- Added Gemini Pro long-prompt tiers (>200k tokens) in `builtinPrice`.
+- Prices come from third-party roundups that agree with each other, not from Google. Verify at ai.google.dev/pricing.
+
+**Verified:** `builtinPrice` returns the right rate for preview ids and for ids with a `models/` prefix (Node). The built page could not render in the sandbox (cdnjs blocked), so there was no browser run.
+
+**Next steps:** Andrew to confirm a Gemini 3 tutoring session now shows a cost. Gemini 3.5/3.6 Flash and `*-latest` aliases are still unpriced (sources conflicted); set a price in the 💲 panel or tell me the exact model id and the price from Google's page.
+**Open questions:** does Gemini's OpenAI-compatible endpoint accept `stream_options.include_usage`? It isn't sent for Gemini, so streamed replies use the ~4 chars/token estimate.
+
 ## 2026-11-02 (later 7) — 🤖 Claude model list: current models, safe with thinking + refusals
 
 Andrew: fix the Claude model list.

@@ -524,6 +524,8 @@ var MODEL_PRICES = {
 "o3-mini": [1.1, 4.4], "o4-mini": [1.1, 4.4], "o3": [2, 8],
 "gpt-5-nano": [0.05, 0.4], "gpt-5-mini": [0.25, 2], "gpt-5": [1.25, 10],
 "gemini-2.5-flash-lite": [0.1, 0.4], "gemini-2.5-flash": [0.3, 2.5], "gemini-2.5-pro": [1.25, 10], "gemini-2.0-flash": [0.1, 0.4],
+"gemini-3.1-flash-lite": [0.25, 1.5], "gemini-3-flash": [0.5, 3],
+"gemini-3.1-pro": [2, 12], "gemini-3-pro": [2, 12],
 };
 function builtinPrice(model, inTok) {
 var id = String(model || "").toLowerCase().replace(/^[a-z0-9-]+\//, "");  // "anthropic/claude-…" → "claude-…"
@@ -531,6 +533,10 @@ var best = null;
 Object.keys(MODEL_PRICES).forEach(function(k) { if (id.indexOf(k) === 0 && (!best || k.length > best.length)) best = k; });
 if (!best) return null;
 if (best === "claude-haiku-5-5" && inTok > 100000) return [0.5, 2.5];  // Haiku 5.5's long-prompt tier
+if (inTok > 200000) {  // Gemini Pro's long-prompt tier
+if (best === "gemini-2.5-pro") return [2.5, 15];
+if (best === "gemini-3-pro" || best === "gemini-3.1-pro") return [4, 18];
+}
 return MODEL_PRICES[best];
 }
 function fmtUsd(x) { x = x || 0; return "$" + (x < 0.01 ? x.toFixed(4) : x < 1 ? x.toFixed(3) : x.toFixed(2)); }
