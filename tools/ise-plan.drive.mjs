@@ -11,8 +11,9 @@
 //        CHROME=...   a Chrome/Chromium binary to use instead of Playwright's own (npx playwright install chromium)
 // Prints PASS/FAIL per check; exits 1 when any check fails.
 //
-// Elements of the ISE view are selected only by their data-ise attributes. App chrome (bottom nav, tracker
-// tabs, Hub tasks, share/import modals) has no such hooks, so it is found by its visible text.
+// Elements of the ISE view (and the Hub's 🎯 task, data-ise="hub-task") are selected only by their data-ise
+// attributes. Other app chrome (bottom nav, tracker tabs, the other Hub tasks, share/import modals, the tutor
+// chat input) has no such hooks, so it is found by its visible text or placeholder.
 import { createRequire } from 'node:module';
 import { mkdtemp, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -59,7 +60,9 @@ let html = '';
 try { html = await (await fetch(PAGE_URL)).text(); } catch (e) { console.log('FAIL setup: cannot load ' + PAGE_URL + ' (' + e.message + '). Start the server: python3 -m http.server 2043'); process.exit(1); }
 const mLogic = html.match(/<script id="ise-logic">([\s\S]*?)<\/script>/);
 if (!mLogic) { console.log('FAIL setup: no <script id="ise-logic"> in ' + PAGE_URL); process.exit(1); }
-const L = new Function(mLogic[1] + '\n;return { iseSetup, iseNorm, iseStatus, iseReshuffle, ISE_BLOCKS, ISE_LABEL };')();
+const L = new Function(mLogic[1] + '\n;return { iseSetup, iseNorm, iseStatus, iseReshuffle, iseWhatIfs, iseResolve, iseMissWindow, ISE_BLOCKS, ISE_LABEL };')();
+// The day's question target as the scheduler resolves it (the oracle for the Today card's data-ise="target")
+const qTarget = (ise, d, today) => { const r = L.iseResolve(ise, d, L.iseStatus(ise, today), today); return r ? r.q : null; };
 const mAua = html.match(/^const AUA_PHASES = (\[[\s\S]*?\n\]);/m);
 const AUA_PHASES = mAua ? new Function('return ' + mAua[1] + ';')() : null;
 function auaKey(name) {
@@ -276,7 +279,7 @@ try {
     check('Hub without a sprint: no 🎯 task, and the Core "reorganize" task shows (seeded Core far behind)', !t.some((x) => x.icon === '🎯') && t.some((x) => /reorganize/.test(x.text)), short(t.map((x) => x.icon + ' ' + x.text).join(' | '), 240));
   });
 
-  let built = null;
+  let built = null, tgtA = NaN;
   await block('fresh flow', async () => {
     await navTo(p, 'study');
     await clickText(p, /🗂\s*Plans/);
@@ -318,8 +321,11 @@ try {
     check('Build stores uroStudyHub_ise with kind "uroISE", exam 11-21 and a plan', built && built.kind === 'uroISE' && built.cfg && built.cfg.exam === '2026-11-21' && built.plan.length > 0 && built.built === '2026-11-02', short(built && { kind: built.kind, built: built.built, n: built.plan.length }));
     const td = await p.locator(ISE('today')).first();
     const tdDate = await td.getAttribute('data-date'), tdKind = await td.getAttribute('data-kind');
-    const tgt = await textOf(p, 'target');
-    check('Today card: Mon 11/02, Content (void1), target 20 Qs', tdDate === '2026-11-02' && tdKind === 'block' && tgt.trim() === '20', tdDate + ' ' + tdKind + ' target=' + tgt);
+    tgtA = parseInt(await textOf(p, 'target'), 10);
+    const want = built ? qTarget(built, '2026-11-02', '2026-11-02') : null;
+    check('Today card: Mon 11/02, Content (void1), target ' + want + ' Qs as the scheduler resolves it (25 at 120 min with no misses yet)', tdDate === '2026-11-02' && tdKind === 'block' && tgtA === want && want === 25, tdDate + ' ' + tdKind + ' target=' + tgtA + ' (Node: ' + want + ')');
+    const tdTxt = (await td.innerText()).replace(/\n/g, ' | ');
+    check('No misses logged yet: the miss-review step says "No misses yet: put these minutes into questions"', /No misses yet: put these minutes into questions/.test(tdTxt) && !/Re-read/.test(tdTxt), short(tdTxt, 260));
     const stt = await textOf(p, 'status');
     check('Status strip: "19 days to ISE"', /19 days to ISE/.test(stt), stt);
     const know = p.locator(ISE('know')).first();
@@ -340,11 +346,13 @@ try {
     check('Reload: stored plan is unchanged (iseNorm round-trips it)', isDeepStrictEqual(after, built), after && built ? 'plan ' + after.plan.length + ' vs ' + built.plan.length : 'missing');
     await openIse(p);
     const ok = await has(p, 'today');
-    const tgt = ok ? (await textOf(p, 'target')).trim() : '';
-    check('Reload: Plans card → Today card with target 20 again', ok && tgt === '20', 'target=' + tgt);
+    const tgt = ok ? parseInt(await textOf(p, 'target'), 10) : NaN;
+    check('Reload: Plans card → Today card with the same target (' + tgtA + ') again', ok && tgt === tgtA, 'target=' + tgt);
     const sum = await hubTasks(p);
     const iseTask = sum.find((x) => x.icon === '🎯');
-    check('Hub: 🎯 task names today\'s block and target, not red; Core reorganize task hidden', !!iseTask && /Voiding 1/.test(iseTask.text) && /20 SASP Qs/.test(iseTask.text) && !isRed(iseTask.color) && !sum.some((x) => /reorganize/.test(x.text)), short(sum.map((x) => x.icon + ' ' + x.text + ' ' + x.color).join(' | '), 240));
+    check('Hub: 🎯 task names today\'s block and target, not red; Core reorganize task hidden', !!iseTask && /Voiding 1/.test(iseTask.text) && new RegExp('\\b' + tgtA + ' SASP Qs').test(iseTask.text) && !isRed(iseTask.color) && !sum.some((x) => /reorganize/.test(x.text)), short(sum.map((x) => x.icon + ' ' + x.text + ' ' + x.color).join(' | '), 240));
+    const ht = await p.evaluate(() => { const e = document.querySelector('[data-ise="hub-task"]'); if (!e) return null; const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return { h: r.height, bw: parseFloat(cs.borderTopWidth), bs: cs.borderTopStyle, txt: e.textContent }; });
+    check('Hub: the 🎯 task is a data-ise="hub-task" row, >= 36px tall with a border (an e-ink tap target)', !!ht && ht.h >= 35.5 && ht.bw >= 1 && ht.bs !== 'none' && /🎯/.test(ht.txt), short(ht));
     await openIse(p);
   });
 
@@ -354,12 +362,25 @@ try {
     const q = await p.locator(ISE('log-q')).inputValue();
     await p.locator(ISE('log-pct')).fill('60');
     const covered = await p.locator('[data-ise^="covered-"]').evaluateAll((els) => els.map((e) => ({ id: e.getAttribute('data-ise').slice(8), on: e.checked })));
-    check('Log form: +5 x4 → 20 Qs; the block is pre-ticked as covered (20 >= 0.6 x 20)', q === '20' && covered.length === 1 && covered[0].id === 'void1' && covered[0].on, 'q=' + q + ' ' + short(covered));
+    check('Log form: +5 x4 → 20 Qs; the block is pre-ticked as covered (20 >= 0.6 x ' + tgtA + ')', q === '20' && 20 >= 0.6 * tgtA && covered.length === 1 && covered[0].id === 'void1' && covered[0].on, 'q=' + q + ' ' + short(covered));
+    // 20 of the target (25) first: logged and covered, but not met, so no Done pill and no reward
     await tap(p, 'log-save');
-    const ise1 = await poll(async () => { const v = await getIse(p); return v && v.log && v.log['2026-11-02'] ? v : null; });
+    const ise0 = await poll(async () => { const v = await getIse(p); return v && v.log && v.log['2026-11-02'] ? v : null; });
+    const lg0 = ise0 && ise0.log['2026-11-02'];
+    check('Save below the target writes log[11-02] = {q 20, pct 60, t ' + tgtA + ', k block, rw 0}', lg0 && lg0.q === 20 && lg0.pct === 60 && lg0.t === tgtA && lg0.k === 'block' && lg0.rw === 0 && lg0.floor === false, short(lg0));
+    check('Save sets done.void1 = "2026-11-02" (the covered tick, even below the target)', ise0 && ise0.done && ise0.done.void1 === '2026-11-02', short(ise0 && ise0.done));
+    const pill0 = await textOf(p, 'dayrow', '[data-date="2026-11-02"]');
+    check('Below the target: today\'s pill says "20/' + tgtA + '", not "Done"', !/\bDone\b/.test(pill0) && pill0.indexOf('20/' + tgtA) >= 0, short(pill0.replace(/\n/g, ' | ')));
+    await p.waitForTimeout(800);
+    const saspU = ((await getProg(p)).activityLog || []).filter((e) => e.type === 'sasp').length;
+    check('Below the target: no reward ("sasp" activityLog entries unchanged)', saspU === sasp0, sasp0 + ' → ' + saspU);
+    // Then the full target: met, so the first met Save earns the reward once
+    for (let n = 20; n < tgtA; n += 5) await tap(p, 'log-plus');
+    const qFull = await p.locator(ISE('log-q')).inputValue();
+    await tap(p, 'log-save');
+    const ise1 = await poll(async () => { const v = await getIse(p); return v && v.log && v.log['2026-11-02'] && v.log['2026-11-02'].q === tgtA ? v : null; });
     const lg = ise1 && ise1.log['2026-11-02'];
-    check('Save writes log[11-02] = {q 20, pct 60, t 20, k block, rw 1}', lg && lg.q === 20 && lg.pct === 60 && lg.t === 20 && lg.k === 'block' && lg.rw === 1 && lg.floor === false, short(lg));
-    check('Save sets done.void1 = "2026-11-02"', ise1 && ise1.done && ise1.done.void1 === '2026-11-02', short(ise1 && ise1.done));
+    check('Save at the full target writes log[11-02] = {q ' + tgtA + ', pct 60, t ' + tgtA + ', k block, rw 1}', qFull === String(tgtA) && lg && lg.q === tgtA && lg.pct === 60 && lg.t === tgtA && lg.k === 'block' && lg.rw === 1 && lg.floor === false, 'q field ' + qFull + ' ' + short(lg));
     const pill = await textOf(p, 'dayrow', '[data-date="2026-11-02"]');
     check('Next 6 days: today\'s status pill says "Done"', /\bDone\b/.test(pill), short(pill.replace(/\n/g, ' | ')));
     const sasp1 = await poll(async () => { const n = ((await getProg(p)).activityLog || []).filter((e) => e.type === 'sasp').length; return n > sasp0 ? n : 0; }, 3000);
@@ -424,7 +445,8 @@ try {
       rq.onerror = () => rej(rq.error);
       rq.onsuccess = () => {
         const db = rq.result, tx = db.transaction('kv', 'readwrite');
-        tx.objectStore('kv').put({ topic: 'Earlier session (driver)', messages: [{ role: 'system', content: 'Starting Deep Dive: Earlier' }, { role: 'user', content: 'Teach me renal physiology.' }, { role: 'assistant', content: 'Here is renal physiology.' }], sideMsgs: [], lectureMode: false, lecturePhase: 0, masteryMode: false, upText: '', skillsCtx: null, date: new Date().toISOString() }, 'activeSession');
+        // The learner's own turn after the opener (2 user messages + a reply): a chat worth keeping
+        tx.objectStore('kv').put({ topic: 'Earlier session (driver)', messages: [{ role: 'system', content: 'Starting Deep Dive: Earlier' }, { role: 'user', content: 'Teach me renal physiology.' }, { role: 'assistant', content: 'Here is renal physiology.' }, { role: 'user', content: 'Why does the loop of Henle concentrate urine?' }, { role: 'assistant', content: 'Countercurrent multiplication.' }], sideMsgs: [], lectureMode: false, lecturePhase: 0, masteryMode: false, upText: '', skillsCtx: null, date: new Date().toISOString() }, 'activeSession');
         tx.oncomplete = () => { db.close(); res(true); };
         tx.onerror = () => rej(tx.error);
       };
@@ -449,23 +471,46 @@ try {
     check('Drill: exactly one request, carrying the Mastery system prompt', reqs.length === 1 && sys1.length === 1 && /MASTERY DRILL/.test(sys1[0].content), 'requests=' + reqs.length + ' sys=' + short(sys1[0] && sys1[0].content, 90));
     check('Drill: the request has exactly one user message, the opener, and no assistant turns', users1.length === 1 && users1[0].content.indexOf(opener1) === 0 && !m1.some((m) => m.role === 'assistant'), short(m1.map((m) => m.role + ':' + String(m.content).slice(0, 60))));
     const saved1 = await poll(async () => { const n = ((await getProg(p)).savedLectures || []).length; return n > saved0 ? n : 0; }, 3000);
-    check('The interrupted session is saved to savedLectures before the new one starts (+1)', saved1 === saved0 + 1, saved0 + ' → ' + saved1);
+    check('The interrupted session (2 learner turns + replies) is saved to savedLectures before the new one starts (+1)', saved1 === saved0 + 1, saved0 + ' → ' + saved1);
     await waitFor(p, () => /Stub reply from the ISE driver/.test(document.body.innerText), null, 5000);
+    // The learner answers the drill once: opener + an own turn = a chat worth saving on the next Start
+    const chatIn = p.locator('input[placeholder^="Answer the check"]:visible').first();
+    await chatIn.fill('Beta-3 agonist; no antimuscarinic side effects.');
+    await chatIn.press('Enter');
+    await waitFor(p, () => window.__lmReqs.length >= 2, null, 6000);
+    await waitFor(p, () => document.body.innerText.split('Stub reply from the ISE driver').length >= 3, null, 5000);
+    await p.waitForTimeout(800);
+    const reqsT = await p.evaluate(() => window.__lmReqs);
+    const mT = (reqsT[1] && reqsT[1].body && reqsT[1].body.messages) || [];
+    check('Drill: the learner\'s own answer goes out as the 2nd user message, after the opener and the reply', reqsT.length === 2 && mT.filter((m) => m.role === 'user').length === 2 && mT.some((m) => m.role === 'assistant'), short(mT.map((m) => m.role + ':' + String(m.content).slice(0, 40))));
 
     await navTo(p, 'study');
     await p.waitForSelector('[data-ise-view]', { timeout: 8000 });
     await tap(p, 'mode-deep');
     await tap(p, 'start');
     const onChat2 = await waitFor(p, () => [...document.querySelectorAll('h1')].some((h) => /AI Tutor/.test(h.textContent)), null, 5000);
-    await waitFor(p, () => window.__lmReqs.length >= 2, null, 6000);
+    await waitFor(p, () => window.__lmReqs.length >= 3, null, 6000);
     await p.waitForTimeout(800);
     const reqs2 = await p.evaluate(() => window.__lmReqs);
-    const m2 = (reqs2[1] && reqs2[1].body && reqs2[1].body.messages) || [];
+    const m2 = (reqs2[2] && reqs2[2].body && reqs2[2].body.messages) || [];
     const users2 = m2.filter((m) => m.role === 'user'), sys2 = m2.filter((m) => m.role === 'system');
-    check('Deep Dive: one more request with the Deep Dive system prompt', onChat2 && reqs2.length === 2 && sys2.length === 1 && /expert urology educator/.test(sys2[0].content) && !/MASTERY DRILL/.test(sys2[0].content), 'requests=' + reqs2.length + ' sys=' + short(sys2[0] && sys2[0].content, 90));
+    check('Deep Dive: one more request with the Deep Dive system prompt', onChat2 && reqs2.length === 3 && sys2.length === 1 && /expert urology educator/.test(sys2[0].content) && !/MASTERY DRILL/.test(sys2[0].content), 'requests=' + reqs2.length + ' sys=' + short(sys2[0] && sys2[0].content, 90));
     check('Deep Dive: exactly one user message (the opener); the live drill is not carried over', users2.length === 1 && users2[0].content.indexOf("Let's deep dive on: " + label + '.') === 0 && !m2.some((m) => m.role === 'assistant'), short(m2.map((m) => m.role + ':' + String(m.content).slice(0, 60))));
     const saved2 = await poll(async () => { const n = ((await getProg(p)).savedLectures || []).length; return n > saved1 ? n : 0; }, 3000);
-    check('The live drill (with an assistant reply) is saved before the Deep Dive starts (+1)', saved2 === saved1 + 1, saved1 + ' → ' + saved2);
+    check('The live drill (opener + the learner\'s own answer + replies) is saved before the Deep Dive starts (+1)', saved2 === saved1 + 1, saved1 + ' → ' + saved2);
+    await waitFor(p, () => document.body.innerText.indexOf('Stub reply from the ISE driver') >= 0, null, 5000);
+
+    // The Deep Dive got its reply but the learner never typed: an opener-only chat is not filed on the next Start
+    await navTo(p, 'study');
+    await p.waitForSelector('[data-ise-view]', { timeout: 8000 });
+    await tap(p, 'mode-mastery');
+    await tap(p, 'start');
+    await waitFor(p, () => window.__lmReqs.length >= 4, null, 6000);
+    await p.waitForTimeout(1500);
+    const reqs3 = await p.evaluate(() => window.__lmReqs);
+    const m3 = (reqs3[3] && reqs3[3].body && reqs3[3].body.messages) || [];
+    const saved3 = ((await getProg(p)).savedLectures || []).length;
+    check('An opener-only chat (Deep Dive opener + reply, no learner turn) is NOT saved when the next Start replaces it', reqs3.length === 4 && m3.filter((m) => m.role === 'user').length === 1 && saved3 === saved2, 'requests=' + reqs3.length + ', savedLectures ' + saved2 + ' → ' + saved3);
   });
 
   await block('regression', async () => {
@@ -493,21 +538,34 @@ try {
     const iseTask = t.find((x) => x.icon === '🎯');
     check('Hub: red 🎯 task "ISE plan: 6 blocks behind — tap to reshuffle"', !!iseTask && /6 blocks behind/.test(iseTask.text) && isRed(iseTask.color), short(iseTask));
     check('Hub: the Core "reorganize" task is hidden during the sprint (Core is far behind)', !t.some((x) => /reorganize/.test(x.text)), short(t.map((x) => x.icon + ' ' + x.text).join(' | '), 240));
-    await clickText(p, /ISE plan: 6 blocks behind/, 'span');
+    const stored0 = await getLS(p, 'uroStudyHub_ise');
+    await tap(p, 'hub-task');
     const opened = await waitFor(p, () => !!document.querySelector('[data-ise-view]'), null, 5000);
-    check('Tapping the Hub task opens the ISE view', opened);
+    const autoSheet = await waitFor(p, () => !!document.querySelector('[data-ise="sheet"]'), null, 3000);
+    const ast = autoSheet ? (await textOf(p, 'sheet')).replace(/\n/g, ' / ') : '';
+    check('Tapping the behind Hub task opens the ISE view with the reshuffle sheet already open', opened && autoSheet && /^Reshuffle from today/.test(ast) && /Back in: Voiding 1 \(Mon 11\/9\)/.test(ast), short(ast, 200));
+    await tap(p, 'sheet-cancel');
+    const closed = await waitFor(p, () => !document.querySelector('[data-ise="sheet"]'), null, 3000);
+    check('Cancel closes the auto-opened sheet and leaves the stored plan byte-identical', closed && (await getLS(p, 'uroStudyHub_ise')) === stored0);
     await tap(p, 'back');
     const card = await textOf(p, 'card');
     check('Plans card: "6 blocks behind: tap to reshuffle"', /6 blocks behind: tap to reshuffle/.test(card), short(card.replace(/\n/g, ' | ')));
     await tap(p, 'card');
+    await p.waitForSelector('[data-ise-view]', { timeout: 8000 });
+    await p.waitForTimeout(400);
+    check('Opening the view from the Plans card does not auto-open the sheet (only the Hub task does)', !(await has(p, 'sheet')));
   });
 
+  const base0 = L.iseReshuffle(fixture, '2026-11-09', {}, 0);
+  const wiNode = (L.iseWhatIfs(fixture, '2026-11-09', 0) || []).map((w) => w.label);
   await block('banner', async () => {
     const b = p.locator(ISE('banner')).first();
     const state = await b.getAttribute('data-state'), txt = (await b.innerText()).replace(/\n/g, ' / ');
     check('Banner: data-state "behind" and "6 blocks behind"', state === 'behind' && /6 blocks behind/.test(txt), short(txt, 240));
+    const rs = (await textOf(p, 'reshuffle')).trim();
+    check('Banner button: "↻ Reshuffle from today → ' + base0.cut.length + ' cut, ' + base0.light.length + ' light" (the plain reshuffle, 10 cut now that both mocks stay)', rs === '↻ Reshuffle from today → ' + base0.cut.length + ' cut, ' + base0.light.length + ' light' && base0.cut.length === 10, rs);
     const wi = await p.locator(ISE('whatif')).allInnerTexts();
-    check('What-ifs: first is "+30 min on weekdays → cuts 6 instead of 9"; no separate +60 weekdays', wi.length >= 1 && /^\+30 min on weekdays → cuts 6 instead of 9/.test(wi[0]) && !wi.some((x) => /^\+60 min on weekdays/.test(x)), short(wi));
+    check('What-ifs: absolute labels, first "+30 min on weekdays → N cut, M light" as iseWhatIfs gives them; no separate +60 weekdays', wi.length >= 1 && /^\+30 min on weekdays → \d+ cut, \d+ light( · keeps \d mocks?)?$/.test(wi[0].trim()) && isDeepStrictEqual(wi.map((x) => x.trim()), wiNode) && !wi.some((x) => /^\+60 min on weekdays/.test(x)), short(wi) + ' (Node: ' + short(wiNode) + ')');
     const card = p.locator(ISE('today')).first();
     check('Today card on 11-09 is a catch-up/content day', /block|catchup|buffer/.test(await card.getAttribute('data-kind')), await card.getAttribute('data-kind'));
   });
@@ -532,8 +590,10 @@ try {
     await tap(p, 'sheet-apply');
     applied = await getIse(p);
     const past = (x) => x.plan.filter((e) => e.d < '2026-11-09');
-    const it = (d) => { const e = applied.plan.find((x) => x.d === d); return e && e.it ? e.it.map((x) => x.b + ':' + x.lvl).join('+') : e && e.k; };
-    check('Apply: built 11-09, shuffles [11-09], 9 cut; void1/peds1/ston1 full on 11-09/10/11', applied.built === '2026-11-09' && isDeepStrictEqual(applied.shuffles, ['2026-11-09']) && applied.cut.length === 9 && it('2026-11-09') === 'void1:full' && it('2026-11-10') === 'peds1:full' && it('2026-11-11') === 'ston1:full', [it('2026-11-09'), it('2026-11-10'), it('2026-11-11'), 'cut ' + applied.cut.length].join(' '));
+    const it = (x, d) => { const e = x.plan.find((y) => y.d === d); return e && e.it ? e.it.map((y) => y.b + ':' + y.lvl).join('+') : e && e.k; };
+    const mocks = applied.plan.filter((e) => e.k === 'mock').map((e) => e.d);
+    check('Apply: built 11-09, shuffles [11-09], ' + base0.cut.length + ' cut (as the button said), both mocks kept, void1 full on 11-09', applied.built === '2026-11-09' && isDeepStrictEqual(applied.shuffles, ['2026-11-09']) && applied.cut.length === base0.cut.length && applied.light.length === base0.light.length && isDeepStrictEqual(mocks, ['2026-11-14', '2026-11-15']) && it(applied, '2026-11-09') === 'void1:full', [it(applied, '2026-11-09'), it(applied, '2026-11-10'), it(applied, '2026-11-11'), 'cut ' + applied.cut.length, 'mocks ' + mocks.join(',')].join(' '));
+    check('Apply: the stored plan from 11-09 on is exactly iseReshuffle(fixture, 11-09) (Node)', isDeepStrictEqual(applied.plan.filter((e) => e.d >= '2026-11-09'), base0.plan.filter((e) => e.d >= '2026-11-09')) && isDeepStrictEqual(applied.cut, base0.cut) && isDeepStrictEqual(applied.light, base0.light), ['11-09', '11-10', '11-11'].map((d) => it(applied, '2026-' + d) + ' vs ' + it(base0, '2026-' + d)).join(' | '));
     check('Apply: entries before 11-09 are deep-equal to the fixture', isDeepStrictEqual(past(applied), past(fixture)), past(applied).length + ' past entries');
     const state = await p.locator(ISE('banner')).first().getAttribute('data-state');
     check('Banner leaves "behind" after Apply', state !== 'behind', state);
@@ -543,9 +603,11 @@ try {
     const t = await hubTasks(p);
     const iseTask = t.find((x) => x.icon === '🎯');
     check('Hub after the reshuffle: 🎯 task names today\'s block, not red; still no reorganize task', !!iseTask && !isRed(iseTask.color) && /Voiding 1/.test(iseTask.text) && !t.some((x) => /reorganize/.test(x.text)), short(iseTask));
-    await openIse(p);
+    await tap(p, 'hub-task');
+    const opened = await waitFor(p, () => !!document.querySelector('[data-ise-view]'), null, 5000);
+    await p.waitForTimeout(400);
     const st = await p.locator(ISE('banner')).first().getAttribute('data-state');
-    check('After reload the ISE view reports on track', st === 'on', st);
+    check('After reload the Hub task opens the ISE view on track, without a sheet', opened && st === 'on' && !(await has(p, 'sheet')), st);
   });
   errCheck('scenario B', errs);
   await ctx.close();
@@ -556,49 +618,65 @@ try {
 // =====================================================================================================
 try {
   const base = L.iseSetup(L.iseNorm(null), CFG(), {}, '2026-11-02');
-  base.misses = [{ id: 'mold1', d: '2026-10-25', g: 'stones', t: 'Old stones rule: citrate for hypocitraturia' }];
+  // Misses on three earlier dates: the "recent" window (iseMissWindow) is the last two miss dates before today
+  // (Thu 10/29, Sat 10/31) plus today, so the Sun 10/25 stones miss is outside it
+  base.misses = [
+    { id: 'mold1', d: '2026-10-25', g: 'stones', t: 'Old stones rule: citrate for hypocitraturia' },
+    { id: 'mold2', d: '2026-10-29', g: 'peds', t: 'Peds rule: UPJ obstruction pyeloplasty if split function < 40%' },
+    { id: 'mold3', d: '2026-10-31', g: 'peds', t: 'Peds rule: posterior urethral valves need a VCUG' },
+  ];
+  const nOld = base.misses.length;
+  const win0 = L.iseMissWindow(base.misses, '2026-11-02');
   const { ctx, p, errs } = await openScenario('C. miss log + share/import, today Mon 11/02', {
     now: [2026, 11, 2, 9, 0],
     seed: { uroStudyHub_mode: 'light', uroStudyHub_progress: JSON.stringify({ role: 'resident' }), uroStudyHub_activePlan: 'aua', uroStudyHub_ise: JSON.stringify(base), uroStudyHub_lmSettings: LM },
   });
   const items = () => p.locator(ISE('miss-item') + ':visible').count();
+  const shownIds = () => p.locator(ISE('miss-item') + ':visible').evaluateAll((els) => els.map((e) => e.getAttribute('data-id')));
+  const recentLbl = async () => (await textOf(p, 'miss-filter-recent')).replace(/^✓\s*/, '').trim();
 
   await block('miss log', async () => {
     await openIse(p);
     const g0 = await p.locator(ISE('miss-group')).inputValue();
     check('Miss log: group defaults to today\'s group (void)', g0 === 'void', g0);
-    check('Filter "Last 2 days" (default) hides the 10-25 miss', (await items()) === 0, String(await items()));
+    check('fixture sanity (Node): iseMissWindow on 11-02 starts Thu 10/29 and holds the 10-29 and 10-31 misses', win0.from === '2026-10-29' && isDeepStrictEqual(win0.list.map((m) => m.id), ['mold2', 'mold3']), short(win0));
+    const lbl = await recentLbl(), ids0 = await shownIds();
+    check('Recent filter (default) reads "Since Thu 10/29": the last two miss dates before today; the 10-25 miss is hidden', lbl === 'Since Thu 10/29' && (await textOf(p, 'miss-filter-recent')).indexOf('✓') === 0 && isDeepStrictEqual(ids0.slice().sort(), ['mold2', 'mold3']), '"' + lbl + '" shows ' + short(ids0));
+    const td0 = (await textOf(p, 'today')).replace(/\n/g, ' | ');
+    check('The day\'s miss-review step reads the same window: "Re-read misses since Thu 10/29 (2)"', /Re-read misses since Thu 10\/29 \(2\)/.test(td0), short(td0, 260));
     await tap(p, 'miss-filter-all');
-    check('Filter "All" shows it', (await items()) === 1, String(await items()));
+    check('Filter "All" shows all ' + nOld + ', the 10-25 one too', (await items()) === nOld && (await shownIds()).indexOf('mold1') >= 0, String(await items()));
     await tap(p, 'miss-filter-recent');
     await p.locator(ISE('miss-text')).fill('Single rule: mirabegron is a beta-3 agonist');
     await tap(p, 'miss-add');
     let ise = await getIse(p);
     const single = ise.misses.find((m) => /^Single rule/.test(m.t));
-    check('Add: one miss dated 11-02 in group void', ise.misses.length === 2 && single && single.d === '2026-11-02' && single.g === 'void' && (await p.locator(ISE('miss-text')).inputValue()) === '', short(single));
+    check('Add: one miss dated 11-02 in group void', ise.misses.length === nOld + 1 && single && single.d === '2026-11-02' && single.g === 'void' && (await p.locator(ISE('miss-text')).inputValue()) === '', short(single));
     await p.locator(ISE('miss-text')).fill('- Rule A: one\n- Rule B: two\n- Rule C: three');
     await tap(p, 'miss-add');
     ise = await getIse(p);
     const bulk = ise.misses.filter((m) => /^Rule [ABC]:/.test(m.t));
-    check('Bulk paste of 3 "- " lines adds 3 misses without the "- " prefix', ise.misses.length === 5 && bulk.length === 3 && new Set(ise.misses.map((m) => m.id)).size === 5, short(ise.misses.map((m) => m.t)));
-    check('Filter "Last 2 days" shows the 4 new ones', (await items()) === 4, String(await items()));
+    const nAll = nOld + 4;
+    check('Bulk paste of 3 "- " lines adds 3 misses without the "- " prefix', ise.misses.length === nAll && bulk.length === 3 && new Set(ise.misses.map((m) => m.id)).size === nAll, short(ise.misses.map((m) => m.t)));
+    const ids1 = await shownIds();
+    check('Recent shows today\'s 4 new ones plus 10-29 and 10-31 (still "Since Thu 10/29"); the 10-25 miss stays hidden', ids1.length === 6 && ids1.indexOf('mold1') < 0 && ids1.indexOf('mold2') >= 0 && ids1.indexOf('mold3') >= 0 && (await recentLbl()) === 'Since Thu 10/29', ids1.length + ' shown: ' + short(ids1));
     await tap(p, 'miss-filter-all');
-    check('Filter "All" shows all 5', (await items()) === 5, String(await items()));
+    check('Filter "All" shows all ' + nAll, (await items()) === nAll, String(await items()));
     await p.locator(ISE('miss-filter-group')).selectOption('stones');
     await p.waitForTimeout(150);
     const nSt = await items(), drill = await has(p, 'miss-drill');
     check('Group filter "Stones" + All shows only the stones miss, and offers "Drill these ▶"', nSt === 1 && drill, nSt + ' item(s), drill=' + drill);
     await tap(p, 'miss-filter-recent');
-    check('Group filter "Stones" + Last 2 days shows none', (await items()) === 0, String(await items()));
+    check('Group filter "Stones" + Recent shows none (the stones miss is from 10-25)', (await items()) === 0, String(await items()));
     await p.locator(ISE('miss-filter-group')).selectOption('');
     await tap(p, 'miss-filter-all');
     await tap(p, 'miss-copy');
     const clip = await poll(() => p.evaluate(() => window.__clip[window.__clip.length - 1] || ''), 2500);
     const lines = (clip || '').split('\n');
-    check('Copy shown writes 5 "- rule" lines', lines.length === 5 && lines.every((x) => x.indexOf('- ') === 0), short(clip));
+    check('Copy shown writes ' + nAll + ' "- rule" lines', lines.length === nAll && lines.every((x) => x.indexOf('- ') === 0), short(clip));
     await p.evaluate(() => { window.__clipFail = true; });
     await tap(p, 'miss-copy');
-    const fb = await waitFor(p, () => [...document.querySelectorAll('[data-ise-view] textarea[readonly]')].some((t) => t.value.split('\n').length === 5), null, 3000);
+    const fb = await waitFor(p, (n) => [...document.querySelectorAll('[data-ise-view] textarea[readonly]')].some((t) => t.value.split('\n').length === n), nAll, 3000);
     check('Copy with the clipboard denied falls back to a selected read-only textarea', fb);
     await p.evaluate(() => { window.__clipFail = false; });
     const id = single.id;
@@ -608,7 +686,7 @@ try {
     p.__dialogAnswer = true;
     await tap(p, 'miss-delete', '[data-id="' + id + '"]');
     const after = await getIse(p);
-    check('Delete + confirm removes it from storage and the list', !after.misses.some((m) => m.id === id) && after.misses.length === 4 && (await p.locator(ISE('miss-item', '[data-id="' + id + '"]')).count()) === 0, after.misses.length + ' left');
+    check('Delete + confirm removes it from storage and the list', !after.misses.some((m) => m.id === id) && after.misses.length === nOld + 3 && (await p.locator(ISE('miss-item', '[data-id="' + id + '"]')).count()) === 0, after.misses.length + ' left');
     await p.locator(ISE('miss-text')).scrollIntoViewIfNeeded();
     await shot(p, '05-misslog');
     await einkChecks(p, 'miss log view');
@@ -717,6 +795,22 @@ try {
     const row = (await textOf(p, 'dayrow', '[data-date="2026-11-02"]')).replace(/\n/g, ' | ');
     check('Build day that is a day off: Today card says Off and offers [Study anyway]', kind === 'off' && (await has(p, 'study-anyway')), 'kind ' + kind + ': ' + short(txt, 140) + ' — Next 6 days row: "' + row + '"');
   });
+  await block('rollover with an unsaved log', async () => {
+    // Study anyway, start a log and leave it unsaved; the device wakes at 04:01 the next day
+    await tap(p, 'study-anyway');
+    await tap(p, 'log-plus');
+    const q0 = await p.locator(ISE('log-q')).inputValue();
+    await p.evaluate(() => { window.__shiftClock((19 * 60 + 1) * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
+    const moved = await waitFor(p, () => { const r = document.querySelector('[data-ise="dayrow"]'); return !!r && r.getAttribute('data-date') === '2026-11-03'; }, null, 3000);
+    await p.waitForTimeout(300);
+    const card = p.locator(ISE('today')).first();
+    const d = await card.getAttribute('data-date'), txt = (await card.innerText()).replace(/\n/g, ' | ');
+    const q1 = (await has(p, 'log-q')) ? await p.locator(ISE('log-q')).inputValue() : '';
+    check('Rollover at 04:01 with an unsaved log: the view stays on Mon 11/2 with "Still on Mon 11/2 — your unsaved log is here" and the draft kept', moved && d === '2026-11-02' && /Still on Mon 11\/2 — your unsaved log is here/.test(txt) && q0 === '5' && q1 === '5', 'next6 rolled=' + moved + ', card ' + d + ', q ' + q0 + ' → ' + q1 + ': ' + short(txt, 160));
+    await clickText(p, /^Back to today$/);
+    const d2 = await p.locator(ISE('today')).first().getAttribute('data-date');
+    check('…"Back to today" then shows Tue 11/3 and the notice is gone', d2 === '2026-11-03' && !/Still on/.test(await p.locator(ISE('today')).first().innerText()), d2);
+  });
   errCheck('scenario D0', errs);
   await ctx.close();
 } catch (e) { check('scenario aborted', false, String((e && e.message) || e).split('\n')[0]); }
@@ -753,12 +847,20 @@ try {
   });
 
   await block('wake after midnight', async () => {
-    await p.evaluate(() => { window.__shiftClock(20 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
+    // 23:50 → 00:01: the sprint day starts at 4 am, so late-night study still belongs to Mon 11/2
+    await p.evaluate(() => { window.__shiftClock(11 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
+    await p.waitForTimeout(1200);
+    const d0 = await p.locator(ISE('today')).first().getAttribute('data-date');
+    const tt0 = (await textOf(p, 'today')).replace(/\n/g, ' | ');
+    check('Waking at 00:01 keeps the Today card on Mon 11/02 (the sprint day starts at 4 am)', d0 === '2026-11-02' && /Mon 11\/2 · today/.test(tt0), d0 + ': ' + short(tt0, 80));
+    // 00:01 → 04:01 (nothing unsaved on screen): the day rolls over
+    await p.evaluate(() => { window.__shiftClock(4 * 3600 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
     const rolled = await waitFor(p, () => { const t = document.querySelector('[data-ise="today"]'); return t && t.getAttribute('data-date') === '2026-11-03'; }, null, 3000);
     const d = await p.locator(ISE('today')).first().getAttribute('data-date');
-    check('Waking the device after midnight rolls the Today card to Tue 11/03', rolled, d);
+    check('Waking at 04:01 rolls the Today card to Tue 11/03', rolled, d);
     const row = rolled ? await textOf(p, 'dayrow', '[data-date="2026-11-03"]') : '';
-    check('…and the Next 6 days list starts at the new today', /Today/.test(row) || /Tue 11\/3/.test(row), short(row.replace(/\n/g, ' | ')));
+    const first = rolled ? await p.locator(ISE('dayrow')).first().getAttribute('data-date') : '';
+    check('…and the Next 6 days list starts at the new today', first === '2026-11-03' && (/Today/.test(row) || /Tue 11\/3/.test(row)), first + ': ' + short(row.replace(/\n/g, ' | ')));
   });
 
   await block('floor day', async () => {
@@ -840,6 +942,14 @@ try {
     const ise = await getIse(p);
     const ban = await textOf(p, 'banner');
     check('Mark covered sets done.peds1 and the banner drops to 4 behind', ise.done.peds1 === '2026-11-09' && /4 blocks behind/.test(ban), short(ban));
+    const rt2 = (await row.innerText()).replace(/\n/g, ' | ');
+    const undo = await p.locator(ISE('uncover-peds1') + ':visible').count();
+    check('The row now offers Undo (data-ise="uncover-peds1") instead of Mark covered', undo === 1 && !/Mark covered/.test(rt2), short(rt2));
+    await tap(p, 'uncover-peds1');
+    const un = await getIse(p);
+    const ban2 = await textOf(p, 'banner');
+    const rt3 = (await row.innerText()).replace(/\n/g, ' | ');
+    check('Undo clears done.peds1, the banner goes back to 5 behind and the row offers Mark covered again', !un.done.peds1 && un.done.void1 === '2026-11-05' && /5 blocks behind/.test(ban2) && /Mark covered/.test(rt3), short(ban2) + ' / row: ' + short(rt3));
   });
   errCheck('scenario B2', errs);
   await ctx.close();
@@ -849,18 +959,29 @@ try {
 // Scenario E: the exam date has passed (today 11-23): plan for next year's ISE
 // =====================================================================================================
 try {
-  const fixture = L.iseSetup(L.iseNorm(null), CFG(), {}, '2026-11-05');
+  // Non-default weekday minutes, one logged day and one miss, so "new sprint" has settings to carry and data to clear or keep
+  const fixture = L.iseSetup(L.iseNorm(null), CFG({ minsWk: 150 }), {}, '2026-11-05');
+  fixture.log['2026-11-05'] = { q: 30, pct: 70, floor: false, t: 30, k: 'block', b: ['void1'], g: 'void', gs: ['void'], ts: 1, rw: 1 };
+  fixture.done.void1 = '2026-11-05';
+  fixture.misses = [{ id: 'me1', d: '2026-11-05', g: 'void', t: 'Kept rule: mirabegron is a beta-3 agonist' }];
+  const fixtureJson = JSON.stringify(L.iseNorm(fixture));
   const { ctx, p, errs } = await openScenario('E. exam passed, today Mon 11/23', {
     now: [2026, 11, 23, 9, 0],
-    seed: { uroStudyHub_mode: 'light', uroStudyHub_progress: JSON.stringify({ role: 'resident', scheduleAnchorDate: '2026-01-05' }), uroStudyHub_activePlan: 'aua', uroStudyHub_ise: JSON.stringify(fixture) },
+    seed: { uroStudyHub_mode: 'light', uroStudyHub_progress: JSON.stringify({ role: 'resident', scheduleAnchorDate: '2026-01-05' }), uroStudyHub_activePlan: 'aua', uroStudyHub_ise: fixtureJson },
   });
   await block('exam passed', async () => {
     const t = await hubTasks(p);
     check('Hub after the exam: no 🎯 task; Core reorganize task is back', !t.some((x) => x.icon === '🎯') && t.some((x) => /reorganize/.test(x.text)), short(t.map((x) => x.icon + ' ' + x.text).join(' | ')));
     await openIse(p);
     const ban = p.locator(ISE('banner')).first();
-    const st = await ban.getAttribute('data-state'), bt = await ban.innerText();
-    check('Banner: state "exam", points to ⚙ Setup', st === 'exam' && /Setup/.test(bt), st + ': ' + short(bt));
+    const st = await ban.getAttribute('data-state'), bt = (await ban.innerText()).replace(/\n/g, ' / ');
+    check('Banner: state "exam", "This plan\'s exam date has passed. Start a new sprint…" with a [Start a new sprint] button and no reshuffle', st === 'exam' && /^This plan's exam date has passed\. Start a new sprint to plan for the next one\./.test(bt) && (await has(p, 'new-sprint')) && (await p.locator(ISE('banner') + ' ' + ISE('reshuffle')).count()) === 0, st + ': ' + short(bt));
+    const before = await getLS(p, 'uroStudyHub_ise');
+    p.__dialogAnswer = false;
+    const nd = p.__dialogs.length;
+    await tap(p, 'new-sprint');
+    check('Start a new sprint asks to confirm; dismissing it changes nothing', p.__dialogs.length === nd + 1 && /Start a new sprint\?/.test(p.__dialogs[nd] || '') && (await getLS(p, 'uroStudyHub_ise')) === before && (await has(p, 'banner')), short(p.__dialogs[nd]));
+    p.__dialogAnswer = true;
     await tap(p, 'setup-open');
     const ex = await p.locator(ISE('exam-date')).inputValue();
     check('Setup proposes next year\'s exam (2027-11-20)', ex === '2027-11-20', ex);
@@ -871,6 +992,24 @@ try {
     const ise = await getIse(p);
     const st2 = await p.locator(ISE('banner')).first().getAttribute('data-state');
     check('Apply: exam 2027-11-20, a fresh plan from today, state no longer "exam"', ise.cfg.exam === '2027-11-20' && ise.plan.some((e) => e.d === '2026-11-23') && st2 !== 'exam', 'state ' + st2 + ', ' + ise.plan.length + ' entries, ' + ms + ' ms');
+  });
+  await block('new sprint', async () => {
+    // Back to the exam-passed fixture, then confirm [Start a new sprint]
+    await p.evaluate((v) => localStorage.setItem('uroStudyHub_ise', v), fixtureJson);
+    await reload(p);
+    await openIse(p);
+    await tap(p, 'new-sprint');
+    const shown = await waitFor(p, () => !!document.querySelector('[data-ise="setup"]') && !document.querySelector('[data-ise="banner"]'), null, 5000);
+    const ns = await getIse(p);
+    check('Confirmed new sprint: a fresh setup; stored cfg null, no plan, logs and covered blocks cleared, the miss log kept', shown && ns && ns.kind === 'uroISE' && ns.cfg === null && ns.plan.length === 0 && Object.keys(ns.log).length === 0 && Object.keys(ns.done).length === 0 && ns.misses.length === 1 && ns.misses[0].id === 'me1', short(ns && { cfg: ns.cfg, plan: ns.plan.length, log: Object.keys(ns.log).length, done: ns.done, misses: ns.misses.length, prefs: ns.prefs }, 240));
+    const ex = await p.locator(ISE('exam-date')).inputValue();
+    const wk = (await textOf(p, 'mins-wk')).trim();
+    check('New-sprint setup defaults from the old settings (150 min on weekdays) with next year\'s exam (2027-11-20)', ex === '2027-11-20' && /^150\b/.test(wk) && ns.prefs && ns.prefs.minsWk === 150, 'exam ' + ex + ', weekdays "' + wk + '"');
+    await tap(p, 'build');
+    await p.waitForSelector(ISE('today'), { timeout: 8000 });
+    const nb = await getIse(p);
+    const st = await p.locator(ISE('banner')).first().getAttribute('data-state');
+    check('Build after the new sprint: exam 2027-11-20, 150 min weekdays, plan from today, not "exam", misses still there', nb.cfg && nb.cfg.exam === '2027-11-20' && nb.cfg.minsWk === 150 && nb.built === '2026-11-23' && nb.plan.length > 0 && nb.plan[0].d >= '2026-11-23' && st !== 'exam' && nb.misses.length === 1, 'state ' + st + ', ' + nb.plan.length + ' entries, first ' + (nb.plan[0] && nb.plan[0].d));
   });
   errCheck('scenario E', errs);
   await ctx.close();

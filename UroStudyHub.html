@@ -6719,7 +6719,10 @@ export default function UroStudyHub() {
     if (pendingResume) {
       var ps = pendingResume;
       setPendingResume(null);
-      saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
+      // Same rule as the live chat below: keep it only if the learner said something beyond the opener
+      if ((ps.messages || []).filter(function(m) { return m.role === "user"; }).length > 1) {
+        saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
+      }
       idbDel("activeSession").catch(function() {});
     }
     // Save the live chat only once the learner has said something beyond the opener

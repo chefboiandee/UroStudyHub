@@ -5997,7 +5997,9 @@ function startPlanTopic(topic, mode, extra) {
 if (pendingResume) {
 var ps = pendingResume;
 setPendingResume(null);
+if ((ps.messages || []).filter(function(m) { return m.role === "user"; }).length > 1) {
 saveLectureSession(ps.topic, ps.messages, { sideMsgs: ps.sideMsgs || [], lecturePhase: ps.lecturePhase || 0, lectureMode: !!ps.lectureMode, masteryMode: !!ps.masteryMode, upText: ps.upText || "" });
+}
 idbDel("activeSession").catch(function() {});
 }
 if (chatMsgs.some(function(m) { return m.role === "assistant"; }) && chatMsgs.filter(function(m) { return m.role === "user"; }).length > 1) {
