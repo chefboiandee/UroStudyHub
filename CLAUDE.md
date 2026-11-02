@@ -40,5 +40,8 @@ inside another workspace; nothing here depends on that one any more.)
 - PUBLIC repo: nothing personal or secret in any file or commit message.
 - `git push` is pre-approved (Andrew, 2026-10-31; allow rule in `.claude/settings.json`): push the
   session's working branch when finished work is committed. Merging to `main` is what deploys to
-  Pages — open the PR and merge only when Andrew asks. Side branches (`proto/*` and the like) stay local.
+  Pages. **Standing instruction (Andrew, 2026-11-02): he doesn't run a local copy and tests only on the
+  live Pages site, so when a change is finished, built and pushed, open the PR and merge it to `main`
+  yourself** (merge commit, as before) without waiting to be asked each time. Don't merge unfinished
+  or broken work. Side branches (`proto/*` and the like) stay local and unmerged.
 - End a non-trivial session with a `STATUS.md` entry at the top (Done / Next steps / Open questions).
