@@ -491,6 +491,31 @@ function dropReply(reqRef, abortRef) {
 reqRef.current++;
 if (abortRef.current) { try { abortRef.current.abort(); } catch (e) {} abortRef.current = null; }
 }
+var MODEL_PRICES = {
+"claude-fable-5": [10, 50], "claude-mythos-5": [10, 50],
+"claude-opus-5-5": [4, 20], "claude-opus-5": [5, 25],
+"claude-opus-4-8": [5, 25], "claude-opus-4-7": [5, 25], "claude-opus-4-6": [5, 25], "claude-opus-4-5": [5, 25],
+"claude-opus-4-1": [15, 75], "claude-opus-4": [15, 75],
+"claude-sonnet-5": [2, 10], "claude-sonnet-4": [3, 15], "claude-3-7-sonnet": [3, 15], "claude-3-5-sonnet": [3, 15],
+"claude-haiku-5-5": [0.1, 0.5], "claude-haiku-4-5": [1, 5], "claude-3-5-haiku": [0.8, 4], "claude-3-haiku": [0.25, 1.25],
+"gpt-4o-mini": [0.15, 0.6], "gpt-4o": [2.5, 10],
+"gpt-4.1-nano": [0.1, 0.4], "gpt-4.1-mini": [0.4, 1.6], "gpt-4.1": [2, 8],
+"o3-mini": [1.1, 4.4], "o4-mini": [1.1, 4.4], "o3": [2, 8],
+"gpt-5-nano": [0.05, 0.4], "gpt-5-mini": [0.25, 2], "gpt-5": [1.25, 10],
+"gemini-2.5-flash-lite": [0.1, 0.4], "gemini-2.5-flash": [0.3, 2.5], "gemini-2.5-pro": [1.25, 10], "gemini-2.0-flash": [0.1, 0.4],
+};
+function builtinPrice(model, inTok) {
+var id = String(model || "").toLowerCase().replace(/^[a-z0-9-]+\//, "");  // "anthropic/claude-…" → "claude-…"
+var best = null;
+Object.keys(MODEL_PRICES).forEach(function(k) { if (id.indexOf(k) === 0 && (!best || k.length > best.length)) best = k; });
+if (!best) return null;
+if (best === "claude-haiku-5-5" && inTok > 100000) return [0.5, 2.5];  // Haiku 5.5's long-prompt tier
+return MODEL_PRICES[best];
+}
+function fmtUsd(x) { x = x || 0; return "$" + (x < 0.01 ? x.toFixed(4) : x < 1 ? x.toFixed(3) : x.toFixed(2)); }
+function fmtTok(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : String(n || 0); }
+function todayKey() { var d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+var EMPTY_COST = { usd: 0, inTok: 0, outTok: 0, n: 0, est: false, unknown: false };
 function readSSE(r, onData) {
 var buf = "";
 function feed(chunk) {
@@ -2124,6 +2149,17 @@ var chatPane = useRef(null);
 var chatReq = useRef(0);
 var chatAbort = useRef(null);
 var chatFollow = useRef({ set: -1, away: false });
+var [sessCost, setSessCost] = useState(EMPTY_COST);
+var [spend, setSpend] = useState(function() {
+try { return JSON.parse(localStorage.getItem("uroStudyHub_aiSpend") || "null") || { day: "", today: 0, all: 0 }; } catch (e) { return { day: "", today: 0, all: 0 }; }
+});
+var [priceOv, setPriceOv] = useState(function() {
+try { return JSON.parse(localStorage.getItem("uroStudyHub_prices") || "{}") || {}; } catch (e) { return {}; }
+});
+var [showCost, setShowCost] = useState(false);
+var [priceDraft, setPriceDraft] = useState(["", ""]);
+var inflightCost = useRef({ tutor: null, side: null });
+var sessEpoch = useRef(0);  // bumped with each new session: a reply that lands late isn't billed to the next one
 var sideReq = useRef(0);   // same three for the Quick Ask reply
 var sideAbort = useRef(null);
 var sideFollow = useRef({ set: -1, away: false });
@@ -2150,7 +2186,7 @@ setPendingResume(function(p) { return p ? null : p; }); // a live session supers
 idbSet("activeSession", {
 topic: lectureTopic, messages: chatMsgs, sideMsgs: sideMsgs,
 lectureMode: lectureMode, lecturePhase: lecturePhase, masteryMode: masteryMode,
-upText: upText, skillsCtx: skillsCtx,
+upText: upText, skillsCtx: skillsCtx, cost: sessCost,
 date: new Date().toISOString(),
 }).catch(function() {});
 }
@@ -2159,11 +2195,13 @@ autosaveT.current = setTimeout(snapshot, 700);
 function onHide() { if (document.visibilityState === "hidden") { if (autosaveT.current) clearTimeout(autosaveT.current); snapshot(); } }
 document.addEventListener("visibilitychange", onHide);
 return function() { document.removeEventListener("visibilitychange", onHide); };
-}, [chatMsgs, sideMsgs, upText, lectureTopic, lectureMode, lecturePhase, masteryMode, skillsCtx]);
+}, [chatMsgs, sideMsgs, upText, lectureTopic, lectureMode, lecturePhase, masteryMode, skillsCtx, sessCost]);
 function resumeInterrupted() {
 var sess = pendingResume; if (!sess) return;
 setPendingResume(null);
 stopChatReply(); stopSideReply();
+sessEpoch.current++;
+setSessCost(sess.cost || EMPTY_COST);
 setLectureTopic(sess.topic || "");
 setChatMsgs(sess.messages || []);
 setSideMsgs(sess.sideMsgs || []);
@@ -2818,6 +2856,7 @@ lecturePhase: opts.lecturePhase !== undefined ? opts.lecturePhase : (lecturePhas
 lectureMode: opts.lectureMode !== undefined ? opts.lectureMode : (lectureMode || false),
 masteryMode: opts.masteryMode !== undefined ? opts.masteryMode : (masteryMode || false),
 hasDoc: !!doc,
+cost: opts.cost !== undefined ? opts.cost : sessCost,
 date: new Date().toISOString(),
 };
 if (doc) idbSet("doc_" + session.id, doc).catch(function() {});
@@ -2826,6 +2865,8 @@ return session.id;
 }
 function resumeSavedSession(item) {
 stopChatReply(); stopSideReply();
+sessEpoch.current++;
+setSessCost(item.cost || EMPTY_COST);
 setLectureTopic(item.topic || "");
 setChatMsgs(item.messages || []);
 setSideMsgs(item.sideMsgs || []);
@@ -3338,18 +3379,41 @@ var temp = (opts && opts.temperature) || 0.7;
 var maxTok = (opts && opts.max_tokens) || 4096;
 var onDelta = opts && opts.onDelta;  // given → stream the reply; called with the text so far
 var signal = (opts && opts.signal) || undefined;
+var kind = (opts && opts.kind) || "other";  // "tutor" / "side" count toward the session cost
 var prov = lm.provider;
 var keyMap = { claude: lm.claudeKey, gemini: lm.geminiKey, openai: lm.openaiKey, openrouter: lm.openrouterKey };
 if (prov !== "lmstudio" && !keyMap[prov]) {
 if (onError) onError(new Error("No API key configured for " + prov + ". Go to Settings to add one."));
 return;
 }
-function callOpenAICompat(endpoint, apiKey, model, extraHeaders) {
+var model = currentModel();
+var inChars = sysPrompt.length + messages.reduce(function(n, m) { return n + String(m.content || "").length; }, 0);
+var acc = "", usage = null, noted = false, epoch = sessEpoch.current;
+var flight = { inTok: Math.round(inChars / 4), rate: (priceFor(prov, model, Math.round(inChars / 4)) || {}).rate || null };
+if (kind === "tutor" || kind === "side") inflightCost.current[kind] = flight;
+function landed() { if (inflightCost.current[kind] === flight) inflightCost.current[kind] = null; }
+function noteUsage() {
+if (noted) return;
+noted = true;
+landed();
+var u = usage || {};
+var inTok = u.input_tokens != null ? u.input_tokens + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) : u.prompt_tokens;
+var outTok = u.output_tokens != null ? u.output_tokens : u.completion_tokens;
+var est = false;
+if (!(inTok >= 0)) { inTok = flight.inTok; est = true; }
+if (!(outTok >= 0)) { outTok = Math.round(acc.length / 4); est = true; }
+recordUsage({ prov: prov, model: model, kind: kind, epoch: epoch, inTok: inTok, outTok: outTok, cost: typeof u.cost === "number" ? u.cost : null, est: est });
+}
+function done(text) { if (text) acc = text; noteUsage(); onSuccess(text); }
+function fail(err) { if (acc) noteUsage(); else landed(); if (onError) onError(err); }
+function callOpenAICompat(endpoint, apiKey, extraHeaders) {
 var headers = Object.assign({ "Content-Type": "application/json" }, extraHeaders || {});
 if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
 var apiMsgs = [{ role: "system", content: sysPrompt }].concat(messages);
 var reqBody = { model: model, messages: apiMsgs, temperature: temp, max_tokens: maxTok };
 if (onDelta) reqBody.stream = true;
+if (onDelta && prov === "openai") reqBody.stream_options = { include_usage: true };  // token counts in the last chunk
+if (prov === "openrouter") reqBody.usage = { include: true };  // OpenRouter reports the exact $ cost
 fetch(endpoint, {
 method: "POST",
 headers: headers,
@@ -3359,11 +3423,11 @@ signal: signal,
 .then(function(r) {
 var ct = r.headers.get("content-type") || "";
 if (onDelta && ct.indexOf("text/event-stream") !== -1) {
-var acc = "";
 return readSSE(r, function(d) {
 if (d === "[DONE]") return;
 var j; try { j = JSON.parse(d); } catch (e) { return; }
 if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+if (j.usage) usage = j.usage;
 var ch = j.choices && j.choices[0];
 var piece = ch && ch.delta && ch.delta.content;
 if (piece) { acc += piece; onDelta(acc); }
@@ -3373,11 +3437,12 @@ if (!ct.includes("application/json")) return r.text().then(function(t) { throw n
 return r.json();
 })
 .then(function(data) {
-if (data.error) { if (onError) onError(new Error(data.error.message || JSON.stringify(data.error))); return; }
+if (data.error) { fail(new Error(data.error.message || JSON.stringify(data.error))); return; }
+if (data.usage) usage = data.usage;
 var text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-onSuccess(text);
+done(text);
 })
-.catch(function(err) { if (onError) onError(err); });
+.catch(fail);
 }
 if (prov === "claude" && lm.claudeKey) {
 fetch("https://api.anthropic.com/v1/messages", {
@@ -3389,7 +3454,7 @@ headers: {
 "anthropic-dangerous-direct-browser-access": "true",
 },
 body: JSON.stringify({
-model: lm.claudeModel || "claude-sonnet-4-20250514",
+model: model,
 max_tokens: maxTok,
 system: sysPrompt,
 messages: messages,
@@ -3400,48 +3465,84 @@ signal: signal,
 .then(function(r) {
 var ct = r.headers.get("content-type") || "";
 if (onDelta && ct.indexOf("text/event-stream") !== -1) {
-var acc = "";
 return readSSE(r, function(d) {
 var j; try { j = JSON.parse(d); } catch (e) { return; }
 if (j.type === "error") throw new Error((j.error && j.error.message) || "Stream error");
+if (j.type === "message_start" && j.message && j.message.usage) usage = Object.assign({}, j.message.usage);
+if (j.type === "message_delta" && j.usage) usage = Object.assign(usage || {}, j.usage);
 if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") { acc += j.delta.text; onDelta(acc); }
 }).then(function() { return { content: [{ text: acc }] }; });
 }
 return r.json();
 })
 .then(function(data) {
-if (data.error) { if (onError) onError(new Error(data.error.message || JSON.stringify(data.error))); return; }
+if (data.error) { fail(new Error(data.error.message || JSON.stringify(data.error))); return; }
+if (data.usage) usage = data.usage;
 var text = (data.content && data.content[0] && data.content[0].text) || "";
-if (!text) { if (onError) onError(new Error("Empty response from Claude API")); return; }
-onSuccess(text);
+if (!text) { fail(new Error("Empty response from Claude API")); return; }
+done(text);
 })
-.catch(function(err) { if (onError) onError(err); });
+.catch(fail);
 } else if (prov === "gemini" && lm.geminiKey) {
-callOpenAICompat(
-"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-lm.geminiKey,
-lm.geminiModel || "gemini-2.5-flash"
-);
+callOpenAICompat("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", lm.geminiKey);
 } else if (prov === "openai" && lm.openaiKey) {
-callOpenAICompat(
-"https://api.openai.com/v1/chat/completions",
-lm.openaiKey,
-lm.openaiModel || "gpt-4o"
-);
+callOpenAICompat("https://api.openai.com/v1/chat/completions", lm.openaiKey);
 } else if (prov === "openrouter" && lm.openrouterKey) {
-callOpenAICompat(
-"https://openrouter.ai/api/v1/chat/completions",
-lm.openrouterKey,
-lm.openrouterModel || OR_DEFAULT_MODEL,
-{ "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" }
-);
+callOpenAICompat("https://openrouter.ai/api/v1/chat/completions", lm.openrouterKey,
+{ "HTTP-Referer": window.location.href, "X-Title": "UroStudy Hub" });
 } else {
-callOpenAICompat(
-lm.ep + "/v1/chat/completions",
-null,
-lm.model || "local-model"
-);
+callOpenAICompat(lm.ep + "/v1/chat/completions", null);
 }
+}
+function currentModel() {
+var prov = lm.provider;
+return prov === "claude" ? (lm.claudeModel || "claude-sonnet-4-20250514")
+: prov === "gemini" ? (lm.geminiModel || "gemini-2.5-flash")
+: prov === "openai" ? (lm.openaiModel || "gpt-4o")
+: prov === "openrouter" ? (lm.openrouterModel || OR_DEFAULT_MODEL)
+: (lm.model || "local-model");
+}
+function priceFor(prov, model, inTok) {
+if (priceOv[model]) return { rate: priceOv[model], src: "your price" };
+if (prov === "lmstudio") return { rate: [0, 0], src: "local model — free" };
+if (prov === "openrouter") {
+var cat = loadOrModels();
+var m = cat && (cat.models || []).filter(function(x) { return x.id === model; })[0];
+if (m && m.inM >= 0 && m.outM >= 0) return { rate: [m.inM, m.outM], src: "OpenRouter's price list (each reply's exact cost when OpenRouter reports it)" };
+}
+var b = builtinPrice(model, inTok);
+return b ? { rate: b, src: "built-in price list" } : null;
+}
+function recordUsage(u) {
+var pr = u.cost != null ? null : priceFor(u.prov, u.model, u.inTok);
+var usd = u.cost != null ? u.cost : pr ? (u.inTok * pr.rate[0] + u.outTok * pr.rate[1]) / 1e6 : null;
+if ((u.kind === "tutor" || u.kind === "side") && u.epoch === sessEpoch.current) {
+setSessCost(function(p) {
+return { usd: p.usd + (usd || 0), inTok: p.inTok + u.inTok, outTok: p.outTok + u.outTok, n: p.n + 1, est: p.est || u.est, unknown: p.unknown || usd == null };
+});
+}
+if (usd) {
+setSpend(function(p) {
+var day = todayKey();
+var next = { day: day, today: (p.day === day ? p.today : 0) + usd, all: (p.all || 0) + usd };
+try { localStorage.setItem("uroStudyHub_aiSpend", JSON.stringify(next)); } catch (e) {  }
+return next;
+});
+}
+}
+function liveSessCost() {
+var t = { usd: sessCost.usd, est: sessCost.est, unknown: sessCost.unknown, live: false };
+[["tutor", chatLoad, chatMsgs], ["side", sideLoad, sideMsgs]].forEach(function(x) {
+var f = inflightCost.current[x[0]];
+if (!f || !x[1]) return;
+t.live = true;
+if (!f.rate) { t.unknown = true; return; }
+var last = x[2][x[2].length - 1];
+var outTok = last && last.role === "assistant" ? Math.round(String(last.content || "").length / 4) : 0;
+t.usd += (f.inTok * f.rate[0] + outTok * f.rate[1]) / 1e6;
+t.est = true;
+});
+return t;
 }
 function detectPhase(text) {
 var upper = text.toUpperCase();
@@ -3514,7 +3615,7 @@ var ctrl = chatAbort.current;
 var live = s.tutorStream === false ? null : streamBatcher(function(t) {
 if (chatReq.current === reqId) setChatMsgs(msgs.concat([{ role: "assistant", content: t }]));
 });
-callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
+callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined, kind: "tutor" }, function(reply) {
 if (chatReq.current !== reqId) return;
 if (live) live.cancel();
 setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
@@ -3555,6 +3656,8 @@ setSideLoad(false);
 }
 function resetSidekick() {
 stopSideReply();
+sessEpoch.current++;
+setSessCost(EMPTY_COST);
 setSideMsgs([]);
 setSideIn("");
 setSideOpen(false);
@@ -3617,7 +3720,7 @@ var ctrl = sideAbort.current;
 var live = s.tutorStream === false ? null : streamBatcher(function(t) {
 if (sideReq.current === reqId) setSideMsgs(msgs.concat([{ role: "assistant", content: t }]));
 });
-callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
+callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined, kind: "side" }, function(reply) {
 if (sideReq.current !== reqId) return;
 if (live) live.cancel();
 setSideMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try again." }]));
@@ -8242,6 +8345,16 @@ return <div key={ti} style={{ width: 11, height: 11, borderRadius: 2, background
 <div style={{ width: 6, height: 6, borderRadius: "50%", background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
 <span style={{ fontSize: 9, color: lm.on ? "var(--a-grn)" : "var(--a-red0)" }}>{lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + (lm.model || "").split("/").pop().substring(0, 20) : "Off"}</span>
 </div>
+{(function() {
+var lc = liveSessCost();
+var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
+var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
+return (
+<button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={{ display: "flex", alignItems: "center", gap: 4, background: showCost ? c.a + "20" : c.cd, border: "1px solid " + (lc.live ? c.a + "80" : "var(--c-br)"), borderRadius: 8, padding: "4px 8px", cursor: "pointer", color: lc.live ? c.a : "var(--c-mut)", fontSize: 10, fontWeight: 700, fontVariantNumeric: "tabular-nums", minHeight: 28 }}>
+<span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>{label}
+</button>
+);
+})()}
 <div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 10, padding: "6px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40 }}>
 <span style={{ fontSize: 15 }}>{"🍅"}</span>
 <span style={{ fontSize: 16, fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
@@ -8861,6 +8974,55 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 </button>
 </div>
 </div>}
+{showCost && (function() {
+var lc = liveSessCost();
+var model = currentModel();
+var pr = priceFor(lm.provider, model, 0);
+var dayTotal = spend.day === todayKey() ? spend.today : 0;
+function n3(x) { return String(+(+x).toFixed(3)); }
+function storePrices(next) { setPriceOv(next); try { localStorage.setItem("uroStudyHub_prices", JSON.stringify(next)); } catch (e) {  } }
+function savePrice() {
+var a = parseFloat(priceDraft[0]), b = parseFloat(priceDraft[1]);
+if (!(a >= 0) || !(b >= 0)) return;
+var next = Object.assign({}, priceOv); next[model] = [a, b]; storePrices(next);
+}
+function clearPrice() { var next = Object.assign({}, priceOv); delete next[model]; storePrices(next); setPriceDraft(["", ""]); }
+var inStyle = { width: 58, padding: "6px 7px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 7, color: "var(--c-tx)", fontSize: 11 };
+var btnStyle = { padding: "6px 10px", background: c.a + "20", border: "1px solid " + c.a + "50", borderRadius: 7, color: c.a, fontSize: 10, fontWeight: 700, cursor: "pointer", minHeight: 30 };
+return (
+<div data-cost-panel style={{ position: "absolute", top: 50, left: 8, zIndex: 45, width: "min(340px, calc(100% - 16px))", background: c.bg, border: "1px solid " + c.a + "55", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,0.6)", padding: 12, fontSize: 11, color: "var(--c-tx)", lineHeight: 1.5 }}>
+<div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+<span style={{ fontWeight: 800, color: c.a, flex: 1 }}>{"AI cost"}</span>
+<button onClick={function() { setShowCost(false); }} title="Close" style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 9, color: "var(--c-tx)", cursor: "pointer", fontSize: 14, minWidth: 34, minHeight: 32, padding: 0, fontWeight: 700 }}>{"✕"}</button>
+</div>
+<div style={{ fontSize: 10, color: "var(--c-mut)" }}>{"This session (tutor + Quick Ask)"}</div>
+<div data-cost-session style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+{lm.provider === "lmstudio" && !priceOv[model] && !lc.usd ? "free" : (lc.est ? "≈" : "") + fmtUsd(lc.usd)}
+{lc.live && <span style={{ fontSize: 10, color: c.a, fontWeight: 600 }}>{"  counting…"}</span>}
+</div>
+<div style={{ fontSize: 10, color: "#64748b" }}>{sessCost.n + (sessCost.n === 1 ? " reply" : " replies") + " · " + fmtTok(sessCost.inTok) + " tokens in · " + fmtTok(sessCost.outTok) + " out"}</div>
+<div style={{ display: "flex", gap: 18, marginTop: 8 }}>
+<div><div style={{ fontSize: 10, color: "var(--c-mut)" }}>{"Today"}</div><b data-cost-today>{fmtUsd(dayTotal)}</b></div>
+<div><div style={{ fontSize: 10, color: "var(--c-mut)" }}>{"All time"}</div><b data-cost-all>{fmtUsd(spend.all)}</b></div>
+</div>
+<div style={{ fontSize: 9, color: "#64748b" }}>{"Today and all time count every AI feature (Anki cards too), on this device."}</div>
+<div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--c-br)", fontSize: 10, color: "var(--c-mut)" }}>
+<div>{"Model: "}<b style={{ color: "var(--c-tx)", wordBreak: "break-all" }}>{model}</b></div>
+<div data-cost-rate>{pr ? "$" + n3(pr.rate[0]) + " in / $" + n3(pr.rate[1]) + " out per million tokens — " + pr.src : "No price known for this model — set it below to see costs."}</div>
+{(
+<div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+<span>{"Your price, $ per million:"}</span>
+<input data-price-in value={priceDraft[0]} onChange={function(e) { setPriceDraft([e.target.value, priceDraft[1]]); }} placeholder={pr ? n3(pr.rate[0]) + " in" : "in"} inputMode="decimal" style={inStyle} />
+<input data-price-out value={priceDraft[1]} onChange={function(e) { setPriceDraft([priceDraft[0], e.target.value]); }} placeholder={pr ? n3(pr.rate[1]) + " out" : "out"} inputMode="decimal" style={inStyle} />
+<button onClick={savePrice} style={btnStyle}>{"Save"}</button>
+{priceOv[model] && <button onClick={clearPrice} style={Object.assign({}, btnStyle, { background: "transparent", color: "var(--c-mut)", border: "1px solid var(--c-br)" })}>{"Default"}</button>}
+</div>
+)}
+</div>
+{lc.est && <div style={{ fontSize: 9, color: "#64748b", marginTop: 6 }}>{"≈ means estimated: a reply still being written, or a provider that didn't report its token count (about 4 characters per token)."}</div>}
+</div>
+);
+})()}
 {chatView === "chat" && chatMsgs.length > 0 && !sideOpen && (
 <button onClick={openSidekick} title="Side chat for quick definitions & clarifications — the lecture won't see it" style={{ position: "absolute", right: 10, bottom: 72, zIndex: 30, display: "flex", alignItems: "center", gap: 5, padding: "8px 13px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 20, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,0.45)" }}>
 {"💬 Quick ask"}{sideMsgs.length > 0 && <span style={{ background: "#ffffff30", borderRadius: 8, padding: "0 6px", fontSize: 9 }}>{sideMsgs.length}</span>}

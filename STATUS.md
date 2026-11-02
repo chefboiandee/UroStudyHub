@@ -3,6 +3,52 @@
 **Updated:** 2026-11-02
 **Tool:** Claude Code (Opus 5.5)
 
+## 2026-11-02 (later 6) — 💲 Live AI cost meter in the tutor
+
+Andrew: show what a session costs on paid models, running and updated as it goes.
+**Done:**
+- A **cost** chip in the tutor toolbar shows this session (tutor + Quick Ask).
+  - It climbs while a reply is written: the input estimate plus the text so far at ~4
+    characters per token, marked ≈.
+  - It snaps to the real number when the reply lands.
+  - New session (Clear, a new topic, a skills module) → $0. Resumed and saved sessions keep their
+    meter.
+- Tap the chip for:
+  - the session total, replies and tokens;
+  - **today** and **all time**: every AI call through `callAI`, Anki included, stored on this
+    device in `uroStudyHub_aiSpend`;
+  - the model and the price used, with its source;
+  - a "your price, $ per million" override per model (`uroStudyHub_prices`).
+- `callAI` reads each provider's usage:
+  - Anthropic: `message_start` + `message_delta`, or `usage` when not streaming.
+  - OpenAI: `stream_options.include_usage`.
+  - OpenRouter: `usage.include` gives the **exact $ cost**.
+  - Gemini / LM Studio: whatever usage they send, else an estimate.
+  - A reply cut off or aborted mid-stream still counts.
+- Prices, as `MODEL_PRICES`, longest prefix wins:
+  - Claude: list prices from the API skill (Oct 2026); legacy Opus 4/4.1 and Sonnet 4 from
+    memory; Haiku 5.5 has its >100K-prompt tier.
+  - OpenAI and Gemini: last known list prices, marked as such; override in the panel.
+  - OpenRouter: its live model list; LM Studio: free unless you set a price.
+- `sessEpoch`: a reply that lands after Clear counts toward today / all time but not toward the new
+  session.
+
+**Verified:** cost suite 18/18 in headless Chrome:
+- live climb with the fake streaming server and a custom price;
+- the session resets on Clear while today keeps the cut-off reply;
+- exact costs: OpenAI stream usage $0.0075, Claude message_start/delta $0.012, Quick Ask adds to
+  the session ($0.024), OpenRouter `usage.cost` $0.0042;
+- custom price and back to default.
+
+All earlier suites still pass (streaming 27/27 at iPad and phone sizes, hooks 13/13, mnemonic
+rule, Quick Ask keyboard).
+
+**Not counted:** the Pocket Guide / Links "organize with AI" buttons, which call `fetch` directly.
+**Next steps:** compare against the real provider dashboards after a session.
+**Open questions:** the Settings Claude picker labels `claude-sonnet-4-20250514` "Sonnet 4.6
+(latest)" (it's Sonnet 4), and `claude-sonnet-4-5-20250514` isn't a real model id. Refresh that
+list?
+
 ## 2026-11-02 (later 5) — 🧠 My hooks: your own mnemonics, saved and on Anki cards
 
 Andrew liked the idea of saving the hooks he builds with the tutor, for later sessions and Anki.
