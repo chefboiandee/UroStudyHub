@@ -16,6 +16,12 @@ Gemini's models endpoint carries no pricing, and `ai.google.dev` is blocked in t
 
 **Verified:** `builtinPrice` returns the right rate for preview ids and for ids with a `models/` prefix (Node). The built page could not render in the sandbox (cdnjs blocked), so there was no browser run.
 
+**Also (same day, after merge request):** Gemini models with no built-in price now borrow OpenRouter's price for the same `google/…` model (`orGooglePrice`, `ensureOrCatalog`).
+- The public list is fetched once and cached for a day, only when a Gemini model has no built-in entry.
+- Ids match exactly, else ignoring `-preview` / `-exp` / date suffixes; `:free` and `:thinking` variants are skipped.
+- The 💲 panel labels it "OpenRouter's price for this Google model (rough estimate)".
+- Tested in Node against a hand-made catalog only: openrouter.ai is blocked in the cloud sandbox, so the live fetch is untested.
+
 **Next steps:** Andrew to confirm a Gemini 3 tutoring session now shows a cost. Gemini 3.5/3.6 Flash and `*-latest` aliases are still unpriced (sources conflicted); set a price in the 💲 panel or tell me the exact model id and the price from Google's page.
 **Open questions:** does Gemini's OpenAI-compatible endpoint accept `stream_options.include_usage`? It isn't sent for Gemini, so streamed replies use the ~4 chars/token estimate.
 

@@ -290,6 +290,27 @@ function loadOrModels() {
 function saveOrModels(models) {
   try { localStorage.setItem("uroStudyHub_orModels", JSON.stringify({ ts: Date.now(), models: models })); } catch(e) { /* ignore */ }
 }
+// Rough price for a Google model from OpenRouter's catalog ("google/gemini-…"), used when the
+// built-in table has no entry. Exact id first, else the same model ignoring -preview / -exp / date
+// suffixes (the catalog is newest-first). Free (:free) and variant (:thinking) ids are skipped.
+function orGooglePrice(model, cat) {
+  var id = String(model || "").toLowerCase().replace(/^models\//, "");
+  function norm(s) { return s.replace(/-(preview|exp)(-.*)?$/, "").replace(/-\d{2}-\d{2,4}$/, "").replace(/-\d{3}$/, ""); }
+  var list = ((cat && cat.models) || []).filter(function(m) { return m.id.indexOf("google/") === 0 && m.id.indexOf(":") < 0 && m.inM >= 0 && m.outM >= 0 && !m.free; });
+  var hit = list.filter(function(m) { return m.id === "google/" + id; })[0]
+    || list.filter(function(m) { return norm(m.id.slice(7)) === norm(id); })[0];
+  return hit ? [hit.inM, hit.outM] : null;
+}
+// Make sure the public OpenRouter model list is cached (no key needed); calls done(true) when it
+// was just fetched. Refreshed daily, since prices move.
+function ensureOrCatalog(done) {
+  var cat = loadOrModels();
+  if (cat && cat.models && Date.now() - (cat.ts || 0) < 864e5) return;
+  fetch("https://openrouter.ai/api/v1/models")
+    .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function(data) { saveOrModels(orParseModels(data)); if (done) done(true); })
+    .catch(function() { /* offline: the meter just stays at "unknown" */ });
+}
 // Turn a GET /api/v1/key result into one status line for the Settings panel
 function orDescribeKey(res) {
   if (!res) return null;
@@ -2457,6 +2478,13 @@ export default function UroStudyHub() {
   });
   var [showCost, setShowCost] = useState(false);
   var [priceDraft, setPriceDraft] = useState(["", ""]);
+  var [, setCatTick] = useState(0);  // re-render once OpenRouter's price list lands
+  // A Gemini model with no built-in price borrows OpenRouter's: fetch (and cache) that list up front.
+  useEffect(function() {
+    if (lm.provider === "gemini" && !builtinPrice(lm.geminiModel || "gemini-2.5-flash", 0)) {
+      ensureOrCatalog(function() { setCatTick(function(n) { return n + 1; }); });
+    }
+  }, [lm.provider, lm.geminiModel]);
   var inflightCost = useRef({ tutor: null, side: null });
   var sessEpoch = useRef(0);  // bumped with each new session: a reply that lands late isn't billed to the next one
   var sideReq = useRef(0);   // same three for the Quick Ask reply
@@ -4030,7 +4058,12 @@ export default function UroStudyHub() {
       if (m && m.inM >= 0 && m.outM >= 0) return { rate: [m.inM, m.outM], src: "OpenRouter's price list (each reply's exact cost when OpenRouter reports it)" };
     }
     var b = builtinPrice(model, inTok);
-    return b ? { rate: b, src: "built-in price list" } : null;
+    if (b) return { rate: b, src: "built-in price list" };
+    if (prov === "gemini") {  // no built-in entry: borrow OpenRouter's price for the same Google model
+      var g = orGooglePrice(model, loadOrModels());
+      if (g) return { rate: g, src: "OpenRouter's price for this Google model (rough estimate)" };
+    }
+    return null;
   }
 
   // One finished AI call → this session's meter (tutor + Quick Ask) and today / all-time totals.
