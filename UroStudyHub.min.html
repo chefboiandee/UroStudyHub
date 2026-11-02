@@ -462,6 +462,30 @@ if (!pane) return;
 top = Math.max(0, Math.min(top, pane.scrollHeight - pane.clientHeight));
 try { pane.scrollTo({ top: top, behavior: "smooth" }); } catch (e) { pane.scrollTop = top; }
 }
+function readSSE(r, onData) {
+var buf = "";
+function feed(chunk) {
+buf += chunk;
+var lines = buf.split(/\r?\n/);
+buf = lines.pop();
+for (var i = 0; i < lines.length; i++) {
+if (lines[i].indexOf("data:") === 0) onData(lines[i].slice(5).replace(/^ /, ""));
+}
+}
+if (!r.body || !r.body.getReader || typeof TextDecoder === "undefined") {
+return r.text().then(function(t) { feed(t + "\n"); });
+}
+var reader = r.body.getReader();
+var dec = new TextDecoder();
+function pump() {
+return reader.read().then(function(res) {
+if (res.done) { feed(dec.decode() + "\n"); return; }
+feed(dec.decode(res.value, { stream: true }));
+return pump();
+});
+}
+return pump();
+}
 function pdfErrMsg(err) {
 if (err && err.name === "PasswordException") return "this PDF is password-protected";
 var m = err && err.message ? String(err.message) : String(err || "unknown error");
@@ -2043,6 +2067,9 @@ try { return localStorage.getItem("uroStudyHub_sideBig") === "1"; } catch (e) { 
 var [sideVvH, setSideVvH] = useState(0);
 var sidePane = useRef(null);
 var chatPane = useRef(null);
+var chatReq = useRef(0);
+var chatAbort = useRef(null);
+var chatFollow = useRef({ set: -1, away: false });
 var fileRef = useRef(null);
 var ankiFileRef = useRef(null);
 var [pendingResume, setPendingResume] = useState(null);
@@ -2079,6 +2106,7 @@ return function() { document.removeEventListener("visibilitychange", onHide); };
 function resumeInterrupted() {
 var sess = pendingResume; if (!sess) return;
 setPendingResume(null);
+stopChatReply();
 setLectureTopic(sess.topic || "");
 setChatMsgs(sess.messages || []);
 setSideMsgs(sess.sideMsgs || []);
@@ -2740,6 +2768,7 @@ setS(function(p) { return Object.assign({}, p, { savedLectures: (p.savedLectures
 return session.id;
 }
 function resumeSavedSession(item) {
+stopChatReply();
 setLectureTopic(item.topic || "");
 setChatMsgs(item.messages || []);
 setSideMsgs(item.sideMsgs || []);
@@ -3154,8 +3183,25 @@ useEffect(function() {
 try { localStorage.setItem("uroStudyHub_ankiSubDeck", ankiSubDeck); } catch (e) {  }
 }, [ankiSubDeck]);
 useEffect(function() {
-if (chatPane.current) scrollPaneTo(chatPane.current, chatPane.current.scrollHeight);
-}, [chatMsgs]);
+var pane = chatPane.current;
+if (!pane) return;
+var f = chatFollow.current;
+var last = chatMsgs[chatMsgs.length - 1];
+if (!last || last.role !== "assistant") {
+f.away = false; f.set = -1;
+scrollPaneTo(pane, pane.scrollHeight);
+return;
+}
+if (f.away) return;
+var bubbles = pane.querySelectorAll("[data-chat-msg]");
+var b = bubbles[bubbles.length - 1];
+if (!b) return;
+var top = pane.scrollTop + b.getBoundingClientRect().top - pane.getBoundingClientRect().top - 8;
+var target = Math.min(top, pane.scrollHeight - pane.clientHeight);
+if (target <= pane.scrollTop + 1) return;  // already there, or you've read ahead
+if (chatLoad) { pane.scrollTop = target; f.set = pane.scrollTop; }  // streaming: step, no animation
+else scrollPaneTo(pane, target);
+}, [chatMsgs, chatLoad]);
 useEffect(function() {
 var pane = sidePane.current;
 if (!pane) return;
@@ -3184,6 +3230,8 @@ return function() { vv.removeEventListener("resize", upd); };
 function callAI(sysPrompt, messages, opts, onSuccess, onError) {
 var temp = (opts && opts.temperature) || 0.7;
 var maxTok = (opts && opts.max_tokens) || 4096;
+var onDelta = opts && opts.onDelta;  // given → stream the reply; called with the text so far
+var signal = (opts && opts.signal) || undefined;
 var prov = lm.provider;
 var keyMap = { claude: lm.claudeKey, gemini: lm.geminiKey, openai: lm.openaiKey, openrouter: lm.openrouterKey };
 if (prov !== "lmstudio" && !keyMap[prov]) {
@@ -3194,13 +3242,27 @@ function callOpenAICompat(endpoint, apiKey, model, extraHeaders) {
 var headers = Object.assign({ "Content-Type": "application/json" }, extraHeaders || {});
 if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
 var apiMsgs = [{ role: "system", content: sysPrompt }].concat(messages);
+var reqBody = { model: model, messages: apiMsgs, temperature: temp, max_tokens: maxTok };
+if (onDelta) reqBody.stream = true;
 fetch(endpoint, {
 method: "POST",
 headers: headers,
-body: JSON.stringify({ model: model, messages: apiMsgs, temperature: temp, max_tokens: maxTok }),
+body: JSON.stringify(reqBody),
+signal: signal,
 })
 .then(function(r) {
 var ct = r.headers.get("content-type") || "";
+if (onDelta && ct.indexOf("text/event-stream") !== -1) {
+var acc = "";
+return readSSE(r, function(d) {
+if (d === "[DONE]") return;
+var j; try { j = JSON.parse(d); } catch (e) { return; }
+if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+var ch = j.choices && j.choices[0];
+var piece = ch && ch.delta && ch.delta.content;
+if (piece) { acc += piece; onDelta(acc); }
+}).then(function() { return { choices: [{ message: { content: acc } }] }; });
+}
 if (!ct.includes("application/json")) return r.text().then(function(t) { throw new Error("Unexpected response (not JSON). The API may be misconfigured."); });
 return r.json();
 })
@@ -3225,9 +3287,22 @@ model: lm.claudeModel || "claude-sonnet-4-20250514",
 max_tokens: maxTok,
 system: sysPrompt,
 messages: messages,
+stream: !!onDelta,
 }),
+signal: signal,
 })
-.then(function(r) { return r.json(); })
+.then(function(r) {
+var ct = r.headers.get("content-type") || "";
+if (onDelta && ct.indexOf("text/event-stream") !== -1) {
+var acc = "";
+return readSSE(r, function(d) {
+var j; try { j = JSON.parse(d); } catch (e) { return; }
+if (j.type === "error") throw new Error((j.error && j.error.message) || "Stream error");
+if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") { acc += j.delta.text; onDelta(acc); }
+}).then(function() { return { content: [{ text: acc }] }; });
+}
+return r.json();
+})
 .then(function(data) {
 if (data.error) { if (onError) onError(new Error(data.error.message || JSON.stringify(data.error))); return; }
 var text = (data.content && data.content[0] && data.content[0].text) || "";
@@ -3328,18 +3403,45 @@ sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject +
 sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
 }
 sysContent += MATH_FORMAT_RULE;
-callAI(sysContent, chatHistory, { temperature: 0.7 }, function(reply) {
+var reqId = ++chatReq.current;
+if (chatAbort.current) { try { chatAbort.current.abort(); } catch (e) {} }
+var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+chatAbort.current = ctrl;
+var streamed = "", pending = null, flushT = null;
+function flush() {
+flushT = null;
+if (pending === null || chatReq.current !== reqId) return;
+var t = pending; pending = null;
+setChatMsgs(msgs.concat([{ role: "assistant", content: t }]));
+}
+var onDelta = s.tutorStream === false ? null : function(t) {
+streamed = t; pending = t;
+if (!flushT) flushT = setTimeout(flush, 120);
+};
+function settle() { if (flushT) { clearTimeout(flushT); flushT = null; } pending = null; if (chatAbort.current === ctrl) chatAbort.current = null; }
+callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: onDelta, signal: ctrl ? ctrl.signal : undefined }, function(reply) {
+if (chatReq.current !== reqId) return;
+settle();
 setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
 setChatLoad(false);
 if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
 }, function(err) {
+if (chatReq.current !== reqId) return;
+settle();
 var provNames = { claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "OpenRouter", lmstudio: "LM Studio" };
-var errMsg = (lm.provider === "lmstudio")
+var errMsg = streamed
+? streamed + "\n\n⚠ Reply cut off (" + (err.message || "connection lost") + ") — tap 🔄 to regenerate."
+: (lm.provider === "lmstudio")
 ? "Connection Error: Could not reach LM Studio at " + lm.ep + ". Make sure LM Studio is running."
 : (provNames[lm.provider] || "AI") + " API Error: " + (err.message || "Check your API key in Settings.");
 setChatMsgs(msgs.concat([{ role: "assistant", content: errMsg }]));
 setChatLoad(false);
 });
+}
+function stopChatReply() {
+chatReq.current++;
+if (chatAbort.current) { try { chatAbort.current.abort(); } catch (e) {} chatAbort.current = null; }
+setChatLoad(false);
 }
 function regenerateResponse() {
 var msgs = chatMsgs.slice();
@@ -8128,7 +8230,7 @@ reader.readAsText(file);
 }} style={{ display: "none" }} />
 <button onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={{ background: chatView === "skills" ? "#f9731620" : c.cd, border: "1px solid " + (chatView === "skills" ? "#f9731680" : "var(--c-br)"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "skills" ? "var(--a-or)" : "var(--c-mut)", fontSize: 10, fontWeight: chatView === "skills" ? 700 : 400 }}>{"🔪 OR Skills"}</button>
 <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={{ background: chatView === "saved" ? "#a78bfa20" : c.cd, border: "1px solid " + (chatView === "saved" ? "#a78bfa60" : "var(--c-br)"), borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: chatView === "saved" ? "var(--a-vio)" : "var(--c-mut)", fontSize: 10, fontWeight: chatView === "saved" ? 700 : 400 }}>{"📚 Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
-<button onClick={function() { setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "var(--c-mut)", fontSize: 10 }}>Clear</button>
+<button onClick={function() { stopChatReply(); setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "var(--c-mut)", fontSize: 10 }}>Clear</button>
 </div>
 <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, overflowX: "auto" }}>
 <span style={{ fontSize: 9, color: "var(--c-br2)", flexShrink: 0 }}>Style:</span>
@@ -8139,7 +8241,7 @@ return <button key={key} onClick={function() { setS(function(p) { return Object.
 })}
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-mut)", fontSize: 10, flexShrink: 0, minHeight: 28 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
 <div style={{ flex: 1 }} />
-<button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-mut)", fontSize: 11, flexShrink: 0, minHeight: 28 }} title="Add personal note to tutor">{"✏️"}</button>
+<button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 12, padding: "5px 9px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-mut)", fontSize: 11, flexShrink: 0, minHeight: 28 }} title="Tutor settings: personal note, live replies">{"✏️"}</button>
 </div>
 {s.showStylePreview && (
 <div style={{ padding: "8px 12px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "30" }}>
@@ -8167,7 +8269,11 @@ return (
 <div style={{ padding: "6px 12px 8px", borderBottom: "1px solid " + c.cd, background: c.cd + "40" }}>
 <div style={{ fontSize: 9, color: "var(--c-mut)", marginBottom: 4 }}>Personal note for the AI tutor — tell it about your background, learning style, what you struggle with, etc.</div>
 <textarea value={s.tutorCustomNote || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { tutorCustomNote: e.target.value }); }); }} placeholder={"e.g. \"I'm a PGY-3 who's strong on oncology but weak on infertility. I learn best with clinical scenarios. Don't go easy on me.\""} style={{ width: "100%", minHeight: 50, padding: 8, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: 10, resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
-<div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
+<label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--c-mut)", cursor: "pointer", minHeight: 28 }} title="Replies appear word by word as the AI writes them. Turn off if live text makes an e-ink screen flicker.">
+<input type="checkbox" checked={s.tutorStream !== false} onChange={function(e) { var on = e.target.checked; setS(function(p) { return Object.assign({}, p, { tutorStream: on }); }); }} style={{ width: 16, height: 16, margin: 0 }} />
+{"⚡ Show replies as they're written"}
+</label>
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: false }); }); }} style={{ padding: "3px 10px", background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 6, color: c.a, fontSize: 9, cursor: "pointer", fontWeight: 600 }}>Done</button>
 </div>
 </div>
@@ -8519,7 +8625,7 @@ return (
 })}
 </div>
 )}
-{chatView === "chat" && <div ref={chatPane} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+{chatView === "chat" && <div ref={chatPane} onScroll={function(e) { var f = chatFollow.current; if (chatLoad && f.set >= 0 && e.currentTarget.scrollTop < f.set - 30) f.away = true; }} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
 {convertingChat && (
 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: c.a + "15", border: "1px solid " + c.a + "30", borderRadius: 8 }}>
 <div style={{ width: 14, height: 14, border: "2px solid " + c.a, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
@@ -8572,9 +8678,10 @@ if (msg.role === "system") {
 return <div key={i} style={{ fontSize: 10, color: "#64748b", textAlign: "center", background: c.cd + "80", padding: "4px 12px", borderRadius: 10, alignSelf: "center" }}>{msg.content}</div>;
 }
 return (
-<div key={i} style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", position: "relative" }}>
+<div key={i} data-chat-msg style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", position: "relative" }}>
 <div style={{ background: msg.role === "user" ? "linear-gradient(135deg," + c.a + "," + c.a2 + ")" : c.cd, borderRadius: msg.role === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px", padding: "10px 14px", color: "var(--c-tx)", fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid var(--c-br)" : "none" }}>
 {renderMathText(msg.content)}
+{chatLoad && msg.role === "assistant" && i === chatMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}
 </div>
 {msg.role === "assistant" && (
 <div style={{ position: "absolute", top: 4, right: -28, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -8605,7 +8712,7 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 <button onClick={function() { sendChat("SKIP"); }} style={{ padding: "9px 14px", background: "transparent", border: "1px solid var(--c-br)", borderRadius: 11, color: "#64748b", fontSize: 12, fontWeight: 600, cursor: "pointer" }} title="Skip this node — it's marked ⚠️ weak and lands on the revisit list">{"⏭️ Skip"}</button>
 </div>
 )}
-{chatLoad && (
+{chatLoad && !(chatMsgs.length > 0 && chatMsgs[chatMsgs.length - 1].role === "assistant") && (
 <div style={{ alignSelf: "flex-start" }}>
 <div style={{ background: c.cd, borderRadius: "14px 14px 14px 2px", padding: "12px 16px", border: "1px solid var(--c-br)", color: "#64748b", fontSize: 12 }}>Thinking...</div>
 </div>
@@ -8627,12 +8734,12 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 )}
 {chatView === "chat" && sideOpen && (
 <div data-quickask style={{ position: "absolute", right: 8, bottom: 132, width: sideBig ? "min(720px, calc(100% - 16px))" : "min(400px, calc(100% - 16px))", height: sideBig ? "calc(100% - 236px)" : "min(50%, 440px)", minHeight: 150, maxHeight: sideVvH ? Math.max(150, sideVvH - 24) : undefined, display: "flex", flexDirection: "column", background: c.bg, border: "1px solid " + c.a + "55", borderRadius: 14, boxShadow: "0 14px 44px rgba(0,0,0,0.6)", zIndex: 30, overflow: "hidden" }}>
-<div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "70", flexShrink: 0 }}>
+<div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px 4px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "70", flexShrink: 0 }}>
 <span style={{ fontSize: 11, fontWeight: 800, color: c.a }}>{"💬 Quick Ask"}</span>
 <span style={{ fontSize: 8, color: "#64748b", flex: 1, lineHeight: 1.3 }}>side chat — the lecture won't see this</span>
-{sideMsgs.length > 0 && <button onClick={function() { setSideMsgs([]); }} title="Clear side chat" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 11, padding: 2 }}>{"🗑"}</button>}
-<button onClick={function() { setSideBig(!sideBig); }} title={sideBig ? "Shrink the side chat" : "Make the side chat bigger"} style={{ background: "none", border: "none", color: "var(--c-mut)", cursor: "pointer", fontSize: 14, padding: "0 4px", fontWeight: 700 }}>{sideBig ? "⤡" : "⤢"}</button>
-<button onClick={function() { setSideOpen(false); }} style={{ background: "none", border: "none", color: "var(--c-mut)", cursor: "pointer", fontSize: 13, padding: 2, fontWeight: 700 }}>{"✕"}</button>
+{sideMsgs.length > 0 && <button onClick={function() { setSideMsgs([]); }} title="Clear side chat" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13, minWidth: 34, minHeight: 34, padding: 0 }}>{"🗑"}</button>}
+<button onClick={function() { setSideBig(!sideBig); }} title={sideBig ? "Shrink the side chat" : "Make the side chat bigger"} style={{ background: "none", border: "none", color: "var(--c-mut)", cursor: "pointer", fontSize: 16, minWidth: 34, minHeight: 34, padding: 0, fontWeight: 700 }}>{sideBig ? "⤡" : "⤢"}</button>
+<button data-side-close onClick={function() { setSideOpen(false); }} title="Close (your side chat is kept)" style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 9, color: "var(--c-tx)", cursor: "pointer", fontSize: 15, minWidth: 36, minHeight: 34, padding: 0, fontWeight: 700 }}>{"✕"}</button>
 </div>
 <div ref={sidePane} style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
 {sideMsgs.length === 0 && (
@@ -8657,7 +8764,7 @@ return (
 {sideLoad && <div style={{ alignSelf: "flex-start", background: c.cd, border: "1px solid var(--c-br)", borderRadius: "11px 11px 11px 2px", padding: "7px 10px", color: "#64748b", fontSize: 11 }}>{"Thinking..."}</div>}
 </div>
 <div style={{ display: "flex", gap: 5, padding: 8, borderTop: "1px solid " + c.cd, flexShrink: 0 }}>
-<input value={sideIn} onChange={function(e) { setSideIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendSide(sideIn); } }} placeholder="Quick question..." style={{ flex: 1, minWidth: 0, padding: "8px 11px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, outline: "none" }} />
+<input value={sideIn} onChange={function(e) { setSideIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendSide(sideIn); } else if (e.key === "Escape") { setSideOpen(false); } }} placeholder="Quick question..." style={{ flex: 1, minWidth: 0, padding: "8px 11px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 11, outline: "none" }} />
 <button onClick={function() { sendSide(sideIn); }} disabled={sideLoad || !sideIn.trim()} style={{ background: (sideLoad || !sideIn.trim()) ? "var(--c-br)" : "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 10, padding: "0 13px", cursor: (sideLoad || !sideIn.trim()) ? "default" : "pointer", color: "#fff", fontSize: 13 }}>{"↑"}</button>
 </div>
 </div>
