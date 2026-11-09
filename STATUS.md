@@ -3,6 +3,38 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 6) — 🗡️ Uro Crawl: Isaac art direction, Abscess Sac weak point, Fournier's gangrene boss
+
+Andrew (via the brief): shift the look to Binding of Isaac, add a weak-point enemy, add a second "Hydra" boss. Payout
+stays per room at run end whether you win or die (the app already pays rooms×8 + kills/4, +50 on a win).
+
+**Done (`games/uro-crawl.html`, ~3.6k lines, still one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 77/77):**
+- Art: new primitives (`eyes` with asymmetry/bags/veins/drips, `cyclops`, `drool`, `pustules`, `veins`, `stitches`,
+  jagged/stitched mouths, crooked teeth); every enemy redrawn grotesque-cute with the same silhouettes; breathing
+  squash + velocity stretch on all movers; darker stained, cracked floor with a fleshy wall trim; Isaac-style player
+  (big head, wet eyes that cry at low HP); elites get a dark dashed aura; the Staghorn grew eyes in its cracks.
+- Weak-point system (`setWeakPoint` / `updateWeakPoint` / `drawWeakPoint`): a per-enemy movable hit zone with its own
+  multipliers, crit class, migration timer + shimmer and hooks; beams, bullets and the probe now pass the hit point.
+  Also generic necrotic armor (`e.necro`: ×0.15 until CUT debrides it), `e.invText`, `e.onCauterized`.
+- Abscess Sac (MICROBE, 110 HP, room 3+): lurches, lobs pus globs; the glowing bulb migrates every 3 s; body hits ×0.25,
+  CUT on the bulb = ×4 "DRAINED!" and the sac collapses into a pus puddle; other classes on the bulb may burst pus at
+  you. Bestiary fact: "Abscesses are treated with incision and drainage." Also new Klebsiella (capsule shield, hops)
+  and Clostridium (spore pod that spews gas bubbles), room 4+/5+.
+- Fournier's gangrene (`?boss=fournier`; `BOSSES`, `spawnFournier`/`updateFournier`): five necrotic lobes; a CUT lobe
+  leaves a stump that regrows as two unless coagulated within 3 s (reuses bleed + cauterize); three permanent
+  debridements expose the body, whose necrotic armor must be cut away. Phase 2: creeping necrosis along three
+  fascial-plane bands (FLUID jets / coag cones push it back, any antibiotic boon shrinks it), gas bubbles that swell
+  then burst into fans, polymicrobial adds, sugar crystals that heal it when its necrosis or slams reach them (new
+  Insulin boon clears them; walking over one gives 1 RVU). Phase 3: sepsis, red pulse, 45 s clock, migrating SOURCE
+  weak point (×0.15 elsewhere); clock out = septic shock (`?god=1` survives). Final room rolls Staghorn or Fournier
+  from the seed; `?boss=staghorn|fournier` forces one. Many eyes, legs, a maw; abstract, never anatomical.
+
+**Verified:** headless Chromium, zero console errors; Staghorn fight and all earlier checks still pass. Not on a device.
+**Next steps:** Andrew to play Fournier on the live site — is 90–120 s right, is the stump 3 s window fair on touch?
+Knobs: `fourlobe.hp 90`, body `hp 1800`, `removed < 3`, stump window `stumpT = 3`, necrosis `22 px/s`, `sepsisMax 45`.
+**Open questions:** should the Abscess bulb crit also count toward the Right Tool bonus? Should Fournier's adds pause
+during the sepsis clock to keep phase 3 readable on a phone?
+
 ## 2026-11-09 (later 5) — 🗡️ Uro Crawl: a dungeon-crawler roguelike (new arcade game, own page)
 
 Brief: a Hades / Gungeon-style top-down roguelike set inside a diseased urinary tract. Not a quiz: the learning is

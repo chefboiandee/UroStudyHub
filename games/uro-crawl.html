@@ -3,7 +3,9 @@
   Uro Crawl — UroStudyHub arcade game. A goofy top-down dungeon-crawler roguelike set inside a diseased urinary
   tract: rooms of pathologic monsters, rock–paper–scissors instrument switching (lasers break stones, loops cut
   tumours, heat burns bugs and lobes, water flushes clots and strips biofilm), Hades-style door choices and boons,
-  and the Staghorn Calculus boss. No quizzes: the learning is osmosis plus one-line bestiary facts.
+  and two bosses: the Staghorn Calculus and Fournier's Gangrene (the Hydra). No quizzes: the learning is osmosis
+  plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, googly eyes, squash
+  and stretch, body-horror gags played for laughs; everything stylized and abstract, never anatomical.
 
   Single file, no dependencies, no network. Canvas 2D + Web Audio, procedural art and sound. Old-engine safe
   (Chromium ≈92: no ?. / ?? / replaceAll / .at / #private / CSS inset).
@@ -11,7 +13,8 @@
   Standalone page: the app opens it in a frame with ?embed=1 and gets {type:'crawl:claim'} on the first input,
   {type:'crawl:exit'} from the Exit button, and {type:'crawl:result', won, rooms, kills, rvu, seconds} at run end.
 
-  URL params: ?seed=N  ?god=1  ?room=K  ?boss=1  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
+  URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier (start at that boss; ?boss=1 rolls one; a normal
+              run rolls the final boss from the seed)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), skipRoom(), step(n), startRun() }
 
@@ -730,7 +733,7 @@ function enemiesInBeam(x, y, a, len, hw) {
     var e = es[i]; if (!enemyTargetable(e)) continue;
     var dx = e.x - x, dy = e.y - y, t = dx * cx + dy * sy; if (t < -e.r || t > len + e.r) continue;
     var px = dx - cx * t, py = dy - sy * t, perp = Math.sqrt(px * px + py * py);
-    if (perp <= hw + e.r) out.push({ e: e, t: clamp(t, 0, len) });
+    if (perp <= hw + e.r) out.push({ e: e, t: clamp(t, 0, len), fx: x + cx * t, fy: y + sy * t });
   }
   out.sort(function (p, q) { return p.t - q.t; });
   return out;
@@ -771,11 +774,12 @@ function beamFire(w, dt, o) {
   var n = o.pierceAll ? 999 : 1 + (o.pierce || 0) + (w.mods.pierce || 0), done = [];
   for (var i = 0; i < hits.length && i < n; i++) {
     var e = hits[i].e;
-    dealDamage(e, o.dmg * wmod(w, 'dmg'), wcls(w), { wid: w.id, knock: o.knock || 0, ang: m.a, split: o.split, status: o.status, strip: o.strip || 0, cauterize: o.cauterize, stun: o.stun });
+    dealDamage(e, o.dmg * wmod(w, 'dmg'), wcls(w), { wid: w.id, knock: o.knock || 0, ang: m.a, split: o.split, status: o.status, strip: o.strip || 0, cauterize: o.cauterize, stun: o.stun, hx: hits[i].fx - Math.cos(m.a) * e.r * 0.6, hy: hits[i].fy - Math.sin(m.a) * e.r * 0.6 });
     burst(e.x - Math.cos(m.a) * e.r * 0.6, e.y - Math.sin(m.a) * e.r * 0.6, 2, { color: CLASSES[wcls(w)].color, speed: 90, life: 0.25, size: 2 });
     done.push(e);
   }
   if (!done.length && len < range - 2) burst(w.fx.x1, w.fx.y1, 1, { color: CLASSES[wcls(w)].color, speed: 60, life: 0.2, size: 2 });
+  if (wcls(w) === 'FLUID') pushNecrosis(w.fx.x1, w.fx.y1, 10);
   return done;
 }
 // short cone (vaporizer, roller, steam spray). Returns hits on a damage tick.
@@ -790,6 +794,7 @@ function coneFire(w, dt, o) {
     dealDamage(e, o.dmg * wmod(w, 'dmg'), wcls(w), { wid: w.id, knock: o.knock || 0, ang: a, status: o.status, cauterize: o.cauterize, stun: o.stun, strip: o.strip || 0, split: o.split });
   }
   var px = P.x + Math.cos(a) * rad * 0.7, py = P.y + Math.sin(a) * rad * 0.7;
+  if (o.cauterize) pushNecrosis(px, py, 6);
   burst(px, py, 1, { color: CLASSES[wcls(w)].color, speed: 50, life: 0.3, size: 3, spread: 0.8 });
   return hits;
 }
@@ -930,7 +935,7 @@ var WEAPONS = {
       Snd.sfx('probe'); shakeIt(0.6);
       if (!tickReady(w, dt, 0.07 / wmod(w, 'rate') / (hasBoon('dualfreq') ? 1.2 : 1))) return;
       var hits = enemiesInBeam(m.x, m.y, m.a, len, 12);
-      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, 4.2 * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', knock: 30, ang: m.a, split: 'frag' });
+      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, 4.2 * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', knock: 30, ang: m.a, split: 'frag', hx: hits[i].fx - Math.cos(m.a) * hits[i].e.r * 0.6, hy: hits[i].fy - Math.sin(m.a) * hits[i].e.r * 0.6 });
     },
     altHold: function (w, dt, held) {
       w.suck = !!held; if (!held) return;
@@ -1096,7 +1101,7 @@ var WEAPONS = {
     },
     line: function (w, a, dmg) {
       var m = muzzle(), range = 320 * wmod(w, 'range'), len = raycast(m.x, m.y, a, range), hits = enemiesInBeam(m.x, m.y, a, len, 6);
-      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, dmg * wmod(w, 'dmg'), 'FLUID', { wid: 'aquablation', knock: 40, ang: a, strip: 0.6 });
+      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, dmg * wmod(w, 'dmg'), 'FLUID', { wid: 'aquablation', knock: 40, ang: a, strip: 0.6, hx: hits[i].fx, hy: hits[i].fy });
       G.fxLines.push({ x0: m.x, y0: m.y, x1: m.x + Math.cos(a) * len, y1: m.y + Math.sin(a) * len, t: 0.18, dur: 0.18, color: '#5df07a', w: 5 });
       shakeIt(3); Snd.sfx('jet'); Snd.sfx('shot');
     },
@@ -1224,29 +1229,54 @@ function regPoly(c, r, n, rot) { c.beginPath(); for (var i = 0; i < n; i++) { va
 function starPath(c, r1, r2, n, rot) { c.beginPath(); for (var i = 0; i < n * 2; i++) { var a = rot + i / (n * 2) * TAU, r = i % 2 ? r2 : r1; var x = Math.cos(a) * r, y = Math.sin(a) * r; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); } c.closePath(); }
 function highlight(c, x, y, r) { c.fillStyle = 'rgba(255,255,255,0.28)'; c.beginPath(); c.ellipse(x, y, r, r * 0.6, -0.6, 0, TAU); c.fill(); }
 // googly eyes: centre (x,y), spacing sp, eye radius er, look angle, blink 0..1, mood
-function eyes(c, x, y, sp, er, look, blink, mood) {
-  var pr = er * 0.5, lx = Math.cos(look) * er * 0.38, ly = Math.sin(look) * er * 0.38;
+// pseudo-random but stable placement for warts/veins (per enemy seed)
+function hsh(seed, i) { var v = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453; return v - Math.floor(v); }
+// googly eyes, Isaac-style: centre (x,y), spacing sp, eye radius er, look angle, blink 0..1, mood, options
+// o: { asym: scale of the right eye, bags: dark under-eye, veins: bloodshot, drip: a tear/blood line, pupil: pupil ratio, sclera, dripColor }
+function eyes(c, x, y, sp, er, look, blink, mood, o) {
+  o = o || {};
+  var lx = Math.cos(look) * er * 0.36, ly = Math.sin(look) * er * 0.36;
   for (var s = -1; s <= 1; s += 2) {
-    c.save(); c.translate(x + s * sp, y); c.scale(1, Math.max(0.08, blink));
-    c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, er, 0, TAU); c.fill(); outline(c, 2.2);
-    c.fillStyle = '#1a1218'; c.beginPath(); c.arc(lx, ly, pr, 0, TAU); c.fill();
-    c.fillStyle = '#fff'; c.beginPath(); c.arc(lx - pr * 0.35, ly - pr * 0.35, pr * 0.3, 0, TAU); c.fill();
-    if (mood === 'angry') { c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-er, -er * 1.1 + (s < 0 ? er * 0.5 : 0)); c.lineTo(er, -er * 1.1 + (s > 0 ? er * 0.5 : 0)); c.stroke(); }
-    if (mood === 'sleepy') { c.fillStyle = c.__lidColor || '#1a1218'; c.globalAlpha = 0.55; c.beginPath(); c.arc(0, 0, er + 1, Math.PI, 0); c.fill(); c.globalAlpha = 1; }
-    if (mood === 'worried') { c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-er, -er * 1.1 + (s > 0 ? er * 0.5 : 0)); c.lineTo(er, -er * 1.1 + (s < 0 ? er * 0.5 : 0)); c.stroke(); }
+    var sc = (s > 0 && o.asym) ? o.asym : 1, r = er * sc, pr = r * (o.pupil || 0.42), oy = (s > 0 && o.asym) ? er * (1 - o.asym) * 0.7 : 0;
+    c.save(); c.translate(x + s * sp, y + oy); c.scale(1, Math.max(0.08, blink));
+    if (o.bags) { c.fillStyle = 'rgba(70,20,60,0.5)'; c.beginPath(); c.ellipse(0, r * 0.5, r * 1.1, r * 0.75, 0, 0, Math.PI); c.fill(); }
+    c.fillStyle = o.sclera || '#fff'; c.beginPath(); c.arc(0, 0, r, 0, TAU); c.fill(); outline(c, 2.6);
+    if (o.veins) { c.strokeStyle = 'rgba(220,40,60,0.75)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-r, 0.1 * r); c.lineTo(-r * 0.4, -r * 0.2); c.moveTo(r * 0.95, r * 0.3); c.lineTo(r * 0.35, r * 0.1); c.moveTo(-r * 0.75, r * 0.55); c.lineTo(-r * 0.25, r * 0.3); c.moveTo(r * 0.6, -r * 0.7); c.lineTo(r * 0.25, -r * 0.3); c.stroke(); }
+    c.fillStyle = '#1a1218'; c.beginPath(); c.arc(lx * sc, ly * sc, pr, 0, TAU); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(lx * sc - pr * 0.4, ly * sc - pr * 0.4, pr * 0.32, 0, TAU); c.fill();
+    if (mood === 'angry') { c.strokeStyle = OUTLINE; c.lineWidth = 2.6; c.beginPath(); c.moveTo(-r, -r * 1.1 + (s < 0 ? r * 0.55 : 0)); c.lineTo(r, -r * 1.1 + (s > 0 ? r * 0.55 : 0)); c.stroke(); }
+    if (mood === 'sleepy') { c.fillStyle = c.__lidColor || '#1a1218'; c.globalAlpha = 0.6; c.beginPath(); c.arc(0, 0, r + 1, Math.PI, 0); c.fill(); c.globalAlpha = 1; }
+    if (mood === 'worried') { c.strokeStyle = OUTLINE; c.lineWidth = 2.6; c.beginPath(); c.moveTo(-r, -r * 1.1 + (s > 0 ? r * 0.55 : 0)); c.lineTo(r, -r * 1.1 + (s < 0 ? r * 0.55 : 0)); c.stroke(); }
     c.restore();
+    if (o.drip && s === (o.dripSide || -1)) { c.strokeStyle = o.dripColor || 'rgba(140,200,255,0.85)'; c.lineWidth = 2.2; c.lineCap = 'round'; c.beginPath(); c.moveTo(x + s * sp - r * 0.3, y + oy + r * 0.9); c.lineTo(x + s * sp - r * 0.3 + 1, y + oy + r * 2.1); c.stroke(); c.fillStyle = o.dripColor || 'rgba(140,200,255,0.85)'; c.beginPath(); c.arc(x + s * sp - r * 0.3 + 1, y + oy + r * 2.2, 2, 0, TAU); c.fill(); }
   }
 }
+// a single eye (cyclops parts, eyes scattered on a boss)
+function cyclops(c, x, y, er, look, blink, o) {
+  o = o || {}; var pr = er * (o.pupil || 0.42), lx = Math.cos(look) * er * 0.36, ly = Math.sin(look) * er * 0.36;
+  c.save(); c.translate(x, y); c.scale(1, Math.max(0.08, blink)); c.fillStyle = o.sclera || '#fff'; c.beginPath(); c.arc(0, 0, er, 0, TAU); c.fill(); outline(c, Math.max(1.6, er * 0.3));
+  if (o.veins) { c.strokeStyle = 'rgba(220,40,60,0.75)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-er, 0); c.lineTo(-er * 0.4, -er * 0.2); c.moveTo(er * 0.9, er * 0.3); c.lineTo(er * 0.3, er * 0.1); c.stroke(); }
+  c.fillStyle = o.iris || '#1a1218'; c.beginPath(); c.arc(lx, ly, pr, 0, TAU); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(lx - pr * 0.4, ly - pr * 0.4, pr * 0.3, 0, TAU); c.fill(); c.restore();
+}
 function mouth(c, x, y, w, kind) {
-  c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath();
+  c.strokeStyle = OUTLINE; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath();
   if (kind === 'frown') { c.arc(x, y + w * 0.6, w, Math.PI * 1.2, Math.PI * 1.8); }
   else if (kind === 'grin') { c.arc(x, y - w * 0.3, w, Math.PI * 0.15, Math.PI * 0.85); }
   else if (kind === 'o') { c.arc(x, y, w * 0.5, 0, TAU); c.fillStyle = '#1a1218'; c.fill(); }
   else if (kind === 'wavy') { c.moveTo(x - w, y); c.quadraticCurveTo(x - w / 2, y - 4, x, y); c.quadraticCurveTo(x + w / 2, y + 4, x + w, y); }
+  else if (kind === 'stitch') { c.moveTo(x - w, y); c.lineTo(x + w, y); for (var i = -1; i <= 1; i++) { c.moveTo(x + i * w * 0.6 - 3, y - 4); c.lineTo(x + i * w * 0.6 + 3, y + 4); c.moveTo(x + i * w * 0.6 + 3, y - 4); c.lineTo(x + i * w * 0.6 - 3, y + 4); } }
+  else if (kind === 'jag') { c.moveTo(x - w, y - 2); for (var j = 0; j <= 4; j++) c.lineTo(x - w + j / 4 * 2 * w, y + (j % 2 ? 6 : -2)); c.lineTo(x + w, y + 7); c.lineTo(x - w, y + 7); c.closePath(); c.fillStyle = '#2a0f18'; c.fill(); }
   else { c.moveTo(x - w, y); c.lineTo(x + w, y); }
   c.stroke();
 }
-function teeth(c, x, y, w, n) { c.fillStyle = '#fff'; for (var i = 0; i < n; i++) { var tx = x - w + (i + 0.5) * (2 * w / n); c.beginPath(); c.moveTo(tx - 3, y); c.lineTo(tx + 3, y); c.lineTo(tx, y + 5); c.closePath(); c.fill(); } }
+function teeth(c, x, y, w, n, crooked) { c.fillStyle = '#fff'; for (var i = 0; i < n; i++) { var tx = x - w + (i + 0.5) * (2 * w / n), h = crooked ? (i % 2 ? 7 : 4) : 5; c.beginPath(); c.moveTo(tx - 3, y); c.lineTo(tx + 3, y); c.lineTo(tx, y + h); c.closePath(); c.fill(); } }
+function drool(c, x, y, n, color, seed) { c.strokeStyle = color || 'rgba(200,230,255,0.75)'; c.lineWidth = 1.8; c.lineCap = 'round'; for (var i = 0; i < n; i++) { var dx = x + (hsh(seed || 1, i) - 0.5) * 14, len = 5 + hsh(seed || 1, i + 9) * 9 + Math.sin(G.realTime * 3 + i) * 2; c.beginPath(); c.moveTo(dx, y); c.lineTo(dx, y + len); c.stroke(); c.fillStyle = c.strokeStyle; c.beginPath(); c.arc(dx, y + len, 2, 0, TAU); c.fill(); } }
+// warts / pustules on a round-ish body
+function pustules(c, r, n, seed, color, size) { for (var i = 0; i < n; i++) { var a = hsh(seed, i) * TAU, d = r * (0.35 + hsh(seed, i + 20) * 0.5), px = Math.cos(a) * d, py = Math.sin(a) * d, pr = (size || 3.5) * (0.7 + hsh(seed, i + 40) * 0.6); c.fillStyle = color || 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(px, py, pr, 0, TAU); c.fill(); c.strokeStyle = 'rgba(20,10,20,0.6)'; c.lineWidth = 1.2; c.stroke(); c.fillStyle = 'rgba(255,255,255,0.55)'; c.beginPath(); c.arc(px - pr * 0.3, py - pr * 0.3, pr * 0.3, 0, TAU); c.fill(); } }
+// squiggly vessels
+function veins(c, r, n, seed, color) { c.strokeStyle = color || 'rgba(190,40,70,0.7)'; c.lineWidth = 1.8; c.lineCap = 'round'; for (var i = 0; i < n; i++) { var a = hsh(seed, i) * TAU, d0 = r * 0.25, d1 = r * (0.7 + hsh(seed, i + 7) * 0.25), a2 = a + (hsh(seed, i + 3) - 0.5) * 0.9; c.beginPath(); c.moveTo(Math.cos(a) * d0, Math.sin(a) * d0); c.quadraticCurveTo(Math.cos(a2) * (d0 + d1) / 2, Math.sin(a2) * (d0 + d1) / 2, Math.cos(a) * d1, Math.sin(a) * d1); c.stroke(); } }
+// a stitched seam
+function stitches(c, x0, y0, x1, y1, n) { c.strokeStyle = OUTLINE; c.lineWidth = 2.2; c.lineCap = 'round'; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); var dx = x1 - x0, dy = y1 - y0, L = Math.sqrt(dx * dx + dy * dy) || 1, nx = -dy / L * 4, ny = dx / L * 4; for (var i = 1; i <= n; i++) { var t = i / (n + 1), px = x0 + dx * t, py = y0 + dy * t; c.moveTo(px - nx, py - ny); c.lineTo(px + nx, py + ny); } c.stroke(); }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §8  ENEMY BEHAVIOUR HELPERS
@@ -1275,6 +1305,43 @@ function radialBurst(x, y, n, speed, dmg, o, rot) { for (var i = 0; i < n; i++) 
 function fanBurst(x, y, a, n, spread, speed, dmg, o) { for (var i = 0; i < n; i++) enemyShot(x, y, a + (n === 1 ? 0 : -spread / 2 + spread * i / (n - 1)), speed, dmg, o); }
 function countKids(e) { var n = 0; for (var i = 0; i < G.enemies.length; i++) if (!G.enemies[i].dead && G.enemies[i].parent === e) n++; return n; }
 function aoeOnPlayer(x, y, r, dmg, src) { if (dist(x, y, P.x, P.y) <= r + P.r) hurtPlayer(dmg, src, ang(x, y, P.x, P.y)); }
+/* ── weak points (movable hit zone with its own multipliers; reusable by bosses) ── */
+function setWeakPoint(e, o) {
+  o = o || {};
+  e.wp = { r: o.r || 9, bodyMult: o.bodyMult === undefined ? 0.25 : o.bodyMult, critCls: o.critCls || null, critMult: o.critMult || 3, critLabel: o.critLabel || 'WEAK POINT!', migrate: o.migrate || 3, t: o.migrate || 3, ox: 0, oy: 0, shimmer: 0, next: null, hint: o.hint || null, onCrit: o.onCrit || null, onOther: o.onOther || null, color: o.color || '#d4ff5a', rad: o.rad || 0.55, fixed: !!o.fixed, label: o.label || null, arc: o.arc || null };
+  wpPlace(e, true);
+}
+function wpPlace(e, now) { var wp = e.wp, a = wp.arc ? rr(wp.arc[0], wp.arc[1]) : rr(0, TAU), rad = e.r * wp.rad, pos = { ox: Math.cos(a) * rad, oy: Math.sin(a) * rad }; if (now) { wp.ox = pos.ox; wp.oy = pos.oy; } else wp.next = pos; }
+function updateWeakPoint(e, dt) {
+  var wp = e.wp; if (!wp || wp.fixed) return; wp.t -= dt;
+  if (wp.t <= 0.5 && !wp.next) { wpPlace(e, false); wp.shimmer = 0.5; }
+  if (wp.shimmer > 0) wp.shimmer -= dt;
+  if (wp.t <= 0) { if (wp.next) { wp.ox = wp.next.ox; wp.oy = wp.next.oy; } wp.next = null; wp.t = wp.migrate; burst(e.x + wp.ox, e.y + wp.oy, 4, { color: wp.color, speed: 40, life: 0.3, size: 2 }); }
+}
+function drawWeakPoint(c, e) {
+  var wp = e.wp, pulse = 0.5 + 0.5 * Math.sin(G.realTime * 9), g = wp.r;
+  c.save();
+  if (wp.next) { c.globalAlpha = 0.35 + 0.4 * pulse; c.strokeStyle = wp.color; c.lineWidth = 2; c.setLineDash([3, 4]); c.beginPath(); c.arc(wp.next.ox, wp.next.oy, g + 4, 0, TAU); c.stroke(); c.setLineDash([]); c.fillStyle = hexA(wp.color, 0.3); c.beginPath(); c.arc(wp.next.ox, wp.next.oy, g * 0.6, 0, TAU); c.fill(); c.globalAlpha = 1; }
+  c.fillStyle = hexA(wp.color, 0.22 + 0.2 * pulse); c.beginPath(); c.arc(wp.ox, wp.oy, g * 1.9, 0, TAU); c.fill();
+  c.fillStyle = wp.color; c.beginPath(); c.arc(wp.ox, wp.oy, g * (1 + 0.08 * pulse), 0, TAU); c.fill(); outline(c, 2.5);
+  c.fillStyle = 'rgba(255,255,255,0.75)'; c.beginPath(); c.arc(wp.ox - g * 0.3, wp.oy - g * 0.35, g * 0.3, 0, TAU); c.fill();
+  if (wp.label) { c.fillStyle = '#fff'; c.font = '900 9px ' + FONT; c.textAlign = 'center'; c.fillText(wp.label, wp.ox, wp.oy - g - 6); }
+  c.restore();
+}
+/* ── pus and gas ── */
+function pusGlob(x, y, tx, ty, dmg, r) {
+  return spawnBullet({ kind: 'lob', hostile: true, x: x, y: y, sx: x, sy: y, tx: clamp(tx, ARENA.x + 10, ARENA.x + ARENA.w - 10), ty: clamp(ty, ARENA.y + 10, ARENA.y + ARENA.h - 10), t: 0, dur: 0.9, r: 8, color: '#d4ff5a', life: 5,
+    onLand: function (b) { addHazard({ kind: 'pus', x: b.x, y: b.y, r: r || 24, t: 3, dps: 5 }); aoeOnPlayer(b.x, b.y, (r || 24) + 8, dmg || 7, 'pus'); burst(b.x, b.y, 6, { color: '#d4ff5a', speed: 90, life: 0.3, size: 3, kind: 'goo', g: 300 }); Snd.sfx('pop'); } });
+}
+function gasBubble(x, y, dmg) {
+  var a = ang(x, y, P.x, P.y);
+  return spawnBullet({ kind: 'bubble', hostile: true, x: x, y: y, vx: Math.cos(a) * 46, vy: Math.sin(a) * 46, r: 13, dmg: dmg || 8, color: '#b8ff5a', life: 3.4, homing: 0.5, onLand: function (b) { burstBubble(b); } });
+}
+function burstBubble(b) {
+  if (b.popped) return; b.popped = true; b.dead = true;
+  fanBurst(b.x, b.y, ang(b.x, b.y, P.x, P.y), 6, 1.3, 190, b.dmg, { color: '#b8ff5a', r: 7, life: 2.5 });
+  burst(b.x, b.y, 10, { color: '#b8ff5a', speed: 120, life: 0.35, size: 3, kind: 'smoke' }); Snd.sfx('pop');
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §9  ENEMIES — the bestiary. hp/speed/r/cost/minRoom + behaviour + cartoon + a real one-line fact.
@@ -1285,7 +1352,7 @@ var ENEMIES = {
   com: {
     name: 'COM Brute', sub: 'Calcium oxalate monohydrate', family: 'STONE', hp: 160, r: 26, speed: 55, cost: 6, minRoom: 2, contact: 16, splits: true, tweaks: { eswl: 0.9 },
     fact: 'Calcium oxalate monohydrate is the hardest common stone and the one most likely to shrug off shockwave lithotripsy.',
-    init: function (e) { e.timer = rr(2, 3.5); e.shape = []; for (var i = 0; i < 9; i++) e.shape.push(rr(0.82, 1.1)); },
+    init: function (e) { e.timer = rr(2, 3.5); e.shape = []; for (var i = 0; i < 9; i++) e.shape.push(rr(0.82, 1.1)); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       if (e.charge > 0) { e.charge -= dt; e.vx = Math.cos(e.chargeA) * 430; e.vy = Math.sin(e.chargeA) * 430; e.contactNow = 22; if (e.hitWall) { e.charge = 0; e.stunSelf = 0.45; shakeIt(3); burst(e.x, e.y, 6, { color: '#a89372', speed: 120, life: 0.3, size: 3 }); } return; }
       e.contactNow = 0;
@@ -1296,41 +1363,49 @@ var ENEMIES = {
     },
     draw: function (c, e) {
       c.fillStyle = e.charge > 0 ? '#bfa57f' : '#a89372'; c.beginPath(); for (var i = 0; i < 9; i++) { var an = i / 9 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); outline(c, 4);
-      c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 2; c.beginPath(); c.moveTo(-e.r * 0.5, -e.r * 0.2); c.lineTo(-e.r * 0.1, e.r * 0.3); c.moveTo(e.r * 0.3, -e.r * 0.6); c.lineTo(e.r * 0.55, -e.r * 0.1); c.stroke();
-      highlight(c, -e.r * 0.35, -e.r * 0.45, e.r * 0.25);
-      eyes(c, 0, -2, e.r * 0.4, e.r * 0.24, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.45, e.r * 0.35, 'frown');
+      c.strokeStyle = 'rgba(0,0,0,0.22)'; c.lineWidth = 2; c.beginPath(); c.moveTo(-e.r * 0.5, -e.r * 0.2); c.lineTo(-e.r * 0.1, e.r * 0.3); c.moveTo(e.r * 0.3, -e.r * 0.6); c.lineTo(e.r * 0.55, -e.r * 0.1); c.stroke();
+      stitches(c, -e.r * 0.7, e.r * 0.15, -e.r * 0.15, e.r * 0.7, 3);
+      // a face jammed into the crack, with a third eye in a pit
+      c.fillStyle = 'rgba(40,20,20,0.5)'; c.beginPath(); c.ellipse(0, -2, e.r * 0.78, e.r * 0.5, 0, 0, TAU); c.fill();
+      cyclops(c, e.r * 0.55, -e.r * 0.55, e.r * 0.12, e.look, e.blink, { veins: true });
+      eyes(c, 0, -2, e.r * 0.38, e.r * 0.24, e.look, e.blink, 'angry', { asym: 0.72, veins: true, bags: true });
+      mouth(c, 0, e.r * 0.45, e.r * 0.35, 'jag'); teeth(c, 0, e.r * 0.43, e.r * 0.3, 4, true); drool(c, 0, e.r * 0.75, 2, 'rgba(230,220,180,0.7)', e.seed);
     }
   },
   cod: {
     name: 'Spiky', sub: 'Calcium oxalate dihydrate', family: 'STONE', hp: 90, r: 20, speed: 70, cost: 4, minRoom: 1, contact: 10, splits: true, tweaks: { LITHO: 1.2 },
     fact: 'Dihydrate (weddellite) stones are spiky, more brittle than monohydrate, and fragment more easily.',
-    init: function (e) { e.timer = rr(1.5, 2.6); e.rot = rr(0, TAU); },
+    init: function (e) { e.timer = rr(1.5, 2.6); e.rot = rr(0, TAU); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       e.rot += dt * 0.8; keepDistance(e, P.x, P.y, 180, 70); e.timer -= dt;
       if (e.timer <= 0 && !e.atk) { e.timer = rr(2.2, 3); telegraph(e, 0.5, 'flash', null, function (e2) { radialBurst(e2.x, e2.y, 6 + ri(3), 200, 10, { color: '#ffd166', shape: 'spike' }, e2.rot); Snd.sfx('shot'); }); }
       if (e.atk) { e.vx *= 0.3; e.vy *= 0.3; }
     },
     draw: function (c, e) {
-      c.save(); c.rotate(e.rot); c.fillStyle = '#e8c766'; starPath(c, e.r * 1.15, e.r * 0.62, 8, 0); c.fill(); outline(c, 3.5); c.restore();
-      highlight(c, -e.r * 0.25, -e.r * 0.3, e.r * 0.22);
-      eyes(c, 0, -1, e.r * 0.34, e.r * 0.26, e.look, e.blink); mouth(c, 0, e.r * 0.42, e.r * 0.22, e.atk ? 'o' : 'flat');
+      c.save(); c.rotate(e.rot); c.fillStyle = '#e8c766'; starPath(c, e.r * 1.15, e.r * 0.62, 8, 0); c.fill(); outline(c, 4);
+      // tiny eyes on two spike tips
+      cyclops(c, e.r * 1.0, 0, e.r * 0.11, e.look - e.rot, e.blink); cyclops(c, -e.r * 1.0, 0, e.r * 0.09, e.look - e.rot, e.blink); c.restore();
+      c.fillStyle = 'rgba(120,70,20,0.35)'; c.beginPath(); c.arc(0, 0, e.r * 0.6, 0, TAU); c.fill();
+      eyes(c, 0, -1, e.r * 0.33, e.r * 0.27, e.look, e.blink, null, { veins: true, pupil: 0.3 }); mouth(c, 0, e.r * 0.4, e.r * 0.26, e.atk ? 'o' : 'grin'); if (!e.atk) teeth(c, 0, e.r * 0.33, e.r * 0.2, 3, true);
     }
   },
   uric: {
     name: 'Sludge', sub: 'Uric acid stone', family: 'STONE', hp: 70, r: 22, speed: 40, cost: 3, minRoom: 1, contact: 8, splits: false, tweaks: { all: 1.25 },
     fact: 'Uric acid stones are radiolucent on plain X-ray and can be dissolved by alkalinizing the urine.',
-    init: function (e) { e.timer = rr(0.5, 1.5); e.wob = rr(0, TAU); },
+    init: function (e) { e.timer = rr(0.5, 1.5); e.wob = rr(0, TAU); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { seek(e, P.x, P.y, 40); e.timer -= dt; if (e.timer <= 0) { e.timer = 1.6; addHazard({ kind: 'sticky', x: e.x, y: e.y, r: 24, t: 5 }); } },
     draw: function (c, e) {
-      c.globalAlpha = 0.82; c.fillStyle = '#ffa94d'; blobPath(c, e.r * 1.05, e.wob * 2, 3, 0.1); c.fill(); outline(c, 3.5); c.globalAlpha = 1;
-      c.fillStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.arc(-e.r * 0.3, -e.r * 0.35, e.r * 0.2, 0, TAU); c.fill();
-      c.__lidColor = '#b36b1f'; eyes(c, 0, -2, e.r * 0.4, e.r * 0.26, e.look, e.blink, 'sleepy'); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'wavy');
+      c.globalAlpha = 0.85; c.fillStyle = '#ffa94d'; blobPath(c, e.r * 1.05, e.wob * 2, 3, 0.12); c.fill(); outline(c, 4);
+      // melting: drips off the bottom
+      c.fillStyle = '#ffa94d'; for (var i = 0; i < 3; i++) { var dx = (i - 1) * e.r * 0.5, dl = e.r * (0.3 + 0.2 * Math.sin(e.wob + i)); c.beginPath(); c.ellipse(dx, e.r * 0.9 + dl * 0.5, 4, dl * 0.6 + 3, 0, 0, TAU); c.fill(); outline(c, 2.5); }
+      c.globalAlpha = 1; c.fillStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.arc(-e.r * 0.3, -e.r * 0.35, e.r * 0.2, 0, TAU); c.fill();
+      c.__lidColor = '#b36b1f'; eyes(c, 0, -2, e.r * 0.4, e.r * 0.27, e.look, e.blink, 'sleepy', { asym: 0.65, bags: true, drip: true, dripColor: 'rgba(255,169,77,0.9)' }); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'wavy');
     }
   },
   cystine: {
     name: 'Hexagon', sub: 'Cystine stone', family: 'STONE', hp: 130, r: 22, speed: 120, cost: 5, minRoom: 2, contact: 12, splits: true, tweaks: { eswl: 0.4 },
     fact: 'Cystine stones (hexagonal crystals, cystinuria) are notoriously resistant to shockwave lithotripsy.',
-    init: function (e) { e.ba = rr(0, TAU); e.rot = 0; },
+    init: function (e) { e.ba = rr(0, TAU); e.rot = 0; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       e.rot += dt * 1.5;
       if (e.hitWall) { if (e.bounceX) e.ba = Math.PI - e.ba; if (e.bounceY) e.ba = -e.ba; if (!e.bounceX && !e.bounceY) e.ba += Math.PI; e.ba += rr(-0.2, 0.2); }
@@ -1338,31 +1413,36 @@ var ENEMIES = {
       e.vx = Math.cos(e.ba) * 120; e.vy = Math.sin(e.ba) * 120;
     },
     draw: function (c, e) {
-      c.save(); c.rotate(e.rot); c.fillStyle = '#d4e157'; regPoly(c, e.r * 1.08, 6, 0); c.fill(); outline(c, 4); c.fillStyle = 'rgba(255,255,255,0.22)'; regPoly(c, e.r * 0.62, 6, 0); c.fill(); c.restore();
-      eyes(c, 0, -2, e.r * 0.36, e.r * 0.24, e.look, e.blink); mouth(c, 0, e.r * 0.42, e.r * 0.25, 'flat');
+      c.save(); c.rotate(e.rot); c.fillStyle = '#d4e157'; regPoly(c, e.r * 1.08, 6, 0); c.fill(); outline(c, 4); c.fillStyle = 'rgba(255,255,255,0.22)'; regPoly(c, e.r * 0.62, 6, 0); c.fill();
+      c.strokeStyle = 'rgba(60,70,10,0.5)'; c.lineWidth = 1.5; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU; c.moveTo(Math.cos(an) * e.r * 0.62, Math.sin(an) * e.r * 0.62); c.lineTo(Math.cos(an) * e.r * 1.08, Math.sin(an) * e.r * 1.08); } c.stroke(); c.restore();
+      // one huge eye, one tiny, and a third peeking from a facet
+      eyes(c, 0, -2, e.r * 0.36, e.r * 0.3, e.look, e.blink, null, { asym: 0.5, veins: true }); cyclops(c, -e.r * 0.15, e.r * 0.55, e.r * 0.1, e.look, e.blink);
+      mouth(c, e.r * 0.3, e.r * 0.45, e.r * 0.2, 'stitch');
     }
   },
   struvite: {
     name: 'Infection Stone', sub: 'Struvite (magnesium ammonium phosphate)', family: 'STONE', hp: 120, r: 24, speed: 35, cost: 6, minRoom: 3, contact: 10, splits: true,
     fact: 'Struvite stones form with urease-producing bacteria (Proteus, Klebsiella) in alkaline, infected urine.',
-    init: function (e) { e.timer = 2; },
+    init: function (e) { e.timer = 2; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { seek(e, P.x, P.y, 35); e.timer -= dt; if (e.timer <= 0 && countKids(e) < 6 && !e.atk) { e.timer = 4; telegraph(e, 0.5, 'flash', null, function (e2) { for (var i = 0; i < 2; i++) { var k = spawnEnemy('proteus', e2.x + rr(-30, 30), e2.y + rr(-30, 30), { fast: true }); if (k) k.parent = e2; } }); } },
     draw: function (c, e) {
       c.fillStyle = '#9aa5a0'; blobPath(c, e.r, e.wob, 5, 0.09); c.fill(); outline(c, 4);
-      c.fillStyle = '#5bd47a'; [[-0.4, -0.2], [0.35, 0.3], [0.1, 0.55], [-0.5, 0.4]].forEach(function (p) { c.beginPath(); c.arc(p[0] * e.r, p[1] * e.r, e.r * 0.12, 0, TAU); c.fill(); });
+      // green pustules, each with a tiny eye
+      [[-0.4, -0.2], [0.35, 0.3], [0.1, 0.55], [-0.5, 0.4]].forEach(function (p, i) { c.fillStyle = '#5bd47a'; c.beginPath(); c.arc(p[0] * e.r, p[1] * e.r, e.r * 0.14, 0, TAU); c.fill(); outline(c, 1.6); cyclops(c, p[0] * e.r, p[1] * e.r, e.r * 0.06, e.look, i === 1 ? e.blink : 1); });
       c.fillStyle = '#d7dfdb'; polyPath(c, [[-e.r * 0.35, -e.r * 0.75], [e.r * 0.25, -e.r * 0.85], [e.r * 0.45, -e.r * 0.5], [-e.r * 0.15, -e.r * 0.4]]); c.fill(); outline(c, 3);
-      eyes(c, 0, 0, e.r * 0.38, e.r * 0.24, e.look, e.blink, 'worried'); mouth(c, 0, e.r * 0.45, e.r * 0.25, 'frown');
+      eyes(c, 0, 0, e.r * 0.38, e.r * 0.24, e.look, e.blink, 'worried', { bags: true, asym: 0.8 }); mouth(c, 0, e.r * 0.45, e.r * 0.25, 'frown'); drool(c, 0, e.r * 0.6, 1, 'rgba(120,230,150,0.7)', e.seed);
     }
   },
   brushite: {
     name: 'Brushite Brick', sub: 'Calcium hydrogen phosphate', family: 'STONE', hp: 110, r: 22, speed: 60, cost: 5, minRoom: 3, contact: 12, splits: true, tweaks: { eswl: 0.4 },
     fact: 'Brushite stones are hard, resist shockwave lithotripsy, and recur quickly: treat them with laser or percutaneous surgery.',
-    init: function (e) { e.timer = rr(2, 3); },
+    init: function (e) { e.timer = rr(2, 3); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { seek(e, P.x, P.y, 60); e.timer -= dt; if (e.timer <= 0 && !e.atk) { e.timer = rr(2.8, 3.6); telegraph(e, 0.6, 'circle', { r: 72 }, function (e2) { aoeOnPlayer(e2.x, e2.y, 72, 14, 'slam'); shakeIt(5); burst(e2.x, e2.y, 12, { color: '#c9b7a2', speed: 160, life: 0.3, size: 3 }); G.fxRings.push({ x: e2.x, y: e2.y, r: 10, r1: 72, t: 0.25, dur: 0.25, color: '#c9b7a2' }); Snd.sfx('clang'); }); } if (e.atk) { e.vx = e.vy = 0; } },
     draw: function (c, e) {
       c.fillStyle = '#c9b7a2'; var w = e.r * 1.1, h = e.r * 0.85; c.beginPath(); c.moveTo(-w + 6, -h); c.lineTo(w - 6, -h); c.quadraticCurveTo(w, -h, w, -h + 6); c.lineTo(w, h - 6); c.quadraticCurveTo(w, h, w - 6, h); c.lineTo(-w + 6, h); c.quadraticCurveTo(-w, h, -w, h - 6); c.lineTo(-w, -h + 6); c.quadraticCurveTo(-w, -h, -w + 6, -h); c.closePath(); c.fill(); outline(c, 4);
-      c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 2; c.beginPath(); c.moveTo(-w, 0); c.lineTo(w, 0); c.moveTo(0, -h); c.lineTo(0, 0); c.moveTo(-w * 0.5, 0); c.lineTo(-w * 0.5, h); c.moveTo(w * 0.5, 0); c.lineTo(w * 0.5, h); c.stroke();
-      eyes(c, 0, -4, e.r * 0.4, e.r * 0.22, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'flat');
+      c.strokeStyle = 'rgba(0,0,0,0.22)'; c.lineWidth = 2; c.beginPath(); c.moveTo(-w, 0); c.lineTo(w, 0); c.moveTo(0, -h); c.lineTo(0, 0); c.moveTo(-w * 0.5, 0); c.lineTo(-w * 0.5, h); c.moveTo(w * 0.5, 0); c.lineTo(w * 0.5, h); c.stroke();
+      stitches(c, -w * 0.9, -h * 0.5, w * 0.9, -h * 0.5, 4);
+      eyes(c, 0, -4, e.r * 0.4, e.r * 0.22, e.look, e.blink, 'angry', { veins: true }); mouth(c, 0, e.r * 0.45, e.r * 0.32, 'jag'); teeth(c, 0, e.r * 0.43, e.r * 0.26, 5, true);
     }
   },
   frag: {
@@ -1370,14 +1450,14 @@ var ENEMIES = {
     fact: 'Residual fragments after lithotripsy are a nidus for new stones, which is why "stone-free" matters.',
     init: function (e) { e.ph = rr(0, TAU); e.shape = []; for (var i = 0; i < 6; i++) e.shape.push(rr(0.7, 1.2)); },
     update: function (e, dt, d, a) { e.ph += dt * 7; var pa = a + Math.sin(e.ph) * 0.9; e.vx = Math.cos(pa) * 160; e.vy = Math.sin(pa) * 160; },
-    draw: function (c, e) { c.fillStyle = '#cbbda0'; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); outline(c, 3); eyes(c, 0, -1, e.r * 0.4, e.r * 0.3, e.look, e.blink); }
+    draw: function (c, e) { c.fillStyle = '#cbbda0'; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); outline(c, 3.2); cyclops(c, 0, -1, e.r * 0.42, e.look, e.blink, { veins: true }); mouth(c, 0, e.r * 0.55, e.r * 0.3, 'jag'); }
   },
   dust: {
     name: 'Stone Dust', sub: 'Dusted fragments', family: 'STONE', hp: 8, r: 7, speed: 120, cost: 1, minRoom: 99, contact: 0, splits: false, grab: true, noClear: true, hidden: true,
     fact: 'Dusting with a laser aims for fragments small enough to pass spontaneously.',
     init: function (e) { e.life = 7; e.ph = rr(0, TAU); },
     update: function (e, dt, d, a) { e.life -= dt; e.ph += dt * 5; var away = a + Math.PI + Math.sin(e.ph) * 0.7; var sp = d < 160 ? 120 : 30; e.vx = Math.cos(away) * sp; e.vy = Math.sin(away) * sp; if (e.life <= 0) { e.hp = 0; e.silent = true; killEnemy(e, 'NEUTRAL', null); } },
-    draw: function (c, e) { c.fillStyle = '#e4dcc8'; for (var i = 0; i < 3; i++) { c.beginPath(); c.arc(Math.cos(i * 2.1 + e.ph * 0.3) * 4, Math.sin(i * 2.1 + e.ph * 0.3) * 4, 4, 0, TAU); c.fill(); } c.beginPath(); c.arc(0, 0, 5, 0, TAU); c.fill(); outline(c, 2); eyes(c, 0, -1, 3, 2.6, e.look, e.blink); }
+    draw: function (c, e) { c.fillStyle = '#e4dcc8'; for (var i = 0; i < 3; i++) { c.beginPath(); c.arc(Math.cos(i * 2.1 + e.ph * 0.3) * 4, Math.sin(i * 2.1 + e.ph * 0.3) * 4, 4, 0, TAU); c.fill(); } c.beginPath(); c.arc(0, 0, 5, 0, TAU); c.fill(); outline(c, 2); eyes(c, 0, -1, 3, 2.6, e.look, e.blink, 'worried'); }
   },
   /* ─── MICROBES ─── */
   ecoli: {
@@ -1390,57 +1470,102 @@ var ENEMIES = {
       var tx = Math.cos(a) * 1.0 + sx * 1.4 + (n ? (cx / n - e.x) / 120 * 0.3 : 0), ty = Math.sin(a) * 1.0 + sy * 1.4 + (n ? (cy / n - e.y) / 120 * 0.3 : 0);
       var l = Math.sqrt(tx * tx + ty * ty) || 1; e.vx = tx / l * 150; e.vy = ty / l * 150; e.rot = Math.atan2(e.vy, e.vx);
     },
-    draw: function (c, e) { c.save(); c.rotate(e.rot); c.strokeStyle = '#ff9fcf'; c.lineWidth = 2; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(-e.r, i * 3); c.quadraticCurveTo(-e.r - 7, i * 3 + Math.sin(e.ph + i) * 4, -e.r - 13, i * 3); } c.stroke(); c.fillStyle = '#ff5fa2'; c.beginPath(); c.ellipse(0, 0, e.r * 1.25, e.r * 0.8, 0, 0, TAU); c.fill(); outline(c, 3); c.restore(); eyes(c, 3, -1, 3.5, 3, e.look, e.blink); }
+    draw: function (c, e) { c.save(); c.rotate(e.rot); c.strokeStyle = '#ff9fcf'; c.lineWidth = 2; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(-e.r, i * 3); c.quadraticCurveTo(-e.r - 7, i * 3 + Math.sin(e.ph + i) * 4, -e.r - 13, i * 3); } c.stroke(); c.fillStyle = '#ff5fa2'; c.beginPath(); c.ellipse(0, 0, e.r * 1.25, e.r * 0.8, 0, 0, TAU); c.fill(); outline(c, 3.2); c.fillStyle = '#2a0f18'; c.beginPath(); c.ellipse(e.r * 0.75, 1, e.r * 0.3, e.r * 0.25, 0, 0, TAU); c.fill(); teeth(c, e.r * 0.75, -1.5, 3, 2); c.restore(); eyes(c, 1, -2, 3.5, 3.2, e.look, e.blink, 'angry', { asym: 0.7 }); }
   },
   proteus: {
     name: 'Proteus', sub: 'Proteus mirabilis', family: 'MICROBE', hp: 40, r: 12, speed: 170, cost: 3, minRoom: 2, contact: 8, grab: true, abx: ['ceftriaxone', 'piptazo', 'cipro', 'meropenem'],
     fact: 'Proteus makes urease, splitting urea into ammonia; alkaline urine then grows struvite "infection" stones.',
-    init: function (e) { e.ph = rr(0, TAU); e.trailT = 0; },
+    init: function (e) { e.ph = rr(0, TAU); e.trailT = 0; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { e.ph += dt * 9; var pa = a + Math.sin(e.ph) * 1.1; e.vx = Math.cos(pa) * (e.fast ? 150 : 170); e.vy = Math.sin(pa) * (e.fast ? 150 : 170); e.trailT -= dt; if (e.trailT <= 0) { e.trailT = 0.25; addHazard({ kind: 'slime', x: e.x, y: e.y, r: 17, t: 4 }); } },
-    draw: function (c, e) { c.strokeStyle = '#d4a8ff'; c.lineWidth = 2; c.beginPath(); for (var i = 0; i < 10; i++) { var an = i / 10 * TAU; c.moveTo(Math.cos(an) * e.r, Math.sin(an) * e.r); c.lineTo(Math.cos(an + Math.sin(e.ph + i) * 0.3) * (e.r + 6), Math.sin(an + Math.sin(e.ph + i) * 0.3) * (e.r + 6)); } c.stroke(); c.fillStyle = '#b06bff'; blobPath(c, e.r, e.ph, 4, 0.08); c.fill(); outline(c, 3); eyes(c, 0, -1, e.r * 0.4, e.r * 0.3, e.look, e.blink); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'grin'); }
+    draw: function (c, e) { c.strokeStyle = '#d4a8ff'; c.lineWidth = 2; c.beginPath(); for (var i = 0; i < 10; i++) { var an = i / 10 * TAU; c.moveTo(Math.cos(an) * e.r, Math.sin(an) * e.r); c.lineTo(Math.cos(an + Math.sin(e.ph + i) * 0.3) * (e.r + 6), Math.sin(an + Math.sin(e.ph + i) * 0.3) * (e.r + 6)); } c.stroke(); c.fillStyle = '#b06bff'; blobPath(c, e.r, e.ph, 4, 0.08); c.fill(); outline(c, 3.2); eyes(c, 0, -1, e.r * 0.4, e.r * 0.3, e.look, e.blink, null, { veins: true, pupil: 0.3 }); mouth(c, 0, e.r * 0.45, e.r * 0.32, 'grin'); teeth(c, 0, e.r * 0.4, e.r * 0.25, 4, true); drool(c, 0, e.r * 0.8, 1, 'rgba(212,168,255,0.8)', e.seed); }
   },
   pseudomonas: {
     name: 'Pseudomonas', sub: 'Pseudomonas aeruginosa', family: 'MICROBE', hp: 70, r: 16, speed: 60, cost: 6, minRoom: 3, contact: 8, shield: 1, abx: ['piptazo', 'cipro', 'meropenem'],
     fact: 'Pseudomonas builds biofilm on catheters and stents and resists many first-line antibiotics (not ceftriaxone-susceptible).',
-    init: function (e) { e.timer = rr(1, 2); },
+    init: function (e) { e.timer = rr(1, 2); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       keepDistance(e, P.x, P.y, 210, 60); e.timer -= dt;
       if (e.timer <= 0 && !e.atk) { e.timer = rr(1.8, 2.4); telegraph(e, 0.45, 'flash', null, function (e2) { var aa = ang(e2.x, e2.y, P.x, P.y); enemyShot(e2.x, e2.y, aa, 230, 8, { color: '#7cf29a', r: 8, shape: 'goo', onLand: function (b) { addHazard({ kind: 'goo', x: b.x, y: b.y, r: 30, t: 3.5 }); } }); Snd.sfx('lob'); }); }
       if (e.atk) { e.vx *= 0.2; e.vy *= 0.2; }
     },
-    draw: function (c, e) { c.fillStyle = '#52d273'; blobPath(c, e.r, e.wob, 5, 0.07); c.fill(); outline(c, 3.5); highlight(c, -e.r * 0.3, -e.r * 0.35, e.r * 0.25); eyes(c, 0, -1, e.r * 0.4, e.r * 0.27, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.45, e.r * 0.3, e.atk ? 'o' : 'grin'); }
+    draw: function (c, e) { c.fillStyle = '#52d273'; blobPath(c, e.r, e.wob, 5, 0.07); c.fill(); outline(c, 3.6); pustules(c, e.r, 5, e.seed, 'rgba(30,110,50,0.7)', 3); highlight(c, -e.r * 0.3, -e.r * 0.35, e.r * 0.25); eyes(c, 0, -1, e.r * 0.4, e.r * 0.27, e.look, e.blink, 'angry', { veins: true, bags: true }); mouth(c, 0, e.r * 0.45, e.r * 0.3, e.atk ? 'o' : 'grin'); if (!e.atk) teeth(c, 0, e.r * 0.4, e.r * 0.22, 3); }
   },
   enterococcus: {
     name: 'Enterococcus Chain', sub: 'Enterococcus faecalis', family: 'MICROBE', hp: 30, r: 11, speed: 90, cost: 5, minRoom: 3, contact: 7, grab: true, abx: ['vanco', 'piptazo', 'meropenem'],
     fact: 'Enterococcus is intrinsically resistant to cephalosporins like ceftriaxone; think ampicillin or vancomycin.',
     init: function (e) { e.ph = rr(0, TAU); var prev = e; for (var i = 0; i < 3; i++) { var k = spawnEnemy('entero_link', e.x - (i + 1) * 20, e.y, { instant: true }); if (!k) break; k.follow = prev; k.head = e; prev = k; } },
     update: function (e, dt, d, a) { e.ph += dt * 3; var pa = a + Math.sin(e.ph) * 0.5; e.vx = Math.cos(pa) * 90; e.vy = Math.sin(pa) * 90; },
-    draw: function (c, e) { c.fillStyle = '#5aa9ff'; c.beginPath(); c.arc(-5, 0, e.r * 0.8, 0, TAU); c.arc(5, 0, e.r * 0.8, 0, TAU); c.fill(); outline(c, 3); eyes(c, 0, -2, e.r * 0.5, e.r * 0.3, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.4, e.r * 0.3, 'grin'); }
+    draw: function (c, e) { c.fillStyle = '#5aa9ff'; c.beginPath(); c.arc(-5, 0, e.r * 0.8, 0, TAU); c.arc(5, 0, e.r * 0.8, 0, TAU); c.fill(); outline(c, 3.2); cyclops(c, -5, -2, e.r * 0.36, e.look, e.blink, { veins: true }); cyclops(c, 6, -2, e.r * 0.28, e.look, e.blink); mouth(c, 0, e.r * 0.5, e.r * 0.3, 'jag'); teeth(c, 0, e.r * 0.48, e.r * 0.25, 4, true); }
   },
   entero_link: {
     name: 'Enterococcus (link)', family: 'MICROBE', hp: 30, r: 10, speed: 90, cost: 0, minRoom: 99, contact: 6, hidden: true, dmgTaken: 0.3, grab: true,
     fact: '', init: function (e) {},
     update: function (e, dt, d, a) { var f = e.follow; if (!f || f.dead) { if (!e.head || e.head.dead) { e.hp = 0; e.silent = true; killEnemy(e, 'NEUTRAL', null); return; } f = e.head; } var dd = dist(e.x, e.y, f.x, f.y); if (dd > 22) { var aa = ang(e.x, e.y, f.x, f.y); e.vx = Math.cos(aa) * Math.min(260, (dd - 20) * 8); e.vy = Math.sin(aa) * Math.min(260, (dd - 20) * 8); } else { e.vx *= 0.5; e.vy *= 0.5; } },
-    draw: function (c, e) { c.fillStyle = '#7dbaff'; c.beginPath(); c.arc(-4, 0, e.r * 0.75, 0, TAU); c.arc(4, 0, e.r * 0.75, 0, TAU); c.fill(); outline(c, 3); eyes(c, 0, -1, 4, 2.6, e.look, e.blink); }
+    draw: function (c, e) { c.fillStyle = '#7dbaff'; c.beginPath(); c.arc(-4, 0, e.r * 0.75, 0, TAU); c.arc(4, 0, e.r * 0.75, 0, TAU); c.fill(); outline(c, 3); cyclops(c, -4, -1, 3.2, e.look, e.blink); cyclops(c, 5, -1, 2.4, e.look, 1); }
   },
   candida: {
     name: 'Candida', sub: 'Candida albicans (a fungus)', family: 'MICROBE', hp: 50, r: 15, speed: 50, cost: 5, minRoom: 4, contact: 7, fungus: true,
     fact: 'Candida is a yeast: antibacterials do nothing to it, and funguria is common in catheterized, diabetic or antibiotic-treated patients.',
-    init: function (e) { e.timer = 2; },
+    init: function (e) { e.timer = 2; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { seek(e, P.x, P.y, 50); e.timer -= dt; if (e.timer <= 0 && countKids(e) < 4) { e.timer = 3; var k = spawnEnemy('bud', e.x + rr(-20, 20), e.y + rr(-20, 20), { instant: true }); if (k) k.parent = e; e.sx = 1.25; e.sy = 0.8; } },
-    draw: function (c, e) { c.strokeStyle = '#e9d9a8'; c.lineWidth = 3; c.beginPath(); c.moveTo(e.r * 0.6, -e.r * 0.4); c.lineTo(e.r * 1.4, -e.r * 0.9); c.moveTo(-e.r * 0.7, e.r * 0.3); c.lineTo(-e.r * 1.5, e.r * 0.8); c.stroke(); c.fillStyle = '#f3e4b5'; c.beginPath(); c.ellipse(0, 0, e.r * 1.05, e.r * 0.85, 0.3, 0, TAU); c.fill(); outline(c, 3.5); c.beginPath(); c.arc(e.r * 0.8, e.r * 0.5, e.r * 0.4, 0, TAU); c.fill(); outline(c, 3); eyes(c, -2, -2, e.r * 0.38, e.r * 0.26, e.look, e.blink); mouth(c, -2, e.r * 0.4, e.r * 0.25, 'wavy'); }
+    draw: function (c, e) { c.strokeStyle = '#e9d9a8'; c.lineWidth = 3; c.beginPath(); c.moveTo(e.r * 0.6, -e.r * 0.4); c.lineTo(e.r * 1.4, -e.r * 0.9); c.moveTo(-e.r * 0.7, e.r * 0.3); c.lineTo(-e.r * 1.5, e.r * 0.8); c.stroke(); c.fillStyle = '#f3e4b5'; c.beginPath(); c.ellipse(0, 0, e.r * 1.05, e.r * 0.85, 0.3, 0, TAU); c.fill(); outline(c, 3.6); c.beginPath(); c.arc(e.r * 0.8, e.r * 0.5, e.r * 0.4, 0, TAU); c.fill(); outline(c, 3); cyclops(c, e.r * 0.8, e.r * 0.45, e.r * 0.15, e.look, e.blink); pustules(c, e.r, 4, e.seed, 'rgba(200,170,110,0.8)', 2.5); eyes(c, -2, -2, e.r * 0.38, e.r * 0.26, e.look, e.blink, null, { bags: true, asym: 0.75 }); mouth(c, -2, e.r * 0.4, e.r * 0.25, 'wavy'); }
   },
   bud: {
     name: 'Candida Bud', family: 'MICROBE', hp: 10, r: 7, speed: 110, cost: 0, minRoom: 99, contact: 4, hidden: true, fungus: true, grab: true,
     fact: '', init: function (e) { e.ph = rr(0, TAU); },
     update: function (e, dt, d, a) { e.ph += dt * 6; var pa = a + Math.sin(e.ph) * 0.6; e.vx = Math.cos(pa) * 110; e.vy = Math.sin(pa) * 110; },
-    draw: function (c, e) { c.fillStyle = '#f3e4b5'; c.beginPath(); c.ellipse(0, 0, e.r, e.r * 0.8, 0, 0, TAU); c.fill(); outline(c, 2.5); eyes(c, 0, -1, 3, 2.4, e.look, e.blink); }
+    draw: function (c, e) { c.fillStyle = '#f3e4b5'; c.beginPath(); c.ellipse(0, 0, e.r, e.r * 0.8, 0, 0, TAU); c.fill(); outline(c, 2.6); cyclops(c, 0, -1, 3, e.look, e.blink); }
+  },
+  klebsiella: {
+    name: 'Klebsiella', sub: 'Klebsiella pneumoniae', family: 'MICROBE', hp: 55, r: 14, speed: 100, cost: 4, minRoom: 4, contact: 8, shield: 0.6, shieldRegen: 0.25, shieldDelay: 2, grab: true, abx: ['ceftriaxone', 'piptazo', 'cipro', 'meropenem'],
+    fact: 'Klebsiella wears a thick mucoid polysaccharide capsule; it causes UTIs, pneumonia and liver abscesses, and resistant ESBL strains are common.',
+    init: function (e) { e.timer = rr(1, 1.8); e.hop = 0; e.seed = rr(1, 99); },
+    update: function (e, dt, d, a) {
+      if (e.hop > 0) { e.hop -= dt; e.vx = Math.cos(e.hopA) * 270; e.vy = Math.sin(e.hopA) * 270; return; }
+      e.vx *= 0.85; e.vy *= 0.85; e.timer -= dt;
+      if (e.timer <= 0 && !e.atk) { e.timer = rr(1.4, 1.9); telegraph(e, 0.4, 'flash', null, function (e2) { e2.hop = 0.3; e2.hopA = ang(e2.x, e2.y, P.x, P.y); e2.sx = 1.3; e2.sy = 0.75; Snd.sfx('swing'); }); }
+    },
+    draw: function (c, e) { c.fillStyle = 'rgba(160,220,255,0.35)'; c.beginPath(); c.ellipse(0, 0, e.r * 1.5, e.r * 1.1, 0, 0, TAU); c.fill(); c.fillStyle = '#6fb8ff'; c.beginPath(); c.ellipse(0, 0, e.r * 1.2, e.r * 0.8, 0, 0, TAU); c.fill(); outline(c, 3.2); pustules(c, e.r, 3, e.seed, 'rgba(40,90,160,0.8)', 2.5); eyes(c, 0, -2, e.r * 0.4, e.r * 0.28, e.look, e.blink, 'angry', { asym: 0.7, veins: true }); mouth(c, 0, e.r * 0.35, e.r * 0.35, 'grin'); teeth(c, 0, e.r * 0.3, e.r * 0.28, 5, true); }
+  },
+  clostridium: {
+    name: 'Clostridium', sub: 'Clostridium perfringens (spore pod)', family: 'MICROBE', hp: 45, r: 15, speed: 0, cost: 4, minRoom: 5, contact: 6, stationary: true, noPush: true, grab: true, gasOnDeath: true, abx: ['piptazo', 'meropenem'],
+    fact: 'Clostridium species are anaerobes that ferment dead tissue and make gas: the crepitus of gas gangrene.',
+    init: function (e) { e.timer = rr(1.5, 2.5); e.ph = rr(0, TAU); e.seed = rr(1, 99); },
+    update: function (e, dt, d, a) { e.ph += dt * 2; e.vx = e.vy = 0; e.timer -= dt; if (e.timer <= 0 && !e.atk) { e.timer = rr(2.6, 3.2); telegraph(e, 0.6, 'flash', null, function (e2) { gasBubble(e2.x, e2.y - 8, 7); e2.sx = 1.2; e2.sy = 0.85; Snd.sfx('lob'); }); } },
+    draw: function (c, e) {
+      c.fillStyle = '#6b7a3a'; blobPath(c, e.r, e.ph, 4, 0.08); c.fill(); outline(c, 3.4);
+      [[-0.45, -0.3], [0.45, -0.25], [0, 0.5]].forEach(function (p, i) { c.fillStyle = '#9fb04a'; c.beginPath(); c.arc(p[0] * e.r, p[1] * e.r, e.r * 0.3, 0, TAU); c.fill(); outline(c, 2.2); cyclops(c, p[0] * e.r, p[1] * e.r, e.r * 0.11, e.look, i === 0 ? e.blink : 1, { veins: i === 2 }); });
+      c.fillStyle = 'rgba(184,255,90,' + (0.3 + 0.25 * Math.sin(e.ph * 3)) + ')'; c.beginPath(); c.arc(0, -e.r * 0.95, 5 + 2 * Math.sin(e.ph * 3), 0, TAU); c.fill();
+      stitches(c, -e.r * 0.6, e.r * 0.9, e.r * 0.6, e.r * 0.9, 3);
+    }
+  },
+  abscess: {
+    name: 'Abscess Sac', sub: 'Scrotal abscess', family: 'MICROBE', hp: 110, r: 24, speed: 28, cost: 6, minRoom: 3, contact: 9, noGrab: true, abx: ['piptazo', 'cipro', 'meropenem', 'ceftriaxone'],
+    fact: 'Abscesses are treated with incision and drainage.',
+    init: function (e) {
+      e.lurchT = rr(0.3, 0.9); e.lurch = 0; e.spitT = rr(2.2, 3.2); e.ph = rr(0, TAU); e.seed = rr(1, 99); e.shape = []; for (var i = 0; i < 10; i++) e.shape.push(rr(0.85, 1.15));
+      setWeakPoint(e, { r: 10, bodyMult: 0.25, critCls: 'CUT', critMult: 4, critLabel: 'DRAINED!', migrate: 3, hint: 'HIT THE BULB',
+        onCrit: function (e2) { e2.drained = true; e2.hp = 0; },
+        onOther: function (e2) { if (rnd() < 0.35) { addText(e2.x, e2.y - e2.r - 26, 'BURST!', { color: '#d4ff5a', size: 13 }); for (var k = 0; k < 3; k++) pusGlob(e2.x + e2.wp.ox, e2.y + e2.wp.oy, P.x + rr(-45, 45), P.y + rr(-45, 45), 6, 20); } } });
+    },
+    update: function (e, dt, d, a) {
+      e.ph += dt * 4; e.lurchT -= dt;
+      if (e.lurch > 0) { e.lurch -= dt; e.vx = Math.cos(a) * 95; e.vy = Math.sin(a) * 95; } else { e.vx *= 0.8; e.vy *= 0.8; if (e.lurchT <= 0 && !e.atk) { e.lurchT = rr(0.9, 1.4); e.lurch = 0.4; e.sx = 1.25; e.sy = 0.8; } }
+      e.spitT -= dt; if (e.spitT <= 0 && !e.atk) { e.spitT = rr(2.8, 3.6); e.vx = e.vy = 0; telegraph(e, 0.55, 'flash', null, function (e2) { pusGlob(e2.x, e2.y - 10, P.x + rr(-30, 30), P.y + rr(-30, 30), 8, 26); Snd.sfx('lob'); e2.sx = 0.85; e2.sy = 1.2; }); }
+    },
+    draw: function (c, e) {
+      c.fillStyle = '#c98a8a'; c.beginPath(); for (var i = 0; i < 10; i++) { var an = i / 10 * TAU, rr0 = e.r * e.shape[i] * (1 + 0.04 * Math.sin(e.ph + i)); if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); outline(c, 4);
+      c.fillStyle = 'rgba(120,40,60,0.35)'; c.beginPath(); c.ellipse(e.r * 0.2, e.r * 0.3, e.r * 0.5, e.r * 0.35, 0.4, 0, TAU); c.fill();
+      veins(c, e.r, 5, e.seed, 'rgba(150,30,60,0.6)'); pustules(c, e.r, 4, e.seed + 3, 'rgba(255,230,150,0.7)', 3);
+      stitches(c, -e.r * 0.2, -e.r * 0.9, e.r * 0.5, -e.r * 0.4, 3);
+      eyes(c, -e.r * 0.1, -e.r * 0.1, e.r * 0.36, e.r * 0.22, e.look, e.blink, 'worried', { asym: 0.6, bags: true, drip: true, dripColor: 'rgba(212,255,90,0.9)' }); mouth(c, -e.r * 0.05, e.r * 0.42, e.r * 0.14, 'o'); drool(c, -e.r * 0.05, e.r * 0.5, 2, 'rgba(212,255,90,0.75)', e.seed);
+    }
   },
   /* ─── MALIGNANT ─── */
   papillary: {
     name: 'Frond', sub: 'Papillary urothelial carcinoma', family: 'MALIGNANT', hp: 100, r: 18, speed: 0, cost: 4, minRoom: 2, contact: 10, stationary: true, urothelial: true, lowgrade: true,
     fact: 'Papillary bladder tumours are resected with a loop (TURBT) and recur often, so surveillance cystoscopy follows.',
-    init: function (e) { e.timer = rr(1, 2); e.lastHit = -10; e.sway = rr(0, TAU); },
+    init: function (e) { e.timer = rr(1, 2); e.lastHit = -10; e.sway = rr(0, TAU); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       e.sway += dt * 2; e.vx = e.vy = 0; e.timer -= dt;
       if (e.hp < e.maxHp && G.time - e.lastHit > 3 && !hasBoon('mitomycin')) { e.hp = Math.min(e.maxHp, e.hp + 8 * dt); e.regrowing = true; } else e.regrowing = false;
@@ -1448,22 +1573,30 @@ var ENEMIES = {
     },
     draw: function (c, e) {
       var s = Math.sin(e.sway) * 3; c.strokeStyle = '#c23b5b'; c.lineWidth = 7; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, e.r + 10); c.quadraticCurveTo(s, 4, s, -4); c.stroke(); c.lineWidth = 3; c.strokeStyle = OUTLINE; c.beginPath(); c.moveTo(-5, e.r + 10); c.quadraticCurveTo(s - 5, 4, s - 5, -4); c.moveTo(5, e.r + 10); c.quadraticCurveTo(s + 5, 4, s + 5, -4); c.stroke();
-      c.save(); c.translate(s, -8); c.fillStyle = '#ff5c7a'; for (var i = 0; i < 7; i++) { var an = i / 7 * TAU; c.beginPath(); c.arc(Math.cos(an) * e.r * 0.62, Math.sin(an) * e.r * 0.62, e.r * 0.5, 0, TAU); c.fill(); } blobPath(c, e.r * 0.85, e.sway, 7, 0.12); c.fill(); outline(c, 3.5);
+      c.strokeStyle = 'rgba(90,10,40,0.7)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-2, e.r + 6); c.quadraticCurveTo(s - 1, 6, s - 2, -2); c.stroke();
+      c.save(); c.translate(s, -8); for (var i = 0; i < 7; i++) { var an = i / 7 * TAU; c.fillStyle = '#ff5c7a'; c.beginPath(); c.arc(Math.cos(an) * e.r * 0.62, Math.sin(an) * e.r * 0.62, e.r * 0.5, 0, TAU); c.fill(); outline(c, 2.4); if (i % 2 === 0) cyclops(c, Math.cos(an) * e.r * 0.62, Math.sin(an) * e.r * 0.62, e.r * 0.13, e.look, i === 2 ? e.blink : 1, { veins: true }); }
+      c.fillStyle = '#ff5c7a'; blobPath(c, e.r * 0.85, e.sway, 7, 0.12); c.fill(); outline(c, 3.6);
       if (e.regrowing) { c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.arc(0, 0, e.r * 0.5, 0, TAU); c.fill(); }
-      eyes(c, 0, -2, e.r * 0.36, e.r * 0.25, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.4, e.r * 0.25, 'grin'); c.restore();
+      eyes(c, 0, -2, e.r * 0.36, e.r * 0.26, e.look, e.blink, 'angry', { veins: true, pupil: 0.3 }); mouth(c, 0, e.r * 0.4, e.r * 0.27, 'grin'); teeth(c, 0, e.r * 0.35, e.r * 0.22, 4, true); c.restore();
     }
   },
   cis: {
     name: 'CIS Carpet', sub: 'Carcinoma in situ', family: 'MALIGNANT', hp: 60, r: 40, speed: 0, cost: 3, minRoom: 3, contact: 0, stationary: true, flat: true, noPush: true, noGrab: true, noCollide: true, urothelial: true, tweaks: { FLUID: 3, ENERGY: 1.2 },
     fact: 'Carcinoma in situ is a flat, high-grade, velvety red patch: easy to miss on cystoscopy and treated with intravesical BCG.',
-    init: function (e) { e.dmgT = 0; e.shape = []; for (var i = 0; i < 12; i++) e.shape.push(rr(0.8, 1.15)); },
+    init: function (e) { e.dmgT = 0; e.shape = []; for (var i = 0; i < 12; i++) e.shape.push(rr(0.8, 1.15)); e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { e.vx = e.vy = 0; if (e.r < 90 && !hasBoon('bcg')) e.r += 3.5 * dt; if (hasBoon('bcg') && e.r > 25) e.r -= 2 * dt; e.dmgT -= dt; if (d < e.r && e.dmgT <= 0) { e.dmgT = 0.5; hurtPlayer(3, 'cis', 0, true); } },
-    draw: function (c, e) { c.globalAlpha = 0.72; c.fillStyle = '#ff6b8a'; c.beginPath(); for (var i = 0; i < 12; i++) { var an = i / 12 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); c.lineWidth = 3; c.strokeStyle = '#8f1f3a'; c.stroke(); c.fillStyle = 'rgba(255,255,255,0.15)'; for (var j = 0; j < 7; j++) { c.beginPath(); c.arc(Math.cos(j * 2.4) * e.r * 0.5, Math.sin(j * 2.4) * e.r * 0.5, 3, 0, TAU); c.fill(); } c.globalAlpha = 1; eyes(c, 0, 0, 8, 5, e.look, e.blink, 'angry'); }
+    draw: function (c, e) {
+      c.globalAlpha = 0.75; c.fillStyle = '#ff6b8a'; c.beginPath(); for (var i = 0; i < 12; i++) { var an = i / 12 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); c.lineWidth = 3; c.strokeStyle = '#8f1f3a'; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.15)'; for (var j = 0; j < 7; j++) { c.beginPath(); c.arc(Math.cos(j * 2.4) * e.r * 0.5, Math.sin(j * 2.4) * e.r * 0.5, 3, 0, TAU); c.fill(); } c.globalAlpha = 1;
+      // many little eyes scattered over the velvet
+      for (var k = 0; k < 6; k++) { var ea = hsh(e.seed, k) * TAU, ed = e.r * (0.3 + hsh(e.seed, k + 11) * 0.5); cyclops(c, Math.cos(ea) * ed, Math.sin(ea) * ed, 3.5 + hsh(e.seed, k + 5) * 2.5, e.look, k === 1 ? e.blink : 1, { veins: k % 2 === 0 }); }
+      eyes(c, 0, 0, 9, 5.5, e.look, e.blink, 'angry', { veins: true }); mouth(c, 0, 12, 10, 'jag'); teeth(c, 0, 10, 8, 4, true);
+    }
   },
   rcc: {
     name: 'RCC Mass', sub: 'Renal cell carcinoma (mini-boss)', family: 'MALIGNANT', hp: 480, r: 34, speed: 45, cost: 14, minRoom: 5, contact: 18, miniBoss: true, bleedMul: 2, tweaks: { ENERGY: 1.2, cryo: 1.3 }, rcc: true, noGrab: true,
     fact: 'Clear cell RCC is classically hypervascular: it enhances avidly with contrast and bleeds. TKIs like sunitinib starve that blood supply.',
-    init: function (e) { e.timer = 3; e.satT = 5; },
+    init: function (e) { e.timer = 3; e.satT = 5; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       if (e.charge > 0) { e.charge -= dt; e.vx = Math.cos(e.chargeA) * 380; e.vy = Math.sin(e.chargeA) * 380; if (e.charge <= 0 || e.hitWall) { e.charge = 0; aoeOnPlayer(e.x, e.y, 85, 18, 'slam'); shakeIt(8); G.punch = 0.2; burst(e.x, e.y, 16, { color: '#f2c14e', speed: 220, life: 0.35, size: 4 }); G.fxRings.push({ x: e.x, y: e.y, r: 10, r1: 85, t: 0.3, dur: 0.3, color: '#f2c14e' }); Snd.sfx('clang'); } return; }
       seek(e, P.x, P.y, 45); e.timer -= dt; e.satT -= dt;
@@ -1473,41 +1606,42 @@ var ENEMIES = {
     },
     draw: function (c, e) {
       c.fillStyle = '#f2c14e'; blobPath(c, e.r, e.wob * 0.5, 6, 0.1); c.fill(); outline(c, 4.5);
-      c.strokeStyle = '#d6453d'; c.lineWidth = 3; c.beginPath(); c.moveTo(-e.r * 0.7, -e.r * 0.2); c.quadraticCurveTo(-e.r * 0.2, -e.r * 0.5, e.r * 0.3, -e.r * 0.7); c.moveTo(-e.r * 0.3, e.r * 0.5); c.quadraticCurveTo(e.r * 0.1, e.r * 0.2, e.r * 0.7, e.r * 0.35); c.moveTo(e.r * 0.2, -e.r * 0.2); c.lineTo(e.r * 0.6, e.r * 0.05); c.stroke();
+      veins(c, e.r, 7, e.seed, 'rgba(214,69,61,0.9)'); pustules(c, e.r, 4, e.seed + 1, 'rgba(255,120,110,0.8)', 4);
       highlight(c, -e.r * 0.35, -e.r * 0.45, e.r * 0.26);
-      eyes(c, 0, -4, e.r * 0.38, e.r * 0.24, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.45, e.r * 0.4, 'frown'); teeth(c, 0, e.r * 0.45 - 3, e.r * 0.3, 4);
+      cyclops(c, -e.r * 0.62, e.r * 0.25, e.r * 0.12, e.look, e.blink, { veins: true }); cyclops(c, e.r * 0.55, -e.r * 0.55, e.r * 0.1, e.look, 1, { veins: true });
+      eyes(c, 0, -4, e.r * 0.38, e.r * 0.24, e.look, e.blink, 'angry', { veins: true, bags: true, asym: 0.8 }); mouth(c, 0, e.r * 0.42, e.r * 0.42, 'jag'); teeth(c, 0, e.r * 0.4, e.r * 0.36, 6, true); drool(c, 0, e.r * 0.72, 3, 'rgba(214,69,61,0.8)', e.seed);
     }
   },
   satellite: {
     name: 'RCC Satellite', family: 'MALIGNANT', hp: 30, r: 10, speed: 0, cost: 0, minRoom: 99, contact: 6, hidden: true, rcc: true, grab: true,
     fact: '', init: function (e) { e.timer = rr(1, 2); e.orbA = 0; },
     update: function (e, dt, d, a) { var p = e.parent; if (!p || p.dead) { e.hp = 0; e.silent = true; killEnemy(e, 'NEUTRAL', null); return; } e.orbA += dt * 1.6; var tx = p.x + Math.cos(e.orbA) * 70, ty = p.y + Math.sin(e.orbA) * 70; e.vx = (tx - e.x) * 8; e.vy = (ty - e.y) * 8; e.timer -= dt; if (e.timer <= 0) { e.timer = 2; enemyShot(e.x, e.y, a, 240, 7, { color: '#ffd166', r: 6 }); } },
-    draw: function (c, e) { c.fillStyle = '#f2c14e'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 3); c.strokeStyle = '#d6453d'; c.lineWidth = 2; c.beginPath(); c.moveTo(-5, 3); c.lineTo(4, -4); c.stroke(); eyes(c, 0, -1, 3.5, 2.8, e.look, e.blink, 'angry'); }
+    draw: function (c, e) { c.fillStyle = '#f2c14e'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 3); c.strokeStyle = '#d6453d'; c.lineWidth = 2; c.beginPath(); c.moveTo(-5, 3); c.lineTo(4, -4); c.stroke(); cyclops(c, 0, -1, e.r * 0.45, e.look, e.blink, { veins: true }); }
   },
   prostate: {
     name: 'Slow Burner', sub: 'Prostate adenocarcinoma', family: 'MALIGNANT', hp: 140, r: 20, speed: 30, cost: 6, minRoom: 4, contact: 10, prostate: true, tweaks: { brachy: 1.5 }, noGrab: true,
     fact: 'Prostate cancer is usually slow-growing, androgen-driven (hence ADT), and spreads to bone.',
-    init: function (e) { e.timer = rr(2, 3); e.growth = 0; },
+    init: function (e) { e.timer = rr(2, 3); e.growth = 0; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       if (!hasBoon('adt')) { e.growth = Math.min(1, e.growth + dt / 40); e.r = 20 + 12 * e.growth; e.contactNow = 10 + 8 * e.growth; }
       seek(e, P.x, P.y, 30 * (hasBoon('adt') ? 0.6 : 1)); e.timer -= dt;
       if (e.timer <= 0 && !e.atk) { e.timer = rr(3.2, 3.8); telegraph(e, 0.5, 'flash', null, function (e2) { fanBurst(e2.x, e2.y, ang(e2.x, e2.y, P.x, P.y), 5, 1.2, 170, 8 + 4 * e2.growth, { color: '#f5f5dc', r: 7, shape: 'bone' }); Snd.sfx('shot'); }); }
       if (e.atk) { e.vx = e.vy = 0; }
     },
-    draw: function (c, e) { c.fillStyle = '#c47a4a'; c.beginPath(); c.arc(-e.r * 0.42, 0, e.r * 0.7, 0, TAU); c.arc(e.r * 0.42, 0, e.r * 0.7, 0, TAU); c.fill(); blobPath(c, e.r * 0.9, 0, 2, 0.02); c.fill(); outline(c, 4); c.fillStyle = '#ff4d6d'; c.fillRect(-e.r * 0.95, -e.r * 0.62, e.r * 1.9, e.r * 0.22); c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.strokeRect(-e.r * 0.95, -e.r * 0.62, e.r * 1.9, e.r * 0.22); eyes(c, 0, -2, e.r * 0.4, e.r * 0.22, e.look, e.blink, 'angry'); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'flat'); }
+    draw: function (c, e) { c.fillStyle = '#c47a4a'; c.beginPath(); c.arc(-e.r * 0.42, 0, e.r * 0.7, 0, TAU); c.arc(e.r * 0.42, 0, e.r * 0.7, 0, TAU); c.fill(); blobPath(c, e.r * 0.9, 0, 2, 0.02); c.fill(); outline(c, 4); veins(c, e.r, 4, e.seed, 'rgba(120,40,30,0.6)'); stitches(c, 0, -e.r * 0.4, 0, e.r * 0.6, 3); c.fillStyle = '#ff4d6d'; c.fillRect(-e.r * 0.95, -e.r * 0.62, e.r * 1.9, e.r * 0.22); c.strokeStyle = OUTLINE; c.lineWidth = 2.5; c.strokeRect(-e.r * 0.95, -e.r * 0.62, e.r * 1.9, e.r * 0.22); eyes(c, 0, -2, e.r * 0.4, e.r * 0.2, e.look, e.blink, 'angry', { veins: true, bags: true }); mouth(c, 0, e.r * 0.42, e.r * 0.3, 'flat'); teeth(c, 0, e.r * 0.4, e.r * 0.26, 6); }
   },
   seminoma: {
     name: 'Seminoma', sub: 'Testicular germ cell tumour', family: 'MALIGNANT', hp: 60, r: 13, speed: 190, cost: 3, minRoom: 3, contact: 9, seminoma: true, grab: true,
     fact: 'Seminoma is exquisitely sensitive to cisplatin-based chemotherapy and to radiation; cure rates are very high.',
-    init: function (e) { e.timer = rr(0.5, 1.2); e.dash = 0; },
+    init: function (e) { e.timer = rr(0.5, 1.2); e.dash = 0; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { e.timer -= dt; if (e.dash > 0) { e.dash -= dt; e.vx = Math.cos(e.dashA) * 330; e.vy = Math.sin(e.dashA) * 330; return; } e.vx *= 0.9; e.vy *= 0.9; if (e.timer <= 0) { e.timer = rr(1, 1.5); e.dash = 0.35; e.dashA = a + rr(-0.5, 0.5); e.sx = 1.3; e.sy = 0.75; } },
-    draw: function (c, e) { c.fillStyle = '#ffc6d9'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 3); highlight(c, -e.r * 0.35, -e.r * 0.4, e.r * 0.25); eyes(c, 0, -2, e.r * 0.4, e.r * 0.28, e.look, e.blink); mouth(c, 0, e.r * 0.4, e.r * 0.35, 'grin'); }
+    draw: function (c, e) { c.fillStyle = '#ffc6d9'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 3.2); highlight(c, -e.r * 0.35, -e.r * 0.4, e.r * 0.25); veins(c, e.r, 2, e.seed, 'rgba(200,60,110,0.5)'); eyes(c, 0, -2, e.r * 0.4, e.r * 0.3, e.look, e.blink, null, { pupil: 0.55, drip: true }); mouth(c, 0, e.r * 0.45, e.r * 0.3, 'grin'); teeth(c, 0, e.r * 0.4, e.r * 0.2, 2); }
   },
   /* ─── BENIGN (don't chase; tanky; optional) ─── */
   bph: {
     name: 'Gentle Giant', sub: 'Benign prostatic hyperplasia', family: 'BENIGN', hp: 350, r: 46, speed: 0, cost: 10, minRoom: 3, contact: 12, stationary: true, noPush: true, noGrab: true, tweaks: { ENERGY: 1.15, aquablation: 1.5, button: 1.2, rezum: 1.2, greenlight: 1.2 },
     fact: 'BPH is nearly universal with age; it causes LUTS and nocturia and is treated with alpha-blockers, 5-ARIs, or TURP-style procedures.',
-    init: function (e) { e.timer = 3; e.dripT = 2; },
+    init: function (e) { e.timer = 3; e.dripT = 2; e.seed = rr(1, 99); },
     update: function (e, dt, d, a) {
       e.vx = e.vy = 0; e.timer -= dt; e.dripT -= dt;
       if (e.timer <= 0 && !e.atk) { e.timer = rr(4.2, 5); telegraph(e, 0.7, 'circle', { r: 118 }, function (e2) { aoeOnPlayer(e2.x, e2.y, 118, 15, 'slam'); shakeIt(7); G.punch = 0.15; G.fxRings.push({ x: e2.x, y: e2.y, r: 20, r1: 118, t: 0.3, dur: 0.3, color: '#ffb199' }); burst(e2.x, e2.y, 14, { color: '#ffb199', speed: 180, life: 0.35, size: 4 }); Snd.sfx('clang'); e2.sx = 1.25; e2.sy = 0.8; }); }
@@ -1516,9 +1650,9 @@ var ENEMIES = {
     draw: function (c, e) {
       c.fillStyle = '#ffb199'; var R = e.r * 0.7; c.beginPath(); c.arc(-R * 0.75, R * 0.2, R, 0, TAU); c.fill(); outline(c, 4.5); c.beginPath(); c.arc(R * 0.75, R * 0.2, R, 0, TAU); c.fill(); outline(c, 4.5); c.beginPath(); c.arc(0, -R * 0.5, R * 0.95, 0, TAU); c.fill(); outline(c, 4.5);
       c.fillStyle = '#ffb199'; c.beginPath(); c.arc(-R * 0.75, R * 0.2, R - 2.5, 0, TAU); c.arc(R * 0.75, R * 0.2, R - 2.5, 0, TAU); c.arc(0, -R * 0.5, R * 0.95 - 2.5, 0, TAU); c.fill();
-      // nightcap
+      veins(c, e.r, 5, e.seed, 'rgba(180,60,80,0.45)'); stitches(c, -R * 0.1, R * 0.5, R * 0.8, R * 0.9, 3); pustules(c, e.r, 3, e.seed + 2, 'rgba(255,200,180,0.9)', 4);
       c.fillStyle = '#6c8cff'; polyPath(c, [[-R * 0.8, -R * 1.2], [R * 0.9, -R * 1.25], [R * 1.3, -R * 2.1]]); c.fill(); outline(c, 3); c.fillStyle = '#fff'; c.beginPath(); c.arc(R * 1.3, -R * 2.1, 6, 0, TAU); c.fill(); outline(c, 2.5);
-      c.__lidColor = '#b3604a'; eyes(c, 0, -R * 0.55, R * 0.42, R * 0.26, e.look, e.blink, 'sleepy'); mouth(c, 0, R * 0.05, R * 0.3, e.atk ? 'o' : 'wavy');
+      c.__lidColor = '#b3604a'; eyes(c, 0, -R * 0.55, R * 0.42, R * 0.26, e.look, e.blink, 'sleepy', { bags: true, asym: 0.8 }); mouth(c, 0, R * 0.05, R * 0.3, e.atk ? 'o' : 'wavy'); drool(c, R * 0.2, R * 0.2, 2, 'rgba(255,240,220,0.8)', e.seed);
     }
   },
   cyst: {
@@ -1526,49 +1660,64 @@ var ENEMIES = {
     fact: 'Simple renal cysts are common and benign; Bosniak grading tells complex cysts (septa, enhancement) from simple ones.',
     init: function (e) { e.complex = rnd() < 0.3; e.ph = rr(0, TAU); },
     update: function (e, dt, d, a) { e.ph += dt; wanderMove(e, dt, 15); e.vy += Math.sin(e.ph * 2) * 4; },
-    draw: function (c, e) { c.strokeStyle = '#9fb6c9'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, e.r); c.quadraticCurveTo(4, e.r + 10, -2, e.r + 20); c.stroke(); c.globalAlpha = 0.85; c.fillStyle = '#cfe9ff'; c.beginPath(); c.ellipse(0, 0, e.r * 0.9, e.r * 1.05, 0, 0, TAU); c.fill(); c.lineWidth = 3.5; c.strokeStyle = e.complex ? '#ff4d6d' : OUTLINE; c.stroke(); c.globalAlpha = 1; highlight(c, -e.r * 0.3, -e.r * 0.45, e.r * 0.3); if (e.complex) { c.strokeStyle = '#ff4d6d'; c.lineWidth = 2; c.beginPath(); c.moveTo(-e.r * 0.5, e.r * 0.3); c.lineTo(e.r * 0.5, -e.r * 0.4); c.stroke(); } eyes(c, 0, -2, e.r * 0.35, e.r * 0.24, e.look, e.blink); mouth(c, 0, e.r * 0.4, e.r * 0.2, 'o'); }
+    draw: function (c, e) { c.strokeStyle = '#9fb6c9'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, e.r); c.quadraticCurveTo(4, e.r + 10, -2, e.r + 20); c.stroke(); c.globalAlpha = 0.85; c.fillStyle = '#cfe9ff'; c.beginPath(); c.ellipse(0, 0, e.r * 0.9, e.r * 1.05, 0, 0, TAU); c.fill(); c.lineWidth = 3.6; c.strokeStyle = e.complex ? '#ff4d6d' : OUTLINE; c.stroke(); c.globalAlpha = 1; highlight(c, -e.r * 0.3, -e.r * 0.45, e.r * 0.3); if (e.complex) { c.strokeStyle = '#ff4d6d'; c.lineWidth = 2; c.beginPath(); c.moveTo(-e.r * 0.5, e.r * 0.3); c.lineTo(e.r * 0.5, -e.r * 0.4); c.stroke(); }
+      // one eye floating loose inside the fluid
+      cyclops(c, Math.sin(e.ph * 1.3) * e.r * 0.3, e.r * 0.15 + Math.cos(e.ph) * e.r * 0.15, e.r * 0.3, e.look, e.blink, { veins: e.complex }); mouth(c, 0, -e.r * 0.5, e.r * 0.2, 'o'); }
   },
   aml: {
     name: 'AML', sub: 'Angiomyolipoma', family: 'BENIGN', hp: 120, r: 24, speed: 10, cost: 4, minRoom: 3, contact: 6, hemorrhage: true, noGrab: true,
     fact: 'Angiomyolipoma is a benign fat-containing kidney tumour that can bleed dramatically (Wunderlich syndrome) once it passes about 4 cm.',
-    init: function (e) {},
+    init: function (e) { e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { if (d < 140) { e.vx = -Math.cos(a) * 25; e.vy = -Math.sin(a) * 25; } else wanderMove(e, dt, 10); },
-    draw: function (c, e) { c.fillStyle = '#ffe07a'; blobPath(c, e.r, e.wob * 0.7, 5, 0.1); c.fill(); outline(c, 4); c.strokeStyle = '#e03a3a'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-e.r * 0.7, 0); c.quadraticCurveTo(-e.r * 0.3, -e.r * 0.5, e.r * 0.2, -e.r * 0.3); c.moveTo(e.r * 0.1, e.r * 0.6); c.quadraticCurveTo(e.r * 0.4, e.r * 0.2, e.r * 0.75, e.r * 0.3); c.stroke(); eyes(c, 0, -3, e.r * 0.4, e.r * 0.26, e.look, e.blink, 'worried'); mouth(c, 0, e.r * 0.45, e.r * 0.25, 'wavy'); }
+    draw: function (c, e) { c.fillStyle = '#ffe07a'; blobPath(c, e.r, e.wob * 0.7, 5, 0.1); c.fill(); outline(c, 4); veins(c, e.r, 6, e.seed, 'rgba(224,58,58,0.85)'); pustules(c, e.r, 3, e.seed + 4, 'rgba(255,170,120,0.9)', 3.5); c.fillStyle = 'rgba(140,200,255,0.8)'; c.beginPath(); c.arc(e.r * 0.75, -e.r * 0.6, 3, 0, TAU); c.fill(); eyes(c, 0, -3, e.r * 0.4, e.r * 0.26, e.look, e.blink, 'worried', { bags: true, drip: true }); mouth(c, 0, e.r * 0.45, e.r * 0.25, 'wavy'); }
   },
   oncocytoma: {
     name: 'Oncocytoma', sub: 'Renal oncocytoma', family: 'BENIGN', hp: 160, r: 26, speed: 0, cost: 4, minRoom: 2, contact: 0, stationary: true, noPush: true, noGrab: true, hearts: 2,
     fact: 'Oncocytoma is a benign kidney tumour with a classic central stellate scar, often indistinguishable from RCC on imaging.',
-    init: function (e) {},
+    init: function (e) { e.seed = rr(1, 99); },
     update: function (e, dt, d, a) { e.vx = e.vy = 0; },
-    draw: function (c, e) { c.fillStyle = '#a0522d'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 4); c.strokeStyle = '#e2b58a'; c.lineWidth = 2.5; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU + 0.3; c.moveTo(Math.cos(an) * 3, Math.sin(an) * 3 + 6); c.lineTo(Math.cos(an) * e.r * 0.5, Math.sin(an) * e.r * 0.5 + 6); } c.stroke(); c.fillStyle = '#ff4d6d'; polyPath(c, [[-10, e.r * 0.75], [-2, e.r * 0.72], [-10, e.r * 0.95]]); c.fill(); polyPath(c, [[10, e.r * 0.75], [2, e.r * 0.72], [10, e.r * 0.95]]); c.fill(); c.beginPath(); c.arc(0, e.r * 0.8, 3, 0, TAU); c.fill(); eyes(c, 0, -8, e.r * 0.38, e.r * 0.24, e.look, e.blink); mouth(c, 0, e.r * 0.35, e.r * 0.3, 'grin'); }
+    draw: function (c, e) { c.fillStyle = '#a0522d'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill(); outline(c, 4); c.strokeStyle = '#e2b58a'; c.lineWidth = 2.5; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU + 0.3; c.moveTo(Math.cos(an) * 3, Math.sin(an) * 3 + 6); c.lineTo(Math.cos(an) * e.r * 0.5, Math.sin(an) * e.r * 0.5 + 6); } c.stroke(); stitches(c, -e.r * 0.5, e.r * 0.1, e.r * 0.5, e.r * 0.1, 4); c.fillStyle = '#ff4d6d'; polyPath(c, [[-10, e.r * 0.75], [-2, e.r * 0.72], [-10, e.r * 0.95]]); c.fill(); polyPath(c, [[10, e.r * 0.75], [2, e.r * 0.72], [10, e.r * 0.95]]); c.fill(); c.beginPath(); c.arc(0, e.r * 0.8, 3, 0, TAU); c.fill(); eyes(c, 0, -8, e.r * 0.38, e.r * 0.25, e.look, e.blink, null, { pupil: 0.5, asym: 0.85 }); mouth(c, 0, e.r * 0.35, e.r * 0.3, 'grin'); teeth(c, 0, e.r * 0.3, e.r * 0.22, 4); }
   },
   polyp: {
     name: 'Fibroepithelial Polyp', sub: 'Benign ureteral polyp', family: 'BENIGN', hp: 30, r: 10, speed: 0, cost: 1, minRoom: 1, contact: 0, stationary: true, noPush: true, grab: true,
     fact: 'Fibroepithelial polyps are the most common benign ureteral tumour: long, dangling, and easy to snip with a laser or loop.',
     init: function (e) { e.sway = rr(0, TAU); },
     update: function (e, dt, d, a) { e.sway += dt * 2.5; e.vx = e.vy = 0; },
-    draw: function (c, e) { var s = Math.sin(e.sway) * 3; c.strokeStyle = '#ff9fb3'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(0, 8); c.quadraticCurveTo(i * 8 + s, -4, i * 11 + s, -16); } c.stroke(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.beginPath(); for (var j = -1; j <= 1; j++) { c.moveTo(0, 8); c.quadraticCurveTo(j * 8 + s, -4, j * 11 + s, -16); } c.stroke(); c.fillStyle = '#ff9fb3'; c.beginPath(); c.arc(0, 8, e.r * 0.7, 0, TAU); c.fill(); outline(c, 2.5); eyes(c, 0, 6, 3.5, 2.6, e.look, e.blink); }
+    draw: function (c, e) { var s = Math.sin(e.sway) * 3; c.strokeStyle = '#ff9fb3'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(0, 8); c.quadraticCurveTo(i * 8 + s, -4, i * 11 + s, -16); } c.stroke(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.beginPath(); for (var j = -1; j <= 1; j++) { c.moveTo(0, 8); c.quadraticCurveTo(j * 8 + s, -4, j * 11 + s, -16); } c.stroke(); for (var k = -1; k <= 1; k++) cyclops(c, k * 11 + s, -16, 3, e.look, k === 0 ? e.blink : 1); c.fillStyle = '#ff9fb3'; c.beginPath(); c.arc(0, 8, e.r * 0.7, 0, TAU); c.fill(); outline(c, 2.6); mouth(c, 0, 8, 4, 'o'); }
   },
   /* ─── CLOT (destructible obstacle; not needed for room clear) ─── */
   clot: {
     name: 'Blood Clot', sub: 'Organized clot', family: 'CLOT', hp: 80, r: 22, speed: 0, cost: 0, minRoom: 99, contact: 0, stationary: true, noPush: true, noGrab: true, noClear: true, blocks: true,
     fact: 'Clot retention after hematuria is cleared by irrigating through a large three-way catheter, and electrocautery stops the bleeder.',
-    init: function (e) { e.ph = rr(0, TAU); e.obs = { type: 'circle', x: e.x, y: e.y, r: e.r - 2, clot: e }; G.obstacles.push(e.obs); },
+    init: function (e) { e.ph = rr(0, TAU); e.seed = rr(1, 99); e.obs = { type: 'circle', x: e.x, y: e.y, r: e.r - 2, clot: e }; G.obstacles.push(e.obs); },
     update: function (e, dt, d, a) { e.ph += dt * 3; e.vx = e.vy = 0; },
-    draw: function (c, e) { c.fillStyle = '#c0392b'; blobPath(c, e.r, e.ph, 4, 0.06); c.fill(); outline(c, 3.5); highlight(c, -e.r * 0.3, -e.r * 0.35, e.r * 0.3); eyes(c, 0, -1, e.r * 0.3, e.r * 0.2, e.look, e.blink); mouth(c, 0, e.r * 0.4, e.r * 0.2, 'flat'); }
+    draw: function (c, e) { c.fillStyle = '#c0392b'; blobPath(c, e.r, e.ph, 4, 0.06); c.fill(); outline(c, 3.6); highlight(c, -e.r * 0.3, -e.r * 0.35, e.r * 0.3); veins(c, e.r, 3, e.seed, 'rgba(80,10,20,0.7)'); eyes(c, 0, -2, e.r * 0.32, e.r * 0.22, e.look, e.blink, 'worried', { veins: true, asym: 0.7 }); mouth(c, 0, e.r * 0.4, e.r * 0.25, 'stitch'); }
   },
-  /* ─── BOSS parts (behaviour lives in §14) ─── */
+  /* ─── BOSS parts (behaviour lives in §14b) ─── */
   staghorn: {
     name: 'Staghorn Calculus', sub: 'BOSS — branching struvite stone', family: 'STONE', hp: 1500, r: 62, speed: 0, cost: 0, minRoom: 99, contact: 20, boss: true, stationary: true, noPush: true, noGrab: true, noCollide: false,
     fact: 'A staghorn calculus fills the renal pelvis and calyces like antlers; most are struvite from urease-producing infection and need PCNL.',
-    init: function (e) {}, update: function (e, dt) {}, draw: function (c, e) { drawBossBody(c, e); }
+    init: function (e) { e.seed = 7; }, update: function (e, dt) {}, draw: function (c, e) { drawBossBody(c, e); }
   },
   stagarm: {
     name: 'Calyceal Branch', family: 'STONE', hp: 110, r: 24, speed: 0, cost: 0, minRoom: 99, contact: 12, hidden: true, isArm: true, stationary: true, noPush: true, noGrab: true,
     fact: '', init: function (e) {}, update: function (e, dt) {}, draw: function (c, e) { /* drawn by the boss renderer */ }
+  },
+  fournier: {
+    name: "Fournier's Gangrene", sub: 'BOSS — necrotizing fasciitis of the perineum', family: 'MICROBE', hp: 1800, r: 96, speed: 0, cost: 0, minRoom: 99, contact: 18, boss: true, stationary: true, noPush: true, noGrab: true,
+    fact: "Fournier's gangrene is a polymicrobial necrotizing fasciitis of the perineum: emergency debridement, broad-spectrum antibiotics and glucose control. Diabetes is the classic risk factor.",
+    init: function (e) { e.seed = 13; }, update: function (e, dt) {}, draw: function (c, e) { drawFournierBody(c, e); }
+  },
+  fourlobe: {
+    name: 'Necrotic Lobe', family: 'MICROBE', hp: 90, r: 30, speed: 0, cost: 0, minRoom: 99, contact: 12, hidden: true, isLobe: true, stationary: true, noPush: true, noGrab: true,
+    fact: '', init: function (e) { e.seed = rr(1, 99); e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 2; }, draw: function (c, e) { drawLobe(c, e); }
+  },
+  fourstump: {
+    name: 'Stump', family: 'MICROBE', hp: 5000, r: 18, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, isStump: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true,
+    fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 6; }, draw: function (c, e) { drawStump(c, e); }
   }
 };
-var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'clot', 'staghorn', 'stagarm'];
+var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
 (function () { for (var id in ENEMIES) ENEMIES[id].id = id; })();
 // pips: the class an enemy is weakest to / resists most (class-level tweaks included)
 function enemyWeakness(def) {
@@ -1617,6 +1766,7 @@ var BOONS = {
   tamsulosin:  { name: 'Tamsulosin', kind: 'med', rarity: 'common', desc: 'Alpha-blocker: enemy projectiles are 10% slower and stone fragments are pushed away from you.' },
   hydration:   { name: 'Hydration', kind: 'med', rarity: 'common', desc: '+20 max HP and slow regeneration (0.5 HP/s).', apply: function () { P.maxHp += 20; P.hp += 20; } },
   ketorolac:   { name: 'Ketorolac', kind: 'med', rarity: 'common', desc: 'NSAID: +10% move speed, and stone contact hurts 25% less.' },
+  insulin:     { name: 'Insulin', kind: 'med', rarity: 'common', desc: 'Clears the sugar crystals that feed Fournier\'s gangrene (no glycemic surges). IV bags and hearts heal 25% more.' },
   txa:         { name: 'Tranexamic Acid', kind: 'med', rarity: 'common', desc: 'Bleeding on you is halved. Bleeding enemies take +15% from ENERGY.', dmg: function (e, cls) { return (cls === 'ENERGY' && e.st.bleed) ? 1.15 : 1; } },
   /* surgical gear */
   moses:       { name: 'Moses Effect', kind: 'gear', rarity: 'rare', desc: 'Holmium FRAGMENT and Thulium SUPERPULSE pulses split into 3 pellets.' },
@@ -1632,7 +1782,7 @@ var BOONS = {
   quickhands:  { name: 'Quick Hands', kind: 'gear', rarity: 'common', desc: 'Weapon swap delay halved.' },
   wolf:        { name: 'Wolf in Scrubs', kind: 'gear', rarity: 'rare', desc: '5 kills within 6 s: 2 s of invulnerability and +40% speed.' }
 };
-var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf'];
+var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf'];
 (function () { for (var id in BOONS) BOONS[id].id = id; })();
 var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ffd166' };
 
@@ -1675,8 +1825,8 @@ var DOOR_TYPES = {
    §12 BOSSES — only the Staghorn is implemented (§14). The rest are design stubs for future rows.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOSSES = {
-  staghorn: { name: 'Staghorn Calculus', hp: 1500, phases: ['Shell', 'Infection', 'Core'], implemented: true }
-  // fournier: { name: "Fournier's Gangrene", hp: 1800, phases: ['Crepitus', 'Spread', 'Debride'] }   — spreading necrotic floor, CUT/debridement + abx phase
+  staghorn: { name: 'Staghorn Calculus', hp: 1500, phases: ['Shell', 'Infection', 'Core'], implemented: true },
+  fournier: { name: "Fournier's Gangrene", hp: 1800, phases: ['Necrosis', 'Spread', 'Sepsis'], implemented: true }
   // giantbph: { name: 'Giant BPH', hp: 2000, phases: ['Lobes', 'Median lobe', 'Capsule'] }          — three lobes, ENERGY/aquablation phase, retention flood
   // rccthrombus: { name: 'RCC with IVC Thrombus', hp: 2200, phases: ['Mass', 'Thrombus', 'Bleed'] }  — vascular tendrils, cryo/energy, satellites
   // mibc: { name: 'Muscle-Invasive Bladder Tumour', hp: 1900, phases: ['Papillary', 'Invasion', 'Cystectomy'] } — CUT/loop, chemo synergy, wall collapse
@@ -1772,9 +1922,20 @@ function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (t
 function dealDamage(e, base, cls, o) {
   o = o || {};
   if (!e || e.dead || e.spawnT > 0) return 0;
-  if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
+  if (e.def.isStump) { if (o.cauterize && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
+  if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
   m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid);
+  var wpCrit = false, wp = e.wp;
+  if (wp) {
+    var hx = o.hx, hy = o.hy; if (hx === undefined || hx === null) { var da = ang(P.x, P.y, e.x, e.y); hx = e.x - Math.cos(da) * e.r * 0.7; hy = e.y - Math.sin(da) * e.r * 0.7; }
+    if (dist(hx, hy, e.x + wp.ox, e.y + wp.oy) <= wp.r + 6) { if (wp.critCls && cls === wp.critCls) { m *= wp.critMult; wpCrit = true; } else if (wp.onOther) wp.onOther(e, cls, o); }
+    else { m *= wp.bodyMult; if (wp.hint && (!e.hintT || G.time - e.hintT > 2.5)) { e.hintT = G.time; addText(e.x, e.y - e.r - 28, wp.hint, { color: '#ffd166', size: 11 }); } }
+  }
+  if (e.necro > 0) {
+    if (cls === 'CUT') { e.necro = Math.max(0, e.necro - (o.debride || 0.34)); m *= 0.6; if (e.necro <= 0) { addText(e.x, e.y - e.r - 28, 'DEBRIDED!', { color: '#ff4d6d', size: 15 }); burst(e.x, e.y, 14, { color: '#1f3522', speed: 160, life: 0.5, size: 4, kind: 'goo', g: 300 }); Snd.sfx('slash'); } else if (!e.necT || G.time - e.necT > 1) { e.necT = G.time; addText(e.x, e.y - e.r - 28, 'DEBRIDING…', { color: '#9fb6c9', size: 11 }); } }
+    else { m *= 0.15; if (!e.necT || G.time - e.necT > 1.2) { e.necT = G.time; addText(e.x, e.y - e.r - 28, 'NECROTIC — CUT IT AWAY', { color: '#9fb6c9', size: 11 }); } }
+  }
   if (e.st.frozen && (fam === 'STONE' || fam === 'MALIGNANT')) m *= 1.5;
   if (e.st.mark) m *= 1.1;
   if (e.coreExposed) m *= 1.5;
@@ -1797,7 +1958,10 @@ function dealDamage(e, base, cls, o) {
   if (o.knock && !e.def.noPush && !e.boss) { var ka = o.ang !== undefined ? o.ang : ang(P.x, P.y, e.x, e.y); e.kx += Math.cos(ka) * o.knock; e.ky += Math.sin(ka) * o.knock; }
   // numbers + flair
   var col = CLASSES[cls] ? CLASSES[cls].color : '#fff', shown = Math.max(1, Math.round(dmg));
-  if (m >= 1.5 && e.shield <= 0) {
+  if (wpCrit) {
+    addText(e.x + rr(-6, 6), e.y - e.r - 8, String(shown), { color: col, size: 26, sub: wp.critLabel, subColor: '#ffd166' }); Snd.sfx('crit'); hitstop(0.07); shakeIt(4);
+    burst(e.x + wp.ox, e.y + wp.oy, 12, { color: wp.color, speed: 180, life: 0.4, size: 3, kind: 'goo', g: 300 }); if (wp.onCrit) wp.onCrit(e, dmg, o);
+  } else if (m >= 1.5 && e.shield <= 0) {
     var flair = (!e.seT || G.time - e.seT > 0.8); if (flair) e.seT = G.time;
     addText(e.x + rr(-6, 6), e.y - e.r - 6, String(shown), { color: col, size: crit ? 24 : 20, sub: flair ? (rightTool ? 'RIGHT TOOL!' : crit ? 'CRIT!' : 'SUPER EFFECTIVE') : null, subColor: rightTool ? '#ffd166' : col });
     Snd.sfx('crit'); if (dmg >= 20) hitstop(0.035);
@@ -1812,7 +1976,7 @@ function dealDamage(e, base, cls, o) {
   // statuses
   if (o.status) for (var k in o.status) applyStatus(e, k, o.status[k][0], o.status[k][1]);
   if (o.stun) applyStatus(e, 'stun', o.stun, 1);
-  if (o.cauterize && e.st.bleed) { delete e.st.bleed; var bonus = 12 * MATRIX.ENERGY[fam]; e.hp -= bonus; addText(e.x, e.y - e.r - 20, 'CAUTERIZED +' + Math.round(bonus), { color: '#ffb630', size: 12 }); burst(e.x, e.y, 6, { color: '#ffb630', speed: 90, life: 0.3, size: 2, kind: 'smoke' }); Snd.sfx('cauter'); }
+  if (o.cauterize && e.st.bleed) { delete e.st.bleed; var bonus = 12 * MATRIX.ENERGY[fam]; e.hp -= bonus; addText(e.x, e.y - e.r - 20, 'CAUTERIZED +' + Math.round(bonus), { color: '#ffb630', size: 12 }); burst(e.x, e.y, 6, { color: '#ffb630', speed: 90, life: 0.3, size: 2, kind: 'smoke' }); Snd.sfx('cauter'); if (e.onCauterized) e.onCauterized(e); }
   if (hasBoon('bcg') && fam === 'MALIGNANT') applyStatus(e, 'mark', 5, 1);
   if (boonWantsPoison(e)) applyStatus(e, 'poison', 3, 4);
   if (e.onDamaged) e.onDamaged(e, dmg, cls, o);
@@ -1868,7 +2032,7 @@ function killEnemy(e, cls, wid) {
     burst(e.x, e.y, pc, { color: FAMILY_PART[fam], speed: 180 + e.r * 2, life: 0.5, size: fam === 'STONE' ? 4 : 3, kind: fam === 'STONE' ? 'frag' : fam === 'MICROBE' ? 'goo' : 'spark', g: fam === 'STONE' ? 500 : 300 });
     Snd.sfx(fam === 'STONE' ? 'shatter' : fam === 'MICROBE' ? 'pop' : 'kill');
     hitstop(def.miniBoss ? 0.09 : e.r > 20 ? 0.05 : 0.03); shakeIt(def.miniBoss ? 6 : 2);
-    if (G.decals.length < 40 && fam !== 'STONE') G.decals.push({ x: e.x, y: e.y, r: e.r * 0.8, color: hexA(FAMILY_PART[fam], 0.3), t: 12 });
+    if (G.decals.length < 40 && fam !== 'STONE') { G.decals.push({ x: e.x, y: e.y, r: e.r * 0.8, color: hexA(FAMILY_PART[fam], 0.3), t: 12 }); G.decals.push({ x: e.x + rr(-e.r, e.r), y: e.y + rr(-e.r * 0.6, e.r), r: e.r * 0.35, color: 'rgba(120,20,40,0.35)', t: 12 }); }
   }
   // loot
   if (!e.silent && !e.inhaled) {
@@ -1894,6 +2058,8 @@ function killEnemy(e, cls, wid) {
     if (cls === 'CUT' || cls === 'LITHO') { aoeOnPlayer(e.x, e.y, 120, 20, 'bleed'); for (var b = 0; b < 4; b++) addHazard({ kind: 'blood', x: e.x + rr(-50, 50), y: e.y + rr(-50, 50), r: rr(22, 40), t: 12 }); burst(e.x, e.y, 30, { color: '#e03a3a', speed: 300, life: 0.6, size: 4, kind: 'goo', g: 400 }); G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 120, t: 0.35, dur: 0.35, color: '#e03a3a' }); addText(e.x, e.y - 40, 'HEMORRHAGE!', { color: '#ff4d6d', size: 18 }); shakeIt(8); Snd.sfx('hurt'); }
     else addText(e.x, e.y - 40, 'HEMOSTASIS. NICE.', { color: '#ffb630', size: 13 });
   }
+  if (e.drained) { addHazard({ kind: 'pus', x: e.x, y: e.y, r: 46, t: 6, dps: 5 }); burst(e.x, e.y, 24, { color: '#d4ff5a', speed: 220, life: 0.5, size: 4, kind: 'goo', g: 350 }); Snd.sfx('pop'); }
+  if (def.gasOnDeath && !e.silent) { radialBurst(e.x, e.y, 6, 150, 6, { color: '#b8ff5a', r: 6, life: 2.5 }); burst(e.x, e.y, 10, { color: '#b8ff5a', speed: 100, life: 0.4, size: 4, kind: 'smoke' }); }
   if (def.id === 'cyst') { addHazard({ kind: 'water', x: e.x, y: e.y, r: 42, t: 10 }); if (e.complex) for (var c2 = 0; c2 < 2; c2++) spawnEnemy('ecoli', e.x + rr(-16, 16), e.y + rr(-16, 16), {}); }
   if (def.id === 'enterococcus') { for (var l = 0; l < G.enemies.length; l++) { var lk = G.enemies[l]; if (lk.id === 'entero_link' && lk.head === e && !lk.dead) { lk.hp = 0; lk.silent = false; killEnemy(lk, cls, wid); } } }
   if (e.heldBy) { var bw = curWeapon(); if (bw && bw.held === e) bw.held = null; }
@@ -1902,7 +2068,7 @@ function killEnemy(e, cls, wid) {
   // kill chain → Wolf in Scrubs
   if (!e.silent && !def.hidden) { G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
   if (!e.silent && !def.hidden) { G.stats.kills++; recordBestiary(def.id, true); }
-  if (e.isArm || e.boss) bossPartDied(e);
+  if (e.isArm || e.boss || e.def.isLobe || e.def.isStump) bossPartDied(e);
 }
 function updateEnemy(e, dt) {
   e.t += dt;
@@ -1912,6 +2078,7 @@ function updateEnemy(e, dt) {
   e.blinkT -= dt; if (e.blinkT <= 0) { e.blinkT = rr(1.5, 4); e.blink = 0; } e.blink = Math.min(1, e.blink + dt * 10);
   e.look = ang(e.x, e.y, P.x, P.y);
   updateStatuses(e, dt); if (e.dead) return;
+  if (e.wp) updateWeakPoint(e, dt);
   if (e.heldBy) { e.vx = e.vy = 0; e.kx = e.ky = 0; return; }
   if (e.hurl) {
     var hu = e.hurl; hu.t -= dt; e.x += hu.vx * dt; e.y += hu.vy * dt;
@@ -1944,7 +2111,7 @@ function updateEnemy(e, dt) {
   // contact damage
   var cd = e.contactNow || e.def.contact;
   if (cd && !e.def.flat && P.inv <= 0 && dist(e.x, e.y, P.x, P.y) < e.r + P.r - 3) hurtPlayer(cd, e.family === 'STONE' ? 'stone' : 'contact', ang(e.x, e.y, P.x, P.y));
-  if (e.shieldMax && e.shield < e.shieldMax && G.time - e.lastHitT > 4 && !e.boss) e.shield = Math.min(e.shieldMax, e.shield + 0.06 * dt);
+  if (e.shieldMax && e.shield < e.shieldMax && G.time - e.lastHitT > (e.def.shieldDelay || 4) && !e.boss) e.shield = Math.min(e.shieldMax, e.shield + (e.def.shieldRegen || 0.06) * dt);
 }
 
 /* ── player ── */
@@ -1977,6 +2144,7 @@ function bestTarget() {
     var m = MATRIX[cls][e.family] * enemyTweak(e, cls, cur ? cur.id : null), score = -d;
     if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += 60; if (e.isArm) score += 30; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
     if (e.id === 'clot') score -= 120;
+    if (e.def.isStump) { var coag = cur && (cur.id === 'roller' || (cur.id === 'bovie' && cur.mode === 1) || (cur.id === 'loop' && cur.mode === 2)); score += coag ? 120 : -500; }
     if (score > bs) { bs = score; best = e; }
   }
   return best;
@@ -2003,6 +2171,8 @@ function updatePlayer(dt) {
   var cur = curWeapon(); if (cur && cur.def.slowWhile) sp *= cur.def.slowWhile(cur);
   if (inHazard(P.x, P.y, 'slime') || inHazard(P.x, P.y, 'sticky') || inHazard(P.x, P.y, 'biofilm')) sp *= 0.62;
   var goo = inHazard(P.x, P.y, 'goo'); if (goo) { sp *= 0.7; P.gooT = (P.gooT || 0) - dt; if (P.gooT <= 0) { P.gooT = 0.5; hurtPlayer(1.5, 'goo', 0, true); } }
+  var pus = inHazard(P.x, P.y, 'pus'); if (pus) { sp *= 0.8; P.pusT = (P.pusT || 0) - dt; if (P.pusT <= 0) { P.pusT = 0.5; hurtPlayer(1.5, 'pus', 0, true); } }
+  if (P.necroSlow) { sp *= 0.6; P.necroSlow = false; }
   if (inHazard(P.x, P.y, 'burn')) P.burn = Math.max(P.burn, 1.5);
   if (P.roll > 0) {
     P.roll -= dt; P.x += P.rollDx * dt; P.y += P.rollDy * dt; P.rollT = (P.rollT || 0) + dt;
@@ -2063,7 +2233,7 @@ function updateBullets(dt) {
         var en = es2[n]; if (!enemyTargetable(en) || b.hitIds.indexOf(en) >= 0) continue;
         if (dist(b.x, b.y, en.x, en.y) < b.r + en.r) {
           b.hitIds.push(en); hitSomething = true;
-          if (b.onHit) { b.onHit(b, en); } else { dealDamage(en, b.dmg, b.cls, { wid: b.wid, knock: 60, ang: b.a, status: b.status, crit: b.crit, split: b.split }); burst(b.x, b.y, 3, { color: b.color, speed: 90, life: 0.2, size: 2 }); if (b.pierce > 0) b.pierce--; else b.dead = true; }
+          if (b.onHit) { b.onHit(b, en); } else { dealDamage(en, b.dmg, b.cls, { wid: b.wid, knock: 60, ang: b.a, status: b.status, crit: b.crit, split: b.split, hx: b.x, hy: b.y }); burst(b.x, b.y, 3, { color: b.color, speed: 90, life: 0.2, size: 2 }); if (b.pierce > 0) b.pierce--; else b.dead = true; }
           if (b.dead) break;
         }
       }
@@ -2089,9 +2259,9 @@ function updateHazards(dt) {
   var hz = G.hazards;
   for (var i = hz.length - 1; i >= 0; i--) {
     var h = hz[i]; if (h.t !== Infinity) { h.t -= dt; if (h.t <= 0) { hz.splice(i, 1); continue; } }
-    if (h.kind === 'burn' || h.kind === 'cloud') {
+    if (h.kind === 'burn' || h.kind === 'cloud' || h.kind === 'pus') {
       h.tick = (h.tick || 0) - dt;
-      if (h.tick <= 0) { h.tick = 0.25; var es = enemiesNear(h.x, h.y, h.r); for (var j = 0; j < es.length; j++) { if (h.kind === 'burn') dealDamage(es[j], h.dps * 0.25, 'ENERGY', { wid: h.owner || 'burn', status: { burn: [2, 5] } }); else dealDamage(es[j], h.dps * 0.25, 'NEUTRAL', { wid: 'cloud' }); } }
+      if (h.tick <= 0) { h.tick = 0.25; var es = enemiesNear(h.x, h.y, h.r); for (var j = 0; j < es.length; j++) { if (es[j].boss || es[j].def.isStump) continue; if (h.kind === 'burn') dealDamage(es[j], h.dps * 0.25, 'ENERGY', { wid: h.owner || 'burn', status: { burn: [2, 5] } }); else dealDamage(es[j], h.dps * 0.25, 'NEUTRAL', { wid: h.kind }); } }
     }
   }
   for (var d = G.decals.length - 1; d >= 0; d--) { G.decals[d].t -= dt; if (G.decals[d].t <= 0) G.decals.splice(d, 1); }
@@ -2128,8 +2298,8 @@ function updatePickups(dt) {
     if (p.t > 0.25 && d < 22) {
       ps.splice(i, 1);
       if (p.kind === 'coin') { addRVU(p.value); Snd.sfx('coin'); burst(P.x, P.y - 10, 2, { color: '#ffd166', speed: 60, life: 0.25, size: 2 }); G.coinPop = (G.coinPop || 0) + p.value; }
-      else if (p.kind === 'iv') { healPlayer(25); Snd.sfx('heal'); }
-      else if (p.kind === 'heart') { P.maxHp += 10; healPlayer(10); addText(P.x, P.y - 44, 'MAX HP +10', { color: '#ff6b8a', size: 15 }); Snd.sfx('heal'); }
+      else if (p.kind === 'iv') { healPlayer(hasBoon('insulin') ? 31 : 25); Snd.sfx('heal'); }
+      else if (p.kind === 'heart') { P.maxHp += 10; healPlayer(hasBoon('insulin') ? 13 : 10); addText(P.x, P.y - 44, 'MAX HP +10', { color: '#ff6b8a', size: 15 }); Snd.sfx('heal'); }
       else if (p.kind === 'vent') { for (var w = 0; w < G.weapons.length; w++) { var ww = G.weapons[w]; ww.heat = 0; ww.locked = 0; ww.power = 1; ww.pressure = 0; ww.drained = false; ww.cd = 0; } addText(P.x, P.y - 44, 'VENTED', { color: '#38e8ff', size: 14 }); Snd.sfx('pickup'); }
     }
   }
@@ -2153,6 +2323,7 @@ function startRun() {
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 };
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
+  G.bossId = Q.boss === 'fournier' ? 'fournier' : Q.boss === 'staghorn' ? 'staghorn' : (mulberry32(SEED ^ 0x51ab)() < 0.5 ? 'staghorn' : 'fournier');
   var ws = Q.weapons ? Q.weapons.split(',') : ['holmium', 'scalpel'];
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
   if (!G.weapons.length) giveWeapon('holmium');
@@ -2215,7 +2386,7 @@ function enterRoom(plan) {
   for (var d = 0; d < exits.length; d++) { var dp = DOOR_POS[sides[d]]; G.doors.push({ side: sides[d], type: exits[d], x: dp.x, y: dp.y, w: dp.w, h: dp.h, open: false, anim: 0 }); }
   G.waves = buildWaves(plan);
   if (plan.kind === 'tutorial') G.tutorial = { step: 0, moved: false, fired: false, rolled: false, swapped: false, t: 0 }; else G.tutorial = null;
-  if (plan.kind === 'boss') spawnBoss();
+  if (plan.kind === 'boss') spawnBoss(G.bossId || 'staghorn');
   if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360 }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
@@ -2391,13 +2562,41 @@ function skipRoom() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   §14b THE BOSS — Staghorn Calculus. Phase 1 "Shell": crack 2 of 4 armored arms to expose the body.
-   Phase 2 "Infection": struvite revealed, biofilm shield regrows while its microbe swarm lives
-   (strip with FLUID/Bovie/antibiotics, kill the swarm, then LITHO the body). Phase 3 "Core": spirals,
-   rings, fragmentation bursts (suck the shards with the Trilogy for RVUs). ~60–90 s for a good player.
+   §14b BOSSES — the final room rolls one of two (or ?boss=staghorn|fournier).
+   STAGHORN CALCULUS: Phase 1 "Shell": crack 2 of 4 armored arms. Phase 2 "Infection": biofilm shield regrows while
+   the swarm lives (strip with FLUID/Bovie/antibiotics, kill the swarm, LITHO the body). Phase 3 "Core": spirals,
+   rings, fragmentation bursts (suck the shards with the Trilogy for RVUs). ~60–90 s.
+   FOURNIER'S GANGRENE (the Hydra): nearly stationary mass filling the upper half. Phase 1 "Necrosis": five necrotic
+   lobes; a CUT lobe leaves a bleeding stump that regrows as two unless coagulated (ENERGY cauterize) within 3 s;
+   three permanent debridements expose the body, whose necrotic armor must be CUT away. Phase 2 "Spread": creeping
+   necrosis along fascial planes (FLUID flush / coag push it back, antibiotic boons shrink it), gas bubbles that burst
+   into fans, polymicrobial adds, sugar crystals that feed its regeneration (Insulin clears them). Phase 3 "Sepsis":
+   a 45 s clock; hit the migrating SOURCE weak point or go into septic shock. ~90–120 s.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOSS_ARMS = [{ a: -2.25, len: 165 }, { a: -0.95, len: 185 }, { a: 0.95, len: 185 }, { a: 2.25, len: 165 }];
-function spawnBoss() {
+function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else spawnStaghorn(); }
+function microbesAlive() { var n = 0; for (var i = 0; i < G.enemies.length; i++) { var e = G.enemies[i]; if (!e.dead && e.family === 'MICROBE' && !e.boss && !e.def.isLobe && !e.def.isStump) n++; } return n; }
+function bossQueue(delay, fn) { G.boss.queue.push({ t: delay, fn: fn }); }
+function runQueue(B, dt) { for (var q = B.queue.length - 1; q >= 0; q--) { B.queue[q].t -= dt; if (B.queue[q].t <= 0) { var fn = B.queue[q].fn; B.queue.splice(q, 1); fn(); } } }
+function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else updateStaghorn(dt); }
+function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else drawBossArms(c); }
+function bossPartDied(e) {
+  var B = G.boss; if (!B) return;
+  if (e.boss) { bossDefeated(e); return; }
+  if (e.isArm) { for (var i = 0; i < B.arms.length; i++) if (B.arms[i].e === e) { B.arms[i].cracked = true; if (!e.silent) { addText(e.x, e.y - 30, 'BRANCH CRACKED', { color: '#38e8ff', size: 14 }); burst(e.x, e.y, 20, { color: '#d8c7a4', speed: 200, life: 0.5, size: 4, kind: 'frag', g: 400 }); shakeIt(6); hitstop(0.06); } } return; }
+  if (e.def.isLobe) lobeDied(e);
+}
+function bossDefeated(e) {
+  var B = G.boss; B.dead = true; G.cleared = true; B.sepsis = false;
+  for (var k = 0; k < G.enemies.length; k++) { var o = G.enemies[k]; if (!o.dead && o !== e) { o.silent = true; o.hp = 0; killEnemy(o, 'NEUTRAL', null); } }
+  for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
+  var col = B.kind === 'fournier' ? '#b86a78' : '#d8c7a4';
+  burst(e.x, e.y, 120, { color: col, speed: 420, life: 1.4, size: 5, kind: B.kind === 'fournier' ? 'goo' : 'frag', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
+  G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 400, t: 1, dur: 1, color: '#38e8ff' }); shakeIt(16); G.punch = 0.4; hitstop(0.18);
+  G.stats.rooms = Math.max(G.stats.rooms, 9); win();
+}
+/* ───────────── Staghorn ───────────── */
+function spawnStaghorn() {
   var body = spawnEnemy('staghorn', 740, 270, { instant: true, force: true });
   body.inv = true; body.noClear = false; body.shield = 0; body.shieldMax = 0;
   var arms = [];
@@ -2407,17 +2606,13 @@ function spawnBoss() {
     arm.onDamaged = function (e, dmg) { if (G.boss && !G.boss.body.dead) { G.boss.body.hp = Math.max(1, G.boss.body.hp - dmg * 0.9); G.boss.body.flash = 0.08; } };
     arms.push({ e: arm, a: ad.a, len: ad.len, tx: tx, ty: ty, cracked: false, flash: 0 });
   }
-  G.boss = { body: body, arms: arms, phase: 1, t: 0, fanT: 2.2, volleyT: 4.5, slamT: 7, addT: 11, swarmT: 2.5, armIdx: 0, spiral: { on: false, t: 0, a: 0, idle: 0 }, fragT: 8, moveDir: 1, dead: false, queue: [], slam: null, name: 'STAGHORN CALCULUS' };
+  G.boss = { kind: 'staghorn', body: body, arms: arms, phase: 1, t: 0, fanT: 2.2, volleyT: 4.5, slamT: 7, addT: 11, swarmT: 2.5, armIdx: 0, spiral: { on: false, t: 0, a: 0, idle: 0 }, fragT: 8, moveDir: 1, dead: false, queue: [], slam: null, name: 'STAGHORN CALCULUS', sub: 'BOSS · the renal pelvis', phases: ['SHELL', 'INFECTION', 'CORE'], hint: '', sepsis: false };
   G.introT = 2.6; Snd.sfx('roar'); shakeIt(14); G.punch = 0.3;
-  body.onDamaged = function () { /* phases are checked in updateBoss */ };
 }
-function microbesAlive() { var n = 0; for (var i = 0; i < G.enemies.length; i++) { var e = G.enemies[i]; if (!e.dead && e.family === 'MICROBE') n++; } return n; }
 function liveArms() { return G.boss.arms.filter(function (a) { return !a.cracked; }); }
-function bossQueue(delay, fn) { G.boss.queue.push({ t: delay, fn: fn }); }
-function updateBoss(dt) {
-  var B = G.boss; if (!B || B.dead) return; var body = B.body; if (body.dead) return;
-  B.t += dt; body.look = ang(body.x, body.y, P.x, P.y);
-  for (var q = B.queue.length - 1; q >= 0; q--) { B.queue[q].t -= dt; if (B.queue[q].t <= 0) { var fn = B.queue[q].fn; B.queue.splice(q, 1); fn(); } }
+function updateStaghorn(dt) {
+  var B = G.boss, body = B.body;
+  B.t += dt; body.look = ang(body.x, body.y, P.x, P.y); runQueue(B, dt);
   for (var a = 0; a < B.arms.length; a++) { var arm = B.arms[a]; arm.flash = Math.max(0, arm.flash - dt); if (!arm.cracked && arm.e.dead) arm.cracked = true; if (!arm.cracked) { arm.e.x = arm.tx; arm.e.y = arm.ty; } }
   if (B.slam) { var s = B.slam; s.t -= dt; var cx = Math.cos(s.a), sy = Math.sin(s.a), dx = P.x - s.x, dy = P.y - s.y, t = clamp(dx * cx + dy * sy, 0, s.len), px = s.x + cx * t, py = s.y + sy * t; if (dist(P.x, P.y, px, py) < 28 + P.r && !s.hit && P.inv <= 0) { s.hit = true; hurtPlayer(18, 'slam', s.a); } if (s.t <= 0) B.slam = null; }
   if (G.introT > 0) return;
@@ -2425,6 +2620,7 @@ function updateBoss(dt) {
   if (B.phase === 1 && frac <= 0.66) enterPhase2(B); else if (B.phase === 2 && frac <= 0.33) enterPhase3(B);
   var cracked = B.arms.filter(function (x) { return x.cracked; }).length;
   if (B.phase === 1) { var wasInv = body.inv; body.inv = cracked < 2; if (wasInv && !body.inv) { addText(body.x, body.y - 90, 'BODY EXPOSED!', { color: '#38e8ff', size: 18 }); Snd.sfx('shatter'); } } else body.inv = false;
+  B.hint = body.inv ? 'ARMORED — crack 2 branches' : (B.phase === 2 && body.shield > 0 ? 'BIOFILM — strip it (water / cautery), kill the swarm' : '');
   var live = liveArms();
   if (B.phase <= 2 && live.length) {
     B.fanT -= dt; B.volleyT -= dt;
@@ -2466,19 +2662,6 @@ function enterPhase3(B) {
   setBanner('PHASE 3', 'CORE EXPOSED — everything hurts it now', 2.2); Snd.sfx('roar'); Snd.sfx('shatter'); shakeIt(14); G.punch = 0.3; hitstop(0.12);
   B.spiral = { on: false, t: 0, a: 0, idle: 1.2 }; B.fragT = 6;
 }
-function bossPartDied(e) {
-  var B = G.boss; if (!B) return;
-  if (e.isArm) { for (var i = 0; i < B.arms.length; i++) if (B.arms[i].e === e) { B.arms[i].cracked = true; if (!e.silent) { addText(e.x, e.y - 30, 'BRANCH CRACKED', { color: '#38e8ff', size: 14 }); burst(e.x, e.y, 20, { color: '#d8c7a4', speed: 200, life: 0.5, size: 4, kind: 'frag', g: 400 }); shakeIt(6); hitstop(0.06); } } return; }
-  if (e.boss) {
-    B.dead = true; G.cleared = true;
-    for (var k = 0; k < G.enemies.length; k++) { var o = G.enemies[k]; if (!o.dead && o !== e) { o.silent = true; o.hp = 0; killEnemy(o, 'NEUTRAL', null); } }
-    for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
-    burst(e.x, e.y, 120, { color: '#d8c7a4', speed: 420, life: 1.4, size: 5, kind: 'frag', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
-    G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 400, t: 1, dur: 1, color: '#38e8ff' }); shakeIt(16); G.punch = 0.4; hitstop(0.18);
-    G.stats.rooms = Math.max(G.stats.rooms, 9); win();
-  }
-}
-/* ── boss art ── */
 function drawBossArms(c) {
   var B = G.boss; if (!B) return; var body = B.body;
   for (var i = 0; i < B.arms.length; i++) {
@@ -2488,10 +2671,9 @@ function drawBossArms(c) {
     c.lineCap = 'round'; c.strokeStyle = OUTLINE; c.lineWidth = 34; c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(mx, my, ar.tx, ar.ty); c.stroke();
     c.strokeStyle = col; c.lineWidth = 26; c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(mx, my, ar.tx, ar.ty); c.stroke();
     c.lineWidth = 14; c.strokeStyle = OUTLINE; c.beginPath(); c.moveTo(mx, my); c.lineTo(mx + Math.cos(ar.a - 1.2) * 34, my + Math.sin(ar.a - 1.2) * 34); c.stroke(); c.strokeStyle = col; c.lineWidth = 8; c.beginPath(); c.moveTo(mx, my); c.lineTo(mx + Math.cos(ar.a - 1.2) * 34, my + Math.sin(ar.a - 1.2) * 34); c.stroke();
-    // knob (hit circle)
     c.fillStyle = ar.flash > 0 && Math.floor(ar.flash * 16) % 2 === 0 ? '#ffd166' : col; c.beginPath(); c.arc(ar.tx, ar.ty, 24, 0, TAU); c.fill(); outline(c, 4);
     if (dead) { c.strokeStyle = '#2a2420'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(ar.tx - 12, ar.ty - 10); c.lineTo(ar.tx + 4, ar.ty + 2); c.lineTo(ar.tx - 6, ar.ty + 14); c.moveTo(ar.tx + 8, ar.ty - 14); c.lineTo(ar.tx + 12, ar.ty + 6); c.stroke(); }
-    else { highlight(c, ar.tx - 8, ar.ty - 9, 7); if (!ar.e.dead && ar.e.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(ar.tx, ar.ty, 24, 0, TAU); c.fill(); } }
+    else { highlight(c, ar.tx - 8, ar.ty - 9, 7); cyclops(c, ar.tx + 4, ar.ty + 3, 6, ar.e.look || 0, ar.e.blink || 1, { veins: true }); if (!ar.e.dead && ar.e.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(ar.tx, ar.ty, 24, 0, TAU); c.fill(); } }
     c.restore();
   }
 }
@@ -2506,20 +2688,148 @@ function drawBossBody(c, e) {
     c.fillStyle = '#ffb630'; c.beginPath(); c.arc(0, 4, r * 0.32 * (0.9 + 0.1 * pulse), 0, TAU); c.fill(); outline(c, 3);
     c.strokeStyle = '#2a2420'; c.lineWidth = 3; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU + 0.4; c.moveTo(Math.cos(an) * r * 0.5, Math.sin(an) * r * 0.5); c.lineTo(Math.cos(an + 0.2) * r * 0.95, Math.sin(an + 0.2) * r * 0.95); } c.stroke();
   }
-  if (phase === 1) { c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-r * 0.6, -r * 0.1); c.lineTo(-r * 0.2, r * 0.3); c.moveTo(r * 0.2, -r * 0.7); c.lineTo(r * 0.5, -r * 0.2); c.stroke(); }
+  if (phase === 1) { c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-r * 0.6, -r * 0.1); c.lineTo(-r * 0.2, r * 0.3); c.moveTo(r * 0.2, -r * 0.7); c.lineTo(r * 0.5, -r * 0.2); c.stroke(); }
   highlight(c, -r * 0.4, -r * 0.5, r * 0.22);
+  // small eyes embedded in the cracks
+  [[-0.7, 0.2, 0.08], [0.72, 0.3, 0.07], [0.05, -0.8, 0.07], [-0.5, 0.65, 0.06], [0.6, -0.6, 0.06]].forEach(function (p, i) { cyclops(c, p[0] * r, p[1] * r, p[2] * r, e.look, i === 1 ? e.blink : 1, { veins: true }); });
   var ey = phase === 3 ? -r * 0.45 : -r * 0.25;
-  eyes(c, 0, ey, r * 0.36, r * 0.17, e.look, e.blink, 'angry');
-  // jagged mouth
+  eyes(c, 0, ey, r * 0.36, r * 0.17, e.look, e.blink, 'angry', { veins: true, bags: true, asym: 0.8 });
   c.fillStyle = '#2a0f18'; c.beginPath(); c.moveTo(-r * 0.5, r * 0.3); for (var m = 0; m <= 6; m++) { var mx = -r * 0.5 + m / 6 * r; c.lineTo(mx, r * 0.3 + (m % 2 ? r * 0.08 : -r * 0.02)); } c.lineTo(r * 0.5, r * 0.62); for (var n = 6; n >= 0; n--) { var nx = -r * 0.5 + n / 6 * r; c.lineTo(nx, r * 0.62 + (n % 2 ? -r * 0.06 : r * 0.02)); } c.closePath(); c.fill(); outline(c, 3.5);
-  teeth(c, 0, r * 0.3, r * 0.45, 5);
+  teeth(c, 0, r * 0.3, r * 0.45, 5, true); drool(c, 0, r * 0.66, 3, 'rgba(230,230,200,0.6)', 7);
   if (e.inv) { c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.arc(0, 0, r + 10, 0, TAU); c.stroke(); c.setLineDash([]); }
+}
+/* ───────────── Fournier's gangrene (the Hydra) ───────────── */
+var LOBE_ANGLES = [0.5, 1.02, 1.57, 2.12, 2.64];
+function spawnFournier() {
+  var body = spawnEnemy('fournier', 480, 124, { instant: true, force: true });
+  body.inv = true; body.invText = 'DEBRIDE 3 LOBES'; body.necro = 1; body.noClear = false; body.shield = 0; body.shieldMax = 0;
+  var B = G.boss = { kind: 'fournier', body: body, lobes: [], arms: [], phase: 1, t: 0, slamT: 4, spitT: 3, gasT: 3, addT: 6, necrosis: [], sugar: [], sugarT: 10, sepsis: false, sepsisT: 45, sepsisMax: 45, removed: 0, queue: [], legs: [], name: "FOURNIER'S GANGRENE", sub: 'BOSS · necrotizing fasciitis', phases: ['NECROSIS', 'SPREAD', 'SEPSIS'], hint: '', eyesBlink: [], dead: false };
+  for (var i = 0; i < LOBE_ANGLES.length; i++) addLobe(B, LOBE_ANGLES[i], true, null);
+  for (var l = 0; l < 9; l++) B.legs.push({ a: 0.3 + l / 8 * 2.55, len: rr(80, 140), ph: rr(0, TAU), w: rr(10, 16) });
+  for (var k = 0; k < 11; k++) B.eyesBlink.push(rr(1, 5));
+  for (var s = 0; s < 6; s++) spawnSugar(B);
+  G.introT = 2.6; Snd.sfx('roar'); shakeIt(14); G.punch = 0.3;
+}
+function addLobe(B, a, big, near) {
+  var body = B.body, rad = body.r + (big ? 14 : 8), x = body.x + Math.cos(a) * rad, y = body.y + Math.sin(a) * rad;
+  if (near) { x = near.x; y = near.y; }
+  x = clamp(x, ARENA.x + 24, ARENA.x + ARENA.w - 24); y = clamp(y, ARENA.y + 24, ARENA.y + ARENA.h - 24);
+  var e = spawnEnemy('fourlobe', x, y, { instant: true, force: true }); if (!e) return null;
+  if (!big) { e.r = 20; e.hp = e.maxHp = 55; e.sx = 1.5; e.sy = 0.6; } e.necro = 1; e.noClear = true;
+  var rec = { e: e, x: x, y: y, big: big, state: 'alive', stumpT: 0, stump: null, a: a }; e.lobe = rec; B.lobes.push(rec); return rec;
+}
+function spawnSugar(B) { if (hasBoon('insulin') || B.sugar.length >= 8) return; var pos = findSpawnPos(10, false); if (pos.y < 300) pos.y = rr(300, 480); B.sugar.push({ x: pos.x, y: pos.y, ph: rr(0, TAU), t: 0 }); }
+function lobeDied(e) {
+  var B = G.boss, rec = e.lobe; if (!B || !rec) return;
+  if (e.silent) { rec.state = 'gone'; return; }
+  rec.state = 'stump'; rec.stumpT = 3; rec.x = e.x; rec.y = e.y;
+  var st = spawnEnemy('fourstump', e.x, e.y, { instant: true, force: true }); if (!st) { rec.state = 'gone'; B.removed++; return; }
+  st.st.bleed = { t: 99, dps: 0 }; st.lobe = rec; rec.stump = st;
+  st.onCauterized = function (s2) { if (rec.state !== 'stump') return; rec.state = 'gone'; B.removed++; s2.silent = true; s2.hp = 0; killEnemy(s2, 'NEUTRAL', null); addText(s2.x, s2.y - 30, 'DEBRIDED — HEMOSTASIS (' + B.removed + '/3)', { color: '#ffb630', size: 14 }); burst(s2.x, s2.y, 10, { color: '#ffb630', speed: 120, life: 0.35, size: 3, kind: 'smoke' }); Snd.sfx('cauter'); };
+  addText(e.x, e.y - 34, 'CUT! COAG THE STUMP', { color: '#ff4d6d', size: 14 }); burst(e.x, e.y, 20, { color: '#c0392b', speed: 200, life: 0.5, size: 4, kind: 'goo', g: 350 });
+  for (var d = 0; d < 3; d++) if (G.decals.length < 40) G.decals.push({ x: e.x + rr(-14, 14), y: e.y + rr(0, 14), r: rr(6, 12), color: 'rgba(160,20,40,0.5)', t: 14 });
+}
+function eatSugar(B, x, y, rad) { for (var s = B.sugar.length - 1; s >= 0; s--) { var su = B.sugar[s]; if (dist(su.x, su.y, x, y) < rad) { B.sugar.splice(s, 1); var body = B.body; if (!body.dead) body.hp = Math.min(body.maxHp, body.hp + 30); addText(su.x, su.y - 10, 'GLYCEMIC SURGE +30', { color: '#ff8fa3', size: 13 }); burst(su.x, su.y, 10, { color: '#ffd1dc', speed: 120, life: 0.4, size: 3 }); } } }
+function pushNecrosis(x, y, amt) { var B = G.boss; if (!B || B.kind !== 'fournier') return; for (var n = 0; n < B.necrosis.length; n++) { var N = B.necrosis[n], tx = N.x + Math.cos(N.a) * N.len, ty = N.y + Math.sin(N.a) * N.len; if (dist(x, y, tx, ty) < 70) { N.len = Math.max(0, N.len - amt); if (!N.fxT || G.time - N.fxT > 0.5) { N.fxT = G.time; burst(tx, ty, 4, { color: '#5df07a', speed: 60, life: 0.3, size: 2 }); } } } }
+function updateFournier(dt) {
+  var B = G.boss, body = B.body;
+  B.t += dt; body.look = ang(body.x, body.y, P.x, P.y); runQueue(B, dt);
+  for (var i = 0; i < B.lobes.length; i++) {
+    var L = B.lobes[i]; if (L.state !== 'stump') continue; L.stumpT -= dt;
+    if (L.stumpT <= 0) { L.state = 'regrown'; if (L.stump && !L.stump.dead) { L.stump.silent = true; L.stump.hp = 0; killEnemy(L.stump, 'NEUTRAL', null); } addLobe(B, L.a - 0.18, false, { x: L.x - 24, y: L.y + 8 }); addLobe(B, L.a + 0.18, false, { x: L.x + 24, y: L.y + 8 }); addText(L.x, L.y - 30, 'IT GROWS BACK', { color: '#7cf29a', size: 14 }); burst(L.x, L.y, 16, { color: '#c98a8a', speed: 140, life: 0.4, size: 4 }); Snd.sfx('pop'); }
+  }
+  if (G.introT > 0) return;
+  var frac = body.hp / body.maxHp;
+  if (B.phase === 1 && frac <= 0.66) fournierPhase2(B); else if (B.phase === 2 && frac <= 0.33) fournierPhase3(B);
+  if (B.phase === 1) { var was = body.inv; body.inv = B.removed < 3; if (was && !body.inv) { addText(body.x, body.y + 110, 'BODY EXPOSED — CUT THE DEAD TISSUE', { color: '#ff4d6d', size: 16 }); Snd.sfx('shatter'); } B.hint = body.inv ? 'DEBRIDE 3 LOBES — cut one, then coag the stump (' + B.removed + '/3)' : body.necro > 0 ? 'NECROTIC ARMOR — cut it away' : ''; }
+  else { body.inv = false; B.hint = B.phase === 2 && body.necro > 0 ? 'NECROTIC ARMOR — cut it away' : B.phase === 3 ? 'SEPSIS — hit the SOURCE' : ''; }
+  var alive = B.lobes.filter(function (Lb) { return Lb.state === 'alive' && !Lb.e.dead; });
+  B.spitT -= dt;
+  if (B.spitT <= 0 && alive.length) { B.spitT = B.phase === 3 ? rr(3.8, 4.6) : rr(2.8, 3.4); var L2 = alive[ri(alive.length)]; G.teles.push({ kind: 'flash', x: L2.e.x, y: L2.e.y, t: 0.5, dur: 0.5, r: L2.e.r + 6 }); (function (Lx) { bossQueue(0.5, function () { if (Lx.e.dead) return; for (var k = 0; k < 3; k++) pusGlob(Lx.e.x, Lx.e.y, P.x + rr(-60, 60), P.y + rr(-50, 50), 7, 22); Lx.e.sx = 0.8; Lx.e.sy = 1.25; Snd.sfx('lob'); }); })(L2); }
+  B.slamT -= dt;
+  if (B.slamT <= 0) { B.slamT = B.phase === 1 ? rr(4.2, 5) : rr(5.5, 7); var sx = P.x, sy = Math.max(P.y, 250); G.teles.push({ kind: 'circle', x: sx, y: sy, r: 62, t: 0.7, dur: 0.7 }); bossQueue(0.7, function () { aoeOnPlayer(sx, sy, 62, 16, 'slam'); G.fxLines.push({ x0: body.x, y0: body.y + 60, x1: sx, y1: sy, t: 0.3, dur: 0.3, color: '#5a2a3a', w: 22 }); burst(sx, sy, 18, { color: '#5a2a3a', speed: 220, life: 0.4, size: 4 }); shakeIt(9); G.punch = 0.2; Snd.sfx('clang'); eatSugar(B, sx, sy, 50); }); }
+  B.sugarT -= dt; if (B.sugarT <= 0) { B.sugarT = 10; spawnSugar(B); spawnSugar(B); }
+  if (hasBoon('insulin') && B.sugar.length) { B.sugar.length = 0; addText(body.x, body.y + 120, 'INSULIN: SUGAR CLEARED', { color: '#7dffb0', size: 13 }); }
+  for (var s = B.sugar.length - 1; s >= 0; s--) { var su = B.sugar[s]; su.t += dt; if (dist(su.x, su.y, P.x, P.y) < 20) { B.sugar.splice(s, 1); addRVU(1, su.x, su.y); Snd.sfx('coin'); burst(su.x, su.y, 6, { color: '#fff0f5', speed: 80, life: 0.3, size: 2 }); } }
+  if (B.phase >= 2) {
+    var abx = false; for (var b = 0; b < G.boons.length; b++) if (BOONS[G.boons[b]].kind === 'abx') abx = true;
+    for (var n = 0; n < B.necrosis.length; n++) {
+      var N = B.necrosis[n]; if (B.phase === 2) N.len = Math.min(N.max, N.len + 22 * dt); if (abx) N.len = Math.max(0, N.len - 6 * dt);
+      var tx = N.x + Math.cos(N.a) * N.len, ty = N.y + Math.sin(N.a) * N.len; eatSugar(B, tx, ty, 30);
+      var dx = P.x - N.x, dy = P.y - N.y, t = clamp(dx * Math.cos(N.a) + dy * Math.sin(N.a), 0, N.len), px = N.x + Math.cos(N.a) * t, py = N.y + Math.sin(N.a) * t;
+      if (dist(P.x, P.y, px, py) < 24 + P.r) { P.necroSlow = true; P.necroT = (P.necroT || 0) - dt; if (P.necroT <= 0) { P.necroT = 0.5; hurtPlayer(2, 'necrosis', 0, true); } }
+    }
+    B.gasT -= dt; if (B.gasT <= 0) { B.gasT = B.phase === 3 ? rr(3.5, 4.5) : rr(2.6, 3.4); var ga = rr(0.4, 2.7); gasBubble(body.x + Math.cos(ga) * (body.r + 10), body.y + Math.sin(ga) * (body.r + 10), 8); }
+    B.addT -= dt;
+    if (B.addT <= 0 && microbesAlive() < 14) { B.addT = B.phase === 3 ? 11 : 8; var kind = pick(['ecoli', 'pseudomonas', 'klebsiella', 'clostridium']), pa = rr(0.5, 2.6), ax = clamp(body.x + Math.cos(pa) * (body.r + 34), ARENA.x + 30, ARENA.x + ARENA.w - 30), ay = clamp(body.y + Math.sin(pa) * (body.r + 34), ARENA.y + 30, ARENA.y + ARENA.h - 30); G.teles.push({ kind: 'spawn', x: ax, y: ay, r: 20, t: 0.7, dur: 0.7 }); bossQueue(0.7, function () { if (kind === 'ecoli') { for (var k = 0; k < 5; k++) spawnEnemy('ecoli', ax + rr(-20, 20), ay + rr(-20, 20), { instant: true }); } else if (kind === 'klebsiella') { spawnEnemy('klebsiella', ax - 16, ay, { instant: true }); spawnEnemy('klebsiella', ax + 16, ay, { instant: true }); } else spawnEnemy(kind, ax, ay, { instant: true }); }); }
+  }
+  if (B.phase === 3) {
+    B.sepsisT -= dt;
+    if (B.sepsisT <= 0 && !B.sepsisDone) { B.sepsisDone = true; addText(P.x, P.y - 50, 'SEPTIC SHOCK', { color: '#ff4d6d', size: 26 }); hurtPlayer(9999, 'sepsis', 0, true); shakeIt(14); Snd.sfx('alarm'); }
+    if (!B.hb || G.time - B.hb > 1) { B.hb = G.time; Snd.sfx('heartbeat'); }
+  }
+}
+function fournierPhase2(B) {
+  B.phase = 2; var body = B.body; body.inv = false;
+  setBanner('PHASE 2', 'SPREAD — flush the planes, coag the stumps, pop the gas', 2.4); Snd.sfx('roar'); shakeIt(10); G.punch = 0.2;
+  var angs = [1.2, 1.57, 1.95]; for (var i = 0; i < angs.length; i++) B.necrosis.push({ x: body.x + Math.cos(angs[i]) * body.r * 0.9, y: body.y + Math.sin(angs[i]) * body.r * 0.9, a: angs[i], len: 10, max: 400 });
+  B.gasT = 2; B.addT = 3; burst(body.x, body.y + 60, 30, { color: '#1f3522', speed: 200, life: 0.6, size: 5, kind: 'goo', g: 200 });
+}
+function fournierPhase3(B) {
+  B.phase = 3; var body = B.body; body.inv = false; body.necro = 0; B.sepsis = true; B.sepsisT = B.sepsisMax;
+  setWeakPoint(body, { r: 26, bodyMult: 0.15, migrate: 4, hint: 'HIT THE SOURCE', color: '#ff4d6d', label: 'SOURCE', rad: 0.55, arc: [0.25, 2.9] });
+  setBanner('PHASE 3', 'SEPSIS — kill the SOURCE before the clock runs out', 2.6); Snd.sfx('roar'); Snd.sfx('alarm'); shakeIt(14); G.punch = 0.3; hitstop(0.1);
+  for (var i = 0; i < B.lobes.length; i++) { var L = B.lobes[i]; if (L.state === 'alive' && !L.e.dead) { L.e.silent = true; L.e.hp = 0; killEnemy(L.e, 'NEUTRAL', null); } if (L.state === 'stump' && L.stump && !L.stump.dead) { L.stump.silent = true; L.stump.hp = 0; killEnemy(L.stump, 'NEUTRAL', null); } L.state = 'gone'; }
+  burst(body.x, body.y, 50, { color: '#c0392b', speed: 300, life: 0.8, size: 5, kind: 'goo', g: 300 });
+}
+/* ── Fournier art: eldritch mass of legs, sac growths, many eyes, a gaping maw; abstract, never anatomical ── */
+function drawFournierUnder(c) {
+  var B = G.boss, body = B.body;
+  for (var n = 0; n < B.necrosis.length; n++) {
+    var N = B.necrosis[n]; if (N.len < 4) continue; var tx = N.x + Math.cos(N.a) * N.len, ty = N.y + Math.sin(N.a) * N.len;
+    c.lineCap = 'round'; c.strokeStyle = 'rgba(14,30,20,0.9)'; c.lineWidth = 50; c.beginPath(); c.moveTo(N.x, N.y); c.lineTo(tx, ty); c.stroke(); c.strokeStyle = 'rgba(60,110,60,0.45)'; c.lineWidth = 42; c.stroke(); c.strokeStyle = 'rgba(10,20,14,0.95)'; c.lineWidth = 34; c.stroke();
+    c.strokeStyle = 'rgba(90,160,80,0.5)'; c.lineWidth = 2; c.beginPath(); for (var v = 0; v < 4; v++) { var vt = (v + 0.5) / 4 * N.len, vx = N.x + Math.cos(N.a) * vt, vy = N.y + Math.sin(N.a) * vt, side = v % 2 ? 1 : -1; c.moveTo(vx, vy); c.lineTo(vx + Math.cos(N.a + side * 1.4) * 34, vy + Math.sin(N.a + side * 1.4) * 34); } c.stroke();
+    c.save(); c.translate(tx, ty); c.fillStyle = 'rgba(20,40,26,0.95)'; blobPath(c, 28, G.realTime * 3 + n, 5, 0.18); c.fill(); c.strokeStyle = 'rgba(120,200,110,0.6)'; c.lineWidth = 2; c.stroke(); cyclops(c, 0, 0, 5, ang(tx, ty, P.x, P.y), 1, { veins: true }); c.restore();
+  }
+  for (var s = 0; s < B.sugar.length; s++) { var su = B.sugar[s]; c.save(); c.translate(su.x, su.y); c.rotate(su.ph + G.realTime * 0.5); c.fillStyle = '#fff0f5'; regPoly(c, 9, 6, 0); c.fill(); outline(c, 2.5); c.fillStyle = 'rgba(255,255,255,0.9)'; regPoly(c, 4, 6, 0.5); c.fill(); c.restore(); if (Math.floor(G.realTime * 3 + s) % 3 === 0) { c.fillStyle = '#fff'; c.beginPath(); c.arc(su.x + 10, su.y - 10, 1.5, 0, TAU); c.fill(); } }
+  for (var l = 0; l < B.legs.length; l++) {
+    var L = B.legs[l], wig = Math.sin(G.realTime * 2.2 + L.ph) * 0.18, a = L.a + wig, sx = body.x + Math.cos(L.a) * body.r * 0.85, sy = body.y + Math.sin(L.a) * body.r * 0.85, mx = sx + Math.cos(a) * L.len * 0.55 + Math.cos(a + 1.5) * 22, my = sy + Math.sin(a) * L.len * 0.55 + Math.sin(a + 1.5) * 22, ex = sx + Math.cos(a) * L.len, ey = sy + Math.sin(a) * L.len;
+    c.lineCap = 'round'; c.strokeStyle = OUTLINE; c.lineWidth = L.w + 6; c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(mx, my, ex, ey); c.stroke(); c.strokeStyle = '#7a3a4a'; c.lineWidth = L.w; c.stroke(); c.strokeStyle = 'rgba(30,50,30,0.7)'; c.lineWidth = L.w * 0.5; c.beginPath(); c.moveTo(mx, my); c.quadraticCurveTo((mx + ex) / 2, (my + ey) / 2, ex, ey); c.stroke();
+    c.fillStyle = '#1a1218'; c.beginPath(); c.moveTo(ex, ey); c.lineTo(ex + Math.cos(a - 0.5) * 12, ey + Math.sin(a - 0.5) * 12); c.lineTo(ex + Math.cos(a + 0.5) * 12, ey + Math.sin(a + 0.5) * 12); c.closePath(); c.fill();
+  }
+}
+function drawNecro(c, r, amt, seed) {
+  c.save(); c.globalAlpha = Math.min(1, amt) * 0.92;
+  for (var i = 0; i < 4; i++) { var a = hsh(seed, i) * TAU, d = r * (0.15 + hsh(seed, i + 9) * 0.45), br = r * (0.3 + hsh(seed, i + 17) * 0.25) * (0.6 + 0.4 * amt); c.save(); c.translate(Math.cos(a) * d, Math.sin(a) * d); c.fillStyle = i % 2 ? '#15261a' : '#1f3522'; blobPath(c, br, i * 1.7, 4, 0.14); c.fill(); c.strokeStyle = 'rgba(100,170,90,0.4)'; c.lineWidth = 1.5; c.stroke(); c.restore(); }
+  c.fillStyle = 'rgba(90,150,70,0.4)'; for (var k = 0; k < 5; k++) { c.beginPath(); c.arc(Math.cos(hsh(seed, k + 30) * TAU) * r * 0.5, Math.sin(hsh(seed, k + 30) * TAU) * r * 0.5, 2.5, 0, TAU); c.fill(); }
+  c.restore();
+}
+function drawFournierBody(c, e) {
+  var B = G.boss, r = e.r, t = G.realTime, sep = !!(B && B.sepsis);
+  c.fillStyle = sep ? '#9a4a5a' : '#b86a78'; blobPath(c, r, t * 0.6, 7, 0.07); c.fill(); outline(c, 6);
+  c.fillStyle = 'rgba(80,20,40,0.35)'; c.beginPath(); c.ellipse(r * 0.15, r * 0.35, r * 0.6, r * 0.35, 0.2, 0, TAU); c.fill();
+  veins(c, r, 12, 13, 'rgba(120,20,50,0.6)'); pustules(c, r, 8, 21, 'rgba(255,220,170,0.75)', 6);
+  for (var g = 0; g < 4; g++) { var ga = 0.35 + g * 0.75, gx = Math.cos(ga) * r * 0.92, gy = Math.sin(ga) * r * 0.92, gr = r * 0.16 * (1 + 0.08 * Math.sin(t * 3 + g)); c.fillStyle = '#c98a8a'; c.beginPath(); c.arc(gx, gy, gr, 0, TAU); c.fill(); outline(c, 3); cyclops(c, gx, gy, gr * 0.4, e.look, 1, { veins: true }); }
+  if (e.necro > 0) { c.save(); c.globalAlpha = 0.95 * Math.min(1, e.necro); [[-0.45, -0.3, 0.42], [0.35, -0.45, 0.36], [0.1, 0.25, 0.46], [-0.4, 0.4, 0.3], [0.55, 0.1, 0.3]].forEach(function (p, i) { c.save(); c.translate(p[0] * r, p[1] * r); c.fillStyle = i % 2 ? '#15261a' : '#1e3320'; blobPath(c, r * p[2] * (0.5 + 0.5 * e.necro), i * 2.1 + t * 0.3, 5, 0.16); c.fill(); c.strokeStyle = 'rgba(100,170,90,0.45)'; c.lineWidth = 2; c.stroke(); c.restore(); }); c.restore(); }
+  var EYES = [[-0.55, -0.55, 0.11], [-0.2, -0.7, 0.08], [0.25, -0.62, 0.13], [0.6, -0.4, 0.09], [-0.72, -0.1, 0.07], [0.72, -0.05, 0.1], [-0.35, -0.2, 0.17], [0.3, -0.25, 0.17], [0, -0.45, 0.06], [-0.05, 0.05, 0.08], [0.5, 0.3, 0.07]];
+  for (var i = 0; i < EYES.length; i++) { var E = EYES[i], bl = B ? (Math.sin(t * 1.3 + B.eyesBlink[i % B.eyesBlink.length] * 3) > 0.92 ? 0.1 : 1) : 1; cyclops(c, E[0] * r, E[1] * r, E[2] * r, e.look, bl, { veins: i % 3 === 0, iris: sep ? '#8a0f24' : '#1a1218' }); }
+  c.fillStyle = '#2a0f18'; c.beginPath(); c.moveTo(-r * 0.5, r * 0.55); for (var m = 0; m <= 8; m++) { var mx = -r * 0.5 + m / 8 * r; c.lineTo(mx, r * 0.55 + (m % 2 ? r * 0.06 : -r * 0.03) + Math.sin(t * 4 + m) * 2); } c.lineTo(r * 0.45, r * 0.85); for (var n = 8; n >= 0; n--) { var nx = -r * 0.5 + n / 8 * r; c.lineTo(nx, r * 0.85 + (n % 2 ? -r * 0.05 : r * 0.02)); } c.closePath(); c.fill(); outline(c, 4);
+  teeth(c, 0, r * 0.55, r * 0.42, 7, true); drool(c, 0, r * 0.88, 4, 'rgba(212,255,90,0.75)', 5);
+  if (sep) { var pulse = 0.5 + 0.5 * Math.sin(t * 7); c.fillStyle = 'rgba(255,40,60,' + (0.15 + 0.2 * pulse) + ')'; c.beginPath(); c.arc(0, 0, r * 1.05, 0, TAU); c.fill(); }
+  if (e.inv) { c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.arc(0, 0, r + 10, 0, TAU); c.stroke(); c.setLineDash([]); }
+}
+function drawLobe(c, e) { var r = e.r; c.fillStyle = '#c98a8a'; blobPath(c, r, e.ph, 5, 0.1); c.fill(); outline(c, 4); veins(c, r, 4, e.seed, 'rgba(140,30,60,0.6)'); pustules(c, r, 3, e.seed + 1, 'rgba(255,230,170,0.75)', 3); cyclops(c, -r * 0.2, -r * 0.2, r * 0.26, e.look, e.blink, { veins: true }); mouth(c, r * 0.2, r * 0.45, r * 0.22, 'stitch'); drool(c, r * 0.1, r * 0.75, 2, 'rgba(212,255,90,0.7)', e.seed); }
+function drawStump(c, e) {
+  var rec = e.lobe, k = rec ? clamp(rec.stumpT / 3, 0, 1) : 0, r = e.r;
+  c.fillStyle = '#8f1f2f'; blobPath(c, r, e.ph, 6, 0.2); c.fill(); outline(c, 3.5); c.fillStyle = '#ff6b8a'; c.beginPath(); c.arc(0, 0, r * 0.5, 0, TAU); c.fill(); drool(c, 0, r * 0.6, 3, 'rgba(200,30,60,0.85)', 3);
+  c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, r + 8, 0, TAU); c.stroke(); c.strokeStyle = k > 0.35 ? '#ffb630' : '#ff4d6d'; c.beginPath(); c.arc(0, 0, r + 8, -Math.PI / 2, -Math.PI / 2 + TAU * k); c.stroke();
+  c.fillStyle = '#fff'; c.font = '900 10px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('COAG', 0, -r - 16);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §15 RENDERING — dark clinical teal arena, saturated monsters, class-coloured player weapons
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-var PAL = { wallOuter: '#0a1620', wall: '#1d3243', wallEdge: '#2b4659', floor: '#122330', tile: 'rgba(255,255,255,0.035)', tileDark: 'rgba(0,0,0,0.12)' };
+var PAL = { wallOuter: '#070e14', wall: '#172836', wallEdge: '#2a4152', floor: '#0f1d27', tile: 'rgba(255,255,255,0.03)', tileDark: 'rgba(0,0,0,0.14)' };
 var SCRUBS = ['#2fa38a', '#3b5bdb', '#a3335b', '#e07a9a', '#6c6f9c', '#d9a441'];
 var SCRUB_NAMES = ['TEAL', 'NAVY', 'WINE', 'PINK', 'SLATE', 'MUSTARD'];
 function scrubColor() { var i = SET.scrub || 0; var lvl = residencyLevel(); var max = lvl >= 6 ? 6 : lvl >= 4 ? 4 : lvl >= 2 ? 3 : 1; if (i >= max) i = 0; return SCRUBS[i]; }
@@ -2596,7 +2906,12 @@ function paintFloor(c) {
   for (var y = ARENA.y; y <= ARENA.y + ARENA.h; y += 48) { c.moveTo(ARENA.x, y); c.lineTo(ARENA.x + ARENA.w, y); }
   c.stroke();
   c.fillStyle = PAL.tileDark; for (var i = 0; i < 12; i++) { var tx = ARENA.x + ((i * 173) % 19) * 48, ty = ARENA.y + ((i * 97) % 10) * 48; c.fillRect(tx + 1, ty + 1, 46, 46); }
+  // old stains and hairline cracks (Isaac basement energy, kept low-contrast so threats pop)
+  for (var k = 0; k < 11; k++) { var sx = ARENA.x + hsh(3, k) * ARENA.w, sy = ARENA.y + hsh(5, k) * ARENA.h, sr = 18 + hsh(7, k) * 40; c.fillStyle = k % 3 === 0 ? 'rgba(70,20,35,0.22)' : 'rgba(0,0,0,0.16)'; c.save(); c.translate(sx, sy); c.scale(1, 0.7); blobPath(c, sr, k, 4, 0.2); c.fill(); c.restore(); }
+  c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 1.2; c.lineCap = 'round';
+  for (var q = 0; q < 8; q++) { var cx0 = ARENA.x + hsh(11, q) * ARENA.w, cy0 = ARENA.y + hsh(13, q) * ARENA.h; c.beginPath(); c.moveTo(cx0, cy0); for (var seg = 1; seg <= 4; seg++) { cx0 += (hsh(17, q * 5 + seg) - 0.5) * 50; cy0 += (hsh(19, q * 5 + seg) - 0.5) * 50; c.lineTo(cx0, cy0); } c.stroke(); }
   c.restore();
+  c.strokeStyle = 'rgba(140,70,80,0.3)'; c.lineWidth = 5; roundRect(c, ARENA.x - 4, ARENA.y - 4, ARENA.w + 8, ARENA.h + 8, 16); c.stroke();
   c.strokeStyle = PAL.wallEdge; c.lineWidth = 3; roundRect(c, ARENA.x - 1.5, ARENA.y - 1.5, ARENA.w + 3, ARENA.h + 3, 15); c.stroke();
 }
 function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h); c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath(); }
@@ -2627,7 +2942,7 @@ function drawObstacles(c) {
     else { c.beginPath(); c.arc(o.x, o.y, o.r, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.35, 0, TAU); c.fill(); if (o.r < 12) { c.fillStyle = '#5a7a90'; c.beginPath(); c.arc(o.x, o.y, o.r * 0.5, 0, TAU); c.fill(); } }
   }
 }
-var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'] };
+var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'] };
 function drawHazards(c) {
   for (var i = 0; i < G.decals.length; i++) { var d = G.decals[i]; c.globalAlpha = Math.min(1, d.t / 3); c.fillStyle = d.color; c.beginPath(); c.ellipse(d.x, d.y, d.r, d.r * 0.7, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
@@ -2696,11 +3011,16 @@ function drawStatusIcon(c, name, x, y) {
 function drawEnemy(c, e) {
   if (e.spawnT > 0 || e.dead) return;
   c.save(); c.translate(e.x, e.y);
-  if (e.elite || e.def.miniBoss) { c.fillStyle = 'rgba(255,209,102,' + (0.18 + 0.12 * Math.sin(G.realTime * 5)) + ')'; c.beginPath(); c.arc(0, 0, e.r + 10, 0, TAU); c.fill(); }
+  if (e.elite || e.def.miniBoss) { c.fillStyle = 'rgba(255,209,102,' + (0.18 + 0.12 * Math.sin(G.realTime * 5)) + ')'; c.beginPath(); c.arc(0, 0, e.r + 10, 0, TAU); c.fill(); c.strokeStyle = 'rgba(120,10,40,' + (0.5 + 0.3 * Math.sin(G.realTime * 7)) + ')'; c.lineWidth = 3; c.setLineDash([5, 7]); c.beginPath(); c.arc(0, 0, e.r + 14, G.realTime, G.realTime + TAU); c.stroke(); c.setLineDash([]); }
   if (e.st.reveal) { c.strokeStyle = 'rgba(255,209,102,0.6)'; c.lineWidth = 2; c.setLineDash([4, 4]); c.beginPath(); c.arc(0, 0, e.r + 8, 0, TAU); c.stroke(); c.setLineDash([]); }
-  c.save(); c.scale(e.sx, e.sy);
+  c.save();
+  var br = e.def.stationary ? Math.sin(e.wob) * 0.025 : Math.sin(e.wob * 1.3) * 0.04, spd = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+  if (spd > 30 && !e.def.stationary && !e.boss) { var va = Math.atan2(e.vy, e.vx), ks = Math.min(0.14, spd / 1800); c.rotate(va); c.scale(1 + ks, 1 - ks); c.rotate(-va); }
+  c.scale(e.sx * (1 + br), e.sy * (1 - br));
   if (e.hurl) c.rotate(G.realTime * 20);
   e.def.draw(c, e);
+  if (e.necro > 0 && !e.boss) drawNecro(c, e.r, e.necro, e.seed || 1);
+  if (e.wp) drawWeakPoint(c, e);
   if (e.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(0, 0, e.r * 1.02, 0, TAU); c.fill(); }
   if (e.st.frozen) { c.fillStyle = 'rgba(190,235,255,0.5)'; blobPath(c, e.r * 1.12, 0, 6, 0.08); c.fill(); c.strokeStyle = '#eaf8ff'; c.lineWidth = 2; c.stroke(); c.beginPath(); for (var i = 0; i < 3; i++) { var a = i * 2.1 + 0.4; c.moveTo(Math.cos(a) * e.r * 0.2, Math.sin(a) * e.r * 0.2); c.lineTo(Math.cos(a) * e.r * 0.9, Math.sin(a) * e.r * 0.9); } c.stroke(); }
   c.restore();
@@ -2711,7 +3031,7 @@ function drawEnemy(c, e) {
   var top = e.y - e.r * e.sy - 14, names = [];
   for (var k in e.st) names.push(k);
   if (names.length) { var sx0 = e.x - (names.length - 1) * 7; for (var n = 0; n < names.length; n++) drawStatusIcon(c, names[n], sx0 + n * 14, top - 14); }
-  if (!e.boss && !e.def.flat && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
+  if (!e.boss && !e.def.flat && !e.def.isStump && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
     var bw = Math.max(30, e.r * 1.7), bx = e.x - bw / 2, by = top - 3, wk = e.wk || (e.wk = enemyWeakness(e.def));
     c.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(c, bx - 1, by - 1, bw + 2, 6, 3); c.fill();
     c.fillStyle = e.hp / e.maxHp > 0.5 ? '#7dffb0' : e.hp / e.maxHp > 0.25 ? '#ffd166' : '#ff6b8a'; c.fillRect(bx, by, bw * clamp(e.hp / e.maxHp, 0, 1), 4);
@@ -2731,21 +3051,22 @@ function drawPlayer(c) {
   var bob = Math.sin(P.anim) * (P.moving ? 2 : 0.6), sq = P.roll > 0 ? 0.8 : 1 + Math.sin(P.anim) * 0.03 * (P.moving ? 1 : 0.3);
   c.scale(1 / sq, sq); c.translate(0, bob);
   // feet
-  c.fillStyle = '#2b3a4c'; var ft = P.moving ? Math.sin(P.anim) * 5 : 0; c.beginPath(); c.ellipse(-5, P.r - 1 + ft * 0.3, 5, 3, 0, 0, TAU); c.ellipse(5, P.r - 1 - ft * 0.3, 5, 3, 0, 0, TAU); c.fill();
-  // body (scrubs)
-  c.fillStyle = scrub; c.beginPath(); c.ellipse(0, 2, P.r * 0.95, P.r * 1.05, 0, 0, TAU); c.fill(); outline(c, 3.5);
-  c.fillStyle = '#fff'; c.fillRect(-4, 0, 8, 7); c.fillStyle = '#ff4d6d'; c.fillRect(-1, 2, 2, 3);
-  // head
-  c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -9, 9.5, 0, TAU); c.fill(); outline(c, 3);
-  c.fillStyle = scrub; c.beginPath(); c.arc(0, -11, 9.5, Math.PI, 0); c.lineTo(9.5, -9); c.lineTo(-9.5, -9); c.closePath(); c.fill(); outline(c, 2.5);
+  c.fillStyle = '#2b3a4c'; var ft = P.moving ? Math.sin(P.anim) * 5 : 0; c.beginPath(); c.ellipse(-5, P.r + 1 + ft * 0.3, 5, 3, 0, 0, TAU); c.ellipse(5, P.r + 1 - ft * 0.3, 5, 3, 0, 0, TAU); c.fill();
+  // small body (scrubs), big head
+  c.fillStyle = scrub; c.beginPath(); c.ellipse(0, 6, P.r * 0.8, P.r * 0.75, 0, 0, TAU); c.fill(); outline(c, 3.5);
+  c.fillStyle = '#fff'; c.fillRect(-3, 4, 6, 6); c.fillStyle = '#ff4d6d'; c.fillRect(-1, 5, 2, 3);
+  c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -8, 13, 0, TAU); c.fill(); outline(c, 3.5);
+  c.fillStyle = 'rgba(80,30,60,0.25)'; c.beginPath(); c.ellipse(0, -1, 10, 4, 0, 0, Math.PI); c.fill();
+  c.fillStyle = scrub; c.beginPath(); c.arc(0, -11, 13, Math.PI, 0); c.lineTo(13, -8); c.lineTo(-13, -8); c.closePath(); c.fill(); outline(c, 3);
+  c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(-9, -15, 7, 3);
   // headlamp
-  c.fillStyle = '#fff'; c.beginPath(); c.arc(Math.cos(P.aim) * 5, -13 + Math.sin(P.aim) * 2, 3.2, 0, TAU); c.fill(); outline(c, 2);
-  c.fillStyle = '#fff6c8'; c.beginPath(); c.arc(Math.cos(P.aim) * 5, -13 + Math.sin(P.aim) * 2, 1.6, 0, TAU); c.fill();
-  // eyes + mask
-  var lx = Math.cos(P.aim) * 2.2, ly = Math.sin(P.aim) * 1.2;
-  c.fillStyle = '#fff'; c.beginPath(); c.arc(-3.5, -9, 3, 0, TAU); c.arc(3.5, -9, 3, 0, TAU); c.fill();
-  c.fillStyle = '#1a1218'; c.beginPath(); c.arc(-3.5 + lx, -9 + ly, 1.5, 0, TAU); c.arc(3.5 + lx, -9 + ly, 1.5, 0, TAU); c.fill();
-  c.fillStyle = '#bfe3ff'; roundRect(c, -6, -5, 12, 5, 2); c.fill(); outline(c, 1.5);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(Math.cos(P.aim) * 6, -15 + Math.sin(P.aim) * 2, 3.6, 0, TAU); c.fill(); outline(c, 2);
+  c.fillStyle = '#fff6c8'; c.beginPath(); c.arc(Math.cos(P.aim) * 6, -15 + Math.sin(P.aim) * 2, 1.8, 0, TAU); c.fill();
+  // huge wet eyes, a tiny worried mouth, a surgical mask under the chin
+  var low = P.hp / P.maxHp < 0.25;
+  eyes(c, 0, -7, 5.2, 4.6, P.aim, 1, low ? 'worried' : null, { pupil: 0.5, drip: low, dripColor: 'rgba(150,210,255,0.9)' });
+  mouth(c, 0, 1, 3, low ? 'wavy' : 'o');
+  c.fillStyle = '#bfe3ff'; roundRect(c, -7, 2, 14, 5, 2); c.fill(); outline(c, 1.5);
   c.restore();
   // hand + tool
   var cur = curWeapon();
@@ -2818,6 +3139,13 @@ function drawBullets(c) {
     if (b.kind === 'ring') { c.strokeStyle = hexA(b.color, 0.35); c.lineWidth = b.band; c.beginPath(); c.arc(b.x, b.y, b.r, 0, TAU); c.stroke(); c.strokeStyle = b.color; c.lineWidth = 5; c.stroke(); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); c.restore(); continue; }
     if (b.kind === 'lob') { c.fillStyle = 'rgba(0,0,0,0.3)'; var gx = lerp(b.sx, b.tx, Math.min(1, b.t / b.dur)), gy = lerp(b.sy, b.ty, Math.min(1, b.t / b.dur)); c.beginPath(); c.ellipse(gx, gy, 8, 4, 0, 0, TAU); c.fill(); c.fillStyle = b.color; c.beginPath(); c.arc(b.x, b.y, b.r, 0, TAU); c.fill(); outline(c, 2.5); c.fillStyle = 'rgba(255,255,255,0.8)'; c.beginPath(); c.arc(b.x - 3, b.y - 3, 3, 0, TAU); c.fill(); c.restore(); continue; }
     c.translate(b.x, b.y);
+    if (b.kind === 'bubble') {
+      var grow = b.life < 0.6 ? 1 + (0.6 - b.life) * 0.9 : 1, wob = 1 + Math.sin(G.realTime * 14 + b.pulse) * 0.06;
+      c.fillStyle = 'rgba(184,255,90,0.35)'; c.beginPath(); c.ellipse(0, 0, b.r * grow * wob, b.r * grow / wob, 0, 0, TAU); c.fill();
+      c.strokeStyle = b.life < 0.6 ? 'rgba(255,92,92,' + (0.5 + 0.5 * Math.sin(G.realTime * 20)) + ')' : 'rgba(255,255,255,' + (0.5 + 0.4 * Math.sin(G.realTime * 10 + b.pulse)) + ')'; c.lineWidth = 2.5; c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = 1; c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(-b.r * 0.35, -b.r * 0.35, b.r * 0.25, 0, TAU); c.fill();
+      c.restore(); continue;
+    }
     if (b.hostile) {
       c.rotate(b.a); c.fillStyle = b.color;
       if (b.shape === 'spike') { c.beginPath(); c.moveTo(b.r * 1.8, 0); c.lineTo(0, b.r * 0.9); c.lineTo(-b.r * 1.1, 0); c.lineTo(0, -b.r * 0.9); c.closePath(); c.fill(); }
@@ -2859,9 +3187,10 @@ function drawTexts(c) {
   c.globalAlpha = 1;
 }
 function drawVignette(c) {
-  if (!vignette) { vignette = document.createElement('canvas'); vignette.width = W; vignette.height = H; var vc = vignette.getContext('2d'); var g = vc.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)'); vc.fillStyle = g; vc.fillRect(0, 0, W, H); vc.fillStyle = 'rgba(0,0,0,0.06)'; for (var y = 0; y < H; y += 4) vc.fillRect(0, y, W, 1); }
+  if (!vignette) { vignette = document.createElement('canvas'); vignette.width = W; vignette.height = H; var vc = vignette.getContext('2d'); var g = vc.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.68)'); vc.fillStyle = g; vc.fillRect(0, 0, W, H); vc.fillStyle = 'rgba(0,0,0,0.06)'; for (var y = 0; y < H; y += 4) vc.fillRect(0, y, W, 1); }
   c.drawImage(vignette, 0, 0, W, H);
   if (P && P.hp / P.maxHp < 0.25 && G.running) { var pulse = 0.5 + 0.5 * Math.sin(G.realTime * 6); c.fillStyle = 'rgba(255,40,70,' + (0.08 + 0.12 * pulse) + ')'; c.fillRect(0, 0, W, H); }
+  if (G.boss && G.boss.sepsis && G.running) { var sk2 = 1 - clamp(G.boss.sepsisT / G.boss.sepsisMax, 0, 1), spp = 0.5 + 0.5 * Math.sin(G.realTime * (5 + sk2 * 6)); c.fillStyle = 'rgba(200,20,40,' + (0.05 + 0.16 * spp * (0.4 + sk2)) + ')'; c.fillRect(0, 0, W, H); }
   if (G.flash > 0) { c.fillStyle = 'rgba(255,60,80,' + (G.flash * 0.4) + ')'; c.fillRect(0, 0, W, H); }
 }
 
@@ -2918,12 +3247,13 @@ function drawHUD(c) {
   // boss bar
   if (G.boss && !G.boss.dead && G.introT <= 0) {
     var B = G.boss, bw = 420, bx2 = W / 2 - bw / 2, by2 = 72, bf = clamp(B.body.hp / B.body.maxHp, 0, 1);
-    text(c, B.name + ' — ' + ['SHELL', 'INFECTION', 'CORE'][B.phase - 1], bx2, by2 - 11, 11, '#38e8ff', 'left', 900);
+    text(c, B.name + ' — ' + B.phases[B.phase - 1], bx2, by2 - 11, 11, B.kind === 'fournier' ? '#ff8fa3' : '#38e8ff', 'left', 900);
     c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 - 2, by2 - 2, bw + 4, 16, 6); c.fill();
-    c.fillStyle = B.phase === 3 ? '#ffb630' : B.phase === 2 ? '#7cf29a' : '#d8c7a4'; roundRect(c, bx2, by2, Math.max(4, bw * bf), 12, 5); c.fill();
+    c.fillStyle = B.kind === 'fournier' ? (B.phase === 3 ? '#ff4d6d' : B.phase === 2 ? '#5bd47a' : '#b86a78') : (B.phase === 3 ? '#ffb630' : B.phase === 2 ? '#7cf29a' : '#d8c7a4'); roundRect(c, bx2, by2, Math.max(4, bw * bf), 12, 5); c.fill();
     if (B.body.shield > 0) { c.fillStyle = 'rgba(124,242,154,0.6)'; roundRect(c, bx2, by2 + 13, bw * B.body.shield, 3, 1.5); c.fill(); }
     c.fillStyle = '#fff'; c.fillRect(bx2 + bw * 0.66 - 1, by2 - 4, 2, 20); c.fillRect(bx2 + bw * 0.33 - 1, by2 - 4, 2, 20);
-    if (B.body.inv) text(c, 'ARMORED — crack 2 branches', W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
+    if (B.hint) text(c, B.hint, W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
+    if (B.sepsis) { var sk = clamp(B.sepsisT / B.sepsisMax, 0, 1); c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 + 80, by2 + 36, bw - 160, 10, 4); c.fill(); c.fillStyle = sk > 0.3 ? '#ff4d6d' : (Math.floor(G.realTime * 6) % 2 ? '#fff' : '#ff4d6d'); roundRect(c, bx2 + 80, by2 + 36, (bw - 160) * sk, 10, 4); c.fill(); text(c, 'SEPSIS — source control in ' + fmtTime(Math.max(0, B.sepsisT)), W / 2, by2 + 56, 12, '#ff6b8a', 'center', 900); }
   }
   // tutorial prompts
   if (G.tutorial && !G.cleared) {
@@ -2938,7 +3268,7 @@ function drawHUD(c) {
   // banner
   if (G.banner) { var bn2 = G.banner, k = bn2.t / bn2.dur, a = k < 0.15 ? k / 0.15 : k > 0.8 ? (1 - k) / 0.2 : 1, pop = k < 0.15 ? 1.4 - 0.4 * (k / 0.15) : 1; c.globalAlpha = a; text(c, bn2.text, W / 2, 150, Math.round(44 * pop), '#fff', 'center', 900); if (bn2.sub) text(c, bn2.sub, W / 2, 186, 16, '#ffd166', 'center', 800); c.globalAlpha = 1; }
   // boss intro card
-  if (G.introT > 0 && G.boss) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = '#38e8ff'; c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, 'STAGHORN CALCULUS', W / 2, H / 2 - 12, Math.round(50 * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, 'BOSS · the renal pelvis', W / 2, H / 2 + 34, 16, '#38e8ff', 'center', 800); c.globalAlpha = 1; }
+  if (G.introT > 0 && G.boss) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = G.boss.kind === 'fournier' ? '#ff4d6d' : '#38e8ff'; c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, G.boss.name, W / 2, H / 2 - 12, Math.round((G.boss.name.length > 18 ? 42 : 50) * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, G.boss.sub, W / 2, H / 2 + 34, 16, G.boss.kind === 'fournier' ? '#ff8fa3' : '#38e8ff', 'center', 800); c.globalAlpha = 1; }
   // input mode hint (desktop) / fps
   if (DEBUG) { text(c, 'FPS ' + G.fps + ' · E ' + G.enemies.length + ' · B ' + G.bullets.length + ' · P ' + G.parts.length + ' · seed ' + SEED + (G.spawner ? ' · SPAWNER: 1-9,0 → ' + SPAWN_KEYS.join(',') : ' · ` spawner'), 16, H - 10, 10, '#0f0', 'left', 800); }
 }
@@ -2977,11 +3307,12 @@ function render(dtReal) {
   c.translate(G.shakeX, G.shakeY);
   if (G.punch > 0) { var k = 1 + G.punch * 0.08; c.translate(W / 2, H / 2); c.scale(k, k); c.translate(-W / 2, -H / 2); }
   drawFloor(c); drawHazards(c); drawHeadlamp(c); drawTeles(c); drawObstacles(c); drawRewards(c); drawDoors(c); drawSeedsTurrets(c); drawPickups(c);
-  if (G.boss) drawBossArms(c);
+  if (G.boss) drawBossUnder(c);
   var es = G.enemies, i;
   for (i = 0; i < es.length; i++) if (es[i].def.flat) drawEnemy(c, es[i]);
-  for (i = 0; i < es.length; i++) if (!es[i].def.flat && !es[i].boss) drawEnemy(c, es[i]);
+  for (i = 0; i < es.length; i++) if (!es[i].def.flat && !es[i].boss && !es[i].def.isLobe && !es[i].def.isStump) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].boss) drawEnemy(c, es[i]);
+  for (i = 0; i < es.length; i++) if (es[i].def.isLobe || es[i].def.isStump) drawEnemy(c, es[i]);
   drawPlayer(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
   if (DEBUG) { c.strokeStyle = 'rgba(0,255,0,0.6)'; c.lineWidth = 1; for (i = 0; i < es.length; i++) { c.beginPath(); c.arc(es[i].x, es[i].y, es[i].r, 0, TAU); c.stroke(); } c.strokeStyle = 'rgba(255,0,0,0.6)'; for (i = 0; i < G.bullets.length; i++) { c.beginPath(); c.arc(G.bullets[i].x, G.bullets[i].y, G.bullets[i].r, 0, TAU); c.stroke(); } }
   c.restore();
