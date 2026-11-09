@@ -3,6 +3,34 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 3) — 🎯 Staging Attack rebuilt as tap-to-stage on the card-game shell
+
+Andrew: do Staging Attack as tap-to-stage next.
+
+**Done (`UroStudyHub.html`, built, 91/91 in `tools/arcade-cards.drive.mjs`):**
+- The falling-card typing game (`StagingSorter`, keyboard-only, vignettes clipped to two lines) is gone. `StagingAttack`
+  shows one case at a time with four chip rows (T, N, M, stage group) built from each cancer's option lists; tap one
+  per row, **Stage it ▸** (or Enter). 8 cases a round from one cancer (random, never the same twice in a row, or
+  pinned with a chip), 45 s each. 5 points per component, +10 for the full house, speed and full-house-streak
+  bonuses. Reveal marks the right chips green and the wrong picks red and prints the AJCC 8 rule line for every
+  component that was wrong; the debrief lists each missed case with your line → the right line and those rules.
+  Best score in `s.gameBest.staging`; tile is now `reqs: { touch: true }` so it shows on phone and iPad.
+- **Data fixed against AJCC 8th edition** (76 cases, 5 cancers, each with a `rules` cheat sheet):
+  bladder T4b N0 M0 is IVA (was IIIB), bladder N is by node count not size, UTUC any N+ is IV (two cases said III),
+  "through the kidney into perinephric fat" is UTUC T4 (was lumped with T3). Prostate cases now carry PSA + grade
+  group and use the real groups (I, IIA–C, IIIA–C, IVA–B) incl. the GG5-is-IIIC and PSA ≥20-is-IIIA pearls; testis
+  cases carry post-orchiectomy markers (S) so IS / IIIB / IIIC are reachable. Added M1c to prostate.
+- No AI deck for this game on purpose: staging content has to be exact.
+- Harness scenario D reads `STAGING_CANCERS` from the served page, checks every case is answerable from its chip
+  rows, plays a pinned Prostate round with 7 full houses and one deliberate stage-group miss (rule shown on reveal and
+  in the debrief), claims, checks the best, then starts a random round.
+
+**Verified:** headless Chrome, phone viewport screenshots of picking and reveal. Not on a real device yet.
+**Next steps:** Andrew to play a round per cancer on the live site; tell me if any case or rule line reads wrong.
+Then Drug Match → pure tap-sort (own canvas page?), and the ISE tie-in for AI decks.
+**Open questions:** should the stage-group rules for prostate/testis be visible *before* answering (a tap-to-peek
+"rules" link) rather than only on a miss? Round length 8 vs 10?
+
 ## 2026-11-09 (later 2) — 🎮 Arcade: card-game shell, Snap Decision themes, Board Buzzer with the why; Blaster + Visual Dx retired
 
 Andrew's call on the audit below: toss Stone Blaster and Visual Dx, give the Shop back to generic upgrades (themes, XP
