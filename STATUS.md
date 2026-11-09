@@ -3,6 +3,85 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 2) — 🎮 Arcade: card-game shell, Snap Decision themes, Board Buzzer with the why; Blaster + Visual Dx retired
+
+Andrew's call on the audit below: toss Stone Blaster and Visual Dx, give the Shop back to generic upgrades (themes, XP
+and coin boosts; game-specific upgrades can return with a roguelike later), and build the shared shell, with Snap
+Decision dealing a different theme every round.
+
+**Done (`UroStudyHub.html`, built, 58/58 in `tools/arcade-cards.drive.mjs`):**
+- **Retired** `StoneCrusherGame` and `VisualDxGame`, their tiles, the `STONES` table and the five Blaster-only Shop
+  upgrades (Extra Lives, Laser Power, Time Extend, Critical Hit, Coin Magnet). `migrateArcade` (runs once per saved
+  profile via `arcadeV`) refunds every coin spent on those upgrades and on the Visual Dx / Snap unlocks, drops the
+  dead keys, and the Arcade shows a dismissible banner with the amount. Snap Decision is now the ★ free game (touch
+  first, works everywhere incl. the Boox); Buzzer stays at 300 💰.
+- **Card-game shell** (`// ═══ CARD GAME SHELL`): `GameFrame` (header with 🔊 toggle, `< Games`, ✕), `ReadyCard`
+  (how-to bullets, best score), `RunHud` (score / progress / streak / lives / countdown bar), `OverCard` (score, New
+  best!, accuracy, best streak, `+N 💰 · +M XP` preview, **REVIEW · N MISSED** list with your call → right call and the
+  why, Claim ▸ / Play again), `useRoundTimer`, `useGameBest` (persisted in `s.gameBest`), `cardRewards` (capped
+  150 💰 / 80 XP like the framed games; paid through `gameReward(…, keepOpen)`), `fetchAiDeck` (strict-JSON helper).
+  Synthesized sound + haptics live outside the component (`GAME_AUDIO`, `gameSfx`, `uroStudyHub_gameSound`) because the
+  game overlay is memoized.
+- **Snap Decision**: 7 themes in `SNAP_MODES`, 123 built-in cards with a why each — Bench or OR?, Surveillance or
+  Intervention?, Stent or No Stent?, Admit or Discharge?, Biopsy or Hold?, Antibiotics or Not?, Cut or Drug?. Random
+  theme per round (never the same twice in a row) or pin one with a chip. 20 s a card, speed + streak scoring, swipe /
+  buttons / ← → keys, timeout counts as a miss. "✨ Fresh AI deck" generates 10 cards for the dealt theme and caches
+  them (`uroStudyHub_snapAi`, 40 per theme) so built-in rounds draw on them later; failure falls back to the deck.
+- **Board Buzzer**: 50-question bank (was 24, no explanations; two outdated items fixed), every answer shows the why,
+  1–4 / A–D keys, 12 s, 3 lives, "✨ Fresh AI questions" with the same fallback. Same debrief.
+- Docs: `UroStudyHub_CLAUDE.md` game table + shooter notes, `CLAUDE.md` harness list.
+
+**Verified:** headless Chrome (phone viewport too): migration refund maths and banner, Shop contents, full Snap rounds
+(pinned + random, keyboard, timeout, claim pays once, best persists), Buzzer round with lives, Drug Match and Staging
+Attack still open, no console errors. Not verified on a real iPad or the Boox; the AI-deck path is exercised only by
+its fallback (no model in the sandbox).
+
+**Next steps:** Andrew to play a few rounds on the live site (and once on the Boox). Then, from the audit: Staging
+Attack → tap-to-stage on the shell; Drug Match → pure tap-sort (own canvas page?). Tie "Fresh AI deck" to the ISE
+sprint's weak groups / miss log.
+**Open questions:** should Buzzer be free too (it is the most Boox-friendly game)? Reward tuning: a perfect Snap round
+pays ~25 💰 vs up to 150 from the framed games.
+
+## 2026-11-09 — 🎮 Audit of the six in-app arcade games (no code changes)
+
+Andrew asked which arcade games have gone stale and how to bring them up to the polish of Uro Rush /
+Pre-Op, Please / Stone Squadron (Oct–Nov), tossing any that aren't worth saving.
+
+**Found:** every line of the six React games inside `UroStudyHub.html` (Stone Blaster, Drug Match, Board
+Buzzer, Staging Attack, Visual Dx, Snap Decision) dates from July; only the arcade shell got an October
+pass (device fit). Against the newer games they lack: a how-to title card, pause / auto-pause, persisted
+best score, synthesized sound + haptics, an end-of-run **miss review** with the right answer and a why,
+capped and consistent rewards (the in-app games each use their own uncapped `score × 0.12–0.15` formula;
+the framed games are capped at 150 💰 / 80 XP), and any harness. The action games drive React re-renders
+from a 33 ms `setInterval`, which is heavy on phones and hopeless on the Boox.
+
+**Verdicts proposed (Andrew to confirm):**
+- **Snap Decision — keep, extend.** Closest to the bar already. Add the extra modes the `SNAP_MODES` array
+  was built for (stent or not, admit or discharge, biopsy or surveil…), a 20+ card seed per mode, miss
+  review, best score, cached AI decks, and a tie-in to the ISE sprint's weak groups / miss log.
+- **Staging Attack — rebuild as tap-to-stage.** The TNM case data (5 cancers) is the best content of the
+  six; the falling-card typing mechanic hides it (cards clip the vignette at 2 lines, keyboard-only so it
+  never shows on phone/iPad). Show one case, tap T / N / M / Stage from the existing option lists, add a
+  why-line per case. Prostate and testis groupings need GG/PSA and S-marker modifiers to be stage-able.
+- **Drug Match — rebuild as a pure tap-sort.** Drop the run-under-the-chute step (on touch there is no
+  bucket control, only the A/D pad), keep the belt, tap one of four big bucket buttons, add a why-line on
+  misses, more sets (andrology, ADT classes, testis chemo, peds), mixed and side-effect modes. Candidate
+  for its own canvas page like Uro Rush.
+- **Board Buzzer — fold into one quick-fire card game with Snap.** 24 hardcoded questions, no
+  explanations, a few outdated (OAB first-line). Share one shell (title, timer, streak, best, miss review,
+  rewards) and re-source questions (bigger seed with a why, AI deck keyed to the ISE block of the day).
+- **Visual Dx — toss the drawings.** 16 hand-drawn SVGs; the caption gives the answer away, so it is
+  reading, not visual dx, and it cannot scale. Salvage the 16 vignettes as "read the report → dx + next
+  step" cards in the card game.
+- **Stone Blaster — toss.** Keyboard + mouse only (hidden on phone/iPad although it is the ★ free game),
+  no teaching content, and Stone Squadron covers stones far better. Retire the five Blaster-only Shop
+  upgrades with it (game_life, laser_power, time_ext, crit, magnet) and refund spent coins from `s.ups`.
+
+**Next steps:** Andrew picks the tosses; then build the shared card-game shell first, port Snap → Buzzer →
+Staging → report cards into it, and do Drug Match as its own page. Make the free default game a touch
+game that works on every device.
+**Open questions:** keep Blaster's upgrades as Stone Squadron perks instead of retiring them? Is a
+"read the report" mode worth keeping at all, or just drop Visual Dx?
 ## 2026-11-09 (later) — 🛩️ Stone Squadron: more realistic dusting (plume, near-contact, popcorning, bubbles) + mission music
 
 Andrew: likes the dusting, make it even more realistic (picked all four: dust plume, near-contact dusting, popcorn technique,
