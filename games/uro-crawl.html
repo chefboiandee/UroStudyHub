@@ -15,8 +15,16 @@
 
   URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier (start at that boss; ?boss=1 rolls one; a normal
               run rolls the final boss from the seed)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
+              ?mods=holmium_joules,scalpel_backstab (weapon mods at run start; grants the weapon if not carried)
+              ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
-  Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), skipRoom(), step(n), startRun() }
+  Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), giveMod(id), setAspect(weapon, aspect),
+              skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... } }
+
+  Upgrade paths (Hades-style): MODS is a per-weapon table of upgrades in three branches (POWER / CONTROL / SPECIAL),
+  tiers 1-3 with prerequisites, up to 6 mods + 1 capstone per weapon per run, offered by "Instrument Rep" doors
+  (the door plaque shows the weapon's glyph + class colour) and sold as shop samples. ASPECTS are 3 pre-run variants
+  per starting instrument, chosen on the title screen; II and III unlock with residency level (PGY-2 / PGY-4).
 
   Keys:  WASD / arrows move · mouse aims · LMB fire · RMB or Space alt · Shift roll · 1-5 slots · Q/E or wheel cycle · R ultimate · Esc/P pause
   Touch: left thumb floating stick · FIRE (hold, auto-aim) · SWAP · ALT · ROLL · ULT (once you hold the da Vinci console) · tap weapon slots
@@ -96,6 +104,25 @@ p{margin:6px 0;color:#c9d6e0}
 .card.owned{opacity:.55}
 .slotpick{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
 
+/* weapon mods (Instrument Rep) + aspects */
+.tag.br-POWER{background:#4a2218;color:#ffb3a3}.tag.br-CONTROL{background:#143a4a;color:#9fe6ff}.tag.br-SPECIAL{background:#3a1f5e;color:#e6c9ff}
+.tag.capstone{background:linear-gradient(90deg,#7a5a10,#b8891a);color:#fff3c9}
+.tag.sel{background:#1f5e3e;color:#c9ffe0}.tag.locked{background:#2a3440;color:#8fa6b8}
+.card.capstone{border-color:var(--gold);box-shadow:0 0 26px rgba(255,209,102,.35)}
+.card.capstone:hover{border-color:#ffe9a8}
+.card.asp{flex:1 1 180px;max-width:300px;min-width:160px}
+.card.asp.sel{border-color:#45c66e;box-shadow:0 0 18px rgba(69,198,110,.3)}
+.card.asp.locked{opacity:.55;cursor:default}
+.card.asp.locked:hover{transform:none;border-color:var(--line);box-shadow:none}
+.asprow{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.asprow:first-child{border-top:0;margin-top:0;padding-top:0}
+.asphead{display:flex;align-items:center;gap:10px}
+.asphead canvas{width:40px;height:40px;display:block}
+.asphead b{font-size:17px}
+.asprow .cards{margin:6px 0 0;justify-content:flex-start}
+#aspectLine{display:block;margin-top:8px;color:var(--mute);font-size:12px}
+@media (max-height:420px){.card.asp .desc{font-size:11px}.asprow{margin-top:6px;padding-top:4px}}
+
 /* settings */
 .set{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .set label{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel2);padding:10px 14px;border-radius:14px;min-height:48px}
@@ -161,8 +188,10 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
         <button class="btn" id="btnBestiary">BESTIARY</button>
         <button class="btn" id="btnSettings">SETTINGS</button>
       </div>
+      <button class="btn" id="btnAspects">ASPECTS <span class="hint" style="font-weight:700">· instrument variants</span></button>
       <button class="btn danger" id="btnExit" style="display:none">EXIT</button>
     </div>
+    <span id="aspectLine"></span>
     <div style="margin-top:14px;text-align:left">
       <div class="row" style="justify-content:space-between"><b id="resLevel">Residency: PGY-1</b><span class="hint" id="resXp">0 / 100 XP</span></div>
       <div class="xpbar" style="margin-top:6px"><i id="resBar" style="width:0%"></i></div>
@@ -250,6 +279,27 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
   </div>
 </div>
 
+<!-- INSTRUMENT REP (weapon mods) -->
+<div class="ov" id="ov-mod">
+  <div class="panel wide" style="text-align:center">
+    <h2 id="modTitle">Instrument Rep</h2>
+    <div class="bubble" id="modTalk" style="text-align:left">Doc. DOC.</div>
+    <p class="hint" id="modSub"></p>
+    <div class="cards" id="modCards"></div>
+    <div class="row center"><button class="btn" id="btnModReroll">REROLL (20 RVU)</button><button class="btn" id="btnModSkip">NO THANKS</button></div>
+  </div>
+</div>
+
+<!-- ASPECTS (pre-run instrument variants) -->
+<div class="ov" id="ov-aspects">
+  <div class="panel wide">
+    <h2>Instrument aspects <span class="hint" id="aspectHint"></span></h2>
+    <p class="hint">An aspect is a pre-run variant of an instrument: it changes how the tool works, not just its numbers. Aspect I is the classic. Aspects II and III unlock at PGY-2 and PGY-4. Your picks apply to the starting Holmium and Scalpel and to a Loop or Trilogy you find on the way.</p>
+    <div id="aspectList"></div>
+    <div class="row center" style="margin-top:14px"><button class="btn primary" id="btnAspectsBack">DONE</button></div>
+  </div>
+</div>
+
 <!-- SHOP -->
 <div class="ov" id="ov-shop">
   <div class="panel narrow">
@@ -320,10 +370,10 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 
 // localStorage behind try/catch: the game must run with storage unavailable.
 var STORE_KEY = 'urocrawl.v1';
-var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
+var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, aspects: {}, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
 function loadMeta() {
   try { var raw = localStorage.getItem(STORE_KEY); if (raw) { var o = JSON.parse(raw); if (o && typeof o === 'object') { for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) META[k] = o[k]; } } } catch (e) {}
-  META.settings = META.settings || {}; META.bestiary = META.bestiary || {}; META.seen = META.seen || {};
+  META.settings = META.settings || {}; META.bestiary = META.bestiary || {}; META.seen = META.seen || {}; META.aspects = META.aspects || {};
   var d = { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 };
   for (var s in d) if (META.settings[s] === undefined) META.settings[s] = d[s];
   if (META.settings.shake === null) {
@@ -422,7 +472,7 @@ function pointerDown(ev) {
     var TL = touchLayout();
     // HUD weapon slots first
     var slot = hudSlotAt(p.x, p.y);
-    if (slot >= 0) { Input.pointers[ev.pointerId] = { kind: 'slot' }; edge('slot' + (slot + 1)); return; }
+    if (slot >= 0) { Input.pointers[ev.pointerId] = { kind: 'slot' }; edge('slot' + (slot + 1)); G.detailSlot = slot; G.detailT = 3; return; }   // tap: select + show the weapon-detail card for 3 s
     if (hitCircle(p.x, p.y, TL.fire)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'fire' }; Input.buttons.fire = ev.pointerId; edge('fire'); return; }
     if (hitCircle(p.x, p.y, TL.alt)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'alt' }; Input.buttons.alt = ev.pointerId; edge('alt'); return; }
     if (hitCircle(p.x, p.y, TL.roll)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'roll' }; Input.buttons.roll = ev.pointerId; edge('roll'); return; }
@@ -441,7 +491,7 @@ function pointerDown(ev) {
   if (Input.mode === 'touch' && !TOUCH_DEVICE) Input.mode = 'kb';
   Input.mx = p.x; Input.my = p.y;
   if (G.screen === 'run' && !G.overlay) {
-    var s2 = hudSlotAt(p.x, p.y); if (s2 >= 0 && ev.button === 0) { edge('slot' + (s2 + 1)); return; }
+    var s2 = hudSlotAt(p.x, p.y); if (s2 >= 0 && ev.button === 0) { edge('slot' + (s2 + 1)); G.detailSlot = s2; G.detailT = 3; return; }
     if (ev.button === 0 && hudPauseAt(p.x, p.y)) { edge('pause'); return; }
   }
   if (ev.button === 0) { Input.mouseFire = true; edge('fire'); }
@@ -762,24 +812,33 @@ function inHazard(x, y, kind) { var hz = G.hazards; for (var i = 0; i < hz.lengt
    Balance target: ~30–60 DPS at ×1.0 on the 960×540 arena.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 function wcls(w) { var d = w.def; return d.modeCls ? d.modeCls[w.mode] : d.cls; }
-function wmod(w, k) { return (w.mods && w.mods[k]) || 1; }
+// per-weapon numbers: rarity tweaks (w.mods) × mod/aspect stats (w.ms). Multipliers via wmod, additive keys (pierce, chain) via wadd.
+function wmod(w, k) { return ((w.mods && w.mods[k]) || 1) * ((w.ms && w.ms[k]) || 1); }
+function wadd(w, k) { return ((w.mods && w.mods[k]) || 0) + ((w.ms && w.ms[k]) || 0); }
+function wflag(w, k) { return !!(w && w.flags && w.flags[k]); }   // behaviour flag set by a mod or an aspect
+function wasp(w) { return w && w.aspect ? w.aspect : null; }       // the weapon's aspect id ('dusting', 'lunger', …)
 function muzzle() { var a = P.aim; return { x: P.x + Math.cos(a) * 20, y: P.y + Math.sin(a) * 20, a: a }; }
 function tickReady(w, dt, interval) { w.tick = (w.tick || 0) - dt; if (w.tick <= 0) { w.tick += interval; if (w.tick < 0) w.tick = 0; return true; } return false; }
 function beamWidth(hw) { return hw * (hasBoon('bigfiber') ? 1.2 : 1); }
 // continuous beam / jet / stream. Returns the hit list on a damage tick, else null.
 function beamFire(w, dt, o) {
-  var m = muzzle(), range = o.range * wmod(w, 'range'), hw = beamWidth(o.hw);
-  var len = raycast(m.x, m.y, m.a, range);
-  w.fx = { kind: 'beam', x0: m.x, y0: m.y, x1: m.x + Math.cos(m.a) * len, y1: m.y + Math.sin(m.a) * len, hw: hw, t: 0.08, cls: wcls(w), style: o.style || 'beam', a: m.a };
+  var m = muzzle(), range = o.range * wmod(w, 'range'), hw = beamWidth(o.hw) * wmod(w, 'hw');
+  var len = raycast(m.x, m.y, m.a, range), whirl = wflag(w, 'whirlpool');
+  w.fx = { kind: 'beam', x0: m.x, y0: m.y, x1: m.x + Math.cos(m.a) * len, y1: m.y + Math.sin(m.a) * len, hw: hw, t: 0.08, cls: wcls(w), style: o.style || 'beam', a: m.a, whirl: whirl };
   if (o.sfx) Snd.sfx(o.sfx);
   if (!tickReady(w, dt, o.interval / wmod(w, 'rate') / (o.rateBoost || 1))) return null;
   var hits = enemiesInBeam(m.x, m.y, m.a, len, hw);
-  var n = o.pierceAll ? 999 : 1 + (o.pierce || 0) + (w.mods.pierce || 0), done = [];
+  var n = o.pierceAll ? 999 : 1 + (o.pierce || 0) + wadd(w, 'pierce'), done = [];
   for (var i = 0; i < hits.length && i < n; i++) {
     var e = hits[i].e;
     dealDamage(e, o.dmg * wmod(w, 'dmg'), wcls(w), { wid: w.id, knock: o.knock || 0, ang: m.a, split: o.split, status: o.status, strip: o.strip || 0, cauterize: o.cauterize, stun: o.stun, hx: hits[i].fx - Math.cos(m.a) * e.r * 0.6, hy: hits[i].fy - Math.sin(m.a) * e.r * 0.6 });
     burst(e.x - Math.cos(m.a) * e.r * 0.6, e.y - Math.sin(m.a) * e.r * 0.6, 2, { color: CLASSES[wcls(w)].color, speed: 90, life: 0.25, size: 2 });
     done.push(e);
+  }
+  // Whirlpool capstone: a vortex of shards circles the beam — everything within ~35 px of the beam line is hit (60%, no pierce limit)
+  if (whirl) {
+    var near = enemiesInBeam(m.x, m.y, m.a, len, hw + 30);
+    for (var q = 0; q < near.length; q++) { var we = near[q].e; if (done.indexOf(we) >= 0) continue; dealDamage(we, o.dmg * wmod(w, 'dmg') * 0.6, wcls(w), { wid: w.id, knock: 30, ang: ang(near[q].fx, near[q].fy, we.x, we.y) + 1.2, split: 'frag', hx: near[q].fx, hy: near[q].fy }); burst(we.x, we.y, 2, { color: '#ffe9b0', speed: 120, life: 0.3, size: 2, kind: 'frag' }); done.push(we); }
   }
   if (!done.length && len < range - 2) burst(w.fx.x1, w.fx.y1, 1, { color: CLASSES[wcls(w)].color, speed: 60, life: 0.2, size: 2 });
   if (wcls(w) === 'FLUID') pushNecrosis(w.fx.x1, w.fx.y1, 10);
@@ -807,12 +866,19 @@ function aimPointClamped(maxLen) {
   var x = clamp(P.x + Math.cos(a) * d, ARENA.x + 10, ARENA.x + ARENA.w - 10), y = clamp(P.y + Math.sin(a) * d, ARENA.y + 10, ARENA.y + ARENA.h - 10);
   return { x: x, y: y };
 }
+// Moses: the boon splits 2 pellets off a landed pulse; the Holmium mod adds 2 more (4 with both)
 function mosesPellets(w, m, dmg) {
-  if (!hasBoon('moses')) return;
-  for (var k = -1; k <= 1; k += 2) {
-    var a = m.a + k * 0.16;
+  var n = (hasBoon('moses') ? 1 : 0) + (wflag(w, 'moses') ? 1 : 0); if (!n) return;
+  dmg *= wmod(w, 'dmg');
+  for (var ring = 1; ring <= n; ring++) for (var k = -1; k <= 1; k += 2) {
+    var a = m.a + k * 0.16 * ring;
     spawnBullet({ kind: 'pellet', x: m.x, y: m.y, vx: Math.cos(a) * 620, vy: Math.sin(a) * 620, r: 5, dmg: dmg * 0.45, cls: 'LITHO', hostile: false, life: 0.45, wid: w.id, color: '#bff6ff', split: 'frag' });
   }
+}
+// Popcorn mod: a landed FRAGMENT pulse throws three hot fragments that orbit the impact for 0.9 s and hit what they touch
+function popcornBurst(w, e, dmg) {
+  for (var k = 0; k < 3; k++) spawnBullet({ kind: 'orbit', x: e.x, y: e.y, cx: e.x, cy: e.y, oa: k / 3 * TAU, orad: 8, ospin: 9, ogrow: 34, r: 5, dmg: dmg * 0.3, cls: 'LITHO', hostile: false, life: 0.9, wid: w.id, color: '#ffe9b0', split: 'frag', rehit: 0.25, hitIds: [] });
+  Snd.sfx('tink');
 }
 
 function aimPointAt(d) { return { x: clamp(P.x + Math.cos(P.aim) * d, ARENA.x + 10, ARENA.x + ARENA.w - 10), y: clamp(P.y + Math.sin(P.aim) * d, ARENA.y + 10, ARENA.y + ARENA.h - 10) }; }
@@ -833,15 +899,41 @@ var WEAPONS = {
     altDesc: 'Alt toggles DUST (fast weak ticks, stones → dust + coins) ↔ FRAGMENT (slow heavy pulses, splits stones, knockback).',
     modes: ['DUST', 'FRAGMENT'],
     fire: function (w, dt, held) {
+      var longPulse = wflag(w, 'longPulse'), asp = wasp(w), fragAsp = asp === 'fragmenting', popAsp = asp === 'popcorning' && !P.moving;
       if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.5); if (w.locked <= 0) w.heat = 0; w.tick = 0; return; }
-      if (!held) { w.heat = Math.max(0, w.heat - dt * 0.42); w.tick = 0; return; }
-      w.heat += dt / 3.4;
-      if (w.heat >= 1) { w.heat = 1; w.locked = 2; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); Snd.sfx('cauter'); return; }
-      var frag = w.mode === 1;
-      var hits = beamFire(w, dt, { range: 230, hw: 5, interval: frag ? 0.45 : 0.08, dmg: frag ? 24 : 3.4, knock: frag ? 140 : 0, split: frag ? 'frag' : 'dust', sfx: 'beam', style: frag ? 'pulse' : 'beam' });
-      if (hits && frag) { mosesPellets(w, muzzle(), 24); shakeIt(2); }
+      if (!held) { w.heat = Math.max(0, w.heat - dt * 0.42 * (longPulse ? 1.5 : 1)); w.tick = 0; return; }
+      if (!fragAsp) w.heat += dt / 3.4 / (longPulse ? 1.5 : 1) / (popAsp ? 1.3 : 1);   // the Fragmenting aspect heats per pulse instead
+      if (w.heat >= 1) { w.heat = 1; w.locked = longPulse ? 1.2 : 2; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); Snd.sfx('cauter'); return; }
+      var frag = fragAsp || w.mode === 1, pulseDmg = fragAsp ? 26 : 24;
+      var hits = beamFire(w, dt, fragAsp
+        ? { range: 230, hw: 5, interval: 0.32, dmg: 26, knock: 180, split: 'frag', sfx: 'beam', style: 'pulse' }
+        : { range: 230, hw: 5, interval: frag ? 0.45 : 0.08, dmg: frag ? 24 : 3.4, knock: frag ? 140 : 0, split: frag ? 'frag' : 'dust', sfx: 'beam', style: frag ? 'pulse' : 'beam' });
+      if (popAsp && w.fx) w.fx.boil = true;   // the boiling tip is drawn every frame you stand still
+      if (!hits) return;
+      if (fragAsp) w.heat += 0.1;
+      if (frag) { mosesPellets(w, muzzle(), pulseDmg); shakeIt(2); if (hits.length && wflag(w, 'popcorn')) popcornBurst(w, hits[0], pulseDmg * wmod(w, 'dmg')); }
+      // Popcorning aspect: stand still and the beam tip boils — on each tick everything within 38 px of the tip takes 60%, fragments and dust get tossed
+      if (popAsp && w.fx) {
+        var tip = w.fx, boil = enemiesNear(tip.x1, tip.y1, 38);
+        for (var b = 0; b < boil.length; b++) {
+          var be = boil[b]; if (hits.indexOf(be) >= 0) continue;
+          dealDamage(be, (frag ? pulseDmg : 3.4) * wmod(w, 'dmg') * 0.6, 'LITHO', { wid: 'holmium', knock: frag ? 120 : 20, ang: ang(tip.x1, tip.y1, be.x, be.y), split: frag ? 'frag' : 'dust', hx: be.x, hy: be.y });
+          if ((be.id === 'frag' || be.id === 'dust') && !be.dead) { var ta = rr(0, TAU); be.kx += Math.cos(ta) * 220; be.ky += Math.sin(ta) * 220; }
+        }
+        if (boil.length) burst(tip.x1, tip.y1, 2, { color: '#ffe9b0', speed: 140, life: 0.3, size: 2, kind: 'frag' });
+      }
     },
-    altPress: function (w) { w.mode = 1 - w.mode; },
+    altPress: function (w) {
+      if (wasp(w) === 'fragmenting') { // Fragmenting aspect: alt is a SUPERPULSE (one ×2.5 pulse now, 1.8 s cooldown), not a mode toggle
+        if (w.cd2 > 0 || w.locked > 0) return; w.cd2 = 1.8;
+        var m = muzzle(), len = raycast(m.x, m.y, m.a, 230 * wmod(w, 'range')), hits = enemiesInBeam(m.x, m.y, m.a, len, 7 * wmod(w, 'hw'));
+        for (var i = 0; i < hits.length && i < 2 + wadd(w, 'pierce'); i++) dealDamage(hits[i].e, 65 * wmod(w, 'dmg'), 'LITHO', { wid: 'holmium', knock: 320, ang: m.a, split: 'frag', hx: hits[i].fx, hy: hits[i].fy, tag: 'SUPERPULSE' });
+        if (hits.length) { mosesPellets(w, m, 26); if (wflag(w, 'popcorn')) popcornBurst(w, hits[0].e, 26 * wmod(w, 'dmg')); }
+        w.heat = Math.min(0.99, w.heat + 0.25); G.fxLines.push({ x0: m.x, y0: m.y, x1: m.x + Math.cos(m.a) * len, y1: m.y + Math.sin(m.a) * len, t: 0.16, dur: 0.16, color: '#38e8ff', w: 14 }); shakeIt(5); Snd.sfx('shock');
+        return;
+      }
+      w.mode = 1 - w.mode;
+    },
     meter: function (w) { return { v: w.heat, color: w.locked > 0 ? '#ff5c5c' : '#ff9f43', label: w.locked > 0 ? 'HOT!' : 'heat' }; }
   },
   /* ───────────── MUST 2: Scalpel ───────────── */
@@ -850,29 +942,44 @@ var WEAPONS = {
     desc: 'Fast wide melee slash that makes things bleed. Get in their face.',
     altDesc: 'Alt: lunge — a short dash-stab with i-frames (1.2 s cooldown).',
     fire: function (w, dt, held) {
+      var asp = wasp(w), lunger = asp === 'lunger', bleeder = asp === 'bleeder';
       if (w.lunge > 0) {
         w.lunge -= dt; P.x += w.lx * dt; P.y += w.ly * dt; P.inv = Math.max(P.inv, 0.06); resolveCircle(P, P.r);
         var hs = enemiesInArc(P.x, P.y, P.aim, 44, Math.PI);
-        for (var i = 0; i < hs.length; i++) { if (w.lungeHit.indexOf(hs[i]) >= 0) continue; w.lungeHit.push(hs[i]); dealDamage(hs[i], 28 * wmod(w, 'dmg'), 'CUT', { wid: 'scalpel', knock: 180, ang: P.aim, status: { bleed: [3, 4] } }); }
+        for (var i = 0; i < hs.length; i++) { if (w.lungeHit.indexOf(hs[i]) >= 0) continue; w.lungeHit.push(hs[i]); WEAPONS.scalpel.cut(w, hs[i], lunger ? 36 : 28, 180, true); }
         w.fx = { kind: 'arc', x: P.x, y: P.y, a: P.aim, rad: 50, half: 0.5, t: 0.1, dur: 0.1, cls: 'CUT', dir: 1 };
         return;
       }
       if (!held || w.cd > 0) return;
-      w.cd = 0.3 / wmod(w, 'rate'); w.dir = -(w.dir || 1);
-      var rad = 70 * wmod(w, 'range');
-      w.fx = { kind: 'arc', x: P.x, y: P.y, a: P.aim, rad: rad, half: 1.25, t: 0.14, dur: 0.14, cls: 'CUT', dir: w.dir };
+      w.cd = (lunger ? 0.4 : 0.3) / wmod(w, 'rate'); w.dir = -(w.dir || 1);
+      var rad = 70 * wmod(w, 'range'), half = lunger ? 0.9 : 1.25;
+      w.fx = { kind: 'arc', x: P.x, y: P.y, a: P.aim, rad: rad, half: half, t: 0.14, dur: 0.14, cls: 'CUT', dir: w.dir };
       Snd.sfx('slash');
-      var hits = enemiesInArc(P.x, P.y, P.aim, rad, 1.25);
-      for (var j = 0; j < hits.length; j++) dealDamage(hits[j], 16 * wmod(w, 'dmg'), 'CUT', { wid: 'scalpel', knock: 70, ang: P.aim, status: { bleed: [3, 4] } });
+      var hits = enemiesInArc(P.x, P.y, P.aim, rad, half);
+      for (var j = 0; j < hits.length; j++) WEAPONS.scalpel.cut(w, hits[j], lunger ? 22 : bleeder ? 12.8 : 16, 70, false);
       if (hits.length) shakeIt(1.5);
     },
+    // one scalpel hit: Backstab doubling (enemies moving away from you, or any lunge hit), Bleed Stacking, the I&D capstone's weak-point drain
+    cut: function (w, e, base, knock, lunge) {
+      var o = { wid: 'scalpel', knock: knock, ang: P.aim, status: { bleed: wasp(w) === 'bleeder' ? [5, 8] : [3, 4] } };
+      if (wflag(w, 'bleedStack')) o.bleedStack = true;
+      if (wflag(w, 'backstab') && (lunge || fromBehind(e))) { o.mul = 2; o.tag = 'BACKSTAB!'; }
+      if (wflag(w, 'incisionDrainage')) { o.wpMult = 6; o.wpLabel = 'I&D!'; o.onWp = function (t, hx, hy) { drainPus(hx, hy, 36, 4); }; }
+      dealDamage(e, base * wmod(w, 'dmg'), 'CUT', o);
+    },
     altPress: function (w) {
+      var asp = wasp(w);
+      if (asp === 'bleeder') { // Bleeder aspect: a thrown spinning blade (220 px, pierces one, heavy bleed) instead of the lunge
+        if (w.cd2 > 0) return; w.cd2 = 0.9; var m = muzzle(); Snd.sfx('shot');
+        spawnBullet({ kind: 'blade', x: m.x, y: m.y, vx: Math.cos(m.a) * 520, vy: Math.sin(m.a) * 520, r: 7, dmg: 14 * wmod(w, 'dmg'), cls: 'CUT', hostile: false, life: 0.42, wid: 'scalpel', color: '#ff8fa3', status: { bleed: [5, 8] }, pierce: 1 + wadd(w, 'pierce'), hitIds: [], bleedStack: wflag(w, 'bleedStack') });
+        burst(m.x, m.y, 4, { color: '#ff4d6d', speed: 120, life: 0.15, size: 2, dir: m.a, spread: 0.5 }); return;
+      }
       if (w.cd2 > 0 || w.lunge > 0) return;
-      var mv = readMove(), a = mv.mag > 0.2 ? Math.atan2(mv.y, mv.x) : P.aim;
-      w.lunge = 0.18; w.cd2 = 1.2; w.lx = Math.cos(a) * 760; w.ly = Math.sin(a) * 760; w.lungeHit = []; P.inv = Math.max(P.inv, 0.25); P.aim = a;
+      var mv = readMove(), a = mv.mag > 0.2 ? Math.atan2(mv.y, mv.x) : P.aim, lunger = asp === 'lunger', sp = lunger ? 900 : 760;
+      w.lunge = lunger ? 0.22 : 0.18; w.cd2 = lunger ? 0.5 : 1.2; w.lx = Math.cos(a) * sp; w.ly = Math.sin(a) * sp; w.lungeHit = []; P.inv = Math.max(P.inv, 0.25); P.aim = a;
       Snd.sfx('roll'); burst(P.x, P.y, 6, { color: '#ff4d6d', speed: 120, life: 0.3, size: 3 });
     },
-    meter: function (w) { return { v: 1 - clamp(w.cd2 / 1.2, 0, 1), color: '#ff4d6d', label: 'lunge' }; }
+    meter: function (w) { var asp = wasp(w), cdMax = asp === 'bleeder' ? 0.9 : asp === 'lunger' ? 0.5 : 1.2; return { v: 1 - clamp(w.cd2 / cdMax, 0, 1), color: '#ff4d6d', label: asp === 'bleeder' ? 'blade' : 'lunge' }; }
   },
   /* ───────────── MUST 3: Resectoscope loop (with Button / Roller attachments) ───────────── */
   loop: {
@@ -880,26 +987,56 @@ var WEAPONS = {
     desc: 'Slow, huge sweeping cut that hits everything in the arc and strips shields. Long recovery.',
     altDesc: 'Alt swaps the attachment: LOOP (cut) → BUTTON (vaporize, burn) → ROLLER (coag, stun).',
     modes: ['LOOP', 'BUTTON', 'ROLLER'],
+    times: function (w) { var fast = wflag(w, 'fastReturn'); return { windup: fast ? 0.18 : 0.25, active: 0.2, recover: fast ? 0.22 : 0.45 }; },
     fire: function (w, dt, held) {
-      if (w.mode === 1) { if (!held) { w.tick = 0; return; } coneFire(w, dt, { range: 85, half: 0.7, interval: 0.1, dmg: 3.2, status: { burn: [2.5, 6] }, sfx: 'arc', style: 'vapor' }); return; }
-      if (w.mode === 2) { if (!held) { w.tick = 0; return; } coneFire(w, dt, { range: 80, half: 0.6, interval: 0.12, dmg: 2.6, cauterize: true, stun: 0.3, sfx: 'arc', style: 'heat' }); return; }
-      // the loop: windup 0.25 → active 0.2 → recovery 0.45
+      var asp = wasp(w), att = asp === 'buttonatt' || asp === 'rolleratt', T = WEAPONS.loop.times(w);
+      // the loop: windup 0.25 → active 0.2 (the cut; the TURP Special adds a golden coag return) → recovery 0.45 (Fast Return: 0.18 / 0.22)
       if (w.swing) {
         var s = w.swing; s.t += dt;
-        if (s.phase === 0 && s.t >= 0.25) { s.phase = 1; s.t = 0; Snd.sfx('swing'); var rad = 110 * wmod(w, 'range'), hits = enemiesInArc(P.x, P.y, s.a, rad, 1.6);
-          for (var i = 0; i < hits.length; i++) dealDamage(hits[i], 45 * wmod(w, 'dmg'), 'CUT', { wid: 'loop', knock: 160, ang: s.a, status: { bleed: [3, 5] }, strip: 1 });
-          if (hits.length) { shakeIt(4); hitstop(0.05); }
-          w.fx = { kind: 'arc', x: P.x, y: P.y, a: s.a, rad: rad, half: 1.6, t: 0.2, dur: 0.2, cls: 'CUT', dir: 1, loop: true }; }
-        else if (s.phase === 1 && s.t >= 0.2) { s.phase = 2; s.t = 0; }
-        else if (s.phase === 2 && s.t >= 0.45) { w.swing = null; }
+        if (s.phase === 0 && s.t >= T.windup) { s.phase = 1; s.t = 0; WEAPONS.loop.sweep(w, s.a, 1); }
+        else if (s.phase === 1 && s.t >= T.active) { s.phase = 2; s.t = 0; if (wflag(w, 'turp')) WEAPONS.loop.sweep(w, s.a, 2); }
+        else if (s.phase === 2 && s.t >= T.recover) { w.swing = null; }
         return;
       }
+      if (att) { // attachment aspects: the cone IS the primary; the loop sweep lives on alt (1.2 s cooldown)
+        if (!held) { w.tick = 0; return; }
+        if (asp === 'buttonatt') coneFire(w, dt, { range: 95, half: 0.75, interval: 0.1, dmg: 4.0, status: { burn: [2.5, 6] }, sfx: 'arc', style: 'vapor' });
+        else coneFire(w, dt, { range: 85, half: 0.65, interval: 0.12, dmg: 3.0, cauterize: true, stun: 0.35, sfx: 'arc', style: 'heat' });
+        return;
+      }
+      if (w.mode === 1) { if (!held) { w.tick = 0; return; } coneFire(w, dt, { range: 85, half: 0.7, interval: 0.1, dmg: 3.2, status: { burn: [2.5, 6] }, sfx: 'arc', style: 'vapor' }); return; }
+      if (w.mode === 2) { if (!held) { w.tick = 0; return; } coneFire(w, dt, { range: 80, half: 0.6, interval: 0.12, dmg: 2.6, cauterize: true, stun: 0.3, sfx: 'arc', style: 'heat' }); return; }
       if (!held) return;
       w.swing = { phase: 0, t: 0, a: P.aim };
     },
-    altPress: function (w) { if (w.swing) return; w.mode = (w.mode + 1) % 3; },
-    meter: function (w) { if (!w.swing) return { v: 1, color: '#ff4d6d', label: 'ready' }; var s = w.swing; var v = s.phase === 0 ? s.t / 0.25 : s.phase === 1 ? 1 : 1 - s.t / 0.45; return { v: v, color: s.phase === 2 ? '#8ea2b6' : '#ff4d6d', label: s.phase === 0 ? 'windup' : s.phase === 1 ? 'CUT' : 'recover' }; },
-    slowWhile: function (w) { return w.swing ? 0.55 : 1; }
+    // pass 1 = the cut (Heavy Sweep, Blend Current, Wire Whip hook in here); pass 2 = the TURP Special's coag return (ENERGY, cauterizes, stuns)
+    sweep: function (w, a, pass) {
+      var rad = 110 * wmod(w, 'range'), heavy = wflag(w, 'heavySweep'), blend = wflag(w, 'blend'), hits = enemiesInArc(P.x, P.y, a, rad, 1.6);
+      if (pass === 1) {
+        Snd.sfx('swing');
+        for (var i = 0; i < hits.length; i++) dealDamage(hits[i], 45 * wmod(w, 'dmg'), 'CUT', { wid: 'loop', knock: 160 * (heavy ? 1.5 : 1), ang: a, status: { bleed: [3, 5] }, strip: 1, cauterize: blend });
+        if (hits.length) { shakeIt(heavy ? 6 : 4); hitstop(heavy ? 0.08 : 0.05); }
+        w.fx = { kind: 'arc', x: P.x, y: P.y, a: a, rad: rad, half: 1.6, t: 0.2, dur: 0.2, cls: 'CUT', dir: 1, loop: true };
+        if (wflag(w, 'wireWhip')) addField({ kind: 'wire', x: P.x, y: P.y, a: a, rad: rad - 8, half: 1.6, dur: 1.5, every: 0.3, dmg: 7 * wmod(w, 'dmg') });
+      } else {
+        Snd.sfx('cauter');
+        for (var j = 0; j < hits.length; j++) dealDamage(hits[j], 22 * wmod(w, 'dmg'), 'ENERGY', { wid: 'loop', knock: 60, ang: a, cauterize: true, stun: 0.4, tag: 'TURP' });
+        w.fx = { kind: 'arc', x: P.x, y: P.y, a: a, rad: rad, half: 1.6, t: 0.2, dur: 0.2, cls: 'ENERGY', dir: -1, loop: true, gold: true };
+        if (hits.length) shakeIt(3);
+      }
+    },
+    altPress: function (w) {
+      if (w.swing) return; var asp = wasp(w);
+      if (asp === 'buttonatt' || asp === 'rolleratt') { if (w.cd2 > 0) return; w.cd2 = 1.2; w.swing = { phase: 0, t: 0, a: P.aim }; return; }
+      w.mode = (w.mode + 1) % 3;
+    },
+    meter: function (w) {
+      var asp = wasp(w), T = WEAPONS.loop.times(w);
+      if (!w.swing) return (asp === 'buttonatt' || asp === 'rolleratt') ? { v: 1 - clamp(w.cd2 / 1.2, 0, 1), color: '#ff4d6d', label: w.cd2 > 0 ? 'sweep' : 'sweep ready' } : { v: 1, color: '#ff4d6d', label: 'ready' };
+      var s = w.swing, v = s.phase === 0 ? s.t / T.windup : s.phase === 1 ? 1 : 1 - s.t / T.recover;
+      return { v: v, color: s.phase === 2 ? '#8ea2b6' : '#ff4d6d', label: s.phase === 0 ? 'windup' : s.phase === 1 ? 'CUT' : 'recover' };
+    },
+    slowWhile: function (w) { return w.swing ? (wflag(w, 'fastReturn') ? 0.75 : 0.55) : 1; }
   },
   /* ───────────── MUST 4: Bovie monopolar cautery ───────────── */
   bovie: {
@@ -911,24 +1048,39 @@ var WEAPONS = {
       if (!held) { w.power = Math.min(1, w.power + dt * 0.45); w.tick = 0; w.chainT = 0; return; }
       if (w.drained) { w.power = Math.min(1, w.power + dt * 0.45); if (w.power >= 0.3) w.drained = false; else return; }
       w.power -= dt * 0.32; if (w.power <= 0) { w.power = 0; w.drained = true; addText(P.x, P.y - 34, 'DRAINED', { color: '#ffb630', size: 12 }); return; }
-      var m = muzzle(), range = 170 * wmod(w, 'range');
+      // Spray Mode: a 140° cone at 70% reach with longer jumps. Ground Pad (mod or boon): no saline fizzle.
+      var m = muzzle(), spray = wflag(w, 'spray'), range = 170 * wmod(w, 'range') * (spray ? 0.7 : 1), half = spray ? 1.22 : 0.75, hop = spray ? 143 : 110;
       if (!tickReady(w, dt, 0.15 / wmod(w, 'rate'))) return;
       Snd.sfx('arc');
-      if (inHazard(P.x, P.y, 'saline') && !hasBoon('groundpad') && rnd() < 0.7) {
+      if (inHazard(P.x, P.y, 'saline') && !hasBoon('groundpad') && !wflag(w, 'groundPad') && rnd() < 0.7) {
         burst(m.x, m.y, 4, { color: '#ffb630', speed: 140, life: 0.2, size: 2 }); w.fx = { kind: 'chain', pts: [{ x: m.x, y: m.y }, { x: m.x + Math.cos(m.a + rr(-1, 1)) * 30, y: m.y + Math.sin(m.a + rr(-1, 1)) * 30 }], t: 0.08, cls: 'ENERGY', fizzle: true };
         if (!w.fizzT || G.time - w.fizzT > 0.9) { w.fizzT = G.time; addText(P.x, P.y - 34, 'FIZZLE (saline)', { color: '#8ea2b6', size: 11 }); }
         return;
       }
-      var cands = enemiesInArc(m.x, m.y, m.a, range, 0.75).filter(function (e) { return raycast(m.x, m.y, ang(m.x, m.y, e.x, e.y), dist(m.x, m.y, e.x, e.y)) >= dist(m.x, m.y, e.x, e.y) - e.r - 4; });
+      var cands = enemiesInArc(m.x, m.y, m.a, range, half).filter(function (e) { return raycast(m.x, m.y, ang(m.x, m.y, e.x, e.y), dist(m.x, m.y, e.x, e.y)) >= dist(m.x, m.y, e.x, e.y) - e.r - 4; });
       if (!cands.length) { w.fx = { kind: 'chain', pts: [{ x: m.x, y: m.y }, { x: m.x + Math.cos(m.a + rr(-0.25, 0.25)) * rr(20, 50), y: m.y + Math.sin(m.a + rr(-0.25, 0.25)) * rr(20, 50) }], t: 0.06, cls: 'ENERGY', idle: true }; return; }
-      var jumps = 3 + (hasBoon('groundpad') ? 1 : 0) + (w.mods.pierce || 0), pts = [{ x: m.x, y: m.y }], cur = cands[0], used = [], f = 1, coag = w.mode === 1;
+      var jumps = 3 + (hasBoon('groundpad') ? 1 : 0) + wadd(w, 'pierce') + wadd(w, 'chain'), coag = w.mode === 1, fulg = wflag(w, 'fulguration'), stun = coag ? (fulg ? 0.7 : 0.4) : (fulg ? 0.35 : 0);
+      var zap = function (e, f) { dealDamage(e, 7 * wmod(w, 'dmg') * f * (coag ? 0.7 : 1.2), 'ENERGY', { wid: 'bovie', knock: 20, ang: m.a, strip: 0.35, status: coag ? null : { bleed: [2.5, 3] }, cauterize: coag, stun: stun }); };
+      if (wflag(w, 'chainReaction')) { // capstone: a lightning tree — every node forks to its two nearest neighbours, re-hits allowed (2 per enemy), 10 hits per pulse
+        var branches = [], left = 10, counts = [], frontier = [{ e: cands[0], from: { x: m.x, y: m.y }, f: 1, depth: 0 }];
+        while (frontier.length && left > 0) {
+          var node = frontier.shift(), ce = node.e, ci = G.enemies.indexOf(ce); if (ci < 0 || (counts[ci] || 0) >= 2 || !enemyTargetable(ce)) continue;
+          counts[ci] = (counts[ci] || 0) + 1; left--; zap(ce, node.f); branches.push([node.from, { x: ce.x, y: ce.y }]);
+          if (node.depth + 1 >= jumps) continue;
+          var near = []; for (var k = 0; k < G.enemies.length; k++) { var ne = G.enemies[k]; if (ne === ce || !enemyTargetable(ne) || (counts[k] || 0) >= 2) continue; var dn = dist(ce.x, ce.y, ne.x, ne.y); if (dn < hop) near.push([dn, ne, counts[k] || 0]); }
+          near.sort(function (p, q) { return (p[2] - q[2]) || (p[0] - q[0]); });   // fresh targets first, then nearest; re-hits only when nothing fresh is in reach
+          for (var nb = 0; nb < near.length && nb < 2; nb++) frontier.push({ e: near[nb][1], from: { x: ce.x, y: ce.y }, f: node.f * 0.7, depth: node.depth + 1 });
+        }
+        w.fx = { kind: 'chain', pts: [], branches: branches, t: 0.12, cls: 'ENERGY', tree: true };
+        if (branches.length >= 4) shakeIt(2);
+        return;
+      }
+      var pts = [{ x: m.x, y: m.y }], cur = cands[0], used = [], f = 1;
       for (var j = 0; j < jumps && cur; j++) {
         used.push(cur); pts.push({ x: cur.x, y: cur.y });
-        var base = 7 * wmod(w, 'dmg') * f * (coag ? 0.7 : 1.2);
-        dealDamage(cur, base, 'ENERGY', { wid: 'bovie', knock: 20, ang: m.a, strip: 0.35, status: coag ? null : { bleed: [2.5, 3] }, cauterize: coag, stun: coag ? 0.4 : 0 });
-        f *= 0.7;
-        var next = null, nd = 110;
-        for (var k = 0; k < G.enemies.length; k++) { var e = G.enemies[k]; if (!enemyTargetable(e) || used.indexOf(e) >= 0) continue; var d = dist(cur.x, cur.y, e.x, e.y); if (d < nd) { nd = d; next = e; } }
+        zap(cur, f); f *= 0.7;
+        var next = null, nd = hop;
+        for (var k2 = 0; k2 < G.enemies.length; k2++) { var e = G.enemies[k2]; if (!enemyTargetable(e) || used.indexOf(e) >= 0) continue; var d = dist(cur.x, cur.y, e.x, e.y); if (d < nd) { nd = d; next = e; } }
         cur = next;
       }
       w.fx = { kind: 'chain', pts: pts, t: 0.1, cls: 'ENERGY' };
@@ -942,36 +1094,73 @@ var WEAPONS = {
     desc: 'Very short jackhammer probe: pierces and wrecks stones. You move at 70% while it runs. Loud.',
     altDesc: 'Alt (hold): SUCTION — pulls fragments, loot and pickups to you and inhales tiny stones for coins.',
     fire: function (w, dt, held) {
-      w.active = !!held; if (!held) { w.tick = 0; return; }
-      var m = muzzle(), range = 90 * wmod(w, 'range'), len = raycast(m.x, m.y, m.a, range);
-      w.fx = { kind: 'probe', x0: m.x, y0: m.y, x1: m.x + Math.cos(m.a) * len, y1: m.y + Math.sin(m.a) * len, t: 0.06, cls: 'LITHO', a: m.a, phase: (w.fx && w.fx.phase || 0) + dt * 40 };
-      Snd.sfx('probe'); shakeIt(0.6);
-      if (!tickReady(w, dt, 0.07 / wmod(w, 'rate') / (hasBoon('dualfreq') ? 1.2 : 1))) return;
-      var hits = enemiesInBeam(m.x, m.y, m.a, len, 12);
-      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, 4.2 * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', knock: 30, ang: m.a, split: 'frag', hx: hits[i].fx - Math.cos(m.a) * hits[i].e.r * 0.6, hy: hits[i].fy - Math.sin(m.a) * hits[i].e.r * 0.6 });
+      w.active = !!held; if (!held) { w.tick = 0; w.autoSuck = false; return; }
+      var asp = wasp(w), pneu = asp === 'pneumatic', combo = asp === 'combined';
+      var m = muzzle(), range = 90 * wmod(w, 'range'), len = raycast(m.x, m.y, m.a, range), hw = 12 * wmod(w, 'hw');
+      w.fx = { kind: 'probe', x0: m.x, y0: m.y, x1: m.x + Math.cos(m.a) * len, y1: m.y + Math.sin(m.a) * len, t: 0.06, cls: 'LITHO', a: m.a, phase: (w.fx && w.fx.phase || 0) + dt * (pneu ? 14 : 40), hw: hw };
+      Snd.sfx('probe'); shakeIt(pneu ? 1.2 : 0.6);
+      if (wflag(w, 'handsFree')) { w.autoSuck = true; WEAPONS.trilogy.suction(w, dt); }   // Hands-Free Suction: the suction runs while you fire
+      if (!tickReady(w, dt, (pneu ? 0.24 : 0.07) / wmod(w, 'rate') / (hasBoon('dualfreq') ? 1.2 : 1))) return;
+      w.ticks = (w.ticks || 0) + 1;
+      // Pneumatic aspect: every tick is a piston strike (×3.5, knockback). Combined aspect: every fifth ultrasonic tick is a piston.
+      var piston = pneu || (combo && w.ticks % 5 === 0), hits = enemiesInBeam(m.x, m.y, m.a, len, hw);
+      for (var i = 0; i < hits.length; i++) {
+        var hx = hits[i].fx - Math.cos(m.a) * hits[i].e.r * 0.6, hy = hits[i].fy - Math.sin(m.a) * hits[i].e.r * 0.6;
+        if (piston) dealDamage(hits[i].e, (pneu ? 14.7 : 12) * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', knock: pneu ? 170 : 150, ang: m.a, split: 'frag', hx: hx, hy: hy });
+        else dealDamage(hits[i].e, 4.2 * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', knock: 30, ang: m.a, split: 'frag', hx: hx, hy: hy });
+      }
+      if (piston) { w.fx.piston = true; if (hits.length) { hitstop(0.03); shakeIt(3); } }
     },
-    altHold: function (w, dt, held) {
-      w.suck = !!held; if (!held) return;
-      var a = P.aim, rad = 200; Snd.sfx('suck');
-      w.fx2 = { kind: 'suction', a: a, rad: rad, t: 0.1 };
+    altHold: function (w, dt, held) { if (!held) { if (!w.autoSuck) w.suck = false; return; } WEAPONS.trilogy.suction(w, dt); },
+    // the suction cone (alt, or automatic with Hands-Free): loot + fragments + tiny stones; Vortex Pull and Maelstrom hook in here
+    suction: function (w, dt) {
+      if (w.suckT === G.time) return; w.suckT = G.time; w.suck = true;    // once per sim step even when fire and alt both run it
+      var combo = wasp(w) === 'combined', a = P.aim, rad = combo ? 240 : 200, half = combo ? 0.95 : 0.7, pull = combo ? 1.3 : 1; Snd.sfx('suck');
+      w.fx2 = { kind: 'suction', a: a, rad: rad, half: half, t: 0.1 };
       // pickups
-      for (var i = 0; i < G.pickups.length; i++) { var pk = G.pickups[i]; var d = dist(P.x, P.y, pk.x, pk.y); if (d < rad && Math.abs(angDiff(a, ang(P.x, P.y, pk.x, pk.y))) < 0.7) { var aa = ang(pk.x, pk.y, P.x, P.y); pk.vx = Math.cos(aa) * 340; pk.vy = Math.sin(aa) * 340; pk.magnet = true; } }
+      for (var i = 0; i < G.pickups.length; i++) { var pk = G.pickups[i]; var d = dist(P.x, P.y, pk.x, pk.y); if (d < rad && Math.abs(angDiff(a, ang(P.x, P.y, pk.x, pk.y))) < half) { var aa = ang(pk.x, pk.y, P.x, P.y); pk.vx = Math.cos(aa) * 340 * pull; pk.vy = Math.sin(aa) * 340 * pull; pk.magnet = true; } }
       // tiny stones + shards
       var es = G.enemies;
       for (var j = 0; j < es.length; j++) {
         var e = es[j]; if (!enemyTargetable(e) || e.family !== 'STONE' || e.r > 12 || e.boss) continue;
-        var dd = dist(P.x, P.y, e.x, e.y); if (dd > rad || Math.abs(angDiff(a, ang(P.x, P.y, e.x, e.y))) > 0.7) continue;
-        var ab = ang(e.x, e.y, P.x, P.y); e.x += Math.cos(ab) * 260 * dt; e.y += Math.sin(ab) * 260 * dt;
+        var dd = dist(P.x, P.y, e.x, e.y); if (dd > rad || Math.abs(angDiff(a, ang(P.x, P.y, e.x, e.y))) > half) continue;
+        var ab = ang(e.x, e.y, P.x, P.y); e.x += Math.cos(ab) * 260 * pull * dt; e.y += Math.sin(ab) * 260 * pull * dt;
         if (dd < 24) { e.inhaled = true; e.hp = 0; killEnemy(e, 'LITHO', 'trilogy'); }
       }
       for (var k = G.bullets.length - 1; k >= 0; k--) {
-        var b = G.bullets[k]; if (!b.suckable) continue; var db = dist(P.x, P.y, b.x, b.y); if (db > rad || Math.abs(angDiff(a, ang(P.x, P.y, b.x, b.y))) > 0.8) continue;
+        var b = G.bullets[k]; if (!b.suckable) continue; var db = dist(P.x, P.y, b.x, b.y); if (db > rad || Math.abs(angDiff(a, ang(P.x, P.y, b.x, b.y))) > half + 0.1) continue;
         var ac = ang(b.x, b.y, P.x, P.y); b.vx = Math.cos(ac) * 380; b.vy = Math.sin(ac) * 380;
         if (db < 22) { b.dead = true; addRVU(2, b.x, b.y); Snd.sfx('coin'); }
       }
+      if (wflag(w, 'maelstrom')) WEAPONS.trilogy.maelstrom(w, dt);
+      else if (wflag(w, 'vortex')) WEAPONS.trilogy.vortex(w, dt, a, rad, half);
+    },
+    // Vortex Pull: every non-boss enemy in the cone is drawn toward you; the ones within 70 px are ground for LITHO damage
+    vortex: function (w, dt, a, rad, half) {
+      var es = G.enemies, tick = false; w.vtick = (w.vtick || 0) - dt; if (w.vtick <= 0) { w.vtick = 0.2; tick = true; }
+      for (var i = 0; i < es.length; i++) {
+        var e = es[i]; if (!enemyTargetable(e) || e.boss || e.isArm || e.def.noPush) continue;
+        var d = dist(P.x, P.y, e.x, e.y); if (d > rad + e.r || Math.abs(angDiff(a, ang(P.x, P.y, e.x, e.y))) > half) continue;
+        if (!e.def.stationary && d > 40) { var ab = ang(e.x, e.y, P.x, P.y); e.x += Math.cos(ab) * 90 * dt; e.y += Math.sin(ab) * 90 * dt; }
+        if (tick && d < 70 + e.r) dealDamage(e, 2.5 * wmod(w, 'dmg'), 'LITHO', { wid: 'trilogy', split: 'frag' });
+      }
+      w.fx2.vortex = true;
+    },
+    // Maelstrom capstone: a tight vortex 120 px ahead drags enemies into its eye, grinds them (LITHO) and shatters stones (×1.5)
+    maelstrom: function (w, dt) {
+      var cx = P.x + Math.cos(P.aim) * 120, cy = P.y + Math.sin(P.aim) * 120, R = 95, eye = 30, es = G.enemies, tick = false;
+      w.vtick = (w.vtick || 0) - dt; if (w.vtick <= 0) { w.vtick = 0.2; tick = true; }
+      for (var i = 0; i < es.length; i++) {
+        var e = es[i]; if (!enemyTargetable(e) || e.boss || e.isArm || e.def.noPush) continue;
+        var d = dist(cx, cy, e.x, e.y); if (d > R + e.r) continue;
+        if (!e.def.stationary && d > 6) { var ab = ang(e.x, e.y, cx, cy), step = Math.min(d, 220 * dt); e.x += Math.cos(ab) * step + Math.cos(ab + Math.PI / 2) * 70 * dt; e.y += Math.sin(ab) * step + Math.sin(ab + Math.PI / 2) * 70 * dt; }
+        if (tick && d < eye + e.r) dealDamage(e, 6 * wmod(w, 'dmg') * (e.family === 'STONE' ? 1.5 : 1), 'LITHO', { wid: 'trilogy', split: 'frag', hx: e.x, hy: e.y });
+      }
+      w.fx2 = { kind: 'maelstrom', x: cx, y: cy, r: R, eye: eye, t: 0.1 };
+      if (tick) burst(cx + rr(-eye, eye), cy + rr(-eye, eye), 2, { color: '#bff6ff', speed: 40, life: 0.3, size: 2 });
     },
     meter: function (w) { return { v: w.active ? 1 : 0.0, color: '#38e8ff', label: w.suck ? 'suction' : 'ready', pulse: w.active }; },
-    slowWhile: function (w) { return w.active ? 0.7 : 1; }
+    slowWhile: function (w) { return w.active ? (wasp(w) === 'pneumatic' ? 0.85 : 0.7) : 1; }
   },
   /* ───────────── MUST 6: ESWL shockwave ───────────── */
   eswl: {
@@ -1296,6 +1485,184 @@ var RARITY_MODS = {
   uncommon: function () { var o = { dmg: 1, rate: 1, range: 1, pierce: 0 }; var k = pick(['rate', 'range', 'dmg']); o[k] = k === 'dmg' ? 1.12 : 1.15; return o; },
   rare: function () { var o = { dmg: 1.2, rate: 1.1, range: 1.1, pierce: 1 }; return o; }
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §6b  MODS — per-weapon upgrade paths (Daedalus-hammer style) and ASPECTS — pre-run variants
+   A mod row: id, name, weapon, branch POWER | CONTROL | SPECIAL, tier 1-3, requires (a mod id of the same branch, or
+   null), rarity, desc, and either `stats` (multipliers on dmg / rate / range / hw; `pierce` and `chain` add) or a
+   `flag` the weapon code checks with wflag(w, flag). Mods stack. A weapon holds ≤ MOD_CAP mods + 1 capstone per run.
+   capstone: true rows are offered only when the player holds 3 mods of the capstone's branch OR its `requires` pair.
+   Give any weapon mods by adding rows here: the rep doors, cards, HUD pips and detail card all read this table.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var BRANCHES = { POWER: { name: 'Power', color: '#ff7a5c' }, CONTROL: { name: 'Control', color: '#5fd0ea' }, SPECIAL: { name: 'Special', color: '#d98cff' } };
+var BRANCH_LIST = ['POWER', 'CONTROL', 'SPECIAL'];
+var MOD_CAP = 6, MOD_ADD = { pierce: true, chain: true }, MOD_REROLL_COST = 20;
+var MODS = {
+  /* ── Holmium laser ── */
+  holmium_joules:    { name: 'Higher Joules', weapon: 'holmium', branch: 'POWER', tier: 1, requires: null, rarity: 'common', desc: '+25% damage on every tick and pulse (pellets too).', stats: { dmg: 1.25 } },
+  holmium_pulse:     { name: 'Longer Pulse', weapon: 'holmium', branch: 'POWER', tier: 2, requires: 'holmium_joules', rarity: 'uncommon', desc: 'Heat tolerance: heat builds 35% slower, cools 50% faster, and an overheat locks the fiber for 1.2 s instead of 2.', flag: 'longPulse' },
+  holmium_narrow:    { name: 'Narrow Fiber', weapon: 'holmium', branch: 'CONTROL', tier: 1, requires: null, rarity: 'common', desc: '+30% beam range; the beam is 30% thinner.', stats: { range: 1.3, hw: 0.7 } },
+  holmium_moses:     { name: 'Moses Effect', weapon: 'holmium', branch: 'SPECIAL', tier: 1, requires: null, rarity: 'uncommon', desc: 'Every FRAGMENT pulse that lands splits two LITHO pellets off the impact. Stacks with the Moses boon (four pellets).', flag: 'moses' },
+  holmium_popcorn:   { name: 'Popcorn', weapon: 'holmium', branch: 'SPECIAL', tier: 2, requires: 'holmium_moses', rarity: 'rare', desc: 'A landed FRAGMENT pulse throws out three hot fragments that orbit the hit for 0.9 s and strike whatever they touch.', flag: 'popcorn' },
+  holmium_whirlpool: { name: 'Whirlpool', weapon: 'holmium', branch: 'SPECIAL', tier: 3, requires: ['holmium_moses', 'holmium_popcorn'], rarity: 'epic', capstone: true, desc: 'CAPSTONE: a vortex of stone shards circles the whole beam. Everything within ~35 px of the beam line is hit for 60% beam damage with no pierce limit.', flag: 'whirlpool' },
+  /* ── Scalpel ── */
+  scalpel_sharp:     { name: 'Sharpened', weapon: 'scalpel', branch: 'POWER', tier: 1, requires: null, rarity: 'common', desc: '+25% damage on slashes and lunges.', stats: { dmg: 1.25 } },
+  scalpel_backstab:  { name: 'Backstab', weapon: 'scalpel', branch: 'POWER', tier: 2, requires: 'scalpel_sharp', rarity: 'uncommon', desc: '+100% damage against enemies moving away from you. Lunge hits always count as backstabs.', flag: 'backstab' },
+  scalpel_quick:     { name: 'Quick Hands', weapon: 'scalpel', branch: 'CONTROL', tier: 1, requires: null, rarity: 'common', desc: 'Slash 25% faster: attack time 0.3 s → 0.225 s.', stats: { rate: 1.3333 } },
+  scalpel_lungereset:{ name: 'Lunge Reset', weapon: 'scalpel', branch: 'CONTROL', tier: 2, requires: 'scalpel_quick', rarity: 'uncommon', desc: 'A scalpel kill resets the lunge cooldown on the spot.', flag: 'lungeReset' },
+  scalpel_bleed:     { name: 'Bleed Stacking', weapon: 'scalpel', branch: 'SPECIAL', tier: 1, requires: null, rarity: 'uncommon', desc: 'Every slash adds a bleed stack (+50% bleed per stack, up to ×3) instead of just refreshing it.', flag: 'bleedStack' },
+  scalpel_id:        { name: 'Incision and Drainage', weapon: 'scalpel', branch: 'SPECIAL', tier: 3, requires: ['scalpel_backstab', 'scalpel_bleed'], rarity: 'epic', capstone: true, desc: 'CAPSTONE: weak-point hits crit ×6 (×3 on bosses) and drain a pus puddle; a scalpel kill on a bleeding enemy drains one too. Pus burns everything standing in it — you included.', flag: 'incisionDrainage' },
+  /* ── Resectoscope loop ── */
+  loop_big:          { name: 'Bigger Loop', weapon: 'loop', branch: 'POWER', tier: 1, requires: null, rarity: 'common', desc: '+25% sweep radius (and cone reach for the attachments).', stats: { range: 1.25 } },
+  loop_heavy:        { name: 'Heavy Sweep', weapon: 'loop', branch: 'POWER', tier: 2, requires: 'loop_big', rarity: 'uncommon', desc: '+30% sweep damage, 50% more knockback, a harder hit-stop.', stats: { dmg: 1.3 }, flag: 'heavySweep' },
+  loop_fast:         { name: 'Fast Return', weapon: 'loop', branch: 'CONTROL', tier: 1, requires: null, rarity: 'common', desc: 'Windup 0.25 → 0.18 s, recovery 0.45 → 0.22 s, and you keep 75% speed mid-swing.', flag: 'fastReturn' },
+  loop_blend:        { name: 'Blend Current', weapon: 'loop', branch: 'CONTROL', tier: 2, requires: 'loop_fast', rarity: 'uncommon', desc: 'Cut + coag at once: every sweep hit cauterizes automatically (bonus ENERGY damage, nothing is left bleeding, stumps coagulate).', flag: 'blend' },
+  loop_whip:         { name: 'Wire Whip', weapon: 'loop', branch: 'SPECIAL', tier: 1, requires: null, rarity: 'uncommon', desc: 'The sweep leaves a crackling wire arc for 1.5 s that cuts anything crossing it and makes it bleed.', flag: 'wireWhip' },
+  loop_turp:         { name: 'TURP Special', weapon: 'loop', branch: 'SPECIAL', tier: 3, requires: ['loop_blend', 'loop_heavy'], rarity: 'epic', capstone: true, desc: 'CAPSTONE: the loop sweeps out as a CUT and comes back as a golden coag sweep that cauterizes and stuns. Every BENIGN kill with the loop heals you 4 HP.', flag: 'turp' },
+  /* ── Bovie ── */
+  bovie_watt:        { name: 'High Wattage', weapon: 'bovie', branch: 'POWER', tier: 1, requires: null, rarity: 'common', desc: '+25% arc damage.', stats: { dmg: 1.25 } },
+  bovie_chain:       { name: 'Chain +1', weapon: 'bovie', branch: 'POWER', tier: 2, requires: 'bovie_watt', rarity: 'uncommon', desc: 'The arc jumps to one more target.', stats: { chain: 1 } },
+  bovie_ground:      { name: 'Ground Pad', weapon: 'bovie', branch: 'CONTROL', tier: 1, requires: null, rarity: 'common', desc: 'No more saline fizzle: the arc fires reliably while you stand in saline.', flag: 'groundPad' },
+  bovie_spray:       { name: 'Spray Mode', weapon: 'bovie', branch: 'CONTROL', tier: 2, requires: 'bovie_ground', rarity: 'uncommon', desc: 'Wider, shorter arcs: a 140° cone at 70% reach, and each jump covers 30% more distance.', flag: 'spray' },
+  bovie_fulg:        { name: 'Fulguration', weapon: 'bovie', branch: 'SPECIAL', tier: 1, requires: null, rarity: 'uncommon', desc: 'Every arc hit stuns for 0.35 s (COAG mode stuns for 0.7 s).', flag: 'fulguration' },
+  bovie_reaction:    { name: 'Chain Reaction', weapon: 'bovie', branch: 'SPECIAL', tier: 3, requires: ['bovie_chain', 'bovie_fulg'], rarity: 'epic', capstone: true, desc: 'CAPSTONE: the arc becomes a lightning tree. Every hit forks to its two nearest neighbours and can re-hit targets it already struck: up to 10 hits per pulse.', flag: 'chainReaction' },
+  /* ── Trilogy probe ── */
+  trilogy_probe:     { name: 'Bigger Probe', weapon: 'trilogy', branch: 'POWER', tier: 1, requires: null, rarity: 'common', desc: '+25% damage and a 35% fatter probe tip.', stats: { dmg: 1.25, hw: 1.35 } },
+  trilogy_dual:      { name: 'Dual-Frequency', weapon: 'trilogy', branch: 'POWER', tier: 2, requires: 'trilogy_probe', rarity: 'uncommon', desc: 'The probe hits 25% faster. Stacks with the Dual-Frequency boon.', stats: { rate: 1.25 } },
+  trilogy_handsfree: { name: 'Hands-Free Suction', weapon: 'trilogy', branch: 'CONTROL', tier: 1, requires: null, rarity: 'common', desc: 'Suction runs by itself while you fire the probe (alt still works).', flag: 'handsFree' },
+  trilogy_reach:     { name: 'Probe Reach', weapon: 'trilogy', branch: 'CONTROL', tier: 2, requires: 'trilogy_handsfree', rarity: 'uncommon', desc: '+50% probe range: 90 → 135 px.', stats: { range: 1.5 } },
+  trilogy_vortex:    { name: 'Vortex Pull', weapon: 'trilogy', branch: 'SPECIAL', tier: 1, requires: null, rarity: 'uncommon', desc: 'Suction pulls every non-boss enemy in the cone toward you and grinds the ones within 70 px for LITHO damage.', flag: 'vortex' },
+  trilogy_maelstrom: { name: 'Maelstrom', weapon: 'trilogy', branch: 'SPECIAL', tier: 3, requires: ['trilogy_vortex', 'trilogy_handsfree'], rarity: 'epic', capstone: true, desc: 'CAPSTONE: suction becomes a tight vortex ahead of the probe that drags enemies into its eye, grinds them for LITHO damage and shatters stones (×1.5).', flag: 'maelstrom' }
+};
+var MOD_ORDER = Object.keys(MODS);
+(function () { for (var id in MODS) MODS[id].id = id; })();
+var MOD_RARITY_W = { common: 1, uncommon: 0.65, rare: 0.4, epic: 1 };
+
+/* Aspects: three variants per instrument, chosen on the title screen (META.aspects) and locked in when the weapon is
+   made. Aspect I is the classic behaviour; II and III unlock with residency level and change HOW the tool works
+   (weapon code branches on wasp(w) === id). `mode` pins the weapon mode; `stats` / `flag` fold in like a mod. */
+var ASPECTS = {
+  holmium: [
+    { id: 'dusting', name: 'Dusting', num: 'I', desc: 'The classic fiber: DUST ↔ FRAGMENT toggle, 3.4 s of beam before it overheats.' },
+    { id: 'fragmenting', name: 'Fragmenting', num: 'II', unlock: 2, mode: 1, desc: 'High energy, low frequency: FRAGMENT pulses only, every 0.32 s with big knockback; stones always split. Heat builds per pulse. Alt fires a SUPERPULSE (×2.5, 1.8 s cooldown) instead of toggling modes.' },
+    { id: 'popcorning', name: 'Popcorning', num: 'III', unlock: 4, desc: 'Hold still and the beam tip boils: every tick also hits everything within 38 px of the tip for 60% and tosses fragments and dust around. Heat builds 30% slower while you stand still.' }
+  ],
+  scalpel: [
+    { id: 'backstab', name: 'Backstab', num: 'I', desc: 'The classic blade: fast wide slashes that bleed, and a lunge with i-frames that carries you through to their back.' },
+    { id: 'bleeder', name: 'Bleeder', num: 'II', unlock: 2, desc: 'Slashes do 20% less direct damage but bleed twice as hard for 5 s. Alt throws a spinning blade (220 px, pierces one) that bleeds, instead of lunging.' },
+    { id: 'lunger', name: 'Lunger', num: 'III', unlock: 4, desc: 'The lunge is the weapon: 0.5 s cooldown, 36 damage, a longer dash. Slashes are slower (0.4 s) and narrower but hit for 22.' }
+  ],
+  loop: [
+    { id: 'loopatt', name: 'Loop attachment', num: 'I', desc: 'The classic resectoscope: alt cycles LOOP (cut sweep) → BUTTON (vaporize) → ROLLER (coag).' },
+    { id: 'buttonatt', name: 'Button attachment', num: 'II', unlock: 2, mode: 1, desc: 'The vaporizing button is the primary: a continuous 95 px burning cone (ENERGY). Alt swings one loop sweep on a 1.2 s cooldown.' },
+    { id: 'rolleratt', name: 'Roller Ball attachment', num: 'III', unlock: 4, mode: 2, desc: 'The roller ball is the primary: a continuous coag cone that cauterizes and stuns, and heals 2 HP per BENIGN or CLOT kill. Alt swings one loop sweep on a 1.2 s cooldown.' }
+  ],
+  trilogy: [
+    { id: 'ultrasonic', name: 'Ultrasonic probe', num: 'I', desc: 'The classic jackhammer: rapid 90 px grinding ticks that pierce; suction on alt.' },
+    { id: 'pneumatic', name: 'Pneumatic probe', num: 'II', unlock: 2, desc: 'Ballistic piston: slow heavy strikes every 0.24 s (×3.5 damage) that knock back hard and always split stones. You keep 85% speed while it runs.' },
+    { id: 'combined', name: 'Combined (Trilogy)', num: 'III', unlock: 4, desc: 'Ultrasonic grind plus a pneumatic piston strike every fifth tick, and a wider, stronger suction cone that reaches 240 px.' }
+  ]
+};
+var ASPECT_WEAPONS = Object.keys(ASPECTS);
+var QA = {}; if (Q.aspects) Q.aspects.split(',').forEach(function (kv) { var p = kv.split(':'); if (p.length === 2) QA[p[0]] = p[1]; });
+
+function modsFor(wid) { var out = []; for (var i = 0; i < MOD_ORDER.length; i++) { var m = MODS[MOD_ORDER[i]]; if (m.weapon === wid) out.push(m); } return out; }
+function hasMod(w, id) { return !!w && (w.modIds.indexOf(id) >= 0 || w.capstone === id); }
+function heldInBranch(w, br) { var n = 0; for (var i = 0; i < w.modIds.length; i++) if (MODS[w.modIds[i]].branch === br) n++; return n; }
+function reqList(m) { return !m.requires ? [] : typeof m.requires === 'string' ? [m.requires] : m.requires; }
+function capstoneReady(w, m) { if (heldInBranch(w, m.branch) >= 3) return true; var req = reqList(m); if (!req.length) return false; for (var i = 0; i < req.length; i++) if (!hasMod(w, req[i])) return false; return true; }
+function modAvailable(w, m) {
+  if (!w || m.weapon !== w.id || hasMod(w, m.id)) return false;
+  if (m.capstone) return !w.capstone && capstoneReady(w, m);
+  if (w.modIds.length >= MOD_CAP) return false;
+  var req = reqList(m); for (var i = 0; i < req.length; i++) if (!hasMod(w, req[i])) return false;
+  return true;
+}
+function availableMods(w) { var out = [], all = modsFor(w.id); for (var i = 0; i < all.length; i++) if (modAvailable(w, all[i])) out.push(all[i]); return out; }
+function anyRepTarget() { for (var i = 0; i < G.weapons.length; i++) if (availableMods(G.weapons[i]).length) return true; return false; }
+// fold the aspect + every held mod into w.ms (stats) and w.flags; called whenever either changes
+function recomputeWeapon(w) {
+  var ms = {}, flags = {}, i, k;
+  function fold(src) { if (!src) return; if (src.stats) for (k in src.stats) { if (MOD_ADD[k]) ms[k] = (ms[k] || 0) + src.stats[k]; else ms[k] = (ms[k] || 1) * src.stats[k]; } if (src.flag) flags[src.flag] = true; if (src.flags) for (k in src.flags) flags[k] = true; }
+  var asp = aspectDef(w.id, w.aspect); fold(asp); if (asp && asp.mode !== undefined) w.mode = asp.mode;
+  for (i = 0; i < w.modIds.length; i++) fold(MODS[w.modIds[i]]);
+  if (w.capstone) fold(MODS[w.capstone]);
+  w.ms = ms; w.flags = flags;
+}
+// install a mod on the carried weapon it belongs to. Respects the 6 + 1 caps; prerequisites are the offer's job (debug hook bypasses them).
+function giveMod(id, quiet) {
+  var m = MODS[id]; if (!m) return false;
+  var w = null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === m.weapon) w = G.weapons[i];
+  if (!w || hasMod(w, id)) return false;
+  if (m.capstone) { if (w.capstone) return false; w.capstone = id; } else { if (w.modIds.length >= MOD_CAP) return false; w.modIds.push(id); }
+  recomputeWeapon(w); if (G.stats) G.stats.mods = (G.stats.mods || 0) + 1; recordSeen('m:' + id);
+  if (!quiet && P) {
+    addText(P.x, P.y - 44, (m.capstone ? '★ ' : '') + m.name.toUpperCase(), { color: m.capstone ? '#ffd166' : BRANCHES[m.branch].color, size: m.capstone ? 17 : 14 }); Snd.sfx(m.capstone ? 'jingle' : 'buy');
+    if (m.capstone) { burst(P.x, P.y, 30, { color: '#ffd166', speed: 220, life: 0.8, size: 4, kind: 'confetti' }); shakeIt(4); }
+  }
+  return true;
+}
+// the rep's offer: n available mods for this weapon, weighted by rarity; a ready capstone is always on the table (unless noCap)
+function rollModOffer(w, n, exclude, noCap) {
+  var avail = availableMods(w), caps = [], pool = [];
+  for (var i = 0; i < avail.length; i++) { var m = avail[i]; if (exclude && exclude.indexOf(m.id) >= 0) continue; if (m.capstone) { if (!noCap) caps.push(m); } else pool.push([m.id, MOD_RARITY_W[m.rarity] || 1]); }
+  var out = [];
+  if (caps.length) out.push(caps[0].id);
+  while (out.length < n && pool.length) { var tot = 0; for (var p = 0; p < pool.length; p++) tot += pool[p][1]; var x = rnd() * tot, idx = 0; for (var q = 0; q < pool.length; q++) { x -= pool[q][1]; if (x <= 0) { idx = q; break; } } out.push(pool[idx][0]); pool.splice(idx, 1); }
+  return out;
+}
+// which carried weapon a rep door (or shop sample) serves: weighted a bit toward weapons already upgraded (build momentum), never exclusive
+function pickRepWeapon(exclude) {
+  var pool = [];
+  for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; if (exclude && exclude.indexOf(w.id) >= 0) continue; if (!availableMods(w).length) continue; pool.push([w, 1 + 0.4 * (w.modIds.length + (w.capstone ? 1 : 0))]); }
+  if (!pool.length) return null;
+  var tot = 0; for (var p = 0; p < pool.length; p++) tot += pool[p][1];
+  var x = rnd() * tot; for (var q = 0; q < pool.length; q++) { x -= pool[q][1]; if (x <= 0) return pool[q][0]; }
+  return pool[pool.length - 1][0];
+}
+/* aspects */
+function aspectDef(wid, aid) { var list = ASPECTS[wid]; if (!list) return null; for (var i = 0; i < list.length; i++) if (list[i].id === aid) return list[i]; return null; }
+function aspectUnlocked(wid, a) { return !a.unlock || residencyLevel() >= a.unlock || QA[wid] === a.id; }
+function chosenAspect(wid) { var list = ASPECTS[wid]; if (!list) return null; var a = aspectDef(wid, QA[wid] || (META.aspects || {})[wid]); if (!a || !aspectUnlocked(wid, a)) a = list[0]; return a.id; }
+function setAspect(wid, aid) { if (!aspectDef(wid, aid)) return false; META.aspects = META.aspects || {}; META.aspects[wid] = aid; saveMeta(); return true; }
+/* shared mechanics */
+function fromBehind(e) { var sp = Math.sqrt(e.vx * e.vx + e.vy * e.vy); if (sp < 25) return false; return Math.abs(angDiff(Math.atan2(e.vy, e.vx), ang(e.x, e.y, P.x, P.y))) > Math.PI * 0.6; }
+function drainPus(x, y, r, t) { addHazard({ kind: 'pus', x: x, y: y, r: r, t: t, dps: 6 }); burst(x, y, 14, { color: '#d4ff5a', speed: 160, life: 0.45, size: 4, kind: 'goo', g: 350 }); addText(x, y - 22, 'DRAINED', { color: '#d4ff5a', size: 12 }); Snd.sfx('pop'); }
+function modsOnKill(e, cls, wid) {
+  var w = null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === wid) w = G.weapons[i];
+  if (!w) return;
+  if (wid === 'scalpel') {
+    if (wflag(w, 'lungeReset') && w.cd2 > 0) { w.cd2 = 0; addText(P.x, P.y - 40, 'LUNGE RESET', { color: '#ff4d6d', size: 12 }); Snd.sfx('swap'); }
+    if (wflag(w, 'incisionDrainage') && e.st && e.st.bleed && !e.silent && !e.boss) drainPus(e.x, e.y, 30, 3);
+  }
+  if (wid === 'loop') {
+    if (wflag(w, 'turp') && e.family === 'BENIGN') healPlayer(4);
+    if (wasp(w) === 'rolleratt' && (e.family === 'BENIGN' || e.family === 'CLOT')) healPlayer(2);
+  }
+}
+/* damage fields (G.fields): the Wire Whip's lingering arc; add kinds here */
+function addField(f) { f.t = f.dur; f.tick = 0; G.fields.push(f); return f; }
+function updateFields(dt) {
+  var fs = G.fields;
+  for (var i = fs.length - 1; i >= 0; i--) {
+    var f = fs[i]; f.t -= dt; if (f.t <= 0) { fs.splice(i, 1); continue; }
+    f.tick -= dt; if (f.tick > 0) continue; f.tick = f.every;
+    if (f.kind === 'wire') {
+      var hs = enemiesInArc(f.x, f.y, f.a, f.rad + 10, f.half);
+      for (var j = 0; j < hs.length; j++) { var e = hs[j], d = dist(f.x, f.y, e.x, e.y); if (Math.abs(d - f.rad) > 16 + e.r * 0.5) continue; dealDamage(e, f.dmg, 'CUT', { wid: 'loop', knock: 40, ang: ang(f.x, f.y, e.x, e.y), status: { bleed: [2, 3] } }); burst(e.x, e.y, 2, { color: '#ff4d6d', speed: 100, life: 0.2, size: 2 }); }
+    }
+  }
+}
+function drawFields(c) {
+  for (var i = 0; i < G.fields.length; i++) {
+    var f = G.fields[i], k = f.t / f.dur;
+    if (f.kind === 'wire') {
+      c.save(); c.globalAlpha = 0.25 + 0.65 * k; c.strokeStyle = '#ff4d6d'; c.lineWidth = 3; c.setLineDash([5, 7]); c.lineDashOffset = -G.realTime * 90; c.beginPath(); c.arc(f.x, f.y, f.rad, f.a - f.half, f.a + f.half); c.stroke(); c.setLineDash([]);
+      c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1.2; c.beginPath(); var segs = 24; for (var s = 0; s <= segs; s++) { var aa = f.a - f.half + f.half * 2 * s / segs, rj = f.rad + vrr(-4, 4); var px = f.x + Math.cos(aa) * rj, py = f.y + Math.sin(aa) * rj; if (s === 0) c.moveTo(px, py); else c.lineTo(px, py); } c.stroke();
+      c.restore();
+    }
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §7  CARTOON PRIMITIVES shared by enemy/player art (flat shading, thick outlines, googly eyes)
@@ -1915,6 +2282,7 @@ var DOOR_TYPES = {
   heal:    { label: 'Light combat · IV bag', icon: 'iv',    color: '#ff6b8a' },
   shop:    { label: 'Supply closet (shop)',  icon: 'coin',  color: '#ffd166' },
   elite:   { label: 'ELITE · crate + altar', icon: 'skull', color: '#ff4d6d' },
+  rep:     { label: 'Combat · Instrument Rep (a mod for one of your weapons)', icon: 'rep', color: '#ffd166' },   // colour/icon come from the door's weapon
   mystery: { label: '???',                   icon: 'question', color: '#8fa6b8' },
   rest:    { label: 'Call room (rest)',      icon: 'bed',   color: '#7dffb0' },
   boss:    { label: 'THE STAGHORN',          icon: 'antler', color: '#38e8ff' }
@@ -1941,13 +2309,14 @@ var G = {
   rvu: 0, boons: [], weapons: [], wIndex: 0, maxWeapons: 4, swapT: 0, swapBonusT: 0,
   roomIndex: 0, room: null, cleared: false, waves: null, banner: null, tutorial: null, aimTarget: null,
   stats: null, over: false, won: false, fosfo: false, fosfoRoom: -1, killChain: [], wolfT: 0, lowHpT: 0, fps: 0, frames: 0, fpsT: 0,
-  spawner: false, endT: 0, visited: [], ult: null
+  spawner: false, endT: 0, visited: [], ult: null,
+  fields: [], detailT: 0, detailSlot: -1   // damage fields (wire whip); weapon-detail card timer after a slot tap
 };
 var P = null;
 var vignette = null;
 var PARTICLE_CAP = [180, 400, 700], PARTICLE_SCALE = [0.35, 0.65, 1];
 
-function newStats() { return { dmg: { LITHO: 0, CUT: 0, ENERGY: 0, FLUID: 0, NEUTRAL: 0 }, superHits: 0, swaps: 0, rolls: 0, kills: 0, rooms: 0, rvu: 0, weaponsUsed: {}, boons: [], dmgTaken: 0 }; }
+function newStats() { return { dmg: { LITHO: 0, CUT: 0, ENERGY: 0, FLUID: 0, NEUTRAL: 0 }, superHits: 0, swaps: 0, rolls: 0, kills: 0, rooms: 0, rvu: 0, weaponsUsed: {}, boons: [], dmgTaken: 0, mods: 0 }; }
 function newPlayer() { return { x: 80, y: 270, r: 13, hp: 100, maxHp: 100, speed: 190, aim: 0, roll: 0, rollCd: 0, rollDx: 0, rollDy: 0, inv: 0, flash: 0, burn: 0, bleed: 0, dotT: 0, anim: 0, after: [], regenT: 0, moving: false, mvx: 0, mvy: 0, hitFlashT: 0 }; }
 function curWeapon() { return G.weapons[G.wIndex] || null; }
 function shakeIt(n) { if (SET.shake) G.shake = Math.max(G.shake, n); }
@@ -1960,7 +2329,10 @@ function recordBestiary(id, killed) { var b = META.bestiary[id] || (META.bestiar
 /* ── weapons (carry up to 4, 5 with Backup Instrument) ── */
 function makeWeapon(id, rarity) {
   rarity = rarity || 'common';
-  return { id: id, def: WEAPONS[id], mode: 0, heat: 0, power: 1, pressure: 0, charge: 0, cd: 0, cd2: 0, tick: 0, locked: 0, rarity: rarity, mods: RARITY_MODS[rarity](), fx: null, fx2: null, held: null, wire: null, swing: null, lunge: 0, burst: 0, burstT: 0, bal: null, drained: false, suck: false, active: false, full: false, dir: 1 };
+  var w = { id: id, def: WEAPONS[id], mode: 0, heat: 0, power: 1, pressure: 0, charge: 0, cd: 0, cd2: 0, tick: 0, locked: 0, rarity: rarity, mods: RARITY_MODS[rarity](), fx: null, fx2: null, held: null, wire: null, swing: null, lunge: 0, burst: 0, burstT: 0, bal: null, drained: false, suck: false, active: false, full: false, dir: 1,
+    modIds: [], capstone: null, ms: {}, flags: {}, aspect: chosenAspect(id) };   // mods + aspect (§6b); ms/flags are derived by recomputeWeapon
+  recomputeWeapon(w);
+  return w;
 }
 var RARITY_NEXT = { common: 'uncommon', uncommon: 'rare', rare: 'rare' };
 function giveWeapon(id, rarity) {
@@ -2026,10 +2398,17 @@ function dealDamage(e, base, cls, o) {
   if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
   m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid);
-  var wpCrit = false, wp = e.wp;
+  var wpCrit = false, wp = e.wp, wpLabel = wp ? wp.critLabel : null;
   if (wp) {
     var hx = o.hx, hy = o.hy; if (hx === undefined || hx === null) { var da = ang(P.x, P.y, e.x, e.y); hx = e.x - Math.cos(da) * e.r * 0.7; hy = e.y - Math.sin(da) * e.r * 0.7; }
-    if (dist(hx, hy, e.x + wp.ox, e.y + wp.oy) <= wp.r + 6) { var wpb = o.wid && WEAPONS[o.wid] && WEAPONS[o.wid].wpBonus; if (wpb) m *= wpb; if (wp.critCls && cls === wp.critCls) { m *= wp.critMult; wpCrit = true; } else if (wp.onOther) wp.onOther(e, cls, o); }
+    if (dist(hx, hy, e.x + wp.ox, e.y + wp.oy) <= wp.r + 6) {
+      var wpb = o.wid && WEAPONS[o.wid] && WEAPONS[o.wid].wpBonus; if (wpb) m *= wpb;
+      var wpm = o.wpMult ? (e.boss ? Math.min(o.wpMult, 3) : o.wpMult) : 0;   // weapon-mod weak-point crits (I&D), capped ×3 on bosses
+      if (wp.critCls && cls === wp.critCls) { m *= Math.max(wp.critMult, wpm); wpCrit = true; }
+      else if (wpm) { m *= wpm; wpCrit = true; wpLabel = o.wpLabel || wpLabel; }
+      else if (wp.onOther) wp.onOther(e, cls, o);
+      if (o.onWp) o.onWp(e, hx, hy);
+    }
     else { m *= wp.bodyMult; if (wp.hint && (!e.hintT || G.time - e.hintT > 2.5)) { e.hintT = G.time; addText(e.x, e.y - e.r - 28, wp.hint, { color: '#ffd166', size: 11 }); } }
   }
   if (e.necro > 0 && !o.pierceArmor) {
@@ -2039,6 +2418,7 @@ function dealDamage(e, base, cls, o) {
   if (e.st.frozen && (fam === 'STONE' || fam === 'MALIGNANT')) m *= 1.5;
   if (e.st.mark) m *= 1.1;
   if (e.coreExposed) m *= 1.5;
+  if (o.mul) m *= o.mul;   // per-hit multiplier from weapon mods (Backstab)
   if (e.elite) { if (!e.armorCls && cls !== 'NEUTRAL') { e.armorCls = cls; addText(e.x, e.y - e.r - 16, 'ARMORED vs ' + CLASSES[cls].name.toUpperCase(), { color: '#ffd166', size: 11 }); } else if (cls === e.armorCls && !o.pierceArmor) m *= 0.2; }
   var rightTool = false;
   if (G.swapBonusT > 0 && mBase >= 1.5 && cls !== 'NEUTRAL') { m *= hasBoon('perfectswap') ? 1.5 : 1.25; G.swapBonusT = 0; rightTool = true; }
@@ -2059,8 +2439,10 @@ function dealDamage(e, base, cls, o) {
   // numbers + flair
   var col = CLASSES[cls] ? CLASSES[cls].color : '#fff', shown = Math.max(1, Math.round(dmg));
   if (wpCrit) {
-    addText(e.x + rr(-6, 6), e.y - e.r - 8, String(shown), { color: col, size: 26, sub: wp.critLabel, subColor: '#ffd166' }); Snd.sfx('crit'); hitstop(0.07); shakeIt(4);
+    addText(e.x + rr(-6, 6), e.y - e.r - 8, String(shown), { color: col, size: 26, sub: wpLabel, subColor: '#ffd166' }); Snd.sfx('crit'); hitstop(0.07); shakeIt(4);
     burst(e.x + wp.ox, e.y + wp.oy, 12, { color: wp.color, speed: 180, life: 0.4, size: 3, kind: 'goo', g: 300 }); if (wp.onCrit) wp.onCrit(e, dmg, o);
+  } else if (o.tag) {
+    addText(e.x + rr(-6, 6), e.y - e.r - 6, String(shown), { color: col, size: 22, sub: o.tag, subColor: '#ffd166' }); Snd.sfx('crit'); if (dmg >= 20) hitstop(0.035);
   } else if (m >= 1.5 && e.shield <= 0) {
     var flair = (!e.seT || G.time - e.seT > 0.8); if (flair) e.seT = G.time;
     addText(e.x + rr(-6, 6), e.y - e.r - 6, String(shown), { color: col, size: crit ? 24 : 20, sub: flair ? (rightTool ? 'RIGHT TOOL!' : crit ? 'CRIT!' : 'SUPER EFFECTIVE') : null, subColor: rightTool ? '#ffd166' : col });
@@ -2074,7 +2456,7 @@ function dealDamage(e, base, cls, o) {
   if (crit) burst(e.x, e.y - e.r * 0.5, 5, { color: '#fff', speed: 120, life: 0.25, size: 2 });
   G.stats.dmg[cls] = (G.stats.dmg[cls] || 0) + dmg; if (m >= 1.5) G.stats.superHits++;
   // statuses
-  if (o.status) for (var k in o.status) applyStatus(e, k, o.status[k][0], o.status[k][1]);
+  if (o.status) for (var k in o.status) applyStatus(e, k, o.status[k][0], o.status[k][1], !!o.bleedStack && k === 'bleed');
   if (o.stun) applyStatus(e, 'stun', o.stun, 1);
   if (o.cauterize && e.st.bleed) { delete e.st.bleed; var bonus = 12 * MATRIX.ENERGY[fam]; e.hp -= bonus; addText(e.x, e.y - e.r - 20, 'CAUTERIZED +' + Math.round(bonus), { color: '#ffb630', size: 12 }); burst(e.x, e.y, 6, { color: '#ffb630', speed: 90, life: 0.3, size: 2, kind: 'smoke' }); Snd.sfx('cauter'); if (e.onCauterized) e.onCauterized(e); }
   if (hasBoon('bcg') && fam === 'MALIGNANT') applyStatus(e, 'mark', 5, 1);
@@ -2083,10 +2465,14 @@ function dealDamage(e, base, cls, o) {
   if (e.hp <= 0) killEnemy(e, cls, o.wid);
   return dmg;
 }
-function applyStatus(e, name, dur, val) {
+function applyStatus(e, name, dur, val, stack) {
   if (e.dead || e.boss && name === 'stun') return;
   var st = e.st;
-  if (name === 'bleed') { var dps = val * (e.def.bleedMul || 1); st.bleed = { t: Math.max(st.bleed ? st.bleed.t : 0, dur), dps: Math.max(st.bleed ? st.bleed.dps : 0, dps) }; }
+  if (name === 'bleed') { // `stack` (Bleed Stacking mod): each application adds a stack, +50% bleed per stack up to ×3
+    var dps = val * (e.def.bleedMul || 1), old = st.bleed;
+    if (stack && old) { var stk = Math.min(5, (old.stacks || 1) + 1), base = Math.max(old.base || old.dps, dps); st.bleed = { t: Math.max(old.t, dur), dps: base * (1 + 0.5 * (stk - 1)), base: base, stacks: stk }; if (!e.stkT || G.time - e.stkT > 0.5) { e.stkT = G.time; addText(e.x, e.y - e.r - 24, 'BLEED ×' + stk, { color: '#ff4d6d', size: 11 }); } }
+    else st.bleed = { t: Math.max(old ? old.t : 0, dur), dps: Math.max(old ? old.dps : 0, dps), base: Math.max(old ? (old.base || old.dps) : 0, dps), stacks: old ? (old.stacks || 1) : 1 };
+  }
   else if (name === 'burn') st.burn = { t: Math.max(st.burn ? st.burn.t : 0, dur), dps: Math.max(st.burn ? st.burn.dps : 0, val) };
   else if (name === 'poison') st.poison = { t: Math.max(st.poison ? st.poison.t : 0, dur), dps: Math.max(st.poison ? st.poison.dps : 0, val) };
   else if (name === 'chill') { if (st.frozen || e.boss) return; var c = st.chill || (st.chill = { t: 0, stacks: 0 }); c.t = dur; c.stacks += val; if (c.stacks >= 3) { delete st.chill; st.frozen = { t: 2 }; addText(e.x, e.y - e.r - 16, 'FROZEN', { color: '#dff4ff', size: 13 }); Snd.sfx('freeze'); e.vx = e.vy = 0; } }
@@ -2167,7 +2553,7 @@ function killEnemy(e, cls, wid) {
   if (def.id === 'cyst') { addHazard({ kind: 'water', x: e.x, y: e.y, r: 42, t: 10 }); if (e.complex) for (var c2 = 0; c2 < 2; c2++) spawnEnemy('ecoli', e.x + rr(-16, 16), e.y + rr(-16, 16), {}); }
   if (def.id === 'enterococcus') { for (var l = 0; l < G.enemies.length; l++) { var lk = G.enemies[l]; if (lk.id === 'entero_link' && lk.head === e && !lk.dead) { lk.hp = 0; lk.silent = false; killEnemy(lk, cls, wid); } } }
   if (e.heldBy) { var bw = curWeapon(); if (bw && bw.held === e) bw.held = null; }
-  boonsOnKill(e);
+  boonsOnKill(e); modsOnKill(e, cls, wid);
   if (wid === 'roller' && (fam === 'BENIGN' || fam === 'CLOT')) healPlayer(3);
   // kill chain → Wolf in Scrubs
   if (!e.silent && !def.hidden) { G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
@@ -2302,7 +2688,7 @@ function updatePlayer(dt) {
 
 /* ── bullets ── */
 function spawnBullet(o) {
-  var b = { kind: o.kind || 'spike', x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, r: o.r || 6, dmg: o.dmg || 0, hostile: !!o.hostile, cls: o.cls || 'NEUTRAL', life: o.life || 3, color: o.color || (o.hostile ? '#ff9f43' : CLASSES[o.cls || 'NEUTRAL'].color), dead: false, t: 0, homing: o.homing || 0, pierce: o.pierce || 0, hitIds: o.hitIds || [], status: o.status || null, crit: o.crit || 0, split: o.split, wid: o.wid, onHit: o.onHit, onLand: o.onLand, shape: o.shape, suckable: !!o.suckable, stun: o.stun, grow: o.grow, band: o.band, sx: o.sx, sy: o.sy, tx: o.tx, ty: o.ty, dur: o.dur, a: Math.atan2(o.vy || 0, o.vx || 1), pulse: rr(0, TAU) };
+  var b = { kind: o.kind || 'spike', x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, r: o.r || 6, dmg: o.dmg || 0, hostile: !!o.hostile, cls: o.cls || 'NEUTRAL', life: o.life || 3, color: o.color || (o.hostile ? '#ff9f43' : CLASSES[o.cls || 'NEUTRAL'].color), dead: false, t: 0, homing: o.homing || 0, pierce: o.pierce || 0, hitIds: o.hitIds || [], status: o.status || null, crit: o.crit || 0, split: o.split, wid: o.wid, onHit: o.onHit, onLand: o.onLand, shape: o.shape, suckable: !!o.suckable, stun: o.stun, grow: o.grow, band: o.band, sx: o.sx, sy: o.sy, tx: o.tx, ty: o.ty, dur: o.dur, cx: o.cx, cy: o.cy, oa: o.oa, orad: o.orad, ospin: o.ospin, ogrow: o.ogrow, rehit: o.rehit, bleedStack: !!o.bleedStack, a: Math.atan2(o.vy || 0, o.vx || 1), pulse: rr(0, TAU) };
   if (b.hostile && hasBoon('tamsulosin')) { b.vx *= 0.9; b.vy *= 0.9; }
   G.bullets.push(b); return b;
 }
@@ -2322,6 +2708,13 @@ function updateBullets(dt) {
       if (!insideArena(b.x, b.y, -b.r * 0.5)) b.dead = true;
       continue;
     }
+    if (b.kind === 'orbit') { // Popcorn fragments: circle the impact point, re-hit every `rehit` seconds
+      b.oa += b.ospin * dt; b.orad = Math.min(b.ogrow, b.orad + 70 * dt); b.x = b.cx + Math.cos(b.oa) * b.orad; b.y = b.cy + Math.sin(b.oa) * b.orad; b.a = b.oa + Math.PI / 2;
+      b.rehitT = (b.rehitT || 0) - dt; if (b.rehitT <= 0) { b.rehitT = b.rehit || 0.25; b.hitIds.length = 0; }
+      var eo = G.enemies;
+      for (var oj = 0; oj < eo.length; oj++) { var oe = eo[oj]; if (!enemyTargetable(oe) || b.hitIds.indexOf(oe) >= 0) continue; if (dist(b.x, b.y, oe.x, oe.y) < b.r + oe.r) { b.hitIds.push(oe); dealDamage(oe, b.dmg, b.cls, { wid: b.wid, knock: 40, ang: b.a, split: b.split, hx: b.x, hy: b.y }); burst(b.x, b.y, 2, { color: b.color, speed: 80, life: 0.2, size: 2 }); } }
+      continue;
+    }
     if (b.homing && b.hostile) { var ta = ang(b.x, b.y, P.x, P.y), sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy), ca = Math.atan2(b.vy, b.vx); ca += clamp(angDiff(ca, ta), -b.homing * dt, b.homing * dt); b.vx = Math.cos(ca) * sp; b.vy = Math.sin(ca) * sp; }
     b.x += b.vx * dt; b.y += b.vy * dt; b.a = Math.atan2(b.vy, b.vx);
     if (!insideArena(b.x, b.y, -b.r)) { b.dead = true; if (b.onLand) { b.x = clamp(b.x, ARENA.x, ARENA.x + ARENA.w); b.y = clamp(b.y, ARENA.y, ARENA.y + ARENA.h); b.onLand(b); } continue; }
@@ -2338,7 +2731,7 @@ function updateBullets(dt) {
         var en = es2[n]; if (!enemyTargetable(en) || b.hitIds.indexOf(en) >= 0) continue;
         if (dist(b.x, b.y, en.x, en.y) < b.r + en.r) {
           b.hitIds.push(en); hitSomething = true;
-          if (b.onHit) { b.onHit(b, en); } else { dealDamage(en, b.dmg, b.cls, { wid: b.wid, knock: 60, ang: b.a, status: b.status, crit: b.crit, split: b.split, hx: b.x, hy: b.y }); burst(b.x, b.y, 3, { color: b.color, speed: 90, life: 0.2, size: 2 }); if (b.pierce > 0) b.pierce--; else b.dead = true; }
+          if (b.onHit) { b.onHit(b, en); } else { dealDamage(en, b.dmg, b.cls, { wid: b.wid, knock: 60, ang: b.a, status: b.status, crit: b.crit, split: b.split, hx: b.x, hy: b.y, bleedStack: b.bleedStack }); burst(b.x, b.y, 3, { color: b.color, speed: 90, life: 0.2, size: 2 }); if (b.pierce > 0) b.pierce--; else b.dead = true; }
           if (b.dead) break;
         }
       }
@@ -2545,7 +2938,7 @@ function boonUnlocked(id) { var b = BOONS[id]; return !b.unlock || residencyLeve
 
 function startRun() {
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
-  G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = [];
+  G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.detailT = 0; G.detailSlot = -1;
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
@@ -2554,19 +2947,24 @@ function startRun() {
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
   if (!G.weapons.length) giveWeapon('holmium');
   if (Q.boons) { var bs = Q.boons.split(','); for (var j = 0; j < bs.length; j++) giveBoon(bs[j]); }
+  if (Q.mods) { // ?mods=holmium_joules,… : install at run start; a mod for a weapon you don't carry grants the weapon first
+    var qm = Q.mods.split(',');
+    for (var mi = 0; mi < qm.length; mi++) { var md = MODS[qm[mi]]; if (!md) continue; var have = false; for (var ci = 0; ci < G.weapons.length; ci++) if (G.weapons[ci].id === md.weapon) have = true; if (!have) giveWeapon(md.weapon); giveMod(qm[mi], true); }
+  }
   G.screen = 'run'; G.running = true; hideScreens(); Snd.setMusicMode('calm'); META.runs = (META.runs || 0) + 1; saveMeta();
   var start = Q.boss ? 9 : clamp(parseInt(Q.room, 10) || 1, 1, 9);
   if (start > 1 && !Q.weapons) { giveWeapon('bovie'); if (start >= 4) giveWeapon('irrigation'); }
   var kind = start === 9 ? 'boss' : start === 8 ? 'rest' : start === 1 ? 'tutorial' : 'combat';
   enterRoom(makeRoomPlan(start, kind));
 }
-function makeRoomPlan(index, doorType) {
+function makeRoomPlan(index, doorType, door) {
   var kind = 'combat', reward = 'weapon';
   if (doorType === 'mystery') doorType = pick(['combat', 'boon', 'heal', 'coins', 'elite', 'boon']);
   switch (doorType) {
     case 'tutorial': kind = 'tutorial'; reward = 'starter'; break;
     case 'combat': kind = 'combat'; reward = 'weapon'; break;
     case 'boon': kind = 'combat'; reward = 'boon'; break;
+    case 'rep': kind = 'combat'; reward = 'rep'; break;
     case 'heal': kind = 'heal'; reward = 'heal'; break;
     case 'coins': kind = 'combat'; reward = 'coins'; break;
     case 'shop': kind = 'shop'; reward = null; break;
@@ -2577,7 +2975,7 @@ function makeRoomPlan(index, doorType) {
   var template;
   if (kind === 'tutorial') template = 'open'; else if (kind === 'boss') template = 'boss'; else if (kind === 'rest') template = 'rest'; else if (kind === 'shop') template = 'shop';
   else { var cands = TEMPLATE_POOL.filter(function (t) { return ROOM_TEMPLATES[t].minRoom <= index && t !== G.lastTemplate; }); template = pick(cands); }
-  return { index: index, kind: kind, reward: reward, template: template, doorType: doorType, name: ROOM_TEMPLATES[template].name };
+  return { index: index, kind: kind, reward: reward, template: template, doorType: doorType, name: ROOM_TEMPLATES[template].name, repWeapon: door && door.weapon ? door.weapon : null };
 }
 function findSpawnPos(r, preferRight, tries) {
   tries = tries || 40;
@@ -2597,7 +2995,7 @@ function freeSpot(x, y, r) { var p = { x: x, y: y }; for (var i = 0; i < 30; i++
 
 function enterRoom(plan) {
   G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null;
-  G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = [];
+  G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = [];
   for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.bal = null; w.swing = null; w.lunge = 0; w.fx = null; w.fx2 = null; w.charge = 0; }
   P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0;
   var t = ROOM_TEMPLATES[plan.template].build();
@@ -2609,11 +3007,15 @@ function enterRoom(plan) {
   if (plan.kind === 'shop') G.plan.shops = (G.plan.shops || 0) + 1;
   // exits (closed until clear)
   var exits = genDoorOptions(plan), sides = ['E', 'N', 'S'];
-  for (var d = 0; d < exits.length; d++) { var dp = DOOR_POS[sides[d]]; G.doors.push({ side: sides[d], type: exits[d], x: dp.x, y: dp.y, w: dp.w, h: dp.h, open: false, anim: 0 }); }
+  for (var d = 0; d < exits.length; d++) {
+    var dp = DOOR_POS[sides[d]], door = { side: sides[d], type: exits[d], x: dp.x, y: dp.y, w: dp.w, h: dp.h, open: false, anim: 0 };
+    if (door.type === 'rep') { var repW = pickRepWeapon(); if (repW) door.weapon = repW.id; else door.type = 'combat'; }   // a rep door serves ONE carried weapon; its plaque shows that glyph
+    G.doors.push(door);
+  }
   G.waves = buildWaves(plan);
   if (plan.kind === 'tutorial') G.tutorial = { step: 0, moved: false, fired: false, rolled: false, swapped: false, t: 0 }; else G.tutorial = null;
   if (plan.kind === 'boss') spawnBoss(G.bossId || 'staghorn');
-  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360 }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); }
+  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360 }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
   if (!G.waves) roomCleared(true);
@@ -2632,7 +3034,7 @@ function genDoorOptions(plan) {
   if (next <= 6 && 2 - G.plan.boons >= left) forced.push('boon');
   if (next <= 6 && 2 - G.plan.weapons >= left) forced.push('combat');
   if (forced.length >= 2) return ['elite', 'boon', 'combat'].slice(0, Math.max(n, 2));
-  var pool = [['combat', 3], ['boon', 3], ['heal', P.hp / P.maxHp < 0.5 ? 2.2 : 1], ['shop', next >= 3 && !G.plan.shops ? 1.1 : 0], ['elite', next >= 4 ? 1.3 : 0], ['mystery', 1]];
+  var pool = [['combat', 3], ['boon', 3], ['heal', P.hp / P.maxHp < 0.5 ? 2.2 : 1], ['shop', next >= 3 && !G.plan.shops ? 1.1 : 0], ['elite', next >= 4 ? 1.3 : 0], ['mystery', 1], ['rep', next >= 3 && anyRepTarget() ? 2.4 : 0]];
   var out = forced.slice(0);
   var guard = 0;
   while (out.length < n && guard++ < 50) {
@@ -2640,6 +3042,7 @@ function genDoorOptions(plan) {
     var x = rnd() * tot, choice = null; for (var k = 0; k < pool.length; k++) { if (out.indexOf(pool[k][0]) >= 0) continue; x -= pool[k][1]; if (x <= 0) { choice = pool[k][0]; break; } }
     if (!choice) break; out.push(choice);
   }
+  if (out.length === 1 && out[0] === 'rep') out.push(P.hp / P.maxHp < 0.5 ? 'heal' : 'combat');   // an Instrument Rep door is never the only way forward
   if (forced.length === 1 && n > 1 && out.indexOf('elite') < 0 && out.indexOf(forced[0]) < 0) out[0] = forced[0];
   return out;
 }
@@ -2707,6 +3110,12 @@ function roomCleared(quiet) {
   var rw = plan.reward, spot;
   if (rw === 'weapon' || rw === 'elite' || (rw === 'coins' && rnd() < 0.5)) { spot = freeSpot(520, 270, 30); G.rewards.push({ kind: 'crate', x: spot.x, y: spot.y, item: rollWeaponDrop() }); }
   if (rw === 'boon' || rw === 'elite') { spot = freeSpot(rw === 'elite' ? 440 : 480, rw === 'elite' ? 330 : 270, 30); G.rewards.push({ kind: 'altar', x: spot.x, y: spot.y }); }
+  if (rw === 'rep') { // the Instrument Rep waits by the exit with 3 mods for the door's weapon (falls back if you swapped it out mid-room)
+    var repId = plan.repWeapon, carried = false; for (var rc = 0; rc < G.weapons.length; rc++) if (G.weapons[rc].id === repId) carried = true;
+    if (!carried) { var altW = pickRepWeapon(); repId = altW ? altW.id : null; }
+    spot = freeSpot(520, 270, 30);
+    if (repId) G.rewards.push({ kind: 'rep', x: spot.x, y: spot.y, weapon: repId }); else G.rewards.push({ kind: 'crate', x: spot.x, y: spot.y, item: rollWeaponDrop() });
+  }
   if (rw === 'heal') { spawnPickup('iv', 480, 250); if (rnd() < 0.4) spawnPickup('heart', 520, 290); }
   if (rw === 'coins') { for (var c = 0; c < 14; c++) spawnPickup('coin', 480, 270, { value: 1 }); }
   if (rw === 'starter') { openWeaponScreen({ starter: true }); }
@@ -2722,7 +3131,7 @@ function updateDoors(dt) {
     if (dist(P.x, P.y, cx, cy) < P.r) goThroughDoor(d);
   }
 }
-function goThroughDoor(door) { if (G.transition) return; G.transition = { t: 0, dur: 0.55, plan: makeRoomPlan(G.roomIndex + 1, door.type), done: false }; Snd.sfx('door'); }
+function goThroughDoor(door) { if (G.transition) return; G.transition = { t: 0, dur: 0.55, plan: makeRoomPlan(G.roomIndex + 1, door.type, door), done: false }; Snd.sfx('door'); }
 function updateTransition(dt) { var tr = G.transition; if (!tr) return; tr.t += dt; if (!tr.done && tr.t >= tr.dur * 0.5) { tr.done = true; enterRoom(tr.plan); } if (tr.t >= tr.dur) G.transition = null; }
 function setBanner(text, sub, dur) { G.banner = { text: text, sub: sub, t: 0, dur: dur || 1.5 }; }
 /* ── rewards: crates, altars, shop pedestals ── */
@@ -2761,6 +3170,7 @@ function updateRewards(dt) {
       if (r.kind === 'crate') openWeaponScreen({ crate: r });
       else if (r.kind === 'altar') openBoonScreen(r);
       else if (r.kind === 'shop') openShop(r);
+      else if (r.kind === 'rep') openRepScreen(r);
     }
   }
 }
@@ -3083,6 +3493,7 @@ function drawDoorIcon(c, type, x, y, s) {
   else if (icon === 'coin') { c.fillStyle = col; c.beginPath(); c.arc(0, 0, s * 0.85, 0, TAU); c.fill(); outline(c, s * 0.16); c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = s * 0.12; c.beginPath(); c.arc(0, 0, s * 0.55, 0, TAU); c.stroke(); c.fillStyle = OUTLINE; c.font = '900 ' + Math.round(s * 1.0) + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('R', 0, s * 0.05); }
   else if (icon === 'skull') { c.fillStyle = '#f4f8ff'; c.beginPath(); c.arc(0, -s * 0.15, s * 0.75, Math.PI, 0); c.lineTo(s * 0.55, s * 0.45); c.lineTo(-s * 0.55, s * 0.45); c.closePath(); c.fill(); outline(c, s * 0.16); c.fillRect(-s * 0.4, s * 0.45, s * 0.8, s * 0.35); c.strokeRect(-s * 0.4, s * 0.45, s * 0.8, s * 0.35); c.fillStyle = col; c.beginPath(); c.arc(-s * 0.3, -s * 0.1, s * 0.22, 0, TAU); c.arc(s * 0.3, -s * 0.1, s * 0.22, 0, TAU); c.fill(); c.fillStyle = OUTLINE; c.fillRect(-s * 0.08, s * 0.2, s * 0.16, s * 0.2); }
   else if (icon === 'bed') { c.fillStyle = '#f4f8ff'; c.fillRect(-s * 0.9, -s * 0.2, s * 1.8, s * 0.7); outline(c, s * 0.16); c.strokeRect(-s * 0.9, -s * 0.2, s * 1.8, s * 0.7); c.fillStyle = col; c.fillRect(-s * 0.8, -s * 0.55, s * 0.6, s * 0.4); c.strokeRect(-s * 0.8, -s * 0.55, s * 0.6, s * 0.4); c.fillStyle = OUTLINE; c.fillRect(-s * 0.9, s * 0.5, s * 0.16, s * 0.3); c.fillRect(s * 0.74, s * 0.5, s * 0.16, s * 0.3); }
+  else if (icon === 'rep') { c.fillStyle = '#5a3b22'; roundRect(c, -s * 0.9, -s * 0.45, s * 1.8, s * 1.2, s * 0.2); c.fill(); outline(c, s * 0.16); c.fillStyle = '#44546a'; roundRect(c, -s * 0.35, -s * 0.8, s * 0.7, s * 0.4, s * 0.1); c.fill(); outline(c, s * 0.12); c.fillStyle = col; c.fillRect(-s * 0.9, -s * 0.05, s * 1.8, s * 0.16); }
   else if (icon === 'antler') { c.strokeStyle = OUTLINE; c.lineWidth = s * 0.42; c.beginPath(); c.moveTo(0, s * 0.9); c.lineTo(0, -s * 0.1); c.lineTo(-s * 0.7, -s * 0.9); c.moveTo(0, -s * 0.1); c.lineTo(s * 0.7, -s * 0.9); c.moveTo(0, s * 0.35); c.lineTo(-s * 0.6, s * 0.05); c.moveTo(0, s * 0.35); c.lineTo(s * 0.6, s * 0.05); c.stroke(); c.strokeStyle = col; c.lineWidth = s * 0.22; c.stroke(); }
   else { c.fillStyle = col; c.font = '900 ' + Math.round(s * 1.9) + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = s * 0.3; c.strokeStyle = OUTLINE; c.strokeText('?', 0, s * 0.1); c.fillText('?', 0, s * 0.1); }
   c.restore();
@@ -3149,7 +3560,7 @@ function drawDoors(c) {
   // entrance (always shut behind you)
   var wd = DOOR_POS.W; c.fillStyle = '#0d1a24'; c.fillRect(wd.x, wd.y, wd.w, wd.h); c.fillStyle = PAL.wallEdge; for (var b = 0; b < 4; b++) c.fillRect(wd.x + 4 + b * 7, wd.y + 6, 3, wd.h - 12);
   for (var i = 0; i < G.doors.length; i++) {
-    var d = G.doors[i], col = DOOR_TYPES[d.type].color, cx = d.x + d.w / 2, cy = d.y + d.h / 2, vert = d.side === 'E';
+    var d = G.doors[i], col = d.type === 'rep' && d.weapon ? CLASSES[WEAPONS[d.weapon].cls].color : DOOR_TYPES[d.type].color, cx = d.x + d.w / 2, cy = d.y + d.h / 2, vert = d.side === 'E';
     c.fillStyle = '#0d1a24'; c.fillRect(d.x, d.y, d.w, d.h);
     if (!d.open) { c.fillStyle = PAL.wallEdge; for (var k = 0; k < 4; k++) { if (vert) c.fillRect(d.x + 4 + k * 7, d.y + 6, 3, d.h - 12); else c.fillRect(d.x + 6, d.y + 4 + k * 7, d.w - 12, 3); } c.fillStyle = '#3a5568'; c.beginPath(); c.arc(cx, cy, 6, 0, TAU); c.fill(); continue; }
     var a = d.anim, glow = 0.25 + 0.15 * Math.sin(G.realTime * 4);
@@ -3160,8 +3571,14 @@ function drawDoors(c) {
     // icon plaque just inside the arena
     var ix = vert ? d.x - 34 : cx, iy = vert ? cy : (d.side === 'N' ? d.y + d.h + 30 : d.y - 30);
     c.fillStyle = '#0b1620'; c.beginPath(); c.arc(ix, iy, 24, 0, TAU); c.fill(); c.strokeStyle = col; c.lineWidth = 3; c.stroke();
-    drawDoorIcon(c, d.type, ix, iy, 11);
+    if (d.type === 'rep' && d.weapon) drawRepIcon(c, d.weapon, ix, iy, 11); else drawDoorIcon(c, d.type, ix, iy, 11);
   }
+}
+// Instrument Rep plaque: the door's weapon silhouette in its class colour with the class glyph as a badge, so you can steer the run
+function drawRepIcon(c, wid, x, y, s) {
+  var cls = WEAPONS[wid].cls, col = CLASSES[cls].color;
+  c.save(); c.translate(x - s * 0.1, y); c.rotate(-0.6); drawTool(c, wid, s * 1.7, col); c.restore();
+  drawGlyph(c, cls, x + s * 1.0, y + s * 1.0, s * 0.5, false);
 }
 function drawObstacles(c) {
   var obs = G.obstacles;
@@ -3201,12 +3618,22 @@ function drawRewards(c) {
   for (var i = 0; i < G.rewards.length; i++) {
     var r = G.rewards[i]; if (r.used) continue; var bob = Math.sin(G.realTime * 3 + i) * 3, glow = 0.35 + 0.25 * Math.sin(G.realTime * 4 + i);
     c.save(); c.translate(r.x, r.y);
-    var col = r.kind === 'altar' ? '#d98cff' : r.kind === 'crate' ? '#ff9f43' : '#ffd166';
+    var col = r.kind === 'altar' ? '#d98cff' : r.kind === 'crate' ? '#ff9f43' : r.kind === 'rep' && r.weapon ? CLASSES[WEAPONS[r.weapon].cls].color : '#ffd166';
     c.fillStyle = hexA(col, glow * 0.5); c.beginPath(); c.ellipse(0, 14, 34, 14, 0, 0, TAU); c.fill();
     c.fillStyle = '#2a3b4c'; roundRect(c, -24, 4, 48, 16, 6); c.fill(); outline(c, 3);
     c.translate(0, bob);
     if (r.kind === 'altar') { c.fillStyle = '#3a2a5a'; roundRect(c, -16, -30, 32, 36, 8); c.fill(); outline(c, 3); c.fillStyle = col; c.beginPath(); c.ellipse(0, -24, 12, 6, 0, 0, TAU); c.fill(); drawDoorIcon(c, 'boon', 0, -12, 8); }
     else if (r.kind === 'crate') { c.fillStyle = '#c97d3a'; roundRect(c, -22, -26, 44, 32, 6); c.fill(); outline(c, 3); c.fillStyle = '#8a4f1e'; c.fillRect(-22, -14, 44, 5); c.fillStyle = '#ffd166'; c.fillRect(-4, -20, 8, 20); c.fillRect(-12, -14, 24, 8); if (r.item) drawGlyph(c, WEAPONS[r.item.id].cls, 14, -32, 7); }
+    else if (r.kind === 'rep') { // the Instrument Rep: suit, lanyard grin, sample case with the class glyph; the instrument on offer floats overhead
+      var wd = WEAPONS[r.weapon], rc = CLASSES[wd.cls].color;
+      c.fillStyle = '#23324a'; roundRect(c, -13, -22, 26, 30, 7); c.fill(); outline(c, 3);
+      c.fillStyle = '#f4f8ff'; c.beginPath(); c.moveTo(-5, -22); c.lineTo(5, -22); c.lineTo(0, -9); c.closePath(); c.fill(); c.fillStyle = rc; c.fillRect(-1.5, -21, 3, 11);
+      c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -32, 10, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#3a2a1a'; c.beginPath(); c.arc(0, -35, 10, Math.PI, 0); c.fill();
+      eyes(c, 0, -33, 4.5, 2.6, Math.atan2(P.y - (r.y - 32), P.x - r.x), 1, null, {}); mouth(c, 0, -27, 5, 'grin');
+      c.fillStyle = '#5a3b22'; roundRect(c, 11, -8, 18, 14, 3); c.fill(); outline(c, 2.5); drawGlyph(c, wd.cls, 20, -1, 4, false);
+      c.save(); c.translate(0, -56 + Math.sin(G.realTime * 3 + i) * 2); c.rotate(-0.5); drawTool(c, r.weapon, 26, rc); c.restore();
+      text(c, 'REP', 0, 16, 10, rc, 'center', 900);
+    }
     else { c.fillStyle = '#f0e0b0'; c.beginPath(); c.arc(0, -16, 16, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#2fa38a'; c.beginPath(); c.arc(0, -16, 14, Math.PI, 0); c.fill(); c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -10, 8, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = '#1a1218'; c.fillRect(-5, -11, 3, 3); c.fillRect(2, -11, 3, 3); c.fillStyle = '#fff'; c.font = '900 11px ' + FONT; c.textAlign = 'center'; c.strokeStyle = OUTLINE; c.lineWidth = 3; c.strokeText('SHOP', 0, 14); c.fillText('SHOP', 0, 14); }
     c.restore();
   }
@@ -3260,7 +3687,7 @@ function drawEnemy(c, e) {
   // status icons + health bar with weakness pips
   var top = e.y - e.r * e.sy - 14, names = [];
   for (var k in e.st) names.push(k);
-  if (names.length) { var sx0 = e.x - (names.length - 1) * 7; for (var n = 0; n < names.length; n++) drawStatusIcon(c, names[n], sx0 + n * 14, top - 14); }
+  if (names.length) { var sx0 = e.x - (names.length - 1) * 7; for (var n = 0; n < names.length; n++) { drawStatusIcon(c, names[n], sx0 + n * 14, top - 14); if (names[n] === 'bleed' && e.st.bleed.stacks > 1) { c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.fillText('×' + e.st.bleed.stacks, sx0 + n * 14 + 8, top - 18); } } }
   if (!e.boss && !e.def.flat && !e.def.isStump && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
     var bw = Math.max(30, e.r * 1.7), bx = e.x - bw / 2, by = top - 3, wk = e.wk || (e.wk = enemyWeakness(e.def));
     c.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(c, bx - 1, by - 1, bw + 2, 6, 3); c.fill();
@@ -3334,12 +3761,25 @@ function drawFx(c, fx, w) {
   c.save(); c.lineCap = 'round';
   if (fx.kind === 'beam' || fx.kind === 'probe') {
     var jit = fx.style === 'jet' ? 2 : fx.style === 'stream' ? 0 : 1, hw = fx.hw || 8;
-    if (fx.kind === 'probe') { var ph = fx.phase || 0; c.strokeStyle = '#aab7c6'; c.lineWidth = 10; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = 2; c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(fx.x1 + Math.cos(fx.a) * (Math.sin(ph) * 4), fx.y1 + Math.sin(fx.a) * (Math.sin(ph) * 4), 7, 0, TAU); c.fill(); outline(c, 2); c.restore(); return; }
+    if (fx.kind === 'probe') { var ph = fx.phase || 0, pw = fx.hw ? fx.hw * 0.85 : 10; c.strokeStyle = '#aab7c6'; c.lineWidth = pw; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = 2; c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(fx.x1 + Math.cos(fx.a) * (Math.sin(ph) * 4), fx.y1 + Math.sin(fx.a) * (Math.sin(ph) * 4), pw * 0.7, 0, TAU); c.fill(); outline(c, 2);
+      if (fx.piston) { c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 3; c.beginPath(); c.arc(fx.x1, fx.y1, pw * 1.4 + 6 * (1 - fx.t / 0.06), 0, TAU); c.stroke(); }
+      c.restore(); return; }
     var alpha = Math.min(1, fx.t / 0.05); c.globalAlpha = alpha;
     if (fx.style === 'jet') { c.strokeStyle = hexA(col, 0.35); c.lineWidth = hw * 2.2; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = '#bfffd0'; c.lineWidth = hw * 0.9; c.beginPath(); var n = 8; for (var i = 0; i <= n; i++) { var k = i / n, x = lerp(fx.x0, fx.x1, k) + Math.cos(fx.a + Math.PI / 2) * Math.sin(k * 14 + G.realTime * 40) * 3, y = lerp(fx.y0, fx.y1, k) + Math.sin(fx.a + Math.PI / 2) * Math.sin(k * 14 + G.realTime * 40) * 3; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); } c.stroke(); c.fillStyle = '#eafff0'; for (var d = 0; d < 4; d++) { c.beginPath(); c.arc(fx.x1 + vrr(-8, 8), fx.y1 + vrr(-8, 8), 2.5, 0, TAU); c.fill(); } }
     else if (fx.style === 'co2') { var gl = raycast(fx.x0, fx.y0, fx.a, 320); c.strokeStyle = 'rgba(255,70,70,0.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x0 + Math.cos(fx.a) * gl, fx.y0 + Math.sin(fx.a) * gl); c.stroke(); c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(fx.x0 + Math.cos(fx.a) * gl, fx.y0 + Math.sin(fx.a) * gl, 2.5, 0, TAU); c.fill(); c.strokeStyle = hexA(col, 0.35); c.lineWidth = 5; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = '#fff7e0'; c.lineWidth = 1.8; c.stroke(); }
     else if (fx.style === 'stream') { c.strokeStyle = hexA(col, 0.25); c.lineWidth = hw * 2; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.fillStyle = col; var len = dist(fx.x0, fx.y0, fx.x1, fx.y1), off = (G.realTime * 900) % 18; for (var s = off; s < len; s += 18) { c.beginPath(); c.arc(fx.x0 + Math.cos(fx.a) * s, fx.y0 + Math.sin(fx.a) * s, hw * 0.9, 0, TAU); c.fill(); } }
     else { var wobble = fx.style === 'pulse' ? (Math.floor(G.realTime * 30) % 2 ? 1.6 : 1) : 1; c.strokeStyle = hexA(col, 0.35); c.lineWidth = hw * 2.4 * wobble; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = col; c.lineWidth = hw * 1.1 * wobble; c.stroke(); c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, hw * 0.4); c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1 + vrr(-jit, jit), fx.y1 + vrr(-jit, jit)); c.stroke(); }
+    if (fx.whirl) { // Whirlpool capstone: a helix of stone shards spiralling around the beam
+      var nx = Math.cos(fx.a + Math.PI / 2), ny = Math.sin(fx.a + Math.PI / 2);
+      c.strokeStyle = 'rgba(255,233,176,0.35)'; c.lineWidth = 2; c.beginPath();
+      for (var ws = 0; ws <= 24; ws++) { var wk = ws / 24, off = Math.sin(wk * 14 - G.realTime * 18) * 26; var wx = lerp(fx.x0, fx.x1, wk) + nx * off, wy = lerp(fx.y0, fx.y1, wk) + ny * off; if (ws === 0) c.moveTo(wx, wy); else c.lineTo(wx, wy); }
+      c.stroke(); c.fillStyle = '#ffe9b0';
+      for (var sh = 0; sh < 6; sh++) { var tk = (G.realTime * 0.9 + sh / 6) % 1, so = Math.sin(tk * 14 - G.realTime * 18) * 26; c.save(); c.translate(lerp(fx.x0, fx.x1, tk) + nx * so, lerp(fx.y0, fx.y1, tk) + ny * so); c.rotate(G.realTime * 10 + sh); regPoly(c, 4, 5, 0); c.fill(); outline(c, 1.2); c.restore(); }
+    }
+    if (fx.boil) { // Popcorning aspect: the tip boils while you stand still
+      c.fillStyle = 'rgba(255,233,176,0.22)'; c.beginPath(); c.arc(fx.x1, fx.y1, 38, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,233,176,0.8)'; c.lineWidth = 2; c.setLineDash([4, 5]); c.lineDashOffset = -G.realTime * 60; c.stroke(); c.setLineDash([]);
+      c.fillStyle = '#fff'; for (var bb = 0; bb < 4; bb++) { c.beginPath(); c.arc(fx.x1 + vrr(-30, 30), fx.y1 + vrr(-30, 30), 2, 0, TAU); c.fill(); }
+    }
     c.fillStyle = '#fff'; c.beginPath(); c.arc(fx.x1, fx.y1, hw * 0.8 + 2, 0, TAU); c.fill(); c.fillStyle = col; c.beginPath(); c.arc(fx.x0, fx.y0, 5, 0, TAU); c.fill();
   } else if (fx.kind === 'arc') {
     var k2 = 1 - fx.t / fx.dur, dir = fx.dir || 1, a0 = fx.a - fx.half * dir, a1 = fx.a - fx.half * dir + fx.half * 2 * dir * Math.min(1, k2 * 1.3);
@@ -3347,16 +3787,26 @@ function drawFx(c, fx, w) {
     c.strokeStyle = col; c.lineWidth = fx.loop ? 6 : 4; c.beginPath(); c.arc(fx.x, fx.y, fx.rad - 3, Math.min(a0, a1), Math.max(a0, a1)); c.stroke(); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
     if (fx.loop) { c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.ellipse(fx.x + Math.cos(a1) * (fx.rad - 10), fx.y + Math.sin(a1) * (fx.rad - 10), 10, 14, a1, 0, TAU); c.stroke(); }
   } else if (fx.kind === 'chain') {
-    c.globalAlpha = Math.min(1, fx.t / 0.05); var pts = fx.pts;
-    for (var p = 0; p < pts.length - 1; p++) { var A = pts[p], B = pts[p + 1], segs = 6; c.strokeStyle = hexA(col, 0.4); c.lineWidth = 7; c.beginPath(); c.moveTo(A.x, A.y); for (var q = 1; q <= segs; q++) { var kq = q / segs, jx = q < segs ? vrr(-6, 6) : 0, jy = q < segs ? vrr(-6, 6) : 0; c.lineTo(lerp(A.x, B.x, kq) + jx, lerp(A.y, B.y, kq) + jy); } c.stroke(); c.strokeStyle = fx.fizzle ? '#8fa6b8' : '#fff7d6'; c.lineWidth = 2.5; c.stroke(); if (p > 0 || !fx.idle) { c.fillStyle = col; c.beginPath(); c.arc(B.x, B.y, 6, 0, TAU); c.fill(); } }
+    c.globalAlpha = Math.min(1, fx.t / 0.05); var pts = fx.pts, segList = [];
+    if (fx.branches) segList = fx.branches; else for (var p0 = 0; p0 < pts.length - 1; p0++) segList.push([pts[p0], pts[p0 + 1]]);   // Chain Reaction draws a tree of segments
+    for (var p = 0; p < segList.length; p++) { var A = segList[p][0], B = segList[p][1], segs = 6; c.strokeStyle = hexA(col, 0.4); c.lineWidth = fx.tree ? 5 : 7; c.beginPath(); c.moveTo(A.x, A.y); for (var q = 1; q <= segs; q++) { var kq = q / segs, jx = q < segs ? vrr(-6, 6) : 0, jy = q < segs ? vrr(-6, 6) : 0; c.lineTo(lerp(A.x, B.x, kq) + jx, lerp(A.y, B.y, kq) + jy); } c.stroke(); c.strokeStyle = fx.fizzle ? '#8fa6b8' : '#fff7d6'; c.lineWidth = 2.5; c.stroke(); if (p > 0 || !fx.idle) { c.fillStyle = col; c.beginPath(); c.arc(B.x, B.y, 6, 0, TAU); c.fill(); } }
   } else if (fx.kind === 'cone') {
     var kc = fx.t / 0.1; c.globalAlpha = Math.min(1, kc) * 0.9;
     var cc = fx.style === 'heat' ? '#ffb630' : fx.style === 'vapor' ? '#ffd8a8' : fx.style === 'steam' ? '#ffffff' : fx.style === 'splash' ? '#bfffd0' : col;
     c.fillStyle = hexA(cc, 0.3); c.beginPath(); c.moveTo(fx.x, fx.y); c.arc(fx.x, fx.y, fx.rad, fx.a - fx.half, fx.a + fx.half); c.closePath(); c.fill();
     c.fillStyle = hexA(cc, 0.5); for (var m = 0; m < 6; m++) { var ra = fx.a + vrr(-fx.half, fx.half) * 0.9, rd = vrr(fx.rad * 0.3, fx.rad * 0.95); c.beginPath(); c.arc(fx.x + Math.cos(ra) * rd, fx.y + Math.sin(ra) * rd, vrr(3, 7), 0, TAU); c.fill(); }
   } else if (fx.kind === 'suction') {
-    c.globalAlpha = 0.6; c.strokeStyle = '#9fb6c9'; c.lineWidth = 2; c.setLineDash([6, 8]); c.lineDashOffset = -G.realTime * 120; c.beginPath(); c.moveTo(P.x, P.y); c.arc(P.x, P.y, fx.rad, fx.a - 0.7, fx.a + 0.7); c.closePath(); c.stroke(); c.setLineDash([]);
-    for (var u = 0; u < 3; u++) { var ua = fx.a + vrr(-0.6, 0.6), ud = ((G.realTime * 300 + u * 70) % fx.rad); c.fillStyle = 'rgba(159,182,201,0.5)'; c.beginPath(); c.arc(P.x + Math.cos(ua) * (fx.rad - ud), P.y + Math.sin(ua) * (fx.rad - ud), 3, 0, TAU); c.fill(); }
+    var hf = fx.half || 0.7, sc = fx.vortex ? '#7ff0ff' : '#9fb6c9';
+    c.globalAlpha = 0.6; c.strokeStyle = sc; c.lineWidth = fx.vortex ? 3 : 2; c.setLineDash([6, 8]); c.lineDashOffset = -G.realTime * 120; c.beginPath(); c.moveTo(P.x, P.y); c.arc(P.x, P.y, fx.rad, fx.a - hf, fx.a + hf); c.closePath(); c.stroke(); c.setLineDash([]);
+    for (var u = 0; u < (fx.vortex ? 7 : 3); u++) { var ua = fx.a + vrr(-hf * 0.85, hf * 0.85), ud = ((G.realTime * 300 + u * 70) % fx.rad); c.fillStyle = fx.vortex ? 'rgba(127,240,255,0.6)' : 'rgba(159,182,201,0.5)'; c.beginPath(); c.arc(P.x + Math.cos(ua) * (fx.rad - ud), P.y + Math.sin(ua) * (fx.rad - ud), 3, 0, TAU); c.fill(); }
+    if (fx.vortex) { c.strokeStyle = 'rgba(127,240,255,0.5)'; c.lineWidth = 2; c.beginPath(); c.arc(P.x, P.y, 70, fx.a - hf, fx.a + hf); c.stroke(); }
+  } else if (fx.kind === 'maelstrom') { // Maelstrom capstone: a tight spinning vortex ahead of the probe
+    c.globalAlpha = 0.85; c.translate(fx.x, fx.y);
+    c.fillStyle = 'rgba(56,232,255,0.08)'; c.beginPath(); c.arc(0, 0, fx.r, 0, TAU); c.fill();
+    for (var ring = 0; ring < 3; ring++) { var rr2 = fx.r * (0.35 + ring * 0.3), rot = G.realTime * (4 + ring * 2) * (ring % 2 ? -1 : 1); c.strokeStyle = 'rgba(159,246,255,' + (0.7 - ring * 0.18) + ')'; c.lineWidth = 3 - ring * 0.6; c.setLineDash([rr2 * 0.9, rr2 * 0.7]); c.lineDashOffset = -rot * rr2; c.beginPath(); c.arc(0, 0, rr2, 0, TAU); c.stroke(); }
+    c.setLineDash([]); c.fillStyle = '#eaffff';
+    for (var db = 0; db < 8; db++) { var ta = G.realTime * 7 + db * 0.78, tr = fx.eye + ((G.realTime * 60 + db * 13) % (fx.r - fx.eye)); c.beginPath(); c.arc(Math.cos(ta) * tr, Math.sin(ta) * tr, 2.2, 0, TAU); c.fill(); }
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, fx.eye, 0, TAU); c.stroke();
   } else if (fx.kind === 'lens') {
     var pl = 0.5 + 0.5 * Math.sin(G.realTime * 10), lw = fx.rad * (0.55 + 0.45 * fx.v);
     c.globalAlpha = 0.35; c.strokeStyle = col; c.lineWidth = 1.5; c.setLineDash([4, 6]); c.beginPath(); c.moveTo(fx.mx, fx.my); c.lineTo(fx.x, fx.y - lw * 0.5); c.moveTo(fx.mx, fx.my); c.lineTo(fx.x, fx.y + lw * 0.5); c.stroke(); c.setLineDash([]);
@@ -3397,6 +3847,8 @@ function drawBullets(c) {
       if (b.kind === 'slug') { roundRect(c, -b.r * 2, -b.r * 0.6, b.r * 4, b.r * 1.2, b.r * 0.5); c.fill(); outline(c, 2); }
       else if (b.kind === 'ice') { starPath(c, b.r * 1.3, b.r * 0.6, 6, G.realTime * 6); c.fill(); outline(c, 2); c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, b.r * 0.4, 0, TAU); c.fill(); }
       else if (b.kind === 'basket') { c.strokeStyle = b.color; c.lineWidth = 2; c.beginPath(); c.ellipse(0, 0, b.r * 1.2, b.r, 0, 0, TAU); c.ellipse(0, 0, b.r * 1.2, b.r * 0.4, 0, 0, TAU); c.moveTo(-b.r * 1.2, 0); c.lineTo(b.r * 1.2, 0); c.stroke(); }
+      else if (b.kind === 'orbit') { c.rotate(G.realTime * 12); regPoly(c, b.r * 1.2, 5, 0); c.fill(); outline(c, 1.5); c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(-1, -1, b.r * 0.3, 0, TAU); c.fill(); }
+      else if (b.kind === 'blade') { c.rotate(G.realTime * 30); c.fillStyle = '#e8eef5'; c.beginPath(); c.moveTo(-b.r * 1.6, 0); c.lineTo(0, -b.r * 0.5); c.lineTo(b.r * 1.6, 0); c.lineTo(0, b.r * 0.5); c.closePath(); c.fill(); outline(c, 1.5); c.fillStyle = b.color; c.beginPath(); c.arc(0, 0, b.r * 0.35, 0, TAU); c.fill(); }
       else { c.beginPath(); c.arc(0, 0, b.r, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.beginPath(); c.arc(-b.r * 0.2, -b.r * 0.2, b.r * 0.35, 0, TAU); c.fill(); }
     }
     c.restore();
@@ -3439,6 +3891,57 @@ function hudSlotAt(x, y) { if (!G.running) return -1; var rs = slotRects(); for 
 var PAUSE_BTN = { x: W - 30, y: 72, r: 22 };
 function hudPauseAt(x, y) { return G.running && dist(x, y, PAUSE_BTN.x, PAUSE_BTN.y) <= PAUSE_BTN.r + 6; }
 function text(c, s, x, y, size, color, align, weight, stroke) { c.font = (weight || 900) + ' ' + size + 'px ' + FONT; c.textAlign = align || 'left'; c.textBaseline = 'middle'; if (stroke !== false) { c.lineWidth = Math.max(2, size * 0.22); c.strokeStyle = 'rgba(6,12,18,0.85)'; c.strokeText(s, x, y); } c.fillStyle = color || '#fff'; c.fillText(s, x, y); }
+function wrapLines(c, s, maxW, size) { c.font = '800 ' + size + 'px ' + FONT; var words = String(s).split(' '), lines = [], cur = ''; for (var i = 0; i < words.length; i++) { var t = cur ? cur + ' ' + words[i] : words[i]; if (c.measureText(t).width > maxW && cur) { lines.push(cur); cur = words[i]; } else cur = t; } if (cur) lines.push(cur); return lines; }
+/* ── weapon mods on the HUD: a branch-progress pip row under each slot, and a detail card on hover (mouse) or after a slot tap (touch) ── */
+function drawModPips(c, w, x, y, wdt) {
+  var all = modsFor(w.id); if (!all.length) return;
+  var items = [], i, cap = null;
+  for (var b = 0; b < BRANCH_LIST.length; b++) { var br = BRANCH_LIST[b], n = 0, held = 0; for (i = 0; i < all.length; i++) { var m = all[i]; if (m.capstone) { cap = m; continue; } if (m.branch !== br) continue; n++; if (hasMod(w, m.id)) held++; } for (var k = 0; k < n; k++) items.push({ color: BRANCHES[br].color, on: k < held }); }
+  if (cap) items.push({ color: '#ffd166', on: !!w.capstone, star: true });
+  var gap = 7, x0 = x + wdt / 2 - (items.length - 1) * gap / 2;
+  for (i = 0; i < items.length; i++) {
+    var it = items[i], px = x0 + i * gap; c.fillStyle = it.on ? it.color : 'rgba(255,255,255,0.16)';
+    if (it.star) { c.save(); c.translate(px, y); starPath(c, 3.8, 1.7, 5, -Math.PI / 2); c.fill(); if (it.on) outline(c, 1); c.restore(); }
+    else { c.beginPath(); c.arc(px, y, 2.4, 0, TAU); c.fill(); if (it.on) outline(c, 1); }
+  }
+}
+function detailSlot() {
+  if (!G.running || G.overlay || G.over) return -1;
+  if (Input.mode === 'kb') { var s = hudSlotAt(Input.mx, Input.my); if (s >= 0) return s; }
+  if (G.detailT > 0 && G.detailSlot >= 0 && G.detailSlot < G.weapons.length) return G.detailSlot;
+  return -1;
+}
+function drawWeaponDetail(c, w, rct) {
+  var all = modsFor(w.id), asp = aspectDef(w.id, w.aspect), col = CLASSES[wcls(w)].color, cw = 320, pad = 10, lh = 15, i, k;
+  var mods = w.modIds.slice(0); if (w.capstone) mods.push(w.capstone);
+  var cap = null, branches = []; for (i = 0; i < all.length; i++) { if (all[i].capstone) cap = all[i]; else if (branches.indexOf(all[i].branch) < 0) branches.push(all[i].branch); }
+  var capLines = cap ? wrapLines(c, cap.desc.replace(/^CAPSTONE:\s*/, ''), cw - pad * 2, 9) : [];
+  var ch = pad * 2 + 24 + lh + (asp ? lh : 0) + (all.length ? Math.max(1, mods.length) * lh + branches.length * 13 + 4 + (cap ? lh + 4 + capLines.length * 11 : 0) : lh);
+  var x = clamp(rct.x + rct.w / 2 - cw / 2, 8, W - cw - 8), y = HUD.slotY - 36 - ch;
+  c.save(); c.fillStyle = 'rgba(8,18,26,0.95)'; roundRect(c, x, y, cw, ch, 12); c.fill(); c.strokeStyle = col; c.lineWidth = 2; c.stroke();
+  c.save(); c.translate(x + 24, y + pad + 13); c.rotate(-0.6); drawTool(c, w.id, 22, col); c.restore();
+  text(c, w.def.name.toUpperCase(), x + 50, y + pad + 7, 12, col, 'left', 900, false);
+  text(c, w.rarity.toUpperCase() + (w.def.modes ? ' · ' + w.def.modes[w.mode] : '') + ' · ' + CLASSES[wcls(w)].name.toUpperCase(), x + 50, y + pad + 21, 9, '#8fa6b8', 'left', 800, false);
+  var ty = y + pad + 24 + lh;
+  if (asp) { text(c, 'ASPECT ' + asp.num + ' · ' + asp.name.toUpperCase(), x + pad, ty, 10, '#7dffb0', 'left', 900, false); ty += lh; }
+  if (!all.length) { text(c, 'No upgrade path for this instrument yet.', x + pad, ty, 10, '#8fa6b8', 'left', 800, false); c.restore(); return; }
+  if (!mods.length) { text(c, 'No mods yet — look for an Instrument Rep door.', x + pad, ty, 10, '#8fa6b8', 'left', 800, false); ty += lh; }
+  for (i = 0; i < mods.length; i++) { var md = MODS[mods[i]], mc = md.capstone ? '#ffd166' : BRANCHES[md.branch].color; c.fillStyle = mc; c.beginPath(); c.arc(x + pad + 5, ty, 4, 0, TAU); c.fill(); text(c, (md.capstone ? '★ ' : '') + md.name + (md.capstone ? '' : ' · ' + BRANCHES[md.branch].name + ' ' + ['I', 'II', 'III'][md.tier - 1]), x + pad + 14, ty, 10, md.capstone ? '#ffd166' : '#eef4f8', 'left', 800, false); ty += lh; }
+  ty += 2;
+  for (var b = 0; b < branches.length; b++) {
+    var br = branches[b], n = 0, held = 0; for (i = 0; i < all.length; i++) { if (all[i].capstone || all[i].branch !== br) continue; n++; if (hasMod(w, all[i].id)) held++; }
+    text(c, BRANCHES[br].name.toUpperCase(), x + pad, ty, 9, BRANCHES[br].color, 'left', 900, false);
+    for (k = 0; k < n; k++) { c.fillStyle = k < held ? BRANCHES[br].color : 'rgba(255,255,255,0.14)'; roundRect(c, x + pad + 62 + k * 16, ty - 4, 12, 8, 3); c.fill(); }
+    text(c, held + ' / ' + n, x + cw - pad, ty, 9, '#8fa6b8', 'right', 800, false); ty += 13;
+  }
+  if (cap) {
+    var ready = capstoneReady(w, cap), taken = w.capstone === cap.id, req = reqList(cap), names = []; for (i = 0; i < req.length; i++) names.push(MODS[req[i]].name);
+    ty += 4; text(c, '★ CAPSTONE · ' + cap.name.toUpperCase(), x + pad, ty, 10, '#ffd166', 'left', 900, false);
+    text(c, taken ? 'TAKEN' : ready ? 'READY — find a rep' : 'needs ' + names.join(' + '), x + cw - pad, ty, 9, taken ? '#7dffb0' : ready ? '#ffd166' : '#8fa6b8', 'right', 800, false); ty += lh;
+    for (i = 0; i < capLines.length; i++) { text(c, capLines[i], x + pad, ty - 2, 9, '#c9d6e0', 'left', 800, false); ty += 11; }
+  }
+  c.restore();
+}
 function drawHUD(c) {
   // HP
   var hpw = 190, hx = 16, hy = 14; c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, hx - 2, hy - 2, hpw + 4, 20, 8); c.fill();
@@ -3477,9 +3980,11 @@ function drawHUD(c) {
     var modes = w.def.modes; if (modes) text(c, modes[w.mode], rct.x + rct.w / 2, rct.y + yoff + rct.h - 15, 8, col, 'center', 900, false);
     var mt = w.def.meter ? w.def.meter(w) : null;
     if (mt) { c.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(c, rct.x + 6, rct.y + yoff + rct.h - 8, rct.w - 12, 4, 2); c.fill(); c.fillStyle = mt.pulse ? (Math.floor(G.realTime * 8) % 2 ? '#fff' : mt.color) : mt.color; roundRect(c, rct.x + 6, rct.y + yoff + rct.h - 8, (rct.w - 12) * clamp(mt.v, 0, 1), 4, 2); c.fill(); }
+    drawModPips(c, w, rct.x, rct.y + yoff + rct.h + 5, rct.w);
     if (active) text(c, w.def.name.toUpperCase() + (mt && mt.label ? ' · ' + mt.label.toUpperCase() : ''), W / 2, HUD.slotY - 14, 10, col, 'center', 900);
   }
   if (G.swapBonusT > 0 && G.swapT <= 0) text(c, 'RIGHT TOOL window', W / 2, HUD.slotY - 28, 9, '#ffd166', 'center', 800);
+  var ds = detailSlot(); if (ds >= 0 && G.weapons[ds]) drawWeaponDetail(c, G.weapons[ds], rs[ds]);
   drawUltMeter(c, rs);
   // boss bar
   if (G.boss && !G.boss.dead && G.introT <= 0) {
@@ -3551,7 +4056,7 @@ function render(dtReal) {
   for (i = 0; i < es.length; i++) if (!es[i].def.flat && !es[i].boss && !es[i].def.isLobe && !es[i].def.isStump) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].boss) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].def.isLobe || es[i].def.isStump) drawEnemy(c, es[i]);
-  drawPlayer(c); drawUltArms(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
+  drawPlayer(c); drawUltArms(c); drawFields(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
   if (DEBUG) { c.strokeStyle = 'rgba(0,255,0,0.6)'; c.lineWidth = 1; for (i = 0; i < es.length; i++) { c.beginPath(); c.arc(es[i].x, es[i].y, es[i].r, 0, TAU); c.stroke(); } c.strokeStyle = 'rgba(255,0,0,0.6)'; for (i = 0; i < G.bullets.length; i++) { c.beginPath(); c.arc(G.bullets[i].x, G.bullets[i].y, G.bullets[i].r, 0, TAU); c.stroke(); } }
   c.restore();
   drawVignette(c); drawHUD(c); drawTouch(c);
@@ -3562,7 +4067,7 @@ function render(dtReal) {
    §17 SCREENS (HTML overlays) — title, help, bestiary, settings, pause, boon altar, crate, shop, summary
    Every overlay has a way out; the sim is frozen while one is open.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary'];
+var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary', 'mod', 'aspects'];
 function hideScreens() { for (var i = 0; i < OVERLAYS.length; i++) $('ov-' + OVERLAYS[i]).classList.remove('show'); G.overlay = null; clearEdges(); }
 function openOverlay(id) { hideScreens(); $('ov-' + id).classList.add('show'); G.overlay = id; Snd.sfx('click'); }
 var settingsFrom = 'title', pendingStart = false, offerCache = null;
@@ -3577,8 +4082,32 @@ function updateTitle() {
   $('resLevel').textContent = 'Residency: PGY-' + lp.lvl + (lp.lvl >= 6 ? ' (attending)' : ''); $('resXp').textContent = lp.cur + ' / ' + lp.need + ' XP'; $('resBar').style.width = Math.round(lp.cur / lp.need * 100) + '%';
   var b = META.best; $('bestRun').textContent = b ? ('Best run: ' + (b.won ? 'DISCHARGED · ' : '') + b.rooms + ' rooms · ' + b.kills + ' kills · ' + b.rvu + ' RVU · ' + fmtTime(b.time)) : 'No runs yet. Scrub in.';
   var unl = []; for (var i = 0; i < WEAPON_ORDER.length; i++) { var wid = WEAPON_ORDER[i]; if (WEAPONS[wid].unlock && WEAPONS[wid].unlock === lp.lvl) unl.push(WEAPONS[wid].name); }
+  if (lp.lvl === 2) unl.push('Aspect II of every instrument'); if (lp.lvl === 4) unl.push('Aspect III of every instrument');
   $('titleBlurb').textContent = unl.length ? 'Unlocked at this level: ' + unl.join(', ') : 'Lasers break stones. Loops cut tumours. Heat burns bugs. Water flushes clots.';
+  var al = []; for (var a = 0; a < ASPECT_WEAPONS.length; a++) { var aw = ASPECT_WEAPONS[a], ad = aspectDef(aw, chosenAspect(aw)); al.push(WEAPONS[aw].name.replace(/^Resectoscope Loop$/, 'Loop').replace(/ (Laser|Probe)$/, '') + ' · ' + ad.name); }
+  $('aspectLine').textContent = 'Aspects: ' + al.join('  |  ');
   $('btnExit').style.display = EMBED ? '' : 'none';
+}
+/* aspects: pre-run instrument variants (persisted in META.aspects; II / III gated by residency level) */
+function openAspects() { openOverlay('aspects'); renderAspects(); }
+function renderAspects() {
+  var wrap = $('aspectList'); wrap.innerHTML = ''; var lvl = residencyLevel();
+  $('aspectHint').textContent = 'PGY-' + lvl + (lvl < 4 ? ' · next unlock at PGY-' + (lvl < 2 ? 2 : 4) : ' · every aspect unlocked');
+  for (var wi = 0; wi < ASPECT_WEAPONS.length; wi++) (function (wid) {
+    var list = ASPECTS[wid], d = WEAPONS[wid], cur = chosenAspect(wid), row = el('div', 'asprow'), head = el('div', 'asphead');
+    var cv = document.createElement('canvas'); cv.width = 80; cv.height = 80; var c = cv.getContext('2d'); c.scale(2, 2); c.translate(18, 22); c.rotate(-0.5); drawTool(c, wid, 26, CLASSES[d.cls].color);
+    head.appendChild(cv); head.appendChild(el('b', '', esc(d.name))); head.appendChild(el('span', 'tag ' + d.cls, CLASSES[d.cls].name)); row.appendChild(head);
+    var cards = el('div', 'cards');
+    for (var i = 0; i < list.length; i++) (function (a) {
+      var unlocked = aspectUnlocked(wid, a), sel = a.id === cur, card = el('button', 'card asp' + (sel ? ' sel' : '') + (unlocked ? '' : ' locked')); card.type = 'button';
+      card.appendChild(el('h4', '', 'Aspect ' + a.num + ' · ' + esc(a.name)));
+      card.appendChild(el('div', '', unlocked ? (sel ? '<span class="tag sel">EQUIPPED</span>' : '<span class="tag">tap to equip</span>') : '<span class="tag locked">LOCKED · PGY-' + a.unlock + '</span>'));
+      card.appendChild(el('div', 'desc', esc(a.desc)));
+      card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (!unlocked) { Snd.sfx('tink'); return; } setAspect(wid, a.id); Snd.sfx('buy'); renderAspects(); updateTitle(); });
+      cards.appendChild(card);
+    })(list[i]);
+    row.appendChild(cards); wrap.appendChild(row);
+  })(ASPECT_WEAPONS[wi]);
 }
 /* help: the matchup grid */
 function buildMatrix() {
@@ -3685,14 +4214,62 @@ function openWeaponScreen(o) {
     if (full) { Snd.sfx('tink'); return; }
     giveWeapon(it.id, it.rarity); if (!owned && !ult) selectWeapon(G.weapons.length - 1); if (crateRef) crateRef.used = true; hideScreens();
   }));
-  if (full) for (var s = 0; s < G.weapons.length; s++) (function (slot) { var w = G.weapons[slot], b = el('button', 'btn small', 'Replace <b style="color:' + CLASSES[wcls(w)].color + '">' + esc(w.def.name) + '</b>'); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); replaceWeapon(slot, item.id, item.rarity); selectWeapon(slot); if (crateRef) crateRef.used = true; hideScreens(); Snd.sfx('buy'); }); sp.appendChild(b); })(s);
+  if (full) for (var s = 0; s < G.weapons.length; s++) (function (slot) { var w = G.weapons[slot], nMods = w.modIds.length + (w.capstone ? 1 : 0), b = el('button', 'btn small', 'Replace <b style="color:' + CLASSES[wcls(w)].color + '">' + esc(w.def.name) + '</b>' + (nMods ? ' <span class="hint">(loses ' + nMods + ' mod' + (nMods > 1 ? 's' : '') + ')</span>' : '')); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); replaceWeapon(slot, item.id, item.rarity); selectWeapon(slot); if (crateRef) crateRef.used = true; hideScreens(); Snd.sfx('buy'); }); sp.appendChild(b); })(s);
+}
+/* Instrument Rep: three mods for one carried weapon, one reroll for RVU */
+var repRef = null;
+var REP_TALK = ['Doc. DOC. This attachment changes everything. Also my quota.', 'Free sample. Well — free for you. Admin hears about it later.', 'Our competitors? Never heard of them. Pick one, I have a flight.', 'This one is evidence-based. The evidence is me, saying it.', 'Sign here. Kidding. Just take the upgrade.', 'I was a scrub tech once. Now I have a lanyard and a Tesla.'];
+function repWeapon() { if (!repRef) return null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === repRef.weapon) return G.weapons[i]; return null; }
+function openRepScreen(reward) {
+  repRef = reward; var w = repWeapon();
+  if (!w) { reward.used = true; repRef = null; return; }
+  if (!reward.offer) { reward.offer = rollModOffer(w, 3); reward.rerolled = false; }
+  openOverlay('mod'); $('modTalk').textContent = REP_TALK[Math.floor(vr() * REP_TALK.length)]; renderModCards();
+}
+function renderModCards() {
+  var w = repWeapon(), wrap = $('modCards'); wrap.innerHTML = ''; if (!w) { hideScreens(); return; }
+  $('modTitle').innerHTML = 'Instrument Rep · <span style="color:' + CLASSES[WEAPONS[w.id].cls].color + '">' + esc(w.def.name) + '</span>';
+  var offer = repRef.offer;
+  if (!offer.length) wrap.appendChild(el('p', 'hint', 'Nothing left in the sample case for this instrument.'));
+  for (var i = 0; i < offer.length; i++) wrap.appendChild(modCard(offer[i], function (id) { giveMod(id); if (repRef) repRef.used = true; repRef = null; hideScreens(); }));
+  var tgt = repRerollTarget();
+  $('btnModReroll').disabled = repRef.rerolled || G.rvu < MOD_REROLL_COST || !tgt; $('btnModReroll').textContent = repRef.rerolled ? 'REROLLED' : !tgt ? 'NOTHING TO REROLL' : (tgt.switched ? 'REROLL → ANOTHER INSTRUMENT (' : 'REROLL (') + MOD_REROLL_COST + ' RVU)';
+  $('modSub').textContent = 'You have ' + G.rvu + ' RVU · ' + w.def.name + ' holds ' + w.modIds.length + ' / ' + MOD_CAP + ' mods' + (w.capstone ? ' + its capstone' : '') + '. A mod lasts the whole run. One reroll per rep: new samples, or another instrument’s case when this one is out.';
+}
+// what one reroll buys: fresh samples for the same weapon, else the sample case for another carried instrument that still has mods to offer
+function anyRepTargetExcept(wid) { for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id !== wid && availableMods(G.weapons[i]).length) return true; return false; }
+function repRerollTarget() {
+  var w = repWeapon(); if (!w || !repRef) return null;
+  var fresh = availableMods(w).filter(function (m) { return !m.capstone && repRef.offer.indexOf(m.id) < 0; });
+  if (fresh.length) return { w: w, switched: false };
+  return anyRepTargetExcept(w.id) ? { w: null, switched: true } : null;
+}
+function modIcon(m) {
+  var cv = document.createElement('canvas'); cv.width = 128; cv.height = 128; var c = cv.getContext('2d'); c.scale(2, 2);
+  var col = CLASSES[WEAPONS[m.weapon].cls].color, bc = m.capstone ? '#ffd166' : BRANCHES[m.branch].color;
+  c.translate(32, 32); c.fillStyle = hexA(bc, 0.15); c.beginPath(); c.arc(0, 0, 27, 0, TAU); c.fill();
+  c.strokeStyle = bc; c.lineWidth = 3; if (m.capstone) c.setLineDash([5, 4]); c.beginPath(); c.arc(0, 0, 28, 0, TAU); c.stroke(); c.setLineDash([]);
+  c.save(); c.translate(-4, 2); c.rotate(-0.5); drawTool(c, m.weapon, 34, col); c.restore();
+  if (m.capstone) { c.fillStyle = '#ffd166'; c.save(); c.translate(18, -18); starPath(c, 8, 3.5, 5, -Math.PI / 2); c.fill(); outline(c, 2); c.restore(); }
+  return cv;
+}
+function modCard(id, onPick) {
+  var m = MODS[id], card = el('button', 'card ' + (m.capstone ? 'capstone' : m.rarity)); card.type = 'button';
+  if (isNew('m:' + id)) card.appendChild(el('span', 'new', 'NEW'));
+  card.appendChild(modIcon(m)); card.appendChild(el('h4', '', esc(m.name)));
+  card.appendChild(el('div', '', '<span class="tag br-' + m.branch + '">' + BRANCHES[m.branch].name + ' ' + ['I', 'II', 'III'][m.tier - 1] + '</span> <span class="tag ' + (m.capstone ? 'capstone' : m.rarity) + '">' + (m.capstone ? 'capstone' : m.rarity) + '</span>'));
+  card.appendChild(el('div', 'desc', esc(m.desc)));
+  card.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (m.capstone ? 'TAKE THE CAPSTONE' : 'INSTALL') + '</span>'));
+  card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); onPick(id); });
+  return card;
 }
 /* shop */
 var SHOP_TALK = ['Bro. BRO. You need this. Trust me, I did a fellowship.', 'Everything here is single-use. Like my attention span.', 'RVUs accepted. Also compliments. Mostly RVUs.', 'That IV bag? Artisanal saline. Small batch.', 'Heart container’s hand-made. Not from a patient. Probably.', 'You look pale. Buy something, it helps. Me, mostly.'];
 var shopRef = null;
 function openShop(reward) {
   shopRef = reward;
-  if (!reward.stock) { var mul = 1 + G.roomIndex * 0.08, bn = rollBoons(1); reward.stock = []; if (bn.length) reward.stock.push({ kind: 'boon', id: bn[0], price: Math.round(45 * mul), name: BOONS[bn[0]].name, sub: BOONS[bn[0]].desc }); reward.stock.push({ kind: 'iv', price: Math.round(30 * mul), name: 'IV bag', sub: 'Heal 25 HP.' }); reward.stock.push({ kind: 'heart', price: Math.round(60 * mul), name: 'Heart container', sub: '+10 max HP.' }); var wd = rollWeaponDrop(); reward.stock.push({ kind: 'weapon', item: wd, price: Math.round(50 * mul), name: WEAPONS[wd.id].name + ' (' + wd.rarity + ')', sub: WEAPONS[wd.id].desc }); }
+  if (!reward.stock) { var mul = 1 + G.roomIndex * 0.08, bn = rollBoons(1); reward.stock = []; if (bn.length) reward.stock.push({ kind: 'boon', id: bn[0], price: Math.round(45 * mul), name: BOONS[bn[0]].name, sub: BOONS[bn[0]].desc }); reward.stock.push({ kind: 'iv', price: Math.round(30 * mul), name: 'IV bag', sub: 'Heal 25 HP.' }); reward.stock.push({ kind: 'heart', price: Math.round(60 * mul), name: 'Heart container', sub: '+10 max HP.' }); var wd = rollWeaponDrop(); reward.stock.push({ kind: 'weapon', item: wd, price: Math.round(50 * mul), name: WEAPONS[wd.id].name + ' (' + wd.rarity + ')', sub: WEAPONS[wd.id].desc });
+    var rw2 = pickRepWeapon(); if (rw2) { var mo = rollModOffer(rw2, 1, null, true); if (mo.length) reward.stock.push({ kind: 'mod', id: mo[0], price: Math.round(55 * mul), name: 'Rep sample: ' + MODS[mo[0]].name, sub: WEAPONS[rw2.id].name + ' mod (' + BRANCHES[MODS[mo[0]].branch].name + ') · ' + MODS[mo[0]].desc }); } }
   openOverlay('shop'); $('shopTalk').textContent = SHOP_TALK[Math.floor(vr() * SHOP_TALK.length)]; renderShop();
 }
 function renderShop() {
@@ -3703,6 +4280,7 @@ function renderShop() {
     var b = el('button', 'btn small' + (it.sold || G.rvu < it.price ? '' : ' primary'), it.sold ? '—' : 'BUY'); b.type = 'button'; b.disabled = it.sold || G.rvu < it.price;
     b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (it.sold || G.rvu < it.price) return; G.rvu -= it.price; it.sold = true; Snd.sfx('buy');
       if (it.kind === 'boon') giveBoon(it.id); else if (it.kind === 'iv') healPlayer(25); else if (it.kind === 'heart') { P.maxHp += 10; healPlayer(10); }
+      else if (it.kind === 'mod') { if (!giveMod(it.id)) { G.rvu += it.price; it.sold = false; Snd.sfx('tink'); } }
       else if (it.kind === 'weapon') { var owned = false; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === it.item.id) owned = true; if (owned || WEAPONS[it.item.id].ultimate || G.weapons.length < G.maxWeapons) { giveWeapon(it.item.id, it.item.rarity); } else { openWeaponScreen({ item: it.item, paid: true }); return; } }
       renderShop(); });
     line.appendChild(b); list.appendChild(line);
@@ -3719,7 +4297,8 @@ function openSummary(won, xp, newLevel, isBest) {
   $('sumStats').innerHTML = html;
   var wl = []; for (var w in st.weaponsUsed) wl.push('<span class="tag ' + WEAPONS[w].cls + '">' + esc(WEAPONS[w].name) + '</span>');
   var bl = []; for (var b = 0; b < st.boons.length; b++) bl.push('<span class="tag ' + BOONS[st.boons[b]].kind + '">' + esc(BOONS[st.boons[b]].name) + '</span>');
-  $('sumLoad').innerHTML = '<div><h3>Instruments</h3>' + wl.join(' ') + '</div><div style="margin-top:8px"><h3>Boons</h3>' + (bl.length ? bl.join(' ') : '<span class="hint">none</span>') + '</div>';
+  var ml = []; for (var mw = 0; mw < G.weapons.length; mw++) { var ww = G.weapons[mw], ids = ww.modIds.concat(ww.capstone ? [ww.capstone] : []); for (var mi = 0; mi < ids.length; mi++) ml.push('<span class="tag ' + (MODS[ids[mi]].capstone ? 'capstone' : 'br-' + MODS[ids[mi]].branch) + '">' + esc(MODS[ids[mi]].name) + '</span>'); }
+  $('sumLoad').innerHTML = '<div><h3>Instruments</h3>' + wl.join(' ') + '</div><div style="margin-top:8px"><h3>Boons</h3>' + (bl.length ? bl.join(' ') : '<span class="hint">none</span>') + '</div>' + (ml.length ? '<div style="margin-top:8px"><h3>Mods</h3>' + ml.join(' ') + '</div>' : '');
   $('sumXp').textContent = '+' + xp + ' XP' + (newLevel ? ' · LEVEL UP → PGY-' + newLevel + '!' : '') + (isBest ? ' · NEW BEST RUN' : '');
 }
 
@@ -3736,7 +4315,8 @@ function update(dt) {
   updatePlayer(dt); updateWeapons(dt); updateUlt(dt);
   var es = G.enemies; for (var i = 0; i < es.length; i++) if (!es[i].dead) updateEnemy(es[i], dt);
   for (var j = es.length - 1; j >= 0; j--) if (es[j].dead) es.splice(j, 1);
-  updateBoss(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
+  updateBoss(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateFields(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
+  G.detailT = Math.max(0, G.detailT - dt);
   clearEdges();
 }
 function frame(ts) {
@@ -3760,7 +4340,7 @@ function frame(ts) {
 function handlePauseKey() {
   if (G.running) { if (!G.overlay) openPause(); else if (G.overlay === 'pause') resumeGame(); else if (G.overlay === 'settings' && settingsFrom === 'pause') openOverlay('pause'); return; }
   if (G.overlay === 'title') { if (EMBED) exitEmbed(); }
-  else if (G.overlay === 'help' || G.overlay === 'bestiary' || G.overlay === 'settings') showTitle();
+  else if (G.overlay === 'help' || G.overlay === 'bestiary' || G.overlay === 'settings' || G.overlay === 'aspects') showTitle();
 }
 function exitEmbed() { try { window.parent.postMessage({ type: 'crawl:exit' }, '*'); } catch (e) {} }
 document.addEventListener('visibilitychange', function () { if (document.hidden && G.running && !G.overlay && !G.over) openPause(); lastTs = 0; });
@@ -3779,10 +4359,19 @@ onTap('btnExit', exitEmbed); onTap('btnPauseExit', exitEmbed);
 onTap('btnResume', resumeGame); onTap('btnPauseSettings', function () { openSettings('pause'); }); onTap('btnQuit', function () { G.running = false; showTitle(); });
 onTap('btnReroll', function () { if (!altarRef || altarRef.rerolled || G.rvu < 25) return; G.rvu -= 25; altarRef.rerolled = true; altarRef.offer = rollBoons(3, altarRef.offer); Snd.sfx('buy'); renderBoonCards(); });
 onTap('btnBoonSkip', function () { altarRef = null; hideScreens(); });
+onTap('btnAspects', openAspects); onTap('btnAspectsBack', showTitle);
+onTap('btnModReroll', function () {
+  var tgt = repRerollTarget(); if (!repRef || !tgt || repRef.rerolled || G.rvu < MOD_REROLL_COST) return;
+  G.rvu -= MOD_REROLL_COST; repRef.rerolled = true;
+  if (tgt.switched) { var nw = pickRepWeapon([repRef.weapon]); if (nw) { repRef.weapon = nw.id; repRef.offer = rollModOffer(nw, 3); } }
+  else repRef.offer = rollModOffer(tgt.w, 3, repRef.offer.filter(function (id) { return !MODS[id].capstone; }));
+  Snd.sfx('buy'); renderModCards();
+});
+onTap('btnModSkip', function () { repRef = null; hideScreens(); });
 onTap('btnWeapLeave', function () { hideScreens(); });
 onTap('btnShopLeave', function () { hideScreens(); });
 onTap('btnAgain', function () { beginRun(); }); onTap('btnSumTitle', showTitle);
-onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.runs = 0; META.helpSeen = false; saveMeta(); updateTitle(); Snd.sfx('kill'); });
+onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.aspects = {}; META.runs = 0; META.helpSeen = false; saveMeta(); updateTitle(); Snd.sfx('kill'); });
 $('setVol').addEventListener('input', function () { SET.vol = parseInt(this.value, 10) || 0; Snd.applyVolume(); saveMeta(); });
 onTap('setMute', function () { SET.mute = !SET.mute; Snd.applyVolume(); refreshSettings(); saveMeta(); });
 onTap('setMusic', function () { SET.music = !SET.music; refreshSettings(); saveMeta(); });
@@ -3797,11 +4386,13 @@ window.UroCrawl = {
   spawn: function (id, x, y, opts) { if (!G.running) return null; return spawnEnemy(id, x === undefined ? P.x + 200 : x, y === undefined ? P.y : y, opts || { instant: true }); },
   giveWeapon: function (id, rarity) { return G.running ? giveWeapon(id, rarity) : false; },
   giveBoon: function (id) { return G.running ? giveBoon(id) : false; },
+  giveMod: function (id) { return G.running ? giveMod(id) : false; },
+  setAspect: setAspect, chosenAspect: chosenAspect, detailSlot: detailSlot, genDoorOptions: genDoorOptions, pickRepWeapon: pickRepWeapon, rollModOffer: rollModOffer, availableMods: availableMods,
   skipRoom: skipRoom,
   step: function (n) { n = n || 1; if (!G.running) return; for (var i = 0; i < n; i++) { if (G.over) { G.endT -= STEP; if (G.endT <= 0 && G.overlay !== 'summary') { G.timeScale = 1; finishRun(); } continue; } update(STEP); } },
   startRun: function () { if (!G.running) { META.helpSeen = true; beginRun(); } },
   selectWeapon: selectWeapon, dealDamage: dealDamage, hurtPlayer: hurtPlayer, seed: function () { return SEED; },
-  tables: { WEAPONS: WEAPONS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, ROOM_TEMPLATES: ROOM_TEMPLATES },
+  tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };
 resize(); setTimeout(resize, 100);
