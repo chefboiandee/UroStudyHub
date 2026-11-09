@@ -3,7 +3,7 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
-## 2026-11-09 (later) — 🎮 Arcade: card-game shell, Snap Decision themes, Board Buzzer with the why; Blaster + Visual Dx retired
+## 2026-11-09 (later 2) — 🎮 Arcade: card-game shell, Snap Decision themes, Board Buzzer with the why; Blaster + Visual Dx retired
 
 Andrew's call on the audit below: toss Stone Blaster and Visual Dx, give the Shop back to generic upgrades (themes, XP
 and coin boosts; game-specific upgrades can return with a roguelike later), and build the shared shell, with Snap
@@ -82,6 +82,107 @@ Staging → report cards into it, and do Drug Match as its own page. Make the fr
 game that works on every device.
 **Open questions:** keep Blaster's upgrades as Stone Squadron perks instead of retiring them? Is a
 "read the report" mode worth keeping at all, or just drop Visual Dx?
+## 2026-11-09 (later) — 🛩️ Stone Squadron: more realistic dusting (plume, near-contact, popcorning, bubbles) + mission music
+
+Andrew: likes the dusting, make it even more realistic (picked all four: dust plume, near-contact dusting, popcorn technique,
+vapour bubbles + sparkle). Then: the lounge music is the pre-flight music; the missions need action music, something like
+Star Fox or the FF7 battle theme.
+**Done** (`games/stone-squadron.html`, BUILD 2026-11-09 12:00):
+- **Dust plume** (`PLUME`, `addDust`/`dustSrc`, `plumeTick`, `plumeDraw`):
+  - Dusting puts puffs of stone dust into the water at the contact point, tinted toward the stone's colour.
+  - They billow back off the stone, spread, sink to the dependent side and slowly settle out on the wall. The outflow carries
+    them back past the scope: slowly in a bare ureter, faster up a sheath, fastest on suction.
+  - `G.dust` is now how much of the plume hangs in front of the lens, so it blinds you locally. The global fog is lighter.
+  - Frag pulses kick up bursts; tumour lasing makes vapour/char.
+- **Near-contact dusting** (`reachDust`/`reachFrag`, `ADV_STOP` 1.05 → 0.85):
+  - Full effect only with the fiber nearly on the stone; it falls to ~6% from the rails' parking distance (was 35%).
+  - Frag pulses reach a bit further. The HUD says "fiber off the stone / too far to dust: hold ▶ ADVANCE".
+  - A stone washed up by high flow now has to be followed in.
+- **Popcorning** (`stirFrags`): in the kidney, fiber held still, ≥15 Hz. Fragments within ~2 units of the tip get churned
+  round it and slowly ablated without aiming (a calyx ~3× better than the open pelvis). Moving the fiber or low-frequency
+  FRAG doesn't popcorn. Firing near the wall still burns. Attending line; count in the run report.
+- **Cavitation**: fragments near where the beam lands jitter.
+- **Vapour bubbles and sparkle**: ring-shaped bubbles fizz off the fiber tip at the pulse rate (`bubPS`, carried off and
+  rising), a bigger Moses bubble each frag pulse, and sparks strobe on the stone where the pulses land. The beam visuals now
+  follow what the sim actually fired (no beam with the fiber out for a wire).
+- **Mission music** (`missionTick`, `musicTrack`): an original 150 BPM D-minor loop, battle-theme energy without quoting
+  any tune. Galloping octave bass, syncopated brass stabs, a pad, a 16-bar lead (A: the call, B: it climbs, with an
+  arpeggio), and drums with a tom fill every 8 bars. It crossfades in at scrub-in; the lounge loop plays for the brief, prep and debrief.
+  The MUSIC toggle and mute cover both.
+
+**Verified (headless Chromium, local three.js; numbers vs the previous build):**
+- Up close, a 9 mm COM stone dusts in 32.4 s (was 32.7). At 35% flow it still fogs out: dust 100, visibility 0.30, lock lost.
+- At 70% flow dust holds at ~35 (was 53). The view stays clearer, but the flow pushes the pressure over 40.
+- From the rails' parking spot, dust barely forms and the stone isn't dusted in 40 s (it used to be).
+- A bot that follows the stone in finishes whole cases in about the same time as before (66/65, 93/83, 51/49 s).
+- Popcorning, 6 uric acid fragments: calyx 4 s, open pelvis ~10 s. Nothing while moving, or on the 12 Hz FRAG pedal.
+- Music: both loops schedule and crossfade (lounge silent during the mission and the reverse). Mission RMS ≈ 1.25× lounge,
+  drum peaks ~0.2.
+- All cases, wire wrinkles and the tumour case play through; no page errors. Screenshots of the plume at 35% / 70% flow in
+  both camera views.
+
+**Not verified:** how the music sounds (no speakers here); plume fill-rate on the iPad (≤200 soft sprites); feel of the
+steeper reach with a thumb.
+**Next steps:** Andrew plays: is the plume too white near the light? Is near-contact too strict (`reachDust` 0.9 → 3.0)?
+Mission music: tempo/volume (`MUSM_VOL`, `S16`), more variations (an intro sting, a calmer cleanup section, a victory
+fanfare at stone-free).
+**Open questions:** settled dust being stirred back up by the scope; dust colour per stone (tinted now: maybe stronger).
+
+## 2026-11-09 — 🛩️ Stone Squadron: wire work as a random wrinkle, experience counter, safety-wire order (built 2026-10-31, merged today)
+
+Andrew: advanced levels with a wire to get past tight or redundant areas — the scope stops like at a stone, you advance or
+withdraw, "deploy" the wire like the basket aiming for the centre of the lumen so you don't raise a flap, then ride the wire
+past. Not on a case type's first run; it should show up randomly on existing cases as you get more experienced (a counter of
+how many times you've done each case, "like a junior building their skills/confidence"), and difficulty rises with skill.
+Not every advanced run should have it. Maybe choose a safety wire at the start (a prep decision juniors should think about).
+**Done** (`games/stone-squadron.html`; BUILD 2026-10-31 18:00):
+- **Experience per case type** (`XP`, localStorage `sq3d_xp`): finished runs, a skill number (+0.5 bronze, +1 silver,
+  +1.5 gold/S; −1 after a perforation or a false passage), wrinkles wired. Shown on the brief ("You've finished 3 of these").
+- **Wrinkles, rolled per patient** (`rollWrinkles`): never on a type's first run; then 20% after one finished run, +6% per
+  run, capped at 50%. Severity follows skill; rarely two in one case. The first one on a case is always in the chart (CT read
+  in Case 1, the retrograde in the op note in Cases 2–3); later ones can be a surprise. "Same stones" keeps the same ureter.
+- **Kink** (redundant ureter: the lumen jogs sideways, a fold across your path) and **tight segment** (a short narrowing to
+  a pinhole, a little off-centre). Ureter only, above the sheath tip, clear of stones and pinch rings. The tube mesh is
+  built per patient when there's a wrinkle and reshaped as it straightens.
+- **Wire**: the rails stop before it; ADVANCE stops at its mouth (holding it there = pushing against resistance, damage +
+  attending). The basket button becomes WIRE (E/G). It runs up the fiber's channel, so you aim with the green spot; a ring
+  marks the open line (green/amber/red on the easier ones). Centred → through, coils in the kidney on fluoro → the scope
+  rides it past (the kink straightens). A bit off → buckles, retry. Into the wall → a **flap** (−100, PULS 2, bleeding,
+  that side narrows); the third is a false passage and ends the case. Distance matters: from far the wire wanders. No laser
+  while the wire is in the channel. Clean first pass +150.
+- **Safety wire**: a second pre-op order next to the antibiotic (scrub-in needs both). Costs 3 OR min, shows along the
+  wall and on fluoro (the fluoro used to always draw one). Graded against the chart: wrinkle in the chart + no safety wire
+  = wrong (fails the prep objective, attending quote); otherwise defensible either way, with a teaching note. It changes how
+  a perforation or false passage ends (stent over the safety wire vs nephrostomy).
+- Attending coaches less once you've finished 3 of a type; terse at wrinkles after you've wired 2.
+- Debrief: WIRE WORK card, safety-wire card, run report line. `STONE_SQUADRON.md` updated.
+
+**Verified (headless Chromium, local three.js):**
+- Roll odds over 300–500 seeds per setting: 0% before a type's first finish, 20% after one, ~30% after three, ~50% from six.
+  Never on starter stones or the tumor case. No stone ever inside a wrinkle or the 14 units before it. A seed's stones are
+  unchanged when it has no wrinkle (the roll uses its own random stream).
+- Counter: a finish adds a run and skill, a perforation takes skill down a step, quitting changes nothing. "Same stones"
+  replays the same ureter.
+- Bot play-throughs, scope centred on the ring:
+  - Kink and tight segment wire through first time and ride past, including two wrinkles at full severity in Case 1 and a
+    kink just below the UPJ in Case 3.
+  - Aimed into the fold: three flaps end the run as a false passage. The debrief reads differently with and without a
+    safety wire, and the prep objective fails without one.
+- Plain Cases 1–3 and the tumor case behave as on the previous build. Prep orders gate scrub-in; no sideways overflow at
+  844×390.
+- Screenshots in chase cam and scope view: approach, wire out, through, ride, past, flap, tight segment. No page errors.
+**Not verified:** on the iPad (thumb aiming at the opening; is the ring too generous or too tight?), and how it feels.
+**Next steps:** Andrew plays a few runs of a case to see wrinkles appear (or force one: `?case=1&seed=5&wire=kink&sev=0.5`,
+`wire=tight|both`, `sev` 0–1). Tune `wireChance`, `sevOf`, the −0.06/unit distance penalty and the buckle/flap thresholds.
+**Open questions:** should the ring's colour hint go away sooner? Wire choice (hydrophilic vs stiff) as a loadout item next?
+
+## 2026-11-09 — 🏥 Uro Rush: more time in the room
+
+Andrew after playing the computer mechanic: patients run out a bit fast in the bay (try +20%);
+signing speed is good; seen patients should stay frozen.
+**Done:** `PATIENCE` 22 / 18.7 / 17 s → **26.4 / 22.4 / 20.4 s** (+20% every tier). Pended (seen)
+patients stay frozen, `SIGN_TIME` stays 0.5 s, the hall clock stays at 60%.
+**Verified:** `tools/uro-rush.drive.mjs` 38/38.
 
 ## 2026-11-02 (later 10) — 🎯 In-Service Exam Sprint plan (Plans tab)
 

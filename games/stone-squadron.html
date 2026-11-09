@@ -43,6 +43,7 @@ b{font-variant-numeric:tabular-nums}
 .pm{position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;transform:translateX(-7px);border:2px solid #000;background:#888}
 .pm.alive{background:var(--a)}.pm.cleanup{background:#60a5fa}.pm.done{background:var(--g)}.pm.mig{background:var(--r)}.pm.tumor{background:#f472b6;border-radius:3px}
 .pupj{position:absolute;top:-6px;width:2px;height:20px;background:rgba(255,255,255,.5)}
+.pobs{position:absolute;top:-2px;height:12px;min-width:6px;border-radius:3px;background:repeating-linear-gradient(135deg,#fbbf24 0 3px,#7c5a10 3px 6px);opacity:.9}.pobs.done{background:var(--g);opacity:.6}.pobs.hidden{display:none}
 .psh{position:absolute;left:0;top:0;height:100%;border-radius:5px;background:rgba(120,140,170,.45)}
 #stage{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--m);margin-top:9px}
 #target{margin:8px auto 0;display:inline-block;font-size:14px;padding:6px 12px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
@@ -287,7 +288,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeCT, SLICES, zOf, imOf } from './squadron-ct.js';
 
-const BUILD = '2026-10-31 16:00'; // bump on every push so testers can say which build they played
+const BUILD = '2026-11-09 12:00'; // bump on every push so testers can say which build they played
 const params = new URLSearchParams(location.search);
 // Hosted in UroStudyHub's arcade (?embed=1): the app takes back {type:'squadron:claim', coins, xp} / {type:'squadron:exit'} by postMessage.
 const EMBED = params.has('embed') && window.parent !== window;
@@ -323,9 +324,13 @@ const UPJ_S = 268, END_S = 285; // END_S: where the ureter run ends (and the flu
 const FIB_X = 0.17, FIB_Y = -0.15;
 const APPROACH_D = 26, APPROACH_V = 2.6;
 // the rails park MANUAL_D short of the working distance; from there the scope only moves while you hold ADVANCE (ADV_V)
-const MANUAL_D = 3, ADV_V = 3.4;
+const MANUAL_D = 3, ADV_V = 3.4, ADV_STOP = 0.85; // ADV_STOP: how close (scope tip to stone) ADVANCE goes; any closer shoves the stone
 // the laser works best right up on the stone: effectiveness falls off with distance from the fiber to its surface
-const reach = d => lerp(1, 0.3, smooth(1.4, 5.5, d)); // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
+const reach = d => lerp(1, 0.3, smooth(1.4, 5.5, d)); // (the thulium tumor case keeps this one)
+// holmium energy is absorbed in about a millimetre of water, so on stone dusting only really bites with the fiber nearly touching.
+// d is from the scope's tip; the fiber sticks out FIB_TIP past it. Fragmenting pulses throw a bigger vapour bubble and reach further
+const FIB_TIP = 0.6;
+const reachDust = d => lerp(1, 0.06, smooth(0.9, 3.0, d - FIB_TIP)), reachFrag = d => lerp(1, 0.2, smooth(1.0, 3.6, d - FIB_TIP)); // rails ease from cruise down to a creep over the last APPROACH_D before a stone, so it can't rush past
 const CRUISE = 9, WORK_DIST = 2.2, BEAM_RANGE = 6.0, SCOPE_R = 0.3, MMR = 0.13; // stone radius (units) per mm of diameter
 const DUST_RATE = 130, FRAG_V = 52, FRAG_HZ = 4, WAVE_AMP = 0.62; // a contraction closes the lumen to ~40%: off-centre, you hit the wall
 // FRAG preset: lower energy at a higher rate breaks stones as fast as 1.5 J × 8 Hz did, with ~¾ of the retropulsion
@@ -397,12 +402,12 @@ const LEVELS = [
 // a fresh patient for a case: how many stones, where, how big, and what they're made of. One patient, one stone disease:
 // calcium oxalate (monohydrate and dihydrate mixed), uric acid or cystine. Uses the run's seeded rng
 const pickW = (items, w) => { let t = items.reduce((a, it) => a + w(it), 0) * rng(); for (const it of items) { t -= w(it); if (t <= 0) return it; } return items[items.length - 1]; };
-function genLayout(lv) {
+function genLayout(lv, excl = []) { // excl: [lo, hi] stretches a stone can't sit in (a wrinkle's span, with room to work before it)
   const g = lv.gen, n = 1 + pickW(g.n.map((p, i) => i), i => g.n[i]), slots = [];
   if (g.spots) { const pool = g.spots.slice(); for (let k = 0; k < n && pool.length; k++) { const sp = pickW(pool, x => x.w); pool.splice(pool.indexOf(sp), 1); slots.push({ ...sp }); } }
   else for (let k = 0, tries = 0; k < n && tries < 60; tries++) {
     const z = pickW(g.zones, x => x.w), at = Math.round(rand(z.a, z.b));
-    if (slots.some(o => Math.abs(o.s - at) < g.gap)) continue;
+    if (slots.some(o => Math.abs(o.s - at) < g.gap) || excl.some(([a, b]) => at > a && at < b)) continue;
     slots.push({ s: at, loc: z.loc }); k++;
   }
   slots.sort((a, b) => a.s - b.s);
@@ -420,6 +425,45 @@ const allDone = () => unlocked > STONE_CASES().length;
 let seenWild = (() => { try { return localStorage.getItem(WILD_KEY) === '1'; } catch (_) { return false; } })();
 function markWild() { seenWild = true; try { localStorage.setItem(WILD_KEY, '1'); } catch (_) {} }
 function randomCase() { if (rng() < WILD_P) return LEVELS.find(l => l.wild); const pool = STONE_CASES(); let l = pool[(rng() * pool.length) | 0]; if (l === LV) l = pool[(rng() * pool.length) | 0]; return l; }
+// ───────────────────────── experience + wrinkles. Each case type remembers how many times you've finished it (n) and a skill
+// number (sk: up more for better medals, down after a perforation or a false passage). From the second run of a type on, a patient
+// can come with a wrinkle in the ureter, a kink or a tight segment the scope can't take, which you have to pass a wire through.
+// The chance rises with n but stays well short of certain (most runs are still plain stone cases); how hard it is follows sk
+const XP_KEY = 'sq3d_xp';
+let XP = (() => { try { return JSON.parse(localStorage.getItem(XP_KEY) || '{}') || {}; } catch (_) { return {}; } })();
+const xpOf = id => Object.assign({ n: 0, sk: 0, w: 0 }, XP[id]);
+function saveXP(id, x) { XP[id] = x; try { localStorage.setItem(XP_KEY, JSON.stringify(XP)); } catch (_) {} }
+const wireChance = n => n < 1 ? 0 : Math.min(0.5, 0.2 + 0.06 * (n - 1)); // 20% after one finished run, ~32% after 3, capped at 50% from 6
+const sevOf = sk => clamp(sk / 8, 0, 1);
+// where a wrinkle can sit in each case: centre range [a, b] on the track. Ureter only, above the sheath tip, clear of the pinch rings
+const WIRE_SITES = {
+  1: [{ kind: 'tight', a: 30, b: 60, loc: 'distal ureter' }, { kind: 'tight', a: 82, b: 100, loc: 'mid ureter' },
+    { kind: 'kink', a: 84, b: 100, loc: 'mid ureter' }, { kind: 'kink', a: 150, b: 226, loc: 'proximal ureter' }],
+  2: [{ kind: 'kink', a: 204, b: 244, loc: 'proximal ureter' }, { kind: 'tight', a: 200, b: 246, loc: 'proximal ureter' }],
+  3: [{ kind: 'kink', a: 249, b: 256, loc: 'proximal ureter, just below the UPJ' }, { kind: 'tight', a: 246, b: 257, loc: 'proximal ureter, just below the UPJ' }],
+};
+// the stretch of track an obstacle spans: a kink bends over ±2w, a tight segment is 2w long with short tapers
+const obsSpan = o => o.kind === 'kink' ? [o.s - 2 * o.w, o.s + 2 * o.w] : [o.s - o.w - 1.5, o.s + o.w + 1.5];
+// this patient's wrinkles (plain data, kept with the seed so "Same stones" is the same ureter). ?wire=kink|tight|both&sev=0..1 forces one
+function rollWrinkles(lv, fixed, seed) {
+  const sites = WIRE_SITES[lv.id], force = params.get('wire');
+  if (lv.tumor || !sites || fixed) return [];
+  const x = xpOf(lv.id), rng = mulberry32((seed ^ 0x9e3779b9) >>> 0), rand = (a, b) => a + (b - a) * rng(); // its own stream: a seed's stones don't depend on it
+  if (!force && rng() >= wireChance(x.n)) return [];
+  const sev = force ? clamp(+(params.get('sev') || 0.5), 0, 1) : sevOf(x.sk);
+  const want = force === 'both' ? 2 : rng() < 0.25 * smooth(0.6, 1, sev) ? 2 : 1, out = [];
+  for (let tries = 0; out.length < want && tries < 30; tries++) {
+    const pool = sites.filter(z => !force || force === 'both' || z.kind === force), z = pool[(rng() * pool.length) | 0];
+    const o = { kind: z.kind, s: Math.round(rand(z.a, z.b)), loc: z.loc, th: rand(-Math.PI, Math.PI), sev,
+      w: z.kind === 'kink' ? lerp(4, 3, sev) : lerp(2, 3.5, sev), mag: z.kind === 'kink' ? lerp(2.4, 4, sev) : lerp(0.12, 0.4, sev), rho: lerp(0.85, 0.47, sev),
+      hint: !(x.w >= 1 && rng() < 0.35 * sev) }; // the first one you meet on a case is always in the chart; later ones can be a surprise
+    const [lo, hi] = obsSpan(o);
+    if (lv.sheath && lo < lv.sheath + 4) continue;
+    if (out.some(q => { const [a, b] = obsSpan(q); return lo < b + 24 && hi > a - 24; })) continue;
+    out.push(o);
+  }
+  return out.sort((a, b) => a.s - b.s);
+}
 // ───────────────────────── mission prep: the chart for each case (fictional patients) + what the pre-op antibiotic choice does
 const ABX = [['none', 'None'], ['cefazolin', 'Cefazolin 2 g IV'], ['ceftriaxone', 'Ceftriaxone 1 g IV'], ['cipro', 'Ciprofloxacin 400 mg IV'], ['ampgent', 'Ampicillin 2 g + gentamicin IV']];
 // verdict per choice: best / ok (fine) · weak (works, not ideal) · none (no prophylaxis) · wrong (doesn't cover the bug). sepK scales sepsis build-up, sep0 is where it starts
@@ -487,7 +531,47 @@ function calyxAt(s, x, y) {
 }
 const inSheath = s => LV.sheath > 0 && s < LV.sheath;
 // the open lumen at (s, θ): ureter (squeezed by peristalsis) + any calyx pocket — or the sheath's own bore inside it
-const lumR = (s, th) => inSheath(s) ? SHEATH_R : baseR(s) * squeeze(s) + pocketR(s, th);
+const lumR = (s, th) => inSheath(s) ? SHEATH_R : obsRad(s, baseR(s) * squeeze(s)) + pocketR(s, th);
+// ───────────────────────── wrinkles in the ureter (rolled per patient, see rollWrinkles): the lumen's own geometry
+// kink (redundant ureter): the lumen jogs sideways by `mag` toward angle `th` and back, so a fold hangs across the scope's path and the
+// lumen carries on around the corner. tight: a short segment narrows to `rho`, its opening a little off-centre. Riding a wire through
+// straightens a kink (relax → 1 leaves 30% of the jog) and opens a tight segment to TIGHT_OPEN
+let OBS = [];
+const TIGHT_OPEN = 1.05, WIRE_R = 0.05;
+function obsProf(o, s) {
+  if (s <= o.lo || s >= o.hi) return 0;
+  return o.kind === 'kink' ? smooth(o.lo, o.s, s) * (1 - smooth(o.s, o.hi, s)) : smooth(o.lo, o.lo + 1.5, s) * (1 - smooth(o.hi - 1.5, o.hi, s));
+}
+// the lumen's centre at s, off the track's centreline only inside a wrinkle
+const LC0 = { x: 0, y: 0 };
+function lumC(s, out = LC0) {
+  out.x = out.y = 0;
+  for (const o of OBS) { const k = obsProf(o, s); if (k > 0) { const m = o.mag * k * (1 - (o.kind === 'kink' ? 0.7 : 0.75) * o.relax); out.x += Math.cos(o.th) * m; out.y += Math.sin(o.th) * m; } }
+  return out;
+}
+function obsRad(s, r) {
+  for (const o of OBS) { if (o.kind !== 'tight') continue; const k = obsProf(o, s); if (k > 0) r = lerp(r, Math.min(r, lerp(o.rho, TIGHT_OPEN, o.relax) - o.pen * 0.5), k); }
+  return r;
+}
+// the first wrinkle not yet negotiated (the scope can't be past it)
+const nextObs = () => OBS.find(o => o.state !== 'passed') || null;
+// how much room a wire sent straight down the line L = {x, y} has through the whole wrinkle (negative = it hits the wall)
+const LC1 = { x: 0, y: 0 };
+function obsClear(o, L, at) {
+  let m = Infinity;
+  for (let k = 0; k <= 32; k++) {
+    const s = lerp(o.lo - 0.5, o.hi, k / 32); lumC(s, LC1);
+    const c = obsRad(s, baseR(s)) - Math.hypot(L.x - LC1.x, L.y - LC1.y) - WIRE_R;
+    if (c < m) { m = c; if (at) { at.s = s; at.th = Math.atan2(L.y - LC1.y, L.x - LC1.x); } }
+  }
+  return m - (o.kind === 'kink' ? o.pen : 0);
+}
+// where to put the working channel: the middle of what's open all the way through, and how much room that leaves
+function obsAim(o) {
+  if (o.kind === 'tight') { lumC(o.s, LC1); return { x: LC1.x, y: LC1.y, r: lerp(o.rho, TIGHT_OPEN, o.relax) - o.pen * 0.5 - WIRE_R }; }
+  const m = o.mag * (1 - 0.7 * o.relax) / 2; // a kink: the lens where the lumen before the bend overlaps the lumen at its peak
+  return { x: Math.cos(o.th) * m, y: Math.sin(o.th) * m, r: baseR(o.s) - m - WIRE_R - o.pen };
+}
 
 // ───────────────────────── renderer / scene
 const canvas = $('c');
@@ -597,22 +681,13 @@ const GLOW = glowTexture();
 
 // ───────────────────────── the ureter (one mesh; peristalsis in the vertex shader)
 const UNI = { waveS: { value: -999 }, waveAmp: { value: WAVE_AMP }, time: { value: 0 }, upj: { value: UPJ_S }, sheath: { value: -100 } };
-function buildTube() {
+function buildTube(shared) {
   const RINGS = Math.ceil(LEN * 2.2), SEG = LV.calyces ? 72 : 44, W = SEG + 1, n = (RINGS + 1) * W; // calyces need more segments around
   const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), aS = new Float32Array(n), aDir = new Float32Array(n * 3), aR = new Float32Array(n);
-  const f = mkF(), d = new THREE.Vector3();
+  const T = { RINGS, SEG, pos, aR, aDir };
   for (let i = 0; i <= RINGS; i++) {
-    const s = i / RINGS * LEN; frameAt(s, f);
-    const br = baseR(s), fold = 1 - smooth(UPJ_S, UPJ_S + 10, s);
-    for (let j = 0; j <= SEG; j++) {
-      const th = j / SEG * Math.PI * 2;
-      d.copy(f.r).multiplyScalar(Math.cos(th)).addScaledVector(f.u, Math.sin(th));
-      const r = br * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th);
-      const k = i * W + j;
-      pos[k * 3] = f.p.x + d.x * r; pos[k * 3 + 1] = f.p.y + d.y * r; pos[k * 3 + 2] = f.p.z + d.z * r;
-      aDir[k * 3] = d.x; aDir[k * 3 + 1] = d.y; aDir[k * 3 + 2] = d.z;
-      aR[k] = r; aS[k] = s; uv[k * 2] = j / SEG * 2; uv[k * 2 + 1] = s / 9;
-    }
+    tubeRing(T, i);
+    for (let j = 0; j <= SEG; j++) { const k = i * W + j; aS[k] = i / RINGS * LEN; uv[k * 2] = j / SEG * 2; uv[k * 2 + 1] = aS[k] / 9; }
   }
   const idx = [];
   for (let i = 0; i < RINGS; i++) for (let j = 0; j < SEG; j++) { const a = i * W + j, b = a + W; idx.push(a, b, a + 1, b, b + 1, a + 1); }
@@ -624,12 +699,8 @@ function buildTube() {
   g.setAttribute('aDir', new THREE.BufferAttribute(aDir, 3));
   g.setAttribute('aR', new THREE.BufferAttribute(aR, 1));
   g.computeVertexNormals();
-  const nr = g.attributes.normal; // weld the uv seam's normals
-  for (let i = 0; i <= RINGS; i++) {
-    const a = i * W, b = a + SEG;
-    const x = (nr.getX(a) + nr.getX(b)) / 2, y = (nr.getY(a) + nr.getY(b)) / 2, z = (nr.getZ(a) + nr.getZ(b)) / 2;
-    nr.setXYZ(a, x, y, z); nr.setXYZ(b, x, y, z);
-  }
+  weldSeam(g, T); // weld the uv seam's normals
+  if (shared) { const m = new THREE.Mesh(g, shared); m.frustumCulled = false; m.userData.T = T; return m; } // a wrinkled copy of a case's tube: same material
   const tex = mucosaTexture();
   const mat = new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 2.2, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
   mat.onBeforeCompile = sh => {
@@ -642,8 +713,40 @@ function buildTube() {
         transformed -= aDir * aR * (wv - br);`);
   };
   const m = new THREE.Mesh(g, mat);
-  m.frustumCulled = false;
+  m.frustumCulled = false; m.userData.T = T;
   return m;
+}
+// one ring of the tube: wall radius around the lumen's centre (which a wrinkle moves off the track's line)
+const TF = mkF(), TD = new THREE.Vector3(), TLC = { x: 0, y: 0 };
+function tubeRing(T, i) {
+  const s = i / T.RINGS * LEN; frameAt(s, TF); lumC(s, TLC);
+  const br = obsRad(s, baseR(s)), fold = 1 - smooth(UPJ_S, UPJ_S + 10, s), W = T.SEG + 1;
+  const cx = TF.p.x + TF.r.x * TLC.x + TF.u.x * TLC.y, cy = TF.p.y + TF.r.y * TLC.x + TF.u.y * TLC.y, cz = TF.p.z + TF.r.z * TLC.x + TF.u.z * TLC.y;
+  for (let j = 0; j <= T.SEG; j++) {
+    const th = j / T.SEG * Math.PI * 2, d = TD;
+    d.copy(TF.r).multiplyScalar(Math.cos(th)).addScaledVector(TF.u, Math.sin(th));
+    const r = br * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th);
+    const k = i * W + j;
+    T.pos[k * 3] = cx + d.x * r; T.pos[k * 3 + 1] = cy + d.y * r; T.pos[k * 3 + 2] = cz + d.z * r;
+    T.aDir[k * 3] = d.x; T.aDir[k * 3 + 1] = d.y; T.aDir[k * 3 + 2] = d.z; T.aR[k] = r;
+  }
+}
+// re-shape the stretch of tube a wrinkle spans (as a kink straightens on the wire); normals only when asked (they're slow)
+function retube(o, normals) {
+  const m = G && G.tube; if (!m) return;
+  const T = m.userData.T, g = m.geometry, i0 = Math.max(0, Math.floor((o.lo - 1) / LEN * T.RINGS)), i1 = Math.min(T.RINGS, Math.ceil((o.hi + 1) / LEN * T.RINGS));
+  for (let i = i0; i <= i1; i++) tubeRing(T, i);
+  g.attributes.position.needsUpdate = true; g.attributes.aR.needsUpdate = true;
+  if (normals) { g.computeVertexNormals(); weldSeam(g, T); }
+}
+function weldSeam(g, T) {
+  const nr = g.attributes.normal;
+  for (let i = 0; i <= T.RINGS; i++) {
+    const a = i * (T.SEG + 1), b = a + T.SEG;
+    const x = (nr.getX(a) + nr.getX(b)) / 2, y = (nr.getY(a) + nr.getY(b)) / 2, z = (nr.getZ(a) + nr.getZ(b)) / 2;
+    nr.setXYZ(a, x, y, z); nr.setXYZ(b, x, y, z);
+  }
+  nr.needsUpdate = true;
 }
 // the access sheath: a dark plastic bore from the bladder to its tip, with a radiopaque marker band at the tip
 function buildSheath() {
@@ -910,7 +1013,7 @@ void main(){ vec2 d = gl_PointCoord - 0.5; float r = 1.0 - dot(d, d) * 4.0; if (
 #include <colorspace_fragment>
 }`;
 class Particles {
-  constructor(n, blending) {
+  constructor(n, blending, fs = PS_FS) {
     this.n = n; this.i = 0;
     const F = k => new Float32Array(n * k);
     Object.assign(this, { pos: F(3), vel: F(3), col: F(3), al: F(1), a0: F(1), sz: F(1), life: F(1), max: F(1), drag: F(1), grow: F(1) });
@@ -920,7 +1023,7 @@ class Particles {
     g.setAttribute('aAlpha', new THREE.BufferAttribute(this.al, 1).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('aSize', new THREE.BufferAttribute(this.sz, 1).setUsage(THREE.DynamicDrawUsage));
     this.g = g;
-    this.mat = new THREE.ShaderMaterial({ uniforms: { uScale: { value: 600 } }, vertexShader: PS_VS, fragmentShader: PS_FS, transparent: true, depthWrite: false, blending });
+    this.mat = new THREE.ShaderMaterial({ uniforms: { uScale: { value: 600 } }, vertexShader: PS_VS, fragmentShader: fs, transparent: true, depthWrite: false, blending });
     this.pts = new THREE.Points(g, this.mat); this.pts.frustumCulled = false; scene.add(this.pts);
   }
   emit(p, v, c, size, life, alpha, drag = 1.5, grow = 0) {
@@ -947,6 +1050,78 @@ class Particles {
 }
 const dustPS = new Particles(900, THREE.AdditiveBlending);
 const bloodPS = new Particles(260, THREE.NormalBlending);
+// vapour bubbles off the fiber tip: every pulse boils a little water (the Moses bubble), so at dusting rates the tip fizzes
+const BUB_FS = `varying float vA; varying vec3 vC;
+void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;
+  float ring = smoothstep(0.55, 0.86, r) * (1.0 - smoothstep(0.86, 1.0, r)), hl = 1.0 - smoothstep(0.0, 0.3, length(d - vec2(-0.17, -0.17)));
+  gl_FragColor = vec4(vC, vA * (ring * 0.85 + hl * 0.7));
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
+}`;
+const bubPS = new Particles(320, THREE.AdditiveBlending, BUB_FS);
+
+// ───────────────────────── the dust plume: what dusting puts into the water. Each puff is a cloud of fine stone dust, tracked in track
+// terms (s along the ureter, x/y across it, y up on screen). It billows back off the contact point, spreads, sinks to the dependent
+// side, settles out on the wall, and the outflow carries it back past the scope: slowly in a bare ureter, faster up a sheath, fastest
+// on suction. G.dust is how much of it hangs in front of the lens (0–100): that is what fogs the view and what the lock goes by
+const PLUME = [], PLUME_MAX = 200, PUFF_M = 3.5;
+const PLUME_POS = new Float32Array(PLUME_MAX * 3), PLUME_COL = new Float32Array(PLUME_MAX * 3), PLUME_AL = new Float32Array(PLUME_MAX), PLUME_SZ = new Float32Array(PLUME_MAX);
+const plumePts = (() => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(PLUME_POS, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aColor', new THREE.BufferAttribute(PLUME_COL, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aAlpha', new THREE.BufferAttribute(PLUME_AL, 1).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aSize', new THREE.BufferAttribute(PLUME_SZ, 1).setUsage(THREE.DynamicDrawUsage));
+  const mat = new THREE.ShaderMaterial({ uniforms: { uScale: { value: 600 } }, vertexShader: PS_VS, fragmentShader: PS_FS, transparent: true, depthWrite: false, blending: THREE.NormalBlending });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 2; scene.add(pts); return pts;
+})();
+const DUST_PALE = new THREE.Color(0.86, 0.83, 0.76), PC = new THREE.Color(), TC = new THREE.Color();
+// m units of dust at (s, x, y), tinted toward the stone's own colour (uric acid dust is amber, calcium oxalate grey-white)
+function addDust(m, s, x, y, col, burst = 1) {
+  PC.copy(DUST_PALE); if (col != null) PC.lerp(TC.setHex(col), 0.3);
+  while (m > 0.02) {
+    const q = Math.min(PUFF_M, m); m -= q;
+    if (PLUME.length >= PLUME_MAX) { const o = PLUME[(Math.random() * PLUME.length) | 0]; o.m += q; continue; } // full: thicken one instead
+    PLUME.push({ s, x: x + mr(-0.15, 0.15), y: y + mr(-0.15, 0.15), vs: -mr(0.15, 0.6) * burst, vx: mr(-0.7, 0.7) * burst, vy: mr(-0.4, 0.7) * burst, m: q, r: mr(0.22, 0.4), c: [PC.r, PC.g, PC.b] });
+  }
+}
+// a steady source (the beam on a stone): collect it into puffs
+function dustSrc(m, s, x, y, col) { G.dustAcc = (G.dustAcc || 0) + m; if (G.dustAcc >= PUFF_M) { addDust(G.dustAcc, s, x, y, col); G.dustAcc = 0; } }
+const PLC = { x: 0, y: 0 };
+function plumeTick(dt) {
+  const p = G.p, sd = (kitOn('fans') ? KIT.fans.dust : 0) + (kitOn('diss') ? KIT.diss.dust : 0);
+  const carry = -(0.05 + G.flow * (LV.sheath && p.s > LV.sheath - 2 ? 0.6 : 0.38) + sd * 1.5); // outflow, back past the scope
+  const dil = 0.03 + G.flow * 0.45 + sd * 0.6; // dilution: the irrigant thins it out
+  let sum = 0;
+  for (let i = PLUME.length - 1; i >= 0; i--) {
+    const q = PLUME[i];
+    q.vs += (carry - q.vs) * Math.min(1, dt * 1.5);
+    q.vx *= Math.exp(-1.4 * dt); q.vy = q.vy * Math.exp(-1.2 * dt) - 0.32 * dt; // sinks: drifts toward the dependent wall
+    q.vx += mr(-0.35, 0.35) * dt; q.vy += mr(-0.3, 0.3) * dt; // eddies
+    q.s += q.vs * dt; q.x += q.vx * dt; q.y += q.vy * dt;
+    const c = lumC(q.s, PLC), dx = q.x - c.x, dy = q.y - c.y, d = Math.hypot(dx, dy), lim = Math.max(0.15, lumR(q.s, Math.atan2(dy, dx)) - 0.3);
+    if (d > lim) { q.x = c.x + dx * lim / d; q.y = c.y + dy * lim / d; q.vx *= 0.3; q.vy = Math.max(q.vy, 0) * 0.3; q.m *= Math.exp(-0.25 * dt); } // on the wall: it slowly settles out
+    q.r += (2.1 - q.r) * 0.32 * dt; // spreads as it goes
+    q.m *= Math.exp(-dil * dt);
+    if (q.m < 0.1 || q.s < p.s - 9 || q.s > p.s + 40) { PLUME.splice(i, 1); continue; }
+    const ds = q.s - p.s; // in front of the lens, roughly on the line of sight, it blinds you; behind or off to the side it doesn't much
+    if (ds > -0.4 && ds < 9) sum += q.m * smooth(-0.4, 0.6, ds) * (1 - smooth(5, 9, ds)) * clamp(1.15 - (Math.hypot(q.x - p.x, q.y - p.y) - q.r * 0.6) / 2.4, 0.15, 1);
+  }
+  G.dust = Math.min(100, sum);
+}
+// draw it: soft clouds, dimmer the further they are from the scope's light
+function plumeDraw() {
+  const p = G.p, n = PLUME.length;
+  for (let i = 0; i < PLUME_MAX; i++) {
+    if (i >= n) { PLUME_AL[i] = 0; continue; }
+    const q = PLUME[i]; worldAt(q.s, q.x, q.y, V3);
+    PLUME_POS[i * 3] = V3.x; PLUME_POS[i * 3 + 1] = V3.y; PLUME_POS[i * 3 + 2] = V3.z;
+    const lit = lerp(1, 0.3, smooth(1.5, 10, Math.abs(q.s - p.s)));
+    PLUME_COL[i * 3] = q.c[0] * lit; PLUME_COL[i * 3 + 1] = q.c[1] * lit; PLUME_COL[i * 3 + 2] = q.c[2] * lit;
+    PLUME_AL[i] = Math.min(0.45, q.m * 0.055) * smooth(-0.3, 0.6, q.s - p.s + 0.3); PLUME_SZ[i] = q.r * 2.3;
+  }
+  const g = plumePts.geometry; for (const k of ['position', 'aColor', 'aAlpha', 'aSize']) g.attributes[k].needsUpdate = true;
+}
 
 // ───────────────────────── the ureteroscope
 const scope = new THREE.Group();
@@ -1053,7 +1228,7 @@ function markTex(kind) {
 const MARK_GEO = new THREE.PlaneGeometry(1, 1), marks = [];
 const MARK_MATS = Object.fromEntries(['burn', 'thermal', 'scrape'].map(k => [k, new THREE.MeshStandardMaterial({ map: markTex(k), transparent: true, depthWrite: false, alphaTest: 0.02, roughness: 0.95, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })]));
 // the tube's actual inner radius at (s, θ) — same folds as buildTube()
-function wallR(s, th) { const fold = 1 - smooth(UPJ_S, UPJ_S + 10, s); return baseR(s) * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th); }
+function wallR(s, th) { const fold = 1 - smooth(UPJ_S, UPJ_S + 10, s); return obsRad(s, baseR(s)) * (1 + 0.065 * fold * Math.sin(6 * th + s * 0.12) + 0.03 * Math.sin(3 * th - s * 0.37 + 1.3) + 0.02 * Math.sin(s * 1.9 + 2 * th)) + pocketR(s, th); }
 const FMK = mkF(), MK_M = new THREE.Matrix4(), MK_D = new THREE.Vector3(), MK_X = new THREE.Vector3(), MK_Z = new THREE.Vector3();
 const angGap = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 // one lesion site = one decal; repeat hits on the same spot deepen it (bigger, and can upgrade its depth) instead of stacking new ones
@@ -1081,7 +1256,7 @@ function addMark(kind, s, th, size, depth) {
   m.scale.set(size, size * stretch, 1);
   m.renderOrder = -1; // marks are on the wall, behind everything in the lumen (dust, blood, rings)
   // a flat decal on a curved wall: inset by its own sagitta; it then rides the wall's breathing + peristalsis each frame
-  m.userData = { kind, s, th, R, size, stretch, n: 1, depth, inset: 0.02 + (size * 0.5) ** 2 / (2 * R), c: FMK.p.clone(), d: MK_D.clone() };
+  m.userData = { kind, s, th, R, size, stretch, n: 1, depth, inset: 0.02 + (size * 0.5) ** 2 / (2 * R), c: FMK.p.clone(), d: MK_D.clone(), fr: FMK.r.clone(), fu: FMK.u.clone() };
   placeMark(m);
   scene.add(m); marks.push(m);
   return { site: m.userData, isNew: true };
@@ -1089,7 +1264,9 @@ function addMark(kind, s, th, size, depth) {
 function placeMark(m) {
   const u = m.userData, wv = UNI.waveAmp.value * waveK(u.s, UNI.waveS.value);
   const br = 0.022 * Math.sin(u.s * 0.9 - UNI.time.value * 1.7); // same motion as the tube's vertex shader
+  if (OBS.length && OBS.some(o => u.s > o.lo && u.s < o.hi)) u.R = wallR(u.s, u.th); // on a wrinkle the wall moves as it straightens
   m.position.copy(u.c).addScaledVector(u.d, u.R * (1 - wv + br) - u.inset);
+  if (OBS.length) { const c = lumC(u.s); m.position.addScaledVector(u.fr, c.x).addScaledVector(u.fu, c.y); } // …and sits around the lumen's own centre
 }
 function injure(kind, s, th, size, gap, depth = 1) {
   if (G.lastMark[kind] != null && G.t - G.lastMark[kind] < gap) return;
@@ -1105,17 +1282,17 @@ const burnS = p => p.s + clamp(1.8 * (wallR(p.s, Math.atan2(p.y, p.x)) - Math.hy
 // perforation only when focal damage took integrity to zero
 function pulsGrade(reason) {
   const d = G.worstDepth || 0;
-  return reason === 'perf' ? ['≥3', 'perforation', 'bd'] : d >= 2 ? ['2', 'submucosal injury', 'bd'] : d >= 1 ? ['1', 'superficial mucosal injury / oedema', 'wn'] : ['0', 'no lesion', 'ok'];
+  return reason === 'perf' ? ['≥3', 'perforation', 'bd'] : reason === 'access' ? ['2', 'false passage (submucosal tunnel)', 'bd'] : d >= 2 ? ['2', 'submucosal injury', 'bd'] : d >= 1 ? ['1', 'superficial mucosal injury / oedema', 'wn'] : ['0', 'no lesion', 'ok'];
 }
 // the run's bonus objectives and medal. Finishing = bronze; stone-free + 3 objectives = silver; stone-free + 5 = gold; all 6 = S rank
 function objectives(stoneFree) {
-  const [v] = abxVerdict(), g = pulsGrade(G.end)[0], spec = G.stones.reduce((a, st) => a + st.specimens, 0);
+  const [v] = abxVerdict(), [sv] = safetyVerdict(), g = pulsGrade(G.end)[0], spec = G.stones.reduce((a, st) => a + st.specimens, 0);
   const objs = [
     { k: 'free', n: 'Stone-free', ok: stoneFree, v: stoneFree ? 'nothing ≥2 mm left' : `${G.residual} residual${G.stones.some(st => st.how === 'migrated') ? ', stone in the kidney' : ''}` },
     { k: 'puls', n: 'No ureteral injury (PULS 0)', ok: g === '0', v: `PULS ${g}` },
     { k: 'irp', n: 'Pressure never over 40 mmHg', ok: G.timeOver40 === 0, v: `peak ${Math.round(G.peakP)} mmHg` },
     { k: 'spec', n: 'Specimen sent for analysis', ok: spec > 0, v: spec ? `${spec} in the jar` : 'none basketed' },
-    { k: 'prep', n: 'Prep: whole chart, every target, right antibiotic', ok: !unreadNotes().length && G.prep.found.size === nTargets() && (v === 'best' || v === 'ok'), v: `${4 - unreadNotes().length}/4 notes · ${G.prep.found.size}/${nTargets()} targets · ${v === 'best' || v === 'ok' ? 'abx ✓' : 'abx ✗'}` },
+    { k: 'prep', n: 'Prep: whole chart, every target, right orders', ok: !unreadNotes().length && G.prep.found.size === nTargets() && (v === 'best' || v === 'ok') && sv !== 'wrong', v: `${4 - unreadNotes().length}/4 notes · ${G.prep.found.size}/${nTargets()} targets · ${v === 'best' || v === 'ok' ? 'abx ✓' : 'abx ✗'} · ${sv === 'wrong' ? 'safety wire ✗' : 'wire ✓'}` },
     { k: 'time', n: `Under par (${fmtOR(G.par)} of anesthesia)`, ok: G.t <= G.par, v: fmtOR(G.t) },
   ];
   if (!G.tumor) return objs;
@@ -1141,7 +1318,9 @@ function medalCard(m, objs, isBest) {
 // the attending's one-line verdict on the run
 function attQuote(reason, stoneFree) {
   const [v] = abxVerdict(), g = pulsGrade(reason)[0];
-  if (reason === 'perf') return '"We stop when the ureter says stop. Stent it, let it heal, come back."';
+  if (reason === 'access') return G.safety ? '"Three flaps is a false passage. Good thing you had a safety wire: that stent keeps this kidney out of IR."' : '"No safety wire, and now no access. That\'s a nephrostomy and a hard conversation. Wire up front when the ureter looks difficult."';
+  if (reason === 'perf') return OBS.length && !G.safety ? '"We stop when the ureter says stop. And without a safety wire, getting a stent past that perforation is a fight."' : '"We stop when the ureter says stop. Stent it, let it heal, come back."';
+  if (safetyVerdict()[0] === 'wrong' && stoneFree) return '"Stone-free. But the chart told you that ureter was trouble, and you went in without a safety wire. Don\'t make me say it twice."';
   if (reason === 'thermal') return '"You cooked it. Watts plus no flow equals heat. Remember that one."';
   if (reason === 'sepsis') return v === 'wrong' || v === 'none' ? '"Septic. And it started in pre-op: the culture told you what grew."' : '"Septic. High pressure pushes bacteria into the bloodstream. Watch the gauge."';
   if (reason === 'quit') return '"Live to fight another day."';
@@ -1166,7 +1345,21 @@ function prepCard() {
   const lab = { best: 'Right call ✓', ok: 'Acceptable', weak: 'Not ideal', none: 'No prophylaxis', wrong: 'Doesn\'t cover it ✗' }[v];
   return `<div class="sc"><div class="h"><span>Antibiotic: ${name}</span><span class="${ABX_FX[v].cls}">${lab}</span></div>
     <div class="keys">Chart read ${4 - unreadNotes().length}/4${unreadNotes().length ? ` — <span class="bd">skipped: ${listWords(unreadNotes())} (−${unreadNotes().length * NOTE_PEN})</span>` : ' ✓'} · Targets found on the CT ${G.prep.found.size}/${nTargets()}${G.prep.phleb.size ? ` · ${G.prep.phleb.size} phlebolith${G.prep.phleb.size === 1 ? '' : 's'} checked` : ''}${v === 'wrong' ? ' · sepsis risk built ×2.2 faster and started at 18' : v === 'weak' || v === 'none' ? ` · sepsis risk built ×${ABX_FX[v].k} faster` : ''}</div>
-    <p>${why}</p></div>`;
+    <p>${why}</p></div>${safetyCard()}`;
+}
+function safetyCard() {
+  const [v, why] = safetyVerdict(), lab = { best: 'Right call ✓', ok: 'Acceptable', wrong: 'Should have ✗' }[v];
+  return `<div class="sc"><div class="h"><span>Safety wire: ${G.prep.safety ? `placed (${orMin(SAFETY_T)} OR min)` : 'none'}</span><span class="${v === 'wrong' ? 'bd' : 'ok'}">${lab}</span></div><p>${why}</p></div>`;
+}
+// what happened at each wrinkle: tries, buckles, flaps, and what it teaches
+function wireCard() {
+  if (!OBS.length) return '';
+  return '<h2>WIRE WORK</h2>' + OBS.map(o => {
+    const res = o.state === 'passed' ? `<span class="${o.flaps ? 'wn' : 'ok'}">Wired and passed${o.tries === 1 && !o.flaps ? ' first time ✓' : ''}</span>` : '<span class="bd">Not passed</span>';
+    return `<div class="sc"><div class="h"><span>${o.kind === 'kink' ? 'Kinked, redundant ureter' : 'Tight segment'} · ${o.loc}${o.hint ? '' : ' · not in the chart'}</span>${res}</div>
+      <div class="keys">${o.tries} wire pass${o.tries === 1 ? '' : 'es'} · ${o.buckles} buckled · ${o.flaps ? `<span class="bd">${o.flaps} flap${o.flaps === 1 ? '' : 's'} raised</span>` : '0 flaps'}${o.log.length ? ' · ' + o.log.join(' → ') : ''}</div>
+      <p>${o.kind === 'kink' ? 'A redundant ureter kinks where it folds on itself: the scope can\'t follow the bend, and pushing it there is how you perforate. Pass a wire through the lumen under vision and ride over it; a stiff wire straightens the kink.' : 'A narrow segment (stricture, a tight distal or intramural ureter) won\'t take the scope. Wire it through the middle of the lumen and ride the scope over the wire, or stent and come back after passive dilation.'} Off-centre, a wire buckles on the wall or tunnels under the mucosa (a flap, then a false passage). Check on fluoro that it coils in the kidney.</p></div>`;
+  }).join('');
 }
 function injuryCard(reason) {
   const inj = G.injury, g = pulsGrade(reason);
@@ -1251,12 +1444,89 @@ function musicTick() {
     MUS.next += BEAT8; MUS.step++;
   }
 }
-function musicLevel() { if (MUS.bus) MUS.bus.gain.setTargetAtTime(MUS.on && !AU.muted ? MUS_VOL : 0, AU.ctx.currentTime, 0.6); }
+// ───────── mission music: an original driving loop for the case itself (Andrew: the lounge loop is the pre-flight music; in the OR
+// it should sound like action, Star Fox / a JRPG battle theme in energy, not in notes). 150 BPM in D minor: a galloping octave bass,
+// syncopated brass stabs, a heroic lead over 16 bars (A: the call, B: it climbs), drums with a fill every 8 bars. No tape wobble
+const MUSM = { bus: null, next: 0, step: 0 };
+const MUSM_VOL = 0.85, S16 = 60 / 150 / 4;
+// bass roots (D2 = 38) and chord quality per bar: Dm Dm B♭ C Dm Dm Gm A | B♭ C Dm Dm Gm B♭ A A
+const MPROG = [[38, 3], [38, 3], [34, 4], [36, 4], [38, 3], [38, 3], [43, 3], [33, 4], [34, 4], [36, 4], [38, 3], [38, 3], [43, 3], [34, 4], [33, 4], [33, 4]];
+// the lead: [midi, length in 16ths] per bar, 0 = rest
+const LEAD_BARS = [
+  [[69, 4], [74, 2], [76, 2], [77, 4], [76, 2], [74, 2]], [[72, 3], [74, 3], [69, 2], [0, 4], [65, 2], [67, 2]],
+  [[69, 4], [70, 2], [72, 2], [74, 6], [77, 2]], [[76, 4], [74, 2], [72, 2], [67, 6], [0, 2]],
+  [[81, 6], [79, 2], [77, 4], [76, 2], [77, 2]], [[74, 8], [69, 4], [74, 2], [77, 2]],
+  [[79, 4], [77, 2], [76, 2], [74, 4], [70, 4]], [[73, 4], [76, 4], [81, 6], [0, 2]],
+  [[77, 8], [74, 4], [77, 4]], [[79, 8], [76, 4], [72, 4]],
+  [[81, 6], [77, 2], [74, 8]], [[0, 4], [69, 2], [74, 2], [77, 2], [81, 2], [86, 4]],
+  [[82, 8], [81, 4], [79, 4]], [[77, 8], [74, 4], [70, 4]],
+  [[73, 6], [76, 2], [81, 8]], [[79, 4], [77, 4], [76, 4], [73, 4]],
+];
+const LEAD = (() => { const ev = {}; LEAD_BARS.forEach((bar, b) => { let k = b * 16; for (const [m, n] of bar) { if (m) ev[k] = [m, n]; k += n; } }); return ev; })();
+function missionInit() {
+  const c = AU.ctx; if (!c || MUSM.bus) return;
+  MUSM.bus = c.createGain(); MUSM.bus.gain.value = 0;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200; lp.Q.value = 0.5;
+  const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3; // glues the drums to the rest
+  MUSM.bus.connect(lp); lp.connect(comp); comp.connect(AU.master);
+}
+function mn(type, midi, t, dur, vol, a = 0.006, det = 0) {
+  const c = AU.ctx, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = mtof(midi); o.detune.value = det;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(MUSM.bus); o.start(t); o.stop(t + dur + 0.05);
+}
+function drum(kind, t, vol = 1) {
+  const c = AU.ctx;
+  if (kind === 'kick') { const o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(0.55 * vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16); o.connect(g); g.connect(MUSM.bus); o.start(t); o.stop(t + 0.18); return; }
+  if (kind === 'tom') { const o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(220 * vol, t); o.frequency.exponentialRampToValueAtTime(95 * vol, t + 0.16); g.gain.setValueAtTime(0.32, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.connect(g); g.connect(MUSM.bus); o.start(t); o.stop(t + 0.22); return; }
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), snare = kind === 'snare';
+  s.buffer = AU.noise; f.type = snare ? 'bandpass' : 'highpass'; f.frequency.value = snare ? 1900 : 7500; f.Q.value = snare ? 0.7 : 0.5;
+  const v = (snare ? 0.3 : 0.06) * vol, d = snare ? 0.13 : kind === 'ohat' ? 0.12 : 0.03;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); s.connect(f); f.connect(g); g.connect(MUSM.bus); s.start(t, Math.random() * 0.5); s.stop(t + d + 0.02);
+  if (snare) mn('triangle', 54, t, 0.08, 0.1, 0.002); // the drum's body
+}
+const BASS_PAT = [0, 0, 12, 0, 7, 0, 12, 0]; // per eighth: a galloping octave figure
+function missionTick() {
+  const c = AU.ctx;
+  while (MUSM.next < c.currentTime + 0.3) {
+    const t = MUSM.next, k = MUSM.step % 256, bar = k >> 4, e = k & 15, [root, q] = MPROG[bar], ch = [0, q, 7], fill = (bar & 7) === 7 && e >= 12, B = bar >= 8;
+    if (!(e & 1)) { const n = root + BASS_PAT[e >> 1]; mn('triangle', n, t, S16 * 1.7, 0.2); mn('square', n, t, S16 * 1.2, 0.028); } // bass
+    if (e === 0 || e === 6 || e === 10 || (B && e === 14)) ch.concat(12).forEach((n, i) => mn('sawtooth', root + 24 + n, t + i * 0.004, S16 * (e === 0 ? 3 : 2), 0.03, 0.004, i * 3 - 4)); // brass stabs
+    if (e === 0) ch.concat(12).forEach(n => mn('triangle', root + 24 + n, t, S16 * 15, 0.016, 0.12)); // a pad under it
+    const L = LEAD[k]; if (L) { const d = S16 * L[1] * 0.92; mn('square', L[0], t, d, 0.045, 0.012); mn('sawtooth', L[0], t, d, 0.022, 0.02, -9); }
+    if (B && (e & 1) && !fill) mn('square', root + 36 + ch[(e >> 1) % 3], t, S16 * 0.8, 0.012); // B section: a glittering arpeggio up top
+    if (!AU.muted) {
+      if (fill) drum('tom', t, [1.25, 1.1, 0.95, 0.8][e - 12]);
+      else {
+        if (e === 0 || e === 7 || e === 8 || (e === 14 && bar & 1)) drum('kick', t);
+        if (e === 4 || e === 12) drum('snare', t);
+        if (!(e & 1)) drum(e === 14 ? 'ohat' : 'hat', t, e % 4 === 2 ? 1 : 0.6);
+      }
+      if (e === 0 && (bar & 7) === 0) drum('ohat', t, 2.2); // a crash-ish lift at the top of each 8
+    }
+    MUSM.next += S16; MUSM.step++;
+  }
+}
+// which loop is playing: 'lounge' (briefing, prep, debrief) or 'mission' (in the OR). They crossfade; the idle one stops scheduling
+function musicTrack(name) {
+  if (MUS.track === name) return;
+  MUS.track = name;
+  if (AU.ctx) { if (name === 'mission') { MUSM.next = AU.ctx.currentTime + 0.25; MUSM.step = 0; } else { MUS.next = AU.ctx.currentTime + 0.25; MUS.step = 0; } }
+  musicLevel();
+}
+function musicLevel() {
+  if (!AU.ctx) return;
+  const on = MUS.on && !AU.muted, m = MUS.track === 'mission';
+  if (MUS.bus) MUS.bus.gain.setTargetAtTime(on && !m ? MUS_VOL : 0, AU.ctx.currentTime, 0.6);
+  if (MUSM.bus) MUSM.bus.gain.setTargetAtTime(on && m ? MUSM_VOL : 0, AU.ctx.currentTime, 0.5);
+}
 function musicStart() {
   if (!SETTINGS.music || !AU.ctx || MUS.on) return;
-  musicInit(); MUS.on = true; MUS.next = AU.ctx.currentTime + 0.15; musicLevel();
-  MUS.timer = setInterval(musicTick, 90); musicTick();
+  musicInit(); missionInit(); MUS.on = true; MUS.next = MUSM.next = AU.ctx.currentTime + 0.15; musicLevel();
+  MUS.timer = setInterval(musicTicks, 90); musicTicks();
 }
+function musicTicks() { if (!AU.ctx || !MUS.on) return; if (MUS.track === 'mission') missionTick(); else musicTick(); }
 function musicStop() { if (!MUS.on) return; MUS.on = false; musicLevel(); clearInterval(MUS.timer); }
 
 // ───────── comms radio: the window snapping open/shut, and each crew member's garbled "voice" (Star Fox style)
@@ -1309,6 +1579,7 @@ const SFX = {
   warn() { blip(300, 0.25, 'sawtooth', 0.12, 190); },
   stuck() { blip(170, 0.45, 'sawtooth', 0.22, 85); },
   pop() { burst(0.25, 0.3, 900); blip(540, 0.15, 'triangle', 0.16, 260); },
+  wire() { blip(2200, 0.55, 'sine', 0.05, 1500); burst(0.5, 0.08, 4000); }, // a wire hissing up the working channel
 };
 
 // ───────────────────────── game state
@@ -1316,14 +1587,17 @@ let G = null;
 let state = 'brief'; // brief | play | paused | end
 let camMode = SETTINGS.cam === 'scope' ? 'scope' : 'chase';
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function newRun(seed, fixed, lv = LV) {
+// wrinkles: pass the last run's (G.obsSpec) to replay the same patient; otherwise they're rolled from experience
+function newRun(seed, fixed, lv = LV, wrinkles) {
+  OBS = []; // each case's plain tube is built (and cached) unwrinkled
   setLevel(lv);
-  if (G) { for (const st of G.stones) if (st.mesh.parent) scene.remove(st.mesh); for (const f of G.frags) scene.remove(f.mesh); dropTumor(); }
+  if (G) { for (const st of G.stones) if (st.mesh.parent) scene.remove(st.mesh); for (const f of G.frags) scene.remove(f.mesh); dropTumor(); dropWires(); }
   for (const m of marks) scene.remove(m); marks.length = 0;
-  dustPS.clear(); bloodPS.clear();
+  dustPS.clear(); bloodPS.clear(); bubPS.clear(); PLUME.length = 0;
   rng = mulberry32(seed);
+  const spec = wrinkles || rollWrinkles(lv, fixed, seed), excl = spec.map(o => { const [lo, hi] = obsSpan(o); return [lo - 14, hi + 6]; }); // no stone in a wrinkle, or right before it
   // the starter stones are the same every time (one of each kind, the case's classic spots); otherwise a fresh patient
-  const layout = lv.tumor ? [] : fixed ? lv.slots.map((sl, i) => ({ slot: sl, type: ['UA', 'COM', 'CYS'][i], d: [7, 9, 8][i] })) : genLayout(lv);
+  const layout = lv.tumor ? [] : fixed ? lv.slots.map((sl, i) => ({ slot: sl, type: ['UA', 'COM', 'CYS'][i], d: [7, 9, 8][i] })) : genLayout(lv, excl);
   G = {
     seed, fixed, t: 0, p: { s: 1, x: 0, y: 0, vx: 0, vy: 0, v: 0 },
     flow: 0.35, P: 18, sepsis: 0, temp: 37, dust: 0, blood: 0, hp: 100, mode: 'dust', fragCD: 0,
@@ -1333,7 +1607,8 @@ function newRun(seed, fixed, lv = LV) {
     pend: null, L: laserNums(PRESETS.dust.J, PRESETS.dust.Hz), firing: false, rateObj: null, backed: false, slips: 0,
     injury: { burn: 0, thermal: 0, scrape: 0 }, lastMark: {},
     trip: null, trips: 0, tripTime: 0, bonus: 0, pedSwitches: 0, reprograms: 0, cleanPasses: 0, pinch: PINCHES.map(() => ({ scraped: false, passed: false })), lv: LV,
-    wasUnlocked: unlocked > LV.id, prep: { abx: null, found: new Set(), phleb: new Set(), seen: new Set() }, ct: null, sepK: 1, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
+    obsSpec: spec, wire: null, fiberAt: 0, flaps: [], safety: false, abort: null, xp0: xpOf(lv.id),
+    wasUnlocked: unlocked > LV.id, prep: { abx: null, safety: null, found: new Set(), phleb: new Set(), seen: new Set() }, ct: null, sepK: 1, residual: 0, migFrags: 0, peakP: 0, minHp: 100, timeOver40: 0, shake: 0, tgt: null, lock: false, hurt: 0, alarmT: 0, end: null,
   };
   G.stones = layout.map(({ slot: sl, type, d }, i) => {
     const T = TYPES[type], { mesh, mat, surf } = makeStoneMesh(type);
@@ -1347,7 +1622,10 @@ function newRun(seed, fixed, lv = LV) {
       // it tumbles slowly in the irrigant (rad/s, scope-frame axes), so new faces come round; frag pulses knock it about
       q: new THREE.Quaternion().setFromEuler(new THREE.Euler(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3))), w0: new THREE.Vector3(rand(-0.12, 0.12), rand(-0.12, 0.12), rand(-0.12, 0.12)), w: new THREE.Vector3() };
   });
-  G.par = parOf(lv, G.stones); G.kit = runKit(lv); // suction kit, renal cases only
+  OBS = spec.map((o, i) => { const [lo, hi] = obsSpan(o); return Object.assign({}, o, { i, lo, hi, state: 'ahead', relax: 0, pen: 0, tries: 0, flaps: 0, buckles: 0, pushT: 0, log: [] }); });
+  G.obs = OBS;
+  if (OBS.length) { const plain = LV_MESH[lv.id].children[0]; plain.visible = false; G.tube = buildTube(plain.material); scene.add(G.tube); } // this patient's ureter
+  G.par = parOf(lv, G.stones) + OBS.length * 15; G.kit = runKit(lv); // suction kit, renal cases only; a wrinkle buys you about 4 OR min
   if (lv.tumor) { G.tumor = makeTumor(lv); G.par = lv.parBase + 7 * G.tumor.n; markWild(); } // par: about 7 s a frond
   buildProgress();
 }
@@ -1370,6 +1648,7 @@ addEventListener('keydown', e => {
     if (e.code === 'Minus') nudgeLaser(0, -1);
     if (e.code === 'Equal') nudgeLaser(0, 1);
     if (e.code === 'KeyE') basketPress();
+    if (e.code === 'KeyG') wirePress();
     if (e.code === 'KeyF') e.preventDefault();
     if (e.code === 'Enter') moveOn();
   }
@@ -1483,7 +1762,7 @@ function renderMode() {
     el.innerHTML = `${n}<small>${LV.tumor ? Math.round(pr.J * pr.Hz) + ' W' : `${pr.J.toFixed(1)} J × ${pr.Hz} Hz`}</small>`;
     el.className = `tb ped ${pedCls(n)}${G.act === w ? ' act' : ''}${sb ? ' standby' : ''}${on ? ' on' : ''}`;
   }
-  $('bBasket').innerHTML = LV.tumor ? 'BIOPSY<small>forceps</small>' : 'BASKET<small>2–4 mm</small>';
+  $('bBasket').innerHTML = bkLabel(); G.bkLbl = $('bBasket').innerHTML;
   $('bLaser').classList.toggle('hidden', SETTINGS.level !== 'advanced');
 }
 // the panel pops up for a change and gets out of the way: APPLY, a tap anywhere else, or 6 s idle closes it
@@ -1597,7 +1876,8 @@ function commsTick(dt) {
 }
 // state-driven lines, checked every frame
 function chatter() {
-  const p = G.p, pr = PREP[LV.id], n = G.stones.length;
+  const p = G.p, pr = PREP[LV.id], n = G.stones.length, seasoned = G.xp0.n >= 3; // the attending coaches less once you've done a few of a case type
+  if (G.t > 0.8 && seasoned) say('att', G.xp0.n >= 6 ? pick(['Your case. I\'m just here to watch.', 'You know this one. Go ahead.']) : pick(['You\'ve done a few of these. Your case, I\'ll stay quiet.', 'Your scope. Shout if you need me.']), 'open', Infinity);
   if (G.t > 0.8) say('att', { 1: 'Straightforward one to start. No sheath, so every basket trip goes all the way out. Make them count.', 2: 'Stent\'s out, sheath\'s in. Ride it up, the stones sit high.', 3: 'Into the kidney today. Deflect into each calyx. The lower pole is the tough one.', 4: 'Wildcard. No stones today: a tumor in the ureter. Biopsy first, then ablate. And keep that pressure low.' }[LV.id], 'open', Infinity);
   if (G.t > 5) {
     const [v] = abxVerdict(), drug = (ABX.find(a => a[0] === G.prep.abx) || ABX[0])[1].split(' ')[0];
@@ -1622,6 +1902,7 @@ function chatter() {
       : st.hu > 1200 ? `Stone ${st.i + 1}: ${st.hu.toLocaleString()} HU. That\'s hard. Dusting will crawl, think fragmenting.`
       : st.hu < 550 ? `Stone ${st.i + 1} is low HU, probably uric acid. It\'ll dust in seconds.`
       : `Stone ${st.i + 1} ahead. Green spot on the stone, then fire.`, 'st' + st.i, Infinity);
+    if (seasoned) break;
     if (st.i === 0 && G.manual) say('att', 'Your scope, your distance. Hold ADVANCE to close in. Dusting works best right up on the stone.', 'advhint', Infinity);
     if (st.i === 0) say('att', 'Aim with the green spot. It comes off the fiber at 5 o\'clock, not the middle of the screen.', 'fiberhint', Infinity);
     break;
@@ -1634,7 +1915,16 @@ function chatter() {
   if (G.stones.some(st => st.phase === 'alive' && st.push > 0.35 && st.s - p.s < 20)) say('att', LV.sheath ? 'Easy on the flow. Even with a sheath you can wash it up.' : 'Your flow\'s washing the stone up the ureter. Ease off, you\'re chasing it.', 'flowpush', 20, 2);
   if (G.P > 40) say('gas', pick(['We\'re over 40! Flow down, now!', 'Pressure\'s over 40! Back off the irrigation!']), 'p40', 9, 2);
   else if (G.P > 34) say('gas', 'Pressure\'s creeping up. Ease the flow.', 'p34', 16);
-  if (G.firing && G.tgt && G.tgt.o.surf && fragFrac(G.las.J) < 0.5) say('att', 'Paint it. Sweep the spot over the whole face. Sit in one place and you just dig a hole.', 'painthint', Infinity);
+  // a wrinkle ahead: what it is and how to get past it (shorter once you've wired a couple on this case)
+  const ob = nextObs();
+  if (ob && !G.trip && ob.lo - p.s < 22) {
+    const terse = G.xp0.w >= 2, films = LV.id === 1 ? 'the CT' : 'the retrograde';
+    say('att', ob.kind === 'kink' ? (terse ? 'Kink. Wire it.' : `${ob.hint ? `There's the kink from ${films}.` : 'Huh, a kink. That wasn\'t on the films.'} The scope won't go round that. Get the wire in the lumen and ride it.`)
+      : (terse ? 'Tight. Wire first.' : `${ob.hint ? `That's the narrow segment from ${films}.` : 'That\'s tight, and it wasn\'t on the films.'} Don't push the scope through. Line up dead centre, get close, then pass a wire.`), 'obs' + ob.i, Infinity, 2);
+    if (!terse && G.obsAt) say('att', 'The wire comes out of the same channel as the fiber, at 5 o\'clock. Green spot in the middle of the opening, then wire.', 'obsaim', Infinity);
+    if (!ob.hint && G.obsAt && !G.safety) say('gas', 'No safety wire on this one, doc. Just saying.', 'obsnosw' + ob.i, Infinity);
+  }
+  if (!seasoned && G.firing && G.tgt && G.tgt.o.surf && fragFrac(G.las.J) < 0.5) say('att', 'Paint it. Sweep the spot over the whole face. Sit in one place and you just dig a hole.', 'painthint', Infinity);
   if (G.temp > 42) say('tech', 'Tip\'s cooking. More flow, or let off the pedal.', 'hot', 14);
   if (G.vis < 0.45 && G.firing) say('tech', 'Can\'t see a thing on the monitor. Bump the flow for a sec.', 'vis', 15);
   const curSt = G.stones.find(s => s.phase !== 'done');
@@ -1755,7 +2045,9 @@ function stoneGate(st) {
   const g = st.s - rOf(st) - WORK_DIST, c = LV.calyces && st.slot.cx != null && LV.calyces[st.slot.cx];
   return c ? Math.min(g, Math.max(c.s - 9, g - 0.85 * Math.max(0, Math.hypot(st.x - G.p.x, st.y - G.p.y) - 1.5))) : g;
 }
-function gateS() {
+// where the rails stop: the next stone (or its fragments), or a wrinkle you haven't wired past yet, whichever comes first
+function gateS() { const g = stoneGateS(), o = nextObs(); return o ? Math.min(g, o.lo - OBS_PARK) : g; }
+function stoneGateS() {
   const T = G.tumor; if (T && !T.done && !T.left) return T.s0 - 1.8 - WORK_DIST; // the tumor half-fills the lumen: no riding past it
   for (const st of G.stones) {
     if (st.phase === 'done') continue;
@@ -1766,7 +2058,67 @@ function gateS() {
   }
   return LV.end + 40;
 }
+// ───────────────────────── wire work: at a kink or a tight segment the rails stop. Line the working channel (the fiber's line, so the
+// green spot) up with the lumen, get close, pass a wire; centred it slides through and coils in the kidney, then the scope rides it past.
+// Off-centre it buckles on the fold; into the wall it raises a flap (submucosal), and three flaps make a false passage that ends the case
+const WIRE_OUT_T = 0.7, RIDE_V = 2.4, FIBER_BACK_T = 1.8, SAFETY_T = 12, OBS_PARK = 1; // SAFETY_T: placing a safety wire (game s = 3 OR min)
+const wireNear = () => { const o = G && nextObs(); return !!(o && !G.trip && G.p.s > o.lo - 12); };
+function wirePress() {
+  if (!G || state !== 'play' || G.trip || G.bk.state !== 'idle' || G.wire) return;
+  const o = nextObs(); if (!o) return;
+  const p = G.p, d = Math.max(0, o.lo - p.s);
+  if (d > 9) { toast('Get closer: you need to see the opening to wire it', '', 'wfar', 2); blip(200, 0.08, 'square', 0.08); return; }
+  // a long free run of wire wanders off line: from close up it goes where you point it
+  const L = { x: p.x + FIB_X, y: p.y + FIB_Y }, at = { s: o.lo, th: 0 }, cl = obsClear(o, L, at) - 0.06 * d;
+  G.wire = { o, state: 'out', t: 0, out: cl >= 0.06 ? 'through' : cl >= -0.3 ? 'buckle' : 'flap', L, cl, d, at };
+  o.tries++; o.log.push(G.wire.out); SFX.wire();
+}
+function wireTick(dt) {
+  const w = G.wire; if (!w) return;
+  const o = w.o, xp = xpOf(LV.id); w.t += dt;
+  if (w.state === 'out' && w.t >= WIRE_OUT_T) {
+    w.state = w.out; w.t = 0;
+    if (w.out === 'through') {
+      toast(`Wire's through ✓ — coiled in the kidney on fluoro. Riding it past the ${o.kind === 'kink' ? 'kink' : 'narrowing'}`, 'good', 'wthru', 0); SFX.clear();
+      say('tech', pick(['Wire\'s coiled in the kidney on fluoro.', 'Nice curl up in the kidney on fluoro.']), 'wthru' + o.i + o.tries, Infinity);
+    } else if (w.out === 'buckle') {
+      o.buckles++; SFX.stuck(); toast('The wire buckled on the wall — it\'s not in the lumen. Re-aim and try again', 'warn', 'wbk', 0);
+      say('att', xp.w >= 2 ? 'Buckling. Re-aim.' : 'It\'s buckling, you\'re on the fold. Pull it back, find the lumen, then go again.', 'wbk', 8);
+    } else raiseFlap(o, w);
+  } else if (w.state === 'through' && w.t >= 0.9) { w.state = 'ride'; w.t = 0; }
+  else if ((w.state === 'buckle' && w.t >= 0.9) || (w.state === 'flap' && w.t >= 1.1)) { w.state = 'back'; w.t = 0; }
+  else if (w.state === 'back' && w.t >= 0.5) G.wire = null;
+}
+// the wire dug into the mucosa instead of finding the lumen: a raised flap. Each one narrows that side; the third is a false passage
+function raiseFlap(o, w) {
+  o.flaps++; o.pen += 0.12; G.bonus -= 100;
+  injure('scrape', w.at.s, w.at.th, 0.95, 0, 2);
+  G.flaps.push({ s: w.at.s, th: w.at.th, m: addFlapMesh() });
+  G.hp -= o.flaps >= 2 ? 22 : 10; G.lastLoss = 'scrape'; G.blood = Math.min(100, G.blood + 45); G.hurt = 1; G.shake = Math.max(G.shake, 0.08); SFX.warn();
+  if (o.flaps >= 3) { G.abort = 'access'; return; }
+  toast(o.flaps >= 2 ? 'FALSE PASSAGE — the wire is tunnelling under the mucosa. One more and the case is over' : 'Raised a flap: the wire went under the mucosa, not up the lumen (−100). Aim for the middle', 'bad', 'wflap', 0);
+  say('att', o.flaps >= 2 ? 'That\'s a false passage. Back off. One more and we stop.' : 'You raised a flap, that\'s submucosal. Pull back. Find the true lumen, dead centre.', 'wflap' + o.flaps, Infinity, 2);
+  if (o.flaps === 1) say(G.safety ? 'att' : 'gas', G.safety ? 'At least we\'ve got a safety wire.' : 'And no safety wire on this one, doc.', 'wsafe', Infinity);
+  say('tech', 'That wire\'s not following the ureter on fluoro.', 'wfl' + o.flaps, Infinity);
+}
+function wirePassed(o) {
+  o.state = 'passed'; o.relax = 1; retube(o, true); G.wire = null; G.fiberAt = G.t + FIBER_BACK_T; G.p.v = 0;
+  const clean = o.tries === 1 && !o.flaps; G.bonus += clean ? 150 : o.flaps ? 0 : 50;
+  toast(`Past the ${o.kind === 'kink' ? 'kink' : 'tight segment'} ✓${clean ? ' First pass, clean +150' : o.flaps ? '' : ' +50'} — wire out, fiber back in`, 'good', 'wpass' + o.i, 0);
+  say('att', clean ? pick(['Right down the middle. That\'s how you wire a ureter.', 'Clean. First pass.']) : o.flaps ? 'You got there. Now be gentle on those flaps.' : 'There you go.', 'wpass' + o.i, Infinity);
+  if (G.safety) buildSafetyWire(); // the ureter straightened around it too
+}
+// with the scope stopped at a wrinkle: holding ADVANCE into it is pushing a scope against resistance
+function obsPush(o, pushing, dt) {
+  if (!pushing) { o.pushT = 0; return; }
+  o.pushT += dt; if (o.pushT < 0.35) return;
+  G.hp -= 18 * dt; G.lastLoss = 'scrape'; G.hurt = 1; G.shake = Math.max(G.shake, 0.05); G.blood = Math.min(100, G.blood + 20 * dt);
+  injure('scrape', o.lo + 0.4, o.kind === 'kink' ? o.th + Math.PI : mr(-3, 3), mr(0.8, 1), 0.3, 2);
+  toast(`Pushing the scope against resistance — ${o.kind === 'kink' ? 'it won\'t go round that bend' : 'it won\'t fit through that'}. WIRE it`, 'bad', 'obspush', 3);
+  say('att', 'STOP. You don\'t push a scope through that. Wire it.', 'obspush', 8, 2);
+}
 function basketPress() {
+  if (wireNear()) return wirePress();
   if (LV.tumor) return biopsyPress();
   if (!G || state !== 'play' || G.bk.state !== 'idle' || G.trip) return;
   const t = findTarget(0.9, 6);
@@ -1889,7 +2241,7 @@ function tumorHit(fib, slack = 0) {
 function tumorLase(h, L, dt) {
   const T = G.tumor, W = L.W, rk = reach(h.ds), coag = W <= TM_COAG_W;
   if (!T.lased) { T.lased = true; if (!T.bx_.length) say('att', 'Biopsy first! Burnt tissue tells pathology nothing.', 'bxfirst', Infinity, 2); }
-  G.dust = Math.min(100, G.dust + 5 * (W / 10) * dt); // vapour bubbles
+  dustSrc(5 * (W / 10) * dt, G.p.s + h.ds, G.p.x + FIB_X, G.p.y + FIB_Y, 0xb8b0a8); // vapour and char
   if (coag) T.bleed = Math.max(0, T.bleed - 0.5 * dt); // low power seals as it goes
   if (h.f) {
     const f = h.f; f.len = Math.max(0, f.len - ABL_K * W * rk * dt); f.hit = 1;
@@ -1956,6 +2308,83 @@ function tumorCard() {
     <p>Low-risk upper-tract urothelial carcinoma (unifocal, under 2 cm, low-grade on cytology and biopsy, no invasive features on CT) can be treated kidney-sparing: biopsy for grade, then ablate every frond and the base. Thulium's shallow penetration gives precise vaporization with good haemostasis at low power. Keep the pressure low — backflow can carry tumor cells — and plan a second-look ureteroscopy at about 6–8 weeks: recurrence is common.</p></div>`;
 }
 
+// ───────────────────────── wire visuals: the working wire, the safety wire along the wall, raised flaps, the aim ring at a wrinkle
+const WIRE_MAT = new THREE.MeshStandardMaterial({ color: 0xd4e8da, roughness: 0.3, metalness: 0.15, emissive: 0x10241a }); // hydrophilic: pale green, glossy
+const SAFE_MAT = new THREE.MeshStandardMaterial({ color: 0xc6ccd4, roughness: 0.28, metalness: 0.55, emissive: 0x0c0e12 });
+const FLAP_MAT = new THREE.MeshStandardMaterial({ color: 0xeab8ae, roughness: 0.55, metalness: 0, emissive: 0x2c0c0a, side: THREE.DoubleSide });
+const FLAP_GEO = (() => { const g = new THREE.PlaneGeometry(0.9, 0.6, 6, 4), q = g.attributes.position; for (let i = 0; i < q.count; i++) q.setZ(i, 0.12 * Math.sin((q.getX(i) / 0.9 + 0.5) * Math.PI)); g.computeVertexNormals(); return g; })(); // a little curled sheet
+const wireMesh = new THREE.Mesh(new THREE.BufferGeometry(), WIRE_MAT); wireMesh.visible = false; wireMesh.frustumCulled = false; scene.add(wireMesh);
+const safeMesh = new THREE.Mesh(new THREE.BufferGeometry(), SAFE_MAT); safeMesh.visible = false; safeMesh.frustumCulled = false; scene.add(safeMesh);
+const obsRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.028, 8, 72), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 2.2, 0.6), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+obsRing.visible = false; scene.add(obsRing);
+function setTubeGeo(mesh, pts, r) {
+  if (pts.length < 2) { mesh.visible = false; return; }
+  mesh.geometry.dispose(); mesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'centripetal'), Math.min(220, pts.length * 3), r, 6, false); mesh.visible = true;
+}
+const WC = { x: 0, y: 0 };
+// the safety wire: placed under fluoro before the scope goes in, lying along the wall (outside the sheath) and coiled in the kidney
+function buildSafetyWire() {
+  if (!G || !G.safety) { safeMesh.visible = false; return; }
+  const th = -2.35, pts = [], end = LV.kidney ? 288 : END_S - 6;
+  for (let s = 0.4; s <= end; s += 0.8) { lumC(s, WC); const r = obsRad(s, baseR(s)) + pocketR(s, th) - 0.13; pts.push(worldAt(s, WC.x + Math.cos(th) * r, WC.y + Math.sin(th) * r, new THREE.Vector3())); }
+  for (let pass = 0; pass < 4; pass++) for (let i = 1; i < pts.length - 1; i++) pts[i].lerp(V3.copy(pts[i - 1]).add(pts[i + 1]).multiplyScalar(0.5), 0.5); // a wire is taut: no sharp corners
+  lumC(end, WC); const r0 = obsRad(end, baseR(end)) - 0.13, cx = Math.cos(th), cy = Math.sin(th);
+  for (let a = 0.35; a < 5.6; a += 0.35) { const r = r0 - 1.8 * (1 - Math.cos(a)); pts.push(worldAt(end + 1.8 * Math.sin(a), WC.x + cx * r, WC.y + cy * r, new THREE.Vector3())); } // the curl in the pelvis
+  setTubeGeo(safeMesh, pts, 0.02);
+}
+// a flap of mucosa lifted off the wall where a wire went under it (kept where it was raised, riding the wall as it moves)
+function addFlapMesh() { const m = new THREE.Mesh(FLAP_GEO, FLAP_MAT); m.scale.setScalar(1.3); scene.add(m); return m; }
+const FLF = mkF(), FLN = new THREE.Vector3(), FLB = new THREE.Vector3(), FLM = new THREE.Matrix4();
+function placeFlap(f) {
+  frameAt(f.s, FLF); lumC(f.s, WC);
+  FLN.copy(FLF.r).multiplyScalar(Math.cos(f.th)).addScaledVector(FLF.u, Math.sin(f.th)); FLB.crossVectors(FLF.t, FLN).normalize();
+  FLM.makeBasis(FLB, FLF.t, FLN); f.m.quaternion.setFromRotationMatrix(FLM); f.m.rotateX(-0.75); // lifts off the wall, its free edge toward you
+  worldAt(f.s, WC.x, WC.y, f.m.position).addScaledVector(FLN, wallR(f.s, f.th) - 0.16);
+}
+function dropWires() {
+  if (G && G.tube) { scene.remove(G.tube); G.tube.geometry.dispose(); G.tube = null; const pl = LV_MESH[G.lv.id] && LV_MESH[G.lv.id].children[0]; if (pl) pl.visible = true; }
+  if (G) for (const f of G.flaps) scene.remove(f.m);
+  wireMesh.visible = safeMesh.visible = obsRing.visible = false;
+}
+// the working wire, from the channel at 5 o'clock: straight down the line it was aimed along, then (through) round the bend with the
+// lumen and on up to the kidney; (buckle) curling back off the wall; (flap) under the mucosa
+const WP = [];
+function wirePt(w, s, chan) {
+  const o = w.o, L = w.out === 'through' && w.state === 'ride' ? chan : w.L, out = new THREE.Vector3();
+  if (w.out === 'through') { lumC(s, WC); const k = smooth(o.lo - 0.5, o.s, s); return worldAt(s, lerp(L.x, WC.x + FIB_X, k), lerp(L.y, WC.y + FIB_Y, k), out); }
+  if (w.out === 'flap' && s > w.at.s) { lumC(s, WC); const r = wallR(s, w.at.th) + (s - w.at.s) * 0.35; return worldAt(s, WC.x + Math.cos(w.at.th) * r, WC.y + Math.sin(w.at.th) * r, out); }
+  return worldAt(s, L.x, L.y, out);
+}
+function updateWireMesh() {
+  const w = G.wire;
+  if (!w) { wireMesh.visible = false; return; }
+  const p = G.p, chan = { x: p.x + FIB_X, y: p.y + FIB_Y };
+  const ext = w.state === 'out' ? Math.min(1, w.t / WIRE_OUT_T) : w.state === 'back' ? 1 - Math.min(1, w.t / 0.5) : 1;
+  const sEnd = w.out === 'through' ? Math.min(LV.end - 4, w.o.hi + 30) : w.at.s + (w.out === 'flap' ? 1.4 : 0);
+  const s0 = p.s + 1.1, sTip = lerp(s0, Math.max(s0 + 0.05, sEnd), ext);
+  WP.length = 0; WP.push(tipW.clone(), tipW.clone().addScaledVector(F1.t, 0.35)); // out of the channel along the scope's own axis first
+  for (let s = s0; s < sTip; s += 0.7) WP.push(wirePt(w, s, chan));
+  WP.push(wirePt(w, sTip, chan));
+  if (w.out === 'buckle' && w.state !== 'out') { // it hit the wall and folded back on itself
+    lumC(w.at.s, WC); const nx = WC.x - w.L.x, ny = WC.y - w.L.y, nl = Math.hypot(nx, ny) || 1, cur = w.state === 'back' ? 1 - Math.min(1, w.t / 0.5) : Math.min(1, w.t / 0.3);
+    for (let a = 0.4; a < 5.2 * cur; a += 0.4) WP.push(worldAt(w.at.s - 0.45 * (1 - Math.cos(a)), w.L.x + nx / nl * 0.32 * Math.sin(a), w.L.y + ny / nl * 0.32 * Math.sin(a), new THREE.Vector3()));
+  }
+  setTubeGeo(wireMesh, WP, camMode === 'scope' ? 0.0065 : 0.022); // first person: as thin as the fiber it replaces
+}
+// the guide ring at a wrinkle's mouth: centred on the open line through it, sized to how much room that line has. On the easier ones it
+// also turns green when the channel is lined up close enough to pass (amber: it'll buckle, red: it'll go under the mucosa)
+function updateObsRing() {
+  const o = nextObs(), p = G.p;
+  if (!o || G.wire || G.trip || o.lo - p.s > 24) { obsRing.visible = false; return; }
+  const a = obsAim(o), d = Math.max(0, o.lo - p.s), cl = obsClear(o, { x: p.x + FIB_X, y: p.y + FIB_Y }) - 0.06 * d;
+  const rs = o.kind === 'tight' ? o.lo + 1.6 : o.lo + 0.3; // a narrowing: at its narrowest, where the opening is
+  worldAt(rs, a.x, a.y, obsRing.position); frameAt(rs, FLF); obsRing.lookAt(V2.copy(obsRing.position).add(FLF.t));
+  obsRing.scale.setScalar(Math.max(0.12, a.r)); obsRing.visible = true;
+  if (o.sev < 0.5) obsRing.material.color.setRGB(cl >= 0.06 ? 0.3 : 2.4, cl >= 0.06 ? 2.2 : cl >= -0.3 ? 1.3 : 0.25, cl >= 0.06 ? 0.6 : 0.2);
+  else obsRing.material.color.setRGB(1.4, 1.4, 1.5); // harder ones: just the opening, you judge the line yourself
+  obsRing.material.opacity = 0.8 * smooth(24, 14, o.lo - p.s);
+}
+
 // ───────────────────────── the simulation step
 function update(dt) {
   const p = G.p; G.t += dt;
@@ -1972,7 +2401,8 @@ function update(dt) {
   const L = G.L = LV.tumor ? tmNums(G.las.J, G.las.Hz) : laserNums(G.las.J, G.las.Hz);
   // steer (auto-centred while riding out/in with the basket)
   const [ix, iy] = readStick(), maxV = busy ? 1.2 : G.lock && G.tgt && G.tgt.o.surf ? 2.2 : 3.4; // finer on a stone: painting needs small moves
-  if (trip) { const k = Math.min(1, dt * 4); p.x -= p.x * k; p.y -= p.y * k; p.vx = p.vy = 0; }
+  if (trip) { const k = Math.min(1, dt * 4), c = lumC(p.s); p.x += (c.x - p.x) * k; p.y += (c.y - p.y) * k; p.vx = p.vy = 0; }
+  else if (G.wire) p.vx = p.vy = 0; // hold the scope still while the wire goes in (the ride centres it on the wire)
   else {
     p.vx += (ix * maxV - p.vx) * Math.min(1, dt * 8); p.vy += (iy * maxV - p.vy) * Math.min(1, dt * 8);
     p.x += p.vx * dt; p.y += p.vy * dt;
@@ -1992,15 +2422,24 @@ function update(dt) {
       p.v += (lerp(PINCH_TRIP_V, WITHDRAW_V * sv, tripK) - p.v) * ease; p.s = Math.max(0.6, p.s - p.v * dt);
       if (p.s <= 0.6) { capture(bk.target); bk.state = 'idle'; bk.target = null; trip.phase = 'in'; }
     } else {
-      const target = Math.min(trip.back, gateS() + WORK_DIST - 1.05); // back to where you were, even if you'd advanced past the rails' stop
+      const target = Math.min(trip.back, gateS() + WORK_DIST - ADV_STOP); // back to where you were, even if you'd advanced past the rails' stop
       p.v += (Math.min(lerp(PINCH_TRIP_V, RETURN_V * sv, tripK), (target - p.s) * 3 + 2) - p.v) * ease; p.s = Math.min(target, p.s + p.v * dt);
       if (p.s >= target - 0.01) {
         const tt = G.t - trip.t0; G.tripTime += tt; G.trips++; G.trip = null; p.v = 0;
         toast(`Back at the stone — that basket trip cost ${orMin(tt)} min of anesthesia`, 'warn', 'tripback', 0);
       }
     }
-  } else {
+  } else if (G.wire && G.wire.state === 'ride') {
+    // riding the wire: the scope follows it through, centred, at a crawl; the kink straightens (the narrowing opens) as it goes
+    const o = G.wire.o, c = lumC(p.s), k = Math.min(1, dt * 6);
+    p.v = RIDE_V; p.s += RIDE_V * dt; p.x += (c.x - p.x) * k; p.y += (c.y - p.y) * k;
+    o.relax = Math.max(o.relax, smooth(o.lo - 1, o.s, p.s));
+    if ((G.rideN = (G.rideN || 0) + 1) % 2 === 0) retube(o);
+    if (p.s >= o.hi + 1.5) wirePassed(o);
+  } else if (G.wire) p.v = 0;
+  else {
     const gate = gateS(); gap = gate - p.s;
+    const ob = nextObs(), atObs = !!ob && gate === ob.lo - OBS_PARK; // the wrinkle, not a stone, is what the rails are stopping for
     if (input.back || keys.KeyB) {
       // PULL BACK: back the scope down to reach a fragment that slipped behind it
       const floor = Math.max(1, gate - 25);
@@ -2009,7 +2448,7 @@ function update(dt) {
       // ride the rails up to MANUAL_D short of the work, easing down to a creep over the last stretch so the stone comes in slowly
       // (faster inside a sheath); after a pull-back: slowly, and hold while there's work in front of you.
       // Inside that last stretch the scope only moves while you hold ADVANCE — you choose how close to get, up to touching
-      const cur = G.stones.find(st => st.phase !== 'done'), inCalyx = !!(cur && LV.calyces && cur.slot.cx != null);
+      const cur = G.stones.find(st => st.phase !== 'done'), inCalyx = !atObs && !!(cur && LV.calyces && cur.slot.cx != null);
       const ride = gap - (inCalyx ? 0.6 : MANUAL_D), manual = ride <= 0.05 && !G.backed; // a calyx narrows toward its mouth: park nearer, or you can't deflect in
       const cruise = inSheath(p.s + 4) ? CRUISE * SHEATH_V : CRUISE, near = lerp(APPROACH_V, cruise, smooth(6, APPROACH_D, ride));
       let tv = manual || gap <= 0 ? 0 : Math.min(lerp(PINCH_V, cruise, slowK), near, Math.max(ride, 0) * 1.2 + 0.25);
@@ -2022,35 +2461,39 @@ function update(dt) {
       let lim = ride;
       if (fwd) {
         tv = Math.max(tv, ADV_V);
-        lim = G.tumor && !G.tumor.done && !G.tumor.left ? G.tumor.s0 - 2.3 - p.s : cur && cur.phase === 'alive' ? cur.s - rOf(cur) - 1.05 - p.s : cur ? cur.lastS + 8 - p.s : 1;
+        lim = atObs ? ob.lo - 0.4 - p.s : G.tumor && !G.tumor.done && !G.tumor.left ? G.tumor.s0 - 2.3 - p.s : cur && cur.phase === 'alive' ? cur.s - rOf(cur) - ADV_STOP - p.s : cur ? cur.lastS + 8 - p.s : 1;
       }
       p.v = manual || fwd ? tv : p.v + (tv - p.v) * Math.min(1, dt * 3); // ADVANCE answers at once, like your hand on the scope
       if (lim > 0) p.s += Math.min(p.v * dt, lim); else p.v = 0;
-      G.manual = manual; G.advStop = fwd && lim <= 0.02 && (!!cur && cur.phase === 'alive' || !!(G.tumor && !G.tumor.done && !G.tumor.left));
+      G.manual = manual; G.advStop = !atObs && fwd && lim <= 0.02 && (!!cur && cur.phase === 'alive' || !!(G.tumor && !G.tumor.done && !G.tumor.left));
+      G.obsAt = atObs && manual ? ob : null; G.obsStop = atObs && fwd && lim <= 0.02;
+      if (ob) obsPush(ob, G.obsStop, dt);
     }
   }
+  wireTick(dt);
   // peristalsis: a contraction ring rolls down toward you between stones
   if (!trip && !G.wave.on && G.t > G.wave.next && p.s < UPJ_S - 40 && !inSheath(p.s + 70) && gap > 34) { G.wave.on = true; G.wave.s = p.s + Math.min(85, gap - 4); } // starts well out ahead
   if (G.wave.on) { G.wave.s -= 8 * dt; if (G.wave.s < p.s - 14 || (LV.sheath && G.wave.s < LV.sheath - 8)) { G.wave.on = false; G.wave.next = G.t + mr(3, 6); } } // rolls down slowly enough to see it coming
   UNI.waveS.value = G.wave.on ? G.wave.s : -999;
   // walls
-  const rEff = Math.max(0.6, lumR(p.s, Math.atan2(p.y, p.x)) - SCOPE_R), m = Math.hypot(p.x, p.y);
+  const lc = lumC(p.s), lcx = lc.x, lcy = lc.y, wth = Math.atan2(p.y - lcy, p.x - lcx); // walls are measured from the lumen's own centre (off the track's line only in a wrinkle)
+  const rEff = Math.max(0.6, lumR(p.s, wth) - SCOPE_R), m = Math.hypot(p.x - lcx, p.y - lcy);
   let scraping = false;
   if (m > rEff) {
-    const over = m - rEff; p.x *= rEff / m; p.y *= rEff / m; p.vx *= 0.4; p.vy *= 0.4;
-    const outward = (ix * p.x + iy * p.y) / (rEff || 1);
+    const over = m - rEff; p.x = lcx + (p.x - lcx) * rEff / m; p.y = lcy + (p.y - lcy) * rEff / m; p.vx *= 0.4; p.vy *= 0.4;
+    const outward = (ix * (p.x - lcx) + iy * (p.y - lcy)) / (rEff || 1);
     if (!trip && !inSheath(p.s) && (outward > 0.25 || over > 0.01)) { // inside the sheath you rub plastic, not mucosa
       scraping = true;
       G.hp -= (6 + over * 120) * dt; G.lastLoss = 'scrape'; G.blood = Math.min(100, G.blood + 32 * dt); G.hurt = 1;
-      worldAt(p.s + 0.4, p.x * 1.1, p.y * 1.1, V1);
+      worldAt(p.s + 0.4, lcx + (p.x - lcx) * 1.1, lcy + (p.y - lcy) * 1.1, V1);
       if (Math.random() < 0.5) bloodPS.emit(V1, V2.set(mr(-0.4, 0.4), mr(-0.4, 0.4), mr(-0.4, 0.4)), [0.55, 0.03, 0.03], mr(0.4, 0.8), mr(1.4, 2.4), 0.4, 1, 0.5);
       toast('Scraping mucosa — stay off the wall', 'bad', 'scr', 5);
       say('att', pick(['Easy! You\'re on the wall!', 'Off the wall, off the wall!']), 'scr', 9, 2);
-      injure('scrape', p.s + 0.25, Math.atan2(p.y, p.x), mr(0.6, 0.8), 0.22);
+      injure('scrape', p.s + 0.25, wth, mr(0.6, 0.8), 0.22);
       // ADVANCE with the tip jammed into the wall = pushing against resistance: the classic way to perforate
       if ((input.fwd || keys.KeyF) && p.v > 0.3) {
         G.hp -= 32 * dt; G.lastLoss = 'scrape'; G.shake = Math.max(G.shake, 0.05);
-        injure('scrape', p.s + 0.3, Math.atan2(p.y, p.x), mr(0.8, 1.0), 0.15, 2);
+        injure('scrape', p.s + 0.3, wth, mr(0.8, 1.0), 0.15, 2);
         toast('Pushing against resistance — stop advancing!', 'bad', 'push', 3);
         say('att', 'STOP! Never push against resistance. That\'s how you perforate.', 'push', 8, 2);
       }
@@ -2078,7 +2521,10 @@ function update(dt) {
   if (G.collapsed) { G.hp -= 1.5 * dt; G.lastLoss = 'scrape'; toast('Suction is beating the inflow — the pelvis is collapsing onto the scope. More flow', 'bad', 'collapse', 5); say('tech', 'Pelvis is collapsing on us. Turn the flow up.', 'collapse', 15, 2); }
   // lasing
   const firing = !!(want || input.fire || keys.Space);
-  const canFire = firing && !busy && !G.pend && !trip;
+  const fiberOut = !!G.wire || G.fiberAt > G.t; // one working channel: the fiber comes out for the wire
+  if (G.fiberAt && G.t >= G.fiberAt) { G.fiberAt = 0; toast('Fiber back in the channel — laser ready', 'good', 'fibback', 0); blip(880, 0.1, 'square', 0.1); }
+  if (firing && fiberOut) toast(G.wire ? 'The wire is in the working channel — no laser fiber until it\'s out' : 'Fiber going back in…', 'warn', 'fibout', 3);
+  const canFire = firing && !busy && !G.pend && !trip && !fiberOut;
   G.firing = canFire;
   const vis = clamp(1 - (G.dust * 0.7 + G.blood * 0.8) / 100, 0, 1) * (G.collapsed ? 0.4 : 1);
   G.vis = vis;
@@ -2109,8 +2555,8 @@ function update(dt) {
   if (canFire) {
     power = L.W;
     if (tgt) {
-      const o = tgt.o, T = TYPES[o.type], hit = G.hit, rk = reach(hit ? hit.ds : tgt.ds - rOf(o)); // a crater floor sits further from the fiber
-      G.dust = Math.min(100, G.dust + 40 * (1 - L.f) * (L.W / 32) * dt); // stone dust only when the beam is on stone
+      const o = tgt.o, T = TYPES[o.type], hit = G.hit, dd = hit ? hit.ds : tgt.ds - rOf(o), rk = reachDust(dd), rkF = reachFrag(dd); // a crater floor sits further from the fiber
+      dustSrc(44 * (1 - L.f) * (L.W / 32) * rk * dt, fib.s + dd, fib.x, fib.y, T.col); // stone dust only when the beam is on stone (and only as much as it's ablating)
       if (L.dustRate > 0) {
         hitting = true;
         const dV = L.dustRate * T.dust * rk * dt;
@@ -2118,7 +2564,7 @@ function update(dt) {
         else o.V = Math.max(0, o.V - dV * 1.3);
         if (!o.isFrag && L.f < 0.5) o.dustT += dt;
       }
-      if (L.fragRate > 0 && !o.isFrag) { const dV = L.fragRate * T.frag * rk * dt; o.cracked += dV; o.crackV += dV; } // cracks build inside; chunks come off below
+      if (L.fragRate > 0 && !o.isFrag) { const dV = L.fragRate * T.frag * rkF * dt; o.cracked += dV; o.crackV += dV; } // cracks build inside; chunks come off below
       o.d = Math.cbrt(Math.max(o.V, 0)); o.flash = Math.max(o.flash || 0, 1);
       // live ablation rate — the "is this working?" readout
       if (G.rateObj === o && o.prevD != null) o.rate = lerp(o.rate || 0, (o.prevD - o.d) / dt, Math.min(1, dt * 3));
@@ -2164,7 +2610,8 @@ function update(dt) {
       const kt = tgt && (tgt.o.isFrag ? !tgt.o.gone : tgt.o.phase === 'alive') ? tgt : null;
       kick(kt, nearWall, L);
     }
-  } else G.rateObj = null;
+    if (!LV.tumor) stirFrags(L, fib, tgt, dt);
+  } else { G.rateObj = null; G.popOn = false; }
   level(AU.buzz, canFire && L.f < 0.5 ? 0.165 : 0); // laser sounds sit 25% under where they started
   level(AU.crack, hitting ? 0.135 : 0);
   // heat: total watts cook the lumen unless irrigation carries it away
@@ -2177,10 +2624,10 @@ function update(dt) {
   }
   if (G.tumor && G.tumor.bleed > 0) G.blood = Math.min(100, G.blood + G.tumor.bleed * 4 * dt); // stumps ooze until coagulated
   // visibility clears with flow
-  const sd = (kitOn('fans') ? KIT.fans.dust : 0) + (kitOn('diss') ? KIT.diss.dust : 0); // suction carries the dust away too
-  G.dust = Math.max(0, G.dust - G.dust * (0.05 + G.flow * 1.0 + sd) * dt); // low flow barely clears it: dusting at 35% flow fogs you out
+  plumeTick(dt); // the dust plume drifts, sinks and washes out; G.dust = how much of it hangs in front of the lens
   G.blood = Math.max(0, G.blood - G.blood * (0.08 + G.flow * 0.8) * dt);
   // stones: retropulsion, settle back, migration
+  const obAhead = nextObs();
   for (const st of G.stones) {
     if (st.phase !== 'alive' || st.held) continue;
     st.vs *= Math.exp(-3.2 * dt); st.s += st.vs * dt;
@@ -2190,7 +2637,8 @@ function update(dt) {
     st.push = st.s0 > UPJ_S ? 0 : Math.max(0, G.flow - 0.45) * 2.6 * Math.min(2, 8 / Math.max(st.d, 3)) * (LV.sheath ? 0.35 : 1);
     st.s += st.push * dt;
     if (st.push < 0.05 && st.s > st.s0) st.s = Math.max(st.s0, st.s - SETTLE_V * dt); // settles back between pulses, too
-    st.s = Math.max(st.s, p.s + rOf(st) + 1.0);
+    st.s = Math.max(st.s, p.s + rOf(st) + ADV_STOP - 0.05);
+    if (obAhead && st.s < obAhead.lo) st.s = Math.min(st.s, obAhead.lo - rOf(st) - 0.3); // a kink or a narrowing holds a stone below it
     if (LV.kidney) st.s = Math.min(st.s, st.s0 + (st.s0 > UPJ_S + 20 ? 1.2 : 4)); // a calyx cup (or the far wall of the pelvis) stops it
     st.vx *= Math.exp(-3 * dt); st.vy *= Math.exp(-3 * dt);
     st.x += (st.vx + (st.hx - st.x) * 0.4 + Math.sin(G.t * 0.7 + st.i) * 0.05) * dt;
@@ -2210,8 +2658,10 @@ function update(dt) {
     if (f.s < 0.8) { killFrag(f, false); continue; } // washed into the bladder — it'll pass
     if (behind && f.d < 3.5 && inSheath(f.s - 0.5)) { killFrag(f, false); toast('A fragment washed out through the sheath ✓', 'good', 'shout', 3); continue; } // outflow up the sheath carries it out
     f.x += (f.vx + Math.sin(f.bob * 0.9) * 0.08) * dt; f.y += (f.vy + Math.cos(f.bob * 0.7) * 0.08) * dt;
-    const lim = Math.max(0.05, lumR(f.s, Math.atan2(f.y, f.x)) - rOf(f) - 0.05), fm = Math.hypot(f.x, f.y);
-    if (fm > lim) { f.x *= lim / fm; f.y *= lim / fm; f.vx *= -0.5; f.vy *= -0.5; }
+    if (obAhead && f.s < obAhead.lo && f.s > obAhead.lo - rOf(f) - 0.3) { f.s = obAhead.lo - rOf(f) - 0.3; f.vs = Math.min(f.vs, 0); } // nothing washes up past an unwired wrinkle
+    const fc = lumC(f.s), fcx = fc.x, fcy = fc.y; // walls around the lumen's centre
+    const lim = Math.max(0.05, lumR(f.s, Math.atan2(f.y - fcy, f.x - fcx)) - rOf(f) - 0.05), fm = Math.hypot(f.x - fcx, f.y - fcy);
+    if (fm > lim) { f.x = fcx + (f.x - fcx) * lim / fm; f.y = fcy + (f.y - fcy) * lim / fm; f.vx *= -0.5; f.vy *= -0.5; }
     if (f.left) { if (f.s < p.s - 1.5) killFrag(f, false); continue; }
     const fr = rOf(f), ahead = f.s - p.s;
     if (f.slip) {
@@ -2257,15 +2707,47 @@ function update(dt) {
   if (G.P > 40) { G.alarmT -= dt; if (G.alarmT <= 0) { SFX.alarm(); G.alarmT = 0.7; } }
   G.hp = Math.min(100, G.hp); G.minHp = Math.min(G.minHp, G.hp);
   G.hurt = Math.max(0, G.hurt - dt * 2.5);
+  if (G.abort) return endRun(G.abort);
   if (G.hp <= 0) return endRun(G.lastLoss === 'thermal' ? 'thermal' : 'perf');
   if (G.sepsis >= 100) return endRun('sepsis');
   if (p.s >= LV.end) return endRun('done');
   // the kidney case is over once every calyx is clear — there's nowhere further up to go
   if (LV.kidney && G.stones.every(st => st.phase === 'done')) { G.doneT = (G.doneT || 0) + dt; if (G.doneT > 1.5) return endRun('done'); }
 }
+// what firing does to the loose fragments around the fiber, besides the one it's aimed at:
+//  - anywhere: small pieces near where the beam lands jitter in the cavitation (they dance in the plume)
+//  - in the kidney, POPCORNING: hold the fiber still mid-calyx (or mid-pelvis) firing at high frequency, and the turbulence churns the
+//    fragments round the tip so each one tumbles through the beam now and then, without aiming at it. Best in the confines of a calyx;
+//    out in the open pelvis they scatter. Fired near the wall it's the same mucosal burn as any blind firing (see above)
+const POP_R = 2.1, POP_HZ = 15;
+function stirFrags(L, fib, tgt, dt) {
+  const p = G.p, hs = fib.s + (G.hit ? G.hit.ds : tgt ? tgt.ds : 3);
+  const pop = LV.kidney && p.s > UPJ_S + 4 && L.Hz >= POP_HZ, still = Math.hypot(p.vx, p.vy) < 0.7;
+  const tipS = p.s + FIB_TIP + 0.5, inCx = !!calyxAt(p.s + 1.5, p.x, p.y), k0 = inCx ? 1 : 0.35;
+  let n = 0;
+  for (const f of G.frags) {
+    if (f.gone || f.left || f.held || (tgt && tgt.o === f)) continue;
+    if (tgt && Math.hypot(f.s - hs, f.x - fib.x, f.y - fib.y) < 1.6) { f.vx += mr(-1, 1) * 4 * dt; f.vy += mr(-1, 1) * 4 * dt; f.vs += mr(-1, 1) * 3 * dt; } // cavitation shakes it
+    if (!pop) continue;
+    const ds = f.s - tipS, dx = f.x - fib.x, dy = f.y - fib.y, d = Math.hypot(ds, dx, dy);
+    if (d > POP_R) continue;
+    n++;
+    const near = 1 - d / POP_R, a = Math.atan2(dy, dx), sw = (L.Hz / 40) * near * dt;
+    f.vx += (-Math.sin(a) * 2.4 - dx * 0.9) * sw; f.vy += (Math.cos(a) * 2.4 - dy * 0.9) * sw; f.vs += (-ds * 0.7 + mr(-1.2, 1.2)) * sw; // round the tip, drawn in
+    if (!still) continue; // a moving fiber just chases them about
+    const T = TYPES[f.type], dV = (L.dustRate * T.dust + L.fragRate * T.frag * 0.25) * 0.14 * near * k0 * dt; // a patient technique: well under direct lasing
+    f.V = Math.max(0, f.V - dV); f.d = Math.cbrt(f.V);
+    dustSrc(dV * 0.3, f.s, f.x, f.y, T.col);
+    if (f.d < 2) { killFrag(f, true); G.popped = (G.popped || 0) + 1; toast(`Popcorned a fragment to dust ✓${G.popped > 1 ? ' ×' + G.popped : ''}`, 'good', 'popc', 1.2); }
+  }
+  G.popOn = pop && still && n > 0;
+  if (G.popOn) say('att', xpOf(LV.id).n >= 3 ? 'Popcorning. Good.' : 'That\'s popcorning. Fiber still, high frequency, off the wall: let the fragments come to you.', 'popc', Infinity);
+}
 // one visible laser pulse in the fragmenting regime: flash, shockwave, retropulsion; breaks fragments
 function kick(tgt, nearWall, L) {
-  SFX.pulse(); G.shake = Math.max(G.shake, 0.09 * Math.min(1, L.J / 1.5)); G.dust = Math.min(100, G.dust + 2.5 * L.f);
+  SFX.pulse(); G.shake = Math.max(G.shake, 0.09 * Math.min(1, L.J / 1.5));
+  bubPS.emit(V3.copy(tipW).addScaledVector(F1.t, 0.12), V2.set(0, 0, 0), [0.8, 0.9, 1], 0.12 * L.J * (camMode === 'scope' ? 0.5 : 1), 0.16, 0.9, 0, 1.6 * L.J); // the vapour (Moses) bubble each pulse throws
+  if (tgt) addDust(2.5 * L.f, tgt.o.s - rOf(tgt.o), tgt.o.x, tgt.o.y, TYPES[tgt.o.type] && TYPES[tgt.o.type].col, 1.8); // each pulse kicks up a burst
   if (!tgt) {
     if (nearWall) { G.hp -= 3 * L.f; G.lastLoss = 'burn'; G.blood = Math.min(100, G.blood + 8); G.hurt = 1; toast('Fiber on the mucosa — only lase what you can see', 'bad', 'mis', 4); injure('burn', burnS({ s: G.p.s, x: G.p.x + FIB_X, y: G.p.y + FIB_Y }), Math.atan2(G.p.y + FIB_Y, G.p.x + FIB_X), mr(0.65, 0.8), 0, L.J >= 0.9 ? 2 : 1); }
     return;
@@ -2326,8 +2808,10 @@ function updateScene(dt) {
     G.eng = lerp(G.eng || 0, p.v < 1.5 ? 1 : 0, Math.min(1, dt * 2));
     const e = G.eng, cs = Math.max(0, p.s - lerp(5.2, 3.7, e)); frameAt(cs, F2);
     const kf = LV.kidney ? 0.8 : 0.55; // in the kidney the camera follows the tip further off-axis, out toward the calyces
-    let ox = p.x * kf, oy = p.y * kf + lerp(1.2, 1.65, e); const lim = lumR(cs, Math.atan2(oy, ox)) - 0.45, mm = Math.hypot(ox, oy);
+    const cc = lumC(cs), ccx = cc.x, ccy = cc.y, pc = lumC(p.s); // in a wrinkle the camera keeps to the lumen too
+    let ox = (p.x - pc.x) * kf, oy = (p.y - pc.y) * kf + lerp(1.2, 1.65, e); const lim = lumR(cs, Math.atan2(oy, ox)) - 0.45, mm = Math.hypot(ox, oy);
     if (mm > lim) { ox *= lim / mm; oy *= lim / mm; }
+    ox += ccx; oy += ccy;
     camWant.copy(F2.p).addScaledVector(F2.r, ox).addScaledVector(F2.u, oy);
     frameAt(p.s + lerp(7, 5.5, e), F3); lookWant.copy(F3.p).addScaledVector(F3.r, p.x * 0.75).addScaledVector(F3.u, p.y * 0.75 + lerp(0.45, 0.25, e));
     // kidney: keep the stone you're working on in frame when it sits off to the side in a calyx
@@ -2350,18 +2834,20 @@ function updateScene(dt) {
   spot.intensity = 26 * (1 + 2.2 * kl); if (kl > 0) spot.target.position.lerp(camLook, kl);
   rim.position.copy(V1).addScaledVector(F1.t, -1.6).addScaledVector(F1.u, 0.9);
   // ghost the scope while a target is locked so the impact stays visible
-  const working = G.lock || G.stones.some(st => st.phase !== 'done' && (st.phase === 'alive' ? st.s : st.lastS) - p.s < 12) || !!(G.tumor && !G.tumor.done && !G.tumor.left && G.tumor.s0 - p.s < 12);
+  const working = G.lock || G.stones.some(st => st.phase !== 'done' && (st.phase === 'alive' ? st.s : st.lastS) - p.s < 12) || !!(G.tumor && !G.tumor.done && !G.tumor.left && G.tumor.s0 - p.s < 12) || OBS.some(o => o.state !== 'passed' && o.lo - p.s < 12);
   const op = lerp(SCOPE_MATS[0].opacity, working ? 0.32 : 1, Math.min(1, dt * 8)); // the scope fades back at the stone: the fiber + green spot do the aiming
   for (const m of SCOPE_MATS) m.opacity = op;
   hitLight.intensity *= Math.exp(-dt * 14);
   placeObjects(dt); placeTumor(dt);
+  updateWireMesh(); updateObsRing(); for (const f of G.flaps) placeFlap(f);
+  const fibIn = !G.wire && !(G.fiberAt > G.t); fpFiber.visible = fpTip.visible = camMode === 'scope' && fibIn; // first person: the wire replaces the fiber stub
   // beams
   const tgt = G.tgt;
   const hitDs = G.th ? G.th.ds - 0.03 : tgt && G.hit && G.hit.o === tgt.o ? G.hit.ds - 0.03 : tgt ? tgt.ds - Math.sqrt(Math.max(0, rOf(tgt.o) ** 2 - tgt.lat ** 2)) - 0.03 : BEAM_RANGE; // where the fiber's line meets the stone's surface
   worldAt(p.s + Math.max(0.3, hitDs), p.x + FIB_X, p.y + FIB_Y, hitW); // straight down the fiber's line: the spot lands where the fiber points
   const L = G.L || laserNums(G.las.J, G.las.Hz);
-  const firing = !!(input.pa || input.pb || keys.KeyJ || keys.KeyK || input.fire || keys.Space) && G.bk.state === 'idle' && state === 'play' && !G.pend && !G.trip, onTgt = !!(tgt || G.th);
-  aimBeam.visible = aimDot.visible = !G.pend && !G.trip; // the aiming beam drops out in standby
+  const firing = !!G.firing && state === 'play', onTgt = !!(tgt || G.th); // what the sim actually fired this step (no beam with the fiber out for a wire)
+  aimBeam.visible = aimDot.visible = !G.pend && !G.trip && fibIn; // the aiming beam drops out in standby, and with the fiber out for a wire
   if (camMode === 'scope') aimBeam.visible = false; // first person: just the fiber tip and the green spot, like the real view
   const fpw = camMode === 'scope' ? 0.35 : 1; // first person: the beam starts an inch from the lens, so keep it thin
   setBeam(aimBeam, tipW, hitW, 0.02 * fpw); setBeam(aimGlow, tipW, hitW, 0.07 * fpw); aimGlow.visible = aimBeam.visible;
@@ -2379,8 +2865,14 @@ function updateScene(dt) {
   hitGlow.scale.setScalar(fragFlash ? 1.6 : mr(0.5, 0.9));
   if (onTgt && dustBeam) {
     hitLight.position.copy(hitW).addScaledVector(F1.t, -0.4); hitLight.intensity = Math.max(hitLight.intensity, mr(3, 6));
-    for (let i = 0; i < 3; i++) dustPS.emit(hitW, V2.set(mr(-1.2, 1.2), mr(-1.2, 1.2), mr(-1.2, 1.2)).addScaledVector(F1.t, -mr(0.5, 1.5)), [0.86, 0.83, 0.76], mr(0.12, 0.34), mr(1.2, 2.4), 0.45, 1.2, 0.1);
-    if (Math.random() < 0.6) dustPS.emit(hitW, V2.set(mr(-3, 3), mr(-3, 3), mr(-3, 3)), [1, 0.95, 0.75], mr(0.03, 0.07), mr(0.1, 0.25), 1, 2);
+    dustPS.emit(hitW, V2.set(mr(-1.2, 1.2), mr(-1.2, 1.2), mr(-1.2, 1.2)).addScaledVector(F1.t, -mr(0.5, 1.5)), [0.86, 0.83, 0.76], mr(0.12, 0.3), mr(0.8, 1.6), 0.35, 1.2, 0.1); // glinting specks (the plume carries the cloud)
+    G.sparkAcc = (G.sparkAcc || 0) + L.Hz * dt * 0.3; // the surface sparkles where each pulse lands
+    for (; G.sparkAcc >= 1; G.sparkAcc--) dustPS.emit(V3.copy(hitW).add(V2.set(mr(-0.12, 0.12), mr(-0.12, 0.12), mr(-0.12, 0.12))), V2.set(mr(-1.5, 1.5), mr(-1.5, 1.5), mr(-1.5, 1.5)), [1, 0.96, 0.82], mr(0.025, 0.06), mr(0.03, 0.09), 1, 4);
+  }
+  if (firing) { // fizz at the fiber tip: vapour bubbles at the pulse rate, carried off by the irrigant and rising
+    const fp = camMode === 'scope' ? 0.5 : 1;
+    G.bubAcc = (G.bubAcc || 0) + L.Hz * dt * 0.3;
+    for (; G.bubAcc >= 1; G.bubAcc--) bubPS.emit(V3.copy(tipW).addScaledVector(F1.t, mr(0.02, 0.15)), V2.copy(F1.t).multiplyScalar(mr(0.4, 1.8)).add(V1.set(mr(-0.4, 0.4), mr(-0.4, 0.4), mr(-0.4, 0.4))), [0.7, 0.82, 0.95], mr(0.025, 0.07) * fp, mr(0.3, 0.8), 0.75, 2.6, 0.03 * fp);
   }
   // haze: ambient motes thicken with the dust level
   if (G.dust > 4) { const n = G.dust / 30; for (let i = 0; i < n; i++) { worldAt(p.s + mr(0.5, 7), mr(-2, 2), mr(-2, 2), V3); dustPS.emit(V3, V2.set(mr(-0.2, 0.2), mr(-0.2, 0.2), mr(-0.2, 0.2)), [0.8, 0.77, 0.7], mr(0.15, 0.35), mr(1, 2), 0.25, 1); } }
@@ -2414,11 +2906,13 @@ function updateScene(dt) {
   // shockwaves
   for (const r of rings) if (r.t < 1) { r.t += dt / 0.35; r.m.scale.setScalar(0.25 + r.t * 1.7); r.m.material.opacity = Math.max(0, 1 - r.t) * 0.45; if (r.t >= 1) r.m.visible = false; }
   // fog: dust whitens it, blood reddens it
-  scene.fog.color.copy(BASE_FOG).lerp(DUST_FOG, G.dust / 100 * 0.75).lerp(BLOOD_FOG, G.blood / 100 * 0.7);
-  scene.fog.density = 0.04 + G.dust * 0.0022 + G.blood * 0.0016;
+  scene.fog.color.copy(BASE_FOG).lerp(DUST_FOG, G.dust / 100 * 0.5).lerp(BLOOD_FOG, G.blood / 100 * 0.7); // the plume's clouds carry most of the dust look; a lighter haze stays
+  scene.fog.density = 0.04 + G.dust * 0.0013 + G.blood * 0.0016;
+  plumeDraw();
   // particles drift with the irrigant (away from the scope)
   const fl = G.flow * 3;
   dustPS.update(dt, F1.t.x * fl, F1.t.y * fl, F1.t.z * fl);
+  bubPS.update(dt, F1.t.x * fl * 0.5 + F1.u.x * 0.45, F1.t.y * fl * 0.5 + F1.u.y * 0.45, F1.t.z * fl * 0.5 + F1.u.z * 0.45); // carried off, and rising
   bloodPS.update(dt, F1.t.x * fl * 0.6, F1.t.y * fl * 0.6, F1.t.z * fl * 0.6);
 }
 function attract(dt, t) {
@@ -2427,7 +2921,7 @@ function attract(dt, t) {
   frameAt(s, F1); frameAt(s + 6, F3);
   camera.position.copy(F1.p).addScaledVector(F1.u, 0.3); camera.up.copy(F1.u); camera.lookAt(F3.p);
   spot.position.copy(camera.position); spot.target.position.copy(F3.p); fill.position.copy(camera.position);
-  scope.visible = false; for (const m of [aimBeam, aimGlow, beamCore, beamGlow, aimDot, hitGlow, basket, bkLine, ...pinchRings]) m.visible = false;
+  scope.visible = false; for (const m of [aimBeam, aimGlow, beamCore, beamGlow, aimDot, hitGlow, basket, bkLine, wireMesh, obsRing, ...pinchRings]) m.visible = false;
 }
 
 // ───────────────────────── fake fluoro run map (C-arm AP; radiopaque = dark, like the OR monitor)
@@ -2472,9 +2966,11 @@ function flBackground() {
   g.strokeStyle = 'rgba(55,55,55,0.22)'; g.lineWidth = X(0.022); g.beginPath(); // residual contrast in the ureter
   for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); i ? g.lineTo(X(q.x), X(q.y)) : g.moveTo(X(q.x), X(q.y)); }
   g.stroke();
-  g.strokeStyle = 'rgba(22,22,22,0.75)'; g.lineWidth = X(0.006); g.beginPath(); g.moveTo(X(0.375), X(1.02)); // safety wire, coiled in the pelvis
-  for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); g.lineTo(X(q.x + 0.008), X(q.y)); }
-  g.arc(X(0.71), X(0.13), X(0.035), Math.PI, Math.PI * 2.8); g.stroke();
+  if (G && G.safety) { // safety wire, coiled in the pelvis (only if one was ordered)
+    g.strokeStyle = 'rgba(22,22,22,0.75)'; g.lineWidth = X(0.006); g.beginPath(); g.moveTo(X(0.375), X(1.02));
+    for (let i = 0; i <= 120; i++) { const q = flPoint(i / 120 * END_S); g.lineTo(X(q.x + 0.008), X(q.y)); }
+    g.arc(X(0.71), X(0.13), X(0.035), Math.PI, Math.PI * 2.8); g.stroke();
+  }
   if (LV.sheath) { // the access sheath: a broad grey band with a dense marker ring at its tip
     g.strokeStyle = 'rgba(45,45,45,0.5)'; g.lineWidth = X(0.032); g.beginPath(); g.moveTo(X(0.36), X(1.02));
     for (let i = 0; i <= 60; i++) { const q = flPoint(i / 60 * LV.sheath); g.lineTo(X(q.x), X(q.y)); }
@@ -2511,6 +3007,13 @@ function drawFluoro() {
   for (const f of G.frags) if (!f.gone && !f.held) dot(flAt(f.s, f.x, f.y), f.d, RADIO[f.type]);
   let mi = 0; // a stone pushed into the kidney still shows — that's how migration is confirmed
   for (const st of G.stones) if (st.how === 'migrated') dot({ x: 0.70 + (mi++) * 0.03, y: 0.21 }, st.d, RADIO[st.type]);
+  const w = G.wire;
+  if (w && w.state !== 'out' && w.state !== 'back') { // the working wire: up the ureter and coiled in the kidney, folded on itself, or veering off the ureter's course
+    g.strokeStyle = 'rgba(12,12,12,0.85)'; g.lineWidth = X(0.005); g.beginPath(); g.moveTo(X(tip.x), X(tip.y));
+    if (w.out === 'through') { for (let i = 1; i <= 40; i++) { const q = flPoint(p.s + i / 40 * (END_S - p.s)); g.lineTo(X(q.x - 0.006), X(q.y)); } g.arc(X(0.69), X(0.15), X(0.028), Math.PI * 0.2, Math.PI * 2.1); }
+    else { const q = flPoint(w.at.s); g.lineTo(X(q.x), X(q.y)); if (w.out === 'flap') g.lineTo(X(q.x + 0.035), X(q.y - 0.02)); else g.arc(X(q.x), X(q.y + 0.012), X(0.012), -Math.PI / 2, Math.PI * 1.4); }
+    g.stroke();
+  }
   if (G.bk.state === 'carry') { g.strokeStyle = 'rgba(10,10,10,0.9)'; g.lineWidth = X(0.008); g.beginPath(); g.arc(X(tip.x), X(tip.y - 0.035), X(0.022), 0, 6.283); g.stroke(); }
   g.globalAlpha = 0.09; g.drawImage(FL.noise, -mr(0, 24), -mr(0, 24), S + 24, S + 24); g.globalAlpha = 1; // quantum mottle
   g.restore();
@@ -2533,7 +3036,8 @@ el('gG').setAttribute('d', arcPath(0, 30)); el('gA').setAttribute('d', arcPath(3
 el('flowZone').style.bottom = ((40 - 6) / 54 * 100) + '%'; // where flow tips IRP past 40
 function buildProgress() {
   const bar = el('prog');
-  bar.querySelectorAll('.pm,.pupj,.psh').forEach(n => n.remove());
+  bar.querySelectorAll('.pm,.pupj,.psh,.pobs').forEach(n => n.remove());
+  for (const o of OBS) { const d = document.createElement('div'); d.className = 'pobs'; d.style.left = (o.lo / LV.end * 100) + '%'; d.style.width = ((o.hi - o.lo) / LV.end * 100) + '%'; o.pm = d; bar.appendChild(d); }
   const u = document.createElement('div'); u.className = 'pupj'; u.style.left = (UPJ_S / LV.end * 100) + '%'; bar.appendChild(u);
   if (LV.sheath) { const sh = document.createElement('div'); sh.className = 'psh'; sh.style.width = (LV.sheath / LV.end * 100) + '%'; bar.appendChild(sh); }
   G.stones.forEach(st => { const d = document.createElement('div'); d.className = 'pm alive'; d.style.left = (st.s0 / LV.end * 100) + '%'; st.pm = d; bar.appendChild(d); });
@@ -2550,6 +3054,8 @@ function score() {
   return Math.round(sc - G.residual * 200 + G.bonus);
 }
 function updateHUD() {
+  const bl = bkLabel(); if (G.bkLbl !== bl) { G.bkLbl = bl; $('bBasket').innerHTML = bl; }
+  for (const o of OBS) if (o.pm) o.pm.className = 'pobs' + (o.state === 'passed' ? ' done' : '') + (!o.hint && o.lo - G.p.s > 30 ? ' hidden' : ''); // a surprise shows up once you're on it
   const p = G.p;
   setT(HUD.irp, Math.round(G.P) + '');
   HUD.needle.setAttribute('transform', `rotate(${(clamp(G.P, 0, 60) / 60 * 180 - 90).toFixed(1)} 80 84)`);
@@ -2574,14 +3080,19 @@ function updateHUD() {
   // target readout
   let txt = '', cls = '';
   const near = G.stones.find(s => s.phase === 'alive' && s.s - p.s < APPROACH_D + 6);
-  if (G.vis <= 0.35 && (G.tgt || near)) { txt = 'VISIBILITY LOST — more flow'; cls = 'blind'; }
+  const ob = nextObs(), obNear = !!ob && ob.lo - p.s < 26 && !G.trip;
+  if (G.vis <= 0.35 && (G.tgt || near || obNear)) { txt = 'VISIBILITY LOST — more flow'; cls = 'blind'; }
+  else if (obNear && !G.tgt) {
+    txt = `${ob.kind === 'kink' ? 'KINKED URETER' : 'TIGHT SEGMENT'} · ${G.wire ? (G.wire.state === 'ride' ? 'riding the wire' : 'wire going in') : 'green spot into the middle of the lumen, get close, then WIRE'}${ob.flaps ? ` · ${ob.flaps} flap${ob.flaps === 1 ? '' : 's'}` : ''}`;
+    cls = 'lock';
+  }
   else if (G.tgt) {
     const o = G.tgt.o;
     if (o.isFrag) txt = `FRAGMENT · ${o.d.toFixed(1)} mm · ${o.d >= 4 ? 'too big to basket' : 'basketable'}`;
     else txt = `STONE ${o.i + 1} · ${o.d.toFixed(1)} mm · ${o.hu.toLocaleString()} HU`;
     if (G.firing && G.rateObj === o && o.rate > 0.005) txt += ` · −${o.rate.toFixed(2)} mm/s`;
     if (!o.isFrag && G.firing && o.pit > 0.38) txt += ' · CRATERING: move the spot';
-    if (G.tgt.ds - rOf(o) > 3.2) txt += ' · far: hold ▶ ADVANCE';
+    { const dd = G.hit && G.hit.o === o ? G.hit.ds : G.tgt.ds - rOf(o); if (dd - FIB_TIP > 1.2) txt += dd - FIB_TIP > 2.2 ? ' · too far to dust: hold ▶ ADVANCE' : ' · fiber off the stone: ▶ ADVANCE closer'; } // dusting wants the fiber nearly touching
     cls = 'lock';
   } else if (G.th) {
     const T = G.tumor, left = T.fronds.filter(f => !f.gone).length;
@@ -2607,6 +3118,9 @@ function updateHUD() {
   else if (nearUpj) { b = 'STONE AT THE UPJ — EASE OFF THE PULSES'; red = true; }
   else if (G.tumor && G.tumor.bleed > 0.5) { b = 'BLEEDING STUMP — COAG (LOW POWER) TO SEAL IT'; red = true; }
   else if (G.tumor && G.P > TM_P_MAX) b = 'IRP > 30 — TUMOR CASE: KEEP THE PRESSURE LOW';
+  else if (G.wire) { const ws = G.wire.state; b = ws === 'out' ? 'PASSING THE WIRE…' : ws === 'through' ? 'WIRE THROUGH ✓  COILED IN THE KIDNEY' : ws === 'ride' ? 'RIDING THE WIRE ↑' : ws === 'buckle' ? 'WIRE BUCKLED — RE-AIM' : ws === 'flap' ? 'FLAP — THE WIRE WENT UNDER THE MUCOSA' : 'WIRE BACK'; red = ws === 'flap'; }
+  else if (G.obsStop) { b = 'STOP PUSHING — PASS A WIRE (E)'; red = true; }
+  else if (G.obsAt) b = G.obsAt.kind === 'kink' ? 'KINK — THE SCOPE WON\'T GO ROUND IT: PASS A WIRE (E)' : 'TOO TIGHT FOR THE SCOPE — PASS A WIRE (E)';
   else if (G.pend) b = 'LASER STANDBY';
   else if (input.back || keys.KeyB) b = 'PULLING BACK ↓';
   else if (G.advStop) b = 'AS CLOSE AS IT GETS — LASE FROM HERE';
@@ -2625,6 +3139,8 @@ function updateHUD() {
 
 // ───────────────────────── screens
 const screen = $('screen');
+// the basket button doubles as the biopsy forceps (tumor case) and the wire (stopped at a wrinkle)
+const bkLabel = () => G && wireNear() && !G.wire ? 'WIRE<small>guidewire</small>' : LV.tumor ? 'BIOPSY<small>forceps</small>' : 'BASKET<small>2–4 mm</small>';
 function hideScreen() { screen.classList.add('hidden'); }
 const defHint = () => SETTINGS.invert ? 'push up → tip goes down (lever-style)' : 'push up → tip goes up';
 const segHTML = (k, opts) => `<div class="seg" data-k="${k}">${opts.map(([v, label]) => `<button data-v="${v}" class="${String(SETTINGS[k]) === String(v) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
@@ -2638,7 +3154,8 @@ function toolsHTML() {
     : `<div class="tool"><b style="color:var(--g)">LEFT PEDAL · DUST 0.4 J × 80 Hz</b>Continuous beam that grinds the stone to dust. <b class="in">Paint</b>: keep the green spot moving over the whole face. Held in one place it digs a crater (slow), and dug too deep, a piece breaks off. No retropulsion, but it clouds the view and heats the lumen.</div>
        <div class="tool"><b style="color:var(--a)">RIGHT PEDAL · FRAG ${PRESETS.frag.J} J × ${PRESETS.frag.Hz} Hz</b>Heavy pulses that break hard stones fast. ${LV.kidney ? 'Retropulsion scatters pieces out of the calyx into the rest of the kidney.' : 'Retropulsion pushes the stone up (past the UPJ = lost to the kidney).'} Leaves fragments — some slip behind the scope.</div>`;
   return laser + `<div class="tool"><b style="color:#93c5fd">IRRIGATION</b>Flow clears dust and blood and cools the tip — dusting at low flow fogs you out. But it raises intrarenal pressure (above 40 mmHg, sepsis risk climbs)${LV.sheath ? '' : ' and, with no sheath, washes the stone back up the ureter'}.</div>
-    <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. ${LV.sheath ? 'Through the sheath: a quick trip out and back, still on the clock. ≥4 mm won\'t fit through it.' : 'No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won\'t come down safely.'}</div>`;
+    <div class="tool"><b>BASKET</b>Pulls out 2–4 mm fragments for analysis. ${LV.sheath ? 'Through the sheath: a quick trip out and back, still on the clock. ≥4 mm won\'t fit through it.' : 'No access sheath: each one rides out to the bladder and back on the clock. ≥4 mm won\'t come down safely.'}</div>
+    <div class="tool"><b>GUIDEWIRE</b>Where the ureter is kinked or too tight for the scope, the rails stop and the basket button becomes <b class="in">WIRE</b>. It goes up the same channel as the fiber: put the green spot in the middle of the opening, get close, pass it, then ride the scope over it. Off-centre it buckles, or raises a flap.</div>`;
 }
 function wireSegs(root, after) {
   root.querySelectorAll('.seg[data-k]').forEach(sg => sg.addEventListener('click', e => {
@@ -2648,10 +3165,15 @@ function wireSegs(root, after) {
     after && after(sg.dataset.k);
   }));
 }
+// your record on this case type, building like a junior's: no wire talk until you've finished one
+function xpLine() {
+  const x = xpOf(LV.id);
+  return x.n ? ` You've finished <b>${x.n}</b> of these${x.w ? `, wired past ${x.w} difficult ureter${x.w === 1 ? '' : 's'}` : ''}.` : '';
+}
 // the next patient on the list: any case type, fresh stones (once every type has been done)
 function nextPatient() { rng = mulberry32((Math.random() * 1e9) | 0); newRun((Math.random() * 1e9) | 0, false, randomCase()); showBrief(); }
 function showBrief() {
-  state = 'brief'; closeLaserPanel(); document.body.classList.remove('ingame');
+  state = 'brief'; closeLaserPanel(); musicTrack('lounge'); document.body.classList.remove('ingame');
   $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('scopeMask').classList.add('hidden');
   const locked = l => l.wild ? !seenWild : l.id > unlocked; // the wildcard shows up once you've met it on the list
   const cases = LEVELS.filter(l => !l.wild || seenWild).map(l => `<button data-case="${l.id}" class="${l === LV ? 'on' : ''}"${locked(l) ? ' disabled' : ''}>${locked(l) ? '🔒 ' : ''}${l.tag} · ${l.name}${bestMedal[l.id] ? ' ' + MEDALS[bestMedal[l.id]].icon : ''}</button>`).join('');
@@ -2662,7 +3184,7 @@ function showBrief() {
     <h2>CASE</h2>
     <div class="seg cases">${cases}</div>
     <p class="keys">${LV.blurb}${unlocked <= LEVELS.length ? ' Finish a case to unlock the next.' : ' <b>Every case type done:</b> the OR list is random now. NEXT PATIENT picks any case with fresh stones; the picker is there for practice.'} Anesthesia time runs fast (×${OR_X}): par for this patient is <b>${fmtOR(G.par)}</b> (${G.stones.length} stone${G.stones.length === 1 ? '' : 's'}).</p>
-    <p class="keys">Next: <b>mission prep</b> — scroll the CT and tap ${LV.tumor ? 'the filling defect' : 'every stone'}, read the chart, then write the pre-op antibiotic order.</p>
+    <p class="keys">Next: <b>mission prep</b> — scroll the CT and tap ${LV.tumor ? 'the filling defect' : 'every stone'}, read the chart, then write the pre-op orders (antibiotic, safety wire).${xpLine()}</p>
     <h2>RUN SETTINGS</h2>
     <div class="sets">
       <div class="set"><span>DEFLECTION</span>${segHTML('invert', [[false, 'Standard'], [true, 'Inverted']])}<small id="defHint">${defHint()}</small></div>
@@ -2678,7 +3200,7 @@ function showBrief() {
     <p class="keys">Two pedals, like the OR footswitch: switch between them any time, even mid-lasing. Only <b>changing a laser setting</b> at the stone costs time (${STANDBY_S} s standby). Pinch points (${PINCHES.filter(livePinch).map(k => k.short).join(', ')}) slow you down: fly through the ring, centred. Near a stone the rails stop short: hold <b>▶ ADVANCE</b> to close in yourself — the laser works best right up on the stone. A fragment behind the scope? Hold <b>PULL BACK</b>. <b>Aim with the green spot</b>: it comes off the laser fiber at 5 o'clock, so it sits a little down and right of the middle of the view, not dead centre.${LV.kidney ? ' In the kidney, <b>steer toward a calyx to advance into it</b>, and back out toward the pelvis to move on.' : ''}</p>
     <h2>CONTROLS</h2>
     <p class="keys">Touch: left thumb steers (anywhere on the left) · hold the DUST or FRAG pedal to fire · ◀ PULL BACK / ▶ ADVANCE (hold) · BASKET · drag the FLOW column · ⚙ LASER programs the pedals (Advanced) · 📷 chase cam / scope view.<br>
-    Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · F advance · [ ] energy · − = frequency (Advanced) · E basket · ↑/↓ flow · Enter move on · C camera · P pause.</p>
+    Keyboard: WASD steer · J / K left / right pedal (Space fires the selected one) · B pull back · F advance · [ ] energy · − = frequency (Advanced) · E basket (or wire) · G wire · ↑/↓ flow · Enter move on · C camera · P pause.</p>
     ${PHONE ? '<p class="keys">📱 Play in landscape. On iPhone, Share → <b>Add to Home Screen</b> and launch from the icon for full screen.</p>' : ''}
     <div class="go stick"><button id="goBtn">MISSION PREP ▸</button>${allDone() ? '<button class="alt" id="patBtn">🎲 Next patient</button>' : ''}${G.fixed || !LV.slots ? '' : '<button class="alt" id="firstBtn">Starter stones</button>'}${EMBED ? '<button class="alt" id="exitBtn">Back to Arcade</button>' : ''}</div>
   </div>`;
@@ -2693,6 +3215,39 @@ function showBrief() {
 }
 // ───────────────────────── mission prep: scroll the CT, find the targets, read the chart, write the antibiotic order
 function abxVerdict() { const c = G.prep.abx || 'none', v = PREP[LV.id].abx[c]; return v || ['ok', '']; }
+// both pre-op orders are a decision you make: an antibiotic and yes/no on a safety wire
+const ordersDone = () => !!G.prep.abx && G.prep.safety != null;
+const scrubLabel = () => ordersDone() ? 'SCRUB IN ▸' : !G.prep.abx && G.prep.safety == null ? 'WRITE THE PRE-OP ORDERS FIRST' : !G.prep.abx ? 'ORDER AN ANTIBIOTIC FIRST' : 'DECIDE ON A SAFETY WIRE FIRST';
+// the safety wire goes up to the kidney before the scope and stays alongside it all case, so a stent can always follow it back up.
+// Graded like the antibiotic: the chart tells you when it matters (a kinked or tight ureter on the CT or the retrograde)
+const OBS_WHAT = { kink: 'kinked, redundant ureter', tight: 'tight segment of ureter' };
+function safetyVerdict() {
+  const on = !!G.prep.safety, hinted = OBS.find(o => o.hint), surprise = OBS.find(o => !o.hint), src = LV.id === 1 ? 'CT' : 'retrograde pyelogram in the op note';
+  if (hinted) return on ? ['best', `The ${src} showed a ${OBS_WHAT[hinted.kind]}. That's exactly when you want a safety wire: if a wire or the scope makes a false passage there, a stent can still go up.`]
+    : ['wrong', `The ${src} showed a ${OBS_WHAT[hinted.kind]}, and you went in without a safety wire. A false passage or a perforation there leaves no route for a stent: that's a nephrostomy tube.`];
+  if (surprise) return on ? ['best', `Nothing in the chart warned you about the ${OBS_WHAT[surprise.kind]}. That's why many surgeons place a safety wire every time.`]
+    : ['ok', `Nothing in the chart predicted the ${OBS_WHAT[surprise.kind]}, so going without one was defensible. This is the kind of case that makes surgeons place one routinely.`];
+  if (LV.tumor) return ['ok', on ? 'Fine: some surgeons keep one for every ureteroscopy.' : 'Reasonable: a normal-calibre ureter and a short case.'];
+  if (LV.sheath) return ['ok', on ? 'Good habit: with an access sheath in, many surgeons keep a safety wire outside it, so if the sheath tears the ureter a stent can still go up.' : 'Defensible, but with an access sheath in, many surgeons keep a safety wire outside it in case the sheath injures the ureter.'];
+  return ['ok', on ? 'Fine: routine for many surgeons. It cost a few minutes.' : 'Reasonable: an uncomplicated case and nothing in the chart about the ureter.'];
+}
+// what the chart says about this patient's wrinkles (only the ones that were seen before: a surprise isn't in any note)
+function wireHintLines(where) {
+  return OBS.filter(o => o.hint).map(o => {
+    const at = o.loc, im = imOf(sToZ(o.s));
+    if (where === 'ct') return o.kind === 'kink' ? `- Tortuous left ureter with a sharp kink in the ${at} (series 2, image ${im}); mild hydroureter above it.`
+      : `- Short segment of abrupt narrowing in the left ${at} (series 2, image ${im}), with mild dilation above it; stricture not excluded.`;
+    return o.kind === 'kink' ? `Retrograde pyelogram: tortuous, redundant left ureter with a sharp kink in the ${at}. A hydrophilic wire was needed to negotiate it.`
+      : `Retrograde pyelogram: a short, tight segment of the left ${at}. The wire passed it only with some resistance.`;
+  });
+}
+// the prior note, with what the last retrograde showed about the ureter (Cases 2 and 3 have one; Case 1's CT read carries it instead)
+function noteText() {
+  const pr = PREP[LV.id], h = LV.id === 1 ? [] : wireHintLines('note');
+  if (!h.length) return pr.note;
+  return pr.note.replace(/\nPLAN:/, '\n' + h.join('\n') + '\nPLAN:').replace('A 0.038" guidewire passed easily to the kidney under fluoroscopy.', 'A guidewire was eventually passed to the kidney under fluoroscopy.')
+    .replace('PROCEDURE: Cystoscopy, attempted', 'PROCEDURE: Cystoscopy, left retrograde pyelogram, attempted');
+}
 function ctSpec() {
   const pr = PREP[LV.id], stones = G.stones.map(st => { const sl = st.slot; return sl.ct ? { i: st.i, at: sl.ct, d: st.d0, hu: st.hu } : { i: st.i, at: 'ureter', z: sToZ(st.s0), d: st.d0, hu: st.hu }; });
   if (G.tumor) stones.push({ i: 0, at: 'ureter', kind: 'tumor', z: sToZ(G.tumor.s0), d: G.tumor.size, hu: 45 }); // a filling defect in the contrast column
@@ -2711,7 +3266,8 @@ function readText() {
   const lines = G.stones.map(st => { const sl = st.slot; return `- ${mm2(st.d0)} calculus ${sl.ct ? where[sl.ct] : 'in the left ' + sl.loc.charAt(0).toLowerCase() + sl.loc.slice(1)} (series 2, image ${im(st.i)})${hu(st)}.`; });
   const kid = pr.stent ? 'Left ureteral stent in place: proximal coil in the renal pelvis, distal coil in the bladder. No hydronephrosis.'
     : 'Mild left hydroureteronephrosis to the level of the most distal ureteral calculus, with periureteral and mild perinephric stranding.';
-  return `EXAM: CT abdomen and pelvis without IV contrast (stone protocol), 3 mm.\nCOMPARISON: ${pr.stent ? 'Prior stone CT.' : 'None.'}\n\nFINDINGS:\nLeft kidney/ureter: ${kid}\n${lines.join('\n')}\n${pr.hu ? '' : 'Densities not reported — measure on the images (ROI).\n'}Right kidney/ureter: No calculi or hydronephrosis.\nBladder: ${pr.stent ? 'Distal stent coil. ' : ''}Otherwise unremarkable.\nOther: Pelvic phleboliths. Mild atherosclerotic calcification of the abdominal aorta. No free fluid.\n\nIMPRESSION:\n1. ${G.stones.length} left-sided calcul${G.stones.length === 1 ? 'us' : 'i'} as above.${pr.stent ? ' Stent in good position.' : ' Mild left hydroureteronephrosis.'}`;
+  const wh = LV.id === 1 ? wireHintLines('ct') : [];
+  return `EXAM: CT abdomen and pelvis without IV contrast (stone protocol), 3 mm.\nCOMPARISON: ${pr.stent ? 'Prior stone CT.' : 'None.'}\n\nFINDINGS:\nLeft kidney/ureter: ${kid}\n${lines.concat(wh).join('\n')}\n${pr.hu ? '' : 'Densities not reported — measure on the images (ROI).\n'}Right kidney/ureter: No calculi or hydronephrosis.\nBladder: ${pr.stent ? 'Distal stent coil. ' : ''}Otherwise unremarkable.\nOther: Pelvic phleboliths. Mild atherosclerotic calcification of the abdominal aorta. No free fluid.\n\nIMPRESSION:\n1. ${G.stones.length} left-sided calcul${G.stones.length === 1 ? 'us' : 'i'} as above.${pr.stent ? ' Stent in good position.' : ' Mild left hydroureteronephrosis.'}`;
 }
 const CTV = { idx: 0, win: 'soft', roi: null, msg: '' };
 const WINS = { soft: [400, 40, 'Soft tissue'], bone: [1800, 400, 'Bone'] };
@@ -2772,17 +3328,17 @@ function typeDoc(el, text, crawl) {
 }
 function showPrep() {
   state = 'brief';
-  audioInit(); musicStart(); // the MISSION PREP tap is a user gesture: sound can start here
+  audioInit(); musicTrack('lounge'); musicStart(); // the MISSION PREP tap is a user gesture: sound can start here
   if (!G.ct) G.ct = makeCT(ctSpec());
   const pr = PREP[LV.id];
   if (!CTV.ready || CTV.seed !== G.seed + ':' + LV.id) { // start at the kidneys, soft-tissue window
     Object.assign(CTV, { idx: Math.round(70 / 3), win: 'soft', roi: null, ready: true, seed: G.seed + ':' + LV.id,
       msg: 'Drag up/down on the image (or the slider) to scroll. Tap anything to measure it (ROI); tap a stone to mark it as a target.' });
   }
-  const docs = { hx: ['HISTORY', pr.history], ct: ['CT READ', readText()], note: [pr.noteTitle.split(' ·')[0], pr.noteTitle + '\n\n' + pr.note], labs: ['LABS', pr.labs] };
+  const docs = { hx: ['HISTORY', pr.history], ct: ['CT READ', readText()], note: [pr.noteTitle.split(' ·')[0], pr.noteTitle + '\n\n' + noteText()], labs: ['LABS', pr.labs] };
   screen.innerHTML = `<div class="panel prep">
     <h1 style="font-size:22px">MISSION PREP <span class="tag">${LV.tag}</span></h1>
-    <p class="keys" style="margin-top:6px">${LV.name}. Find every target on the CT, read the chart, write the pre-op order.</p>
+    <p class="keys" style="margin-top:6px">${LV.name}. Find every target on the CT, read the chart, write the pre-op orders.</p>
     <div class="prepgrid">
       <div class="ctcol">
         <canvas id="ctc" width="360" height="360"></canvas>
@@ -2797,7 +3353,9 @@ function showPrep() {
     </div>
     <h2>PRE-OP ORDER · ANTIBIOTIC</h2>
     <div class="seg abx">${ABX.map(([k, n]) => `<button data-abx="${k}" class="${G.prep.abx === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-    <div class="go"><button id="scrubBtn"${G.prep.abx ? '' : ' disabled'}>${G.prep.abx ? 'SCRUB IN ▸' : 'ORDER AN ANTIBIOTIC FIRST'}</button><button class="alt" id="prepBack">Back</button></div>
+    <h2>PRE-OP ORDER · SAFETY WIRE</h2>
+    <div class="seg abx">${[[1, 'Place a safety wire (≈3 min, under fluoro)'], [0, 'No safety wire']].map(([v, n]) => `<button data-sw="${v}" class="${G.prep.safety === !!v ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="go"><button id="scrubBtn"${ordersDone() ? '' : ' disabled'}>${scrubLabel()}</button><button class="alt" id="prepBack">Back</button></div>
   </div>`;
   screen.classList.remove('hidden');
   const setDoc = k => { typeDoc($('docBody'), docs[k][1], !G.prep.seen.has(k)); G.prep.seen.add(k); screen.querySelectorAll('[data-doc]').forEach(b => b.classList.toggle('on', b.dataset.doc === k)); };
@@ -2806,7 +3364,11 @@ function showPrep() {
   screen.querySelectorAll('[data-win]').forEach(b => b.addEventListener('click', () => { CTV.win = b.dataset.win; screen.querySelectorAll('[data-win]').forEach(x => x.classList.toggle('on', x === b)); drawCT(); }));
   screen.querySelectorAll('[data-abx]').forEach(b => b.addEventListener('click', () => {
     G.prep.abx = b.dataset.abx; screen.querySelectorAll('[data-abx]').forEach(x => x.classList.toggle('on', x === b));
-    const sb = $('scrubBtn'); sb.disabled = false; sb.textContent = 'SCRUB IN ▸';
+    const sb = $('scrubBtn'); sb.disabled = !ordersDone(); sb.textContent = scrubLabel();
+  }));
+  screen.querySelectorAll('[data-sw]').forEach(b => b.addEventListener('click', () => {
+    G.prep.safety = b.dataset.sw === '1'; screen.querySelectorAll('[data-sw]').forEach(x => x.classList.toggle('on', x === b));
+    const sb = $('scrubBtn'); sb.disabled = !ordersDone(); sb.textContent = scrubLabel();
   }));
   const step = d => { CTV.idx = clamp(CTV.idx + d, 0, SLICES - 1); drawCT(); };
   $('ctUp').addEventListener('click', () => step(-1)); $('ctDn').addEventListener('click', () => step(1));
@@ -2817,14 +3379,16 @@ function showPrep() {
   c.addEventListener('pointerup', e => { if (!drag || e.pointerId !== drag.id) return; if (!drag.moved) { const r = c.getBoundingClientRect(); ctTap((e.clientX - r.left) / r.width * 360, (e.clientY - r.top) / r.height * 360); } drag = null; });
   c.addEventListener('pointercancel', () => { drag = null; });
   c.addEventListener('wheel', e => { e.preventDefault(); step(e.deltaY > 0 ? 1 : -1); }, { passive: false });
-  $('scrubBtn').addEventListener('click', () => { if (G.prep.abx) startPlay(); });
+  $('scrubBtn').addEventListener('click', () => { if (ordersDone()) startPlay(); });
   $('prepBack').addEventListener('click', showBrief);
   drawCT();
 }
 function startPlay() {
-  audioInit(); musicStart();
+  audioInit(); musicTrack('mission'); musicStart(); // scrubbed in: the action loop
   const fx = ABX_FX[abxVerdict()[0]]; G.sepK = fx.k; G.sepsis = fx.s0; commsReset();
   G.prep.unread = unreadNotes(); G.bonus -= G.prep.unread.length * NOTE_PEN; // read the whole chart, every time
+  G.safety = !!G.prep.safety; if (G.safety) G.t += SAFETY_T; // cystoscope, a wire up to the kidney under fluoro: a few minutes before the scope goes in
+  buildSafetyWire(); FL.bg = null; // the fluoro shows the safety wire only if there is one
   if (!EMBED) try { const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen; const r = fs && fs.call(d); if (r && r.catch) r.catch(() => {}); } catch (_) {}
   hideScreen();
   $('hud').classList.remove('hidden');
@@ -2847,6 +3411,7 @@ function startPlay() {
   state = 'play'; fpsReset(); document.body.classList.add('ingame');
   if (PORTRAIT_PHONE.matches) { togglePause(); rotPaused = true; } // started upright: wait for the turn
   toast('Put the green aiming spot on the stone, then fire. It comes off the fiber at 5 o\'clock, not the middle of the view.', '', 'hint1', 0);
+  if (G.safety) toast(`Safety wire coiled in the kidney ✓ (${orMin(SAFETY_T)} min on the anesthesia clock)`, 'good', 'sw', 0);
 }
 function quiet() { for (const g of [AU.buzz, AU.crack, AU.scrape, AU.flow]) level(g, 0); input.fire = input.pa = input.pb = input.back = input.fwd = false; }
 function showPause() {
@@ -2867,7 +3432,7 @@ function showPause() {
   $('quitBtn').addEventListener('click', () => { state = 'play'; endRun('quit'); });
 }
 function endRun(reason) {
-  state = 'end'; quiet(); commsReset(); document.body.classList.remove('ingame'); rotPaused = false;
+  state = 'end'; quiet(); commsReset(); musicTrack('lounge'); // back to the lounge for the debrief document.body.classList.remove('ingame'); rotPaused = false;
   G.end = reason;
   if (G.trip) { G.tripTime += G.t - G.trip.t0; G.trips++; if (G.bk.state === 'carry' && G.bk.target) capture(G.bk.target); G.trip = null; }
   const aborted = reason !== 'done';
@@ -2877,10 +3442,16 @@ function endRun(reason) {
   const stoneFree = !aborted && (G.tumor ? G.tumor.done : G.residual === 0 && migrated === 0); // the tumor case: complete ablation
   const objs = objectives(stoneFree), medal = medalOf(aborted, stoneFree, objs), isBest = saveMedal(LV.id, medal);
   G.medal = medal; G.objs = objs;
+  // experience with this case type: a finished case counts (a better medal moves the difficulty up faster); a perforation or a false
+  // passage takes it down a step. This is what decides how often (and how hard) the next patient's ureter has a wrinkle
+  const xp = xpOf(LV.id);
+  if (!aborted) { xp.n++; xp.sk += [0.5, 0.5, 1, 1.5, 1.5][medal]; } else if (reason === 'perf' || reason === 'access') xp.sk = Math.max(0, xp.sk - 1);
+  xp.w += OBS.filter(o => o.state === 'passed').length; saveXP(LV.id, xp); G.xp1 = xp;
   let sc = score() + Math.round(G.minHp * 5) + Math.max(0, Math.round((240 - G.t) * 3)) - Math.round(G.timeOver40 * 20);
   if (aborted) sc = Math.round(sc * 0.5);
   sc = Math.max(0, sc);
-  const head = reason === 'perf' ? ['<span class="bd">ABORTED — URETERAL PERFORATION</span>', 'Integrity hit zero. Stop, place a stent, come back another day.']
+  const head = reason === 'perf' ? ['<span class="bd">ABORTED — URETERAL PERFORATION</span>', G.safety ? 'Integrity hit zero. Stop: a stent goes up over the safety wire. Come back another day.' : 'Integrity hit zero. Stop and stent — with no safety wire, getting one past the perforation is a fight (or a nephrostomy).']
+    : reason === 'access' ? ['<span class="bd">ABORTED — FALSE PASSAGE</span>', G.safety ? 'Three flaps: the wire keeps tunnelling under the mucosa. A stent goes up over the safety wire and drains the kidney while it heals. Back in 4–6 weeks.' : 'Three flaps and no safety wire: no wire in the true lumen, so no stent. Interventional radiology places a nephrostomy tube tonight.']
     : reason === 'thermal' ? ['<span class="bd">ABORTED — THERMAL INJURY</span>', 'The lumen stayed above 43 °C too long. Stop, place a stent — and watch for a stricture.']
     : reason === 'sepsis' ? ['<span class="bd">ABORTED — UROSEPSIS</span>', 'Intrarenal pressure stayed above 40 mmHg too long. Stop, decompress, culture, antibiotics.']
     : reason === 'quit' ? ['<span class="wn">RUN ABORTED</span>', '']
@@ -2912,7 +3483,7 @@ function endRun(reason) {
       <div class="stat"><small>MIN INTEGRITY</small><b>${Math.max(0, Math.round(G.minHp))}%</b></div>
     </div>
     <h2>PRE-OP</h2>${prepCard()}
-    <h2>URETER</h2>${injuryCard(reason)}
+    <h2>URETER</h2>${injuryCard(reason)}${wireCard()}
     <h2>${G.tumor ? 'TUMOR' : 'STONE ANALYSIS'}</h2>${G.tumor ? tumorCard() : cards}
     <h2>FEEDBACK</h2>
     <div class="fb"><textarea id="fbNotes" placeholder="What felt off, confusing or fun? (optional) — then share or copy the report and text it over"></textarea>
@@ -2934,7 +3505,7 @@ function endRun(reason) {
   screen.classList.remove('hidden');
   $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); closeLaserPanel();
   $('againBtn').addEventListener('click', () => { newRun((Math.random() * 1e9) | 0, false); showBrief(); });
-  $('sameBtn').addEventListener('click', () => { newRun(G.seed, G.fixed); showBrief(); });
+  $('sameBtn').addEventListener('click', () => { newRun(G.seed, G.fixed, LV, G.obsSpec); showBrief(); }); // same patient: same ureter too
   if ($('nextBtn')) $('nextBtn').addEventListener('click', () => { newRun((Math.random() * 1e9) | 0, false, next); showBrief(); });
   if ($('patBtn')) $('patBtn').addEventListener('click', nextPatient);
 }
@@ -2953,7 +3524,8 @@ function runReport() {
       : `Stones: ${G.stones.map(st => `${st.i + 1}) ${TYPES[st.type].name} ${st.d0} mm ${st.hu} HU → ${st.how || 'not treated'}${st.specimens ? ` (specimen ×${st.specimens})` : ''}`).join(' · ')}`,
     `Medal: ${G.medal ? MEDALS[G.medal].n : 'none'} · objectives ${G.objs ? G.objs.filter(o => o.ok).map(o => o.k).join(', ') || 'none' : '?'}`,
     `Prep: chart ${4 - unreadNotes().length}/4 read${unreadNotes().length ? ' (skipped ' + unreadNotes().join(', ') + ')' : ''} · antibiotic ${G.prep.abx || 'none'} (${abxVerdict()[0]}) · CT targets ${G.prep.found.size}/${nTargets()} · phleboliths checked ${G.prep.phleb.size}`,
-    `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${orMin(G.tripTime)} OR min) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips} · pieces broken off by technique ${G.breaks || 0}`,
+    `Safety wire ${G.prep.safety ? 'yes' : 'no'} (${safetyVerdict()[0]}) · experience on this case ${G.xp0.n} finished, skill ${G.xp0.sk}${OBS.length ? ` · wrinkles: ${OBS.map(o => `${o.kind}@${o.s} sev ${o.sev.toFixed(2)}${o.hint ? '' : ' (surprise)'} → ${o.state}, ${o.tries} tries, ${o.flaps} flaps [${o.log.join(' ')}]`).join('; ')}` : ' · no wrinkle'}`,
+    `Residual ≥2 mm ${G.residual} · basket trips ${G.trips} (${orMin(G.tripTime)} OR min) · pedal switches ${G.pedSwitches} · reprograms ${G.reprograms} · slipped fragments ${G.slips} · pieces broken off by technique ${G.breaks || 0} · popcorned ${G.popped || 0}`,
     `Peak IRP ${Math.round(G.peakP)} mmHg · ${G.timeOver40.toFixed(1)} s over 40 · lowest integrity ${Math.max(0, Math.round(G.minHp))}% · PULS ${g[0]} (${inj.burn} burns, ${inj.thermal} thermal, ${inj.scrape} abrasions)`,
     `Notes: ${notes}`,
   ].join('\n');
@@ -2990,7 +3562,7 @@ async function setupBloom() {
 
 // ───────────────────────── loop
 const useTouch = params.has('touch') || ('ontouchstart' in window) || matchMedia('(pointer: coarse)').matches;
-function updateScale() { const v = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); dustPS.mat.uniforms.uScale.value = v; bloodPS.mat.uniforms.uScale.value = v; }
+function updateScale() { const v = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)); dustPS.mat.uniforms.uScale.value = v; bloodPS.mat.uniforms.uScale.value = v; plumePts.material.uniforms.uScale.value = v; bubPS.mat.uniforms.uScale.value = v; }
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setPixelRatio(Q.pr); renderer.setSize(w, h, false);
@@ -3036,7 +3608,8 @@ window.__sqBooted = true;
 // test hook (headless checks): read state, drive input, advance the sim without rAF
 window.__sq = {
   get G() { return G; }, get state() { return state; }, input, keys, joy, Q,
-  start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt, say, get budget() { return budget; }, set budget(v) { budget = v; }, get kit() { return kit; }, buyKit, useKit, runKit, showBrief, showPrep, nextPatient, allDone, endRun, readText, get unlocked() { return unlocked; }, unlockCase, get music() { return MUS; }, get AU() { return AU; }, get comms() { return COMMS; },
+  wirePress, get OBS() { return OBS; }, get PLUME() { return PLUME; }, obsClear, obsAim, lumC, nextObs, get XP() { return XP; }, xpOf, saveXP, rollWrinkles, wireChance,
+  get MUSM() { return MUSM; }, musicTrack, start: startPlay, get rotPaused() { return rotPaused; }, report: () => runReport(), BUILD, toggleMode, setMode, selectPedal, spawnFrag, get marks() { return marks.length; }, injure: (k, s, th, sz) => injure(k, s, th, sz, 0), basketPress, moveOn, toggleCam, requestSettings, nudgeLaser, engaged, pinchNear, laserNums, flPoint, openLaserPanel, findTarget, SETTINGS, PINCHES, scene, camera, LEVELS, get LV() { return LV; }, newRun, gateS, lumR, calyxAt, say, get budget() { return budget; }, set budget(v) { budget = v; }, get kit() { return kit; }, buyKit, useKit, runKit, showBrief, showPrep, nextPatient, allDone, endRun, readText, get unlocked() { return unlocked; }, unlockCase, get music() { return MUS; }, get AU() { return AU; }, get comms() { return COMMS; },
   step(sec, dt = 1 / 60) { for (let t = 0; t < sec && state === 'play'; t += dt) { update(dt); if (state === 'play') { chatter(); commsTick(dt); } } if (state === 'play') { updateScene(dt); updateHUD(); } },
 };
 </script>
