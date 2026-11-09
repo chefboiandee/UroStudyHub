@@ -1,7 +1,15 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-02
+**Updated:** 2026-11-09
 **Tool:** Claude Code
+
+## 2026-11-09 — 🏥 Uro Rush: more time in the room
+
+Andrew after playing the computer mechanic: patients run out a bit fast in the bay (try +20%);
+signing speed is good; seen patients should stay frozen.
+**Done:** `PATIENCE` 22 / 18.7 / 17 s → **26.4 / 22.4 / 20.4 s** (+20% every tier). Pended (seen)
+patients stay frozen, `SIGN_TIME` stays 0.5 s, the hall clock stays at 60%.
+**Verified:** `tools/uro-rush.drive.mjs` 38/38.
 
 ## 2026-11-02 (later 10) — 🎯 In-Service Exam Sprint plan (Plans tab)
 
