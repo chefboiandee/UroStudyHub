@@ -22,7 +22,8 @@ inside another workspace; nothing here depends on that one any more.)
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
   `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, pure canvas, no deps;
   two bosses, `?boss=staghorn|fournier`; weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
-  `?aspects=`, `UroCrawl.giveMod()`).
+  `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
+  Antibiotic Dropper weapon).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).

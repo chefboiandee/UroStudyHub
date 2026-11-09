@@ -3,6 +3,51 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 9) — 💉 Uro Crawl: Antibiotic Dropper, antibiotic stewardship, the reps cast, patron altars
+
+Andrew (via the brief), three systems on top of the mods/aspects/rep update: a new FLUID weapon, a rebalance of the
+antibiotic boons around stewardship, and flavour + structure for the rep NPC and the boon altars. Everything older still
+passes the harness; the five earlier weapons and all existing boons behave as before unless a new boon is held.
+
+**Done (`games/uro-crawl.html`, ~4.8k lines, one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 196 checks):**
+- **Antibiotic Dropper** (`WEAPONS.dropper`, FLUID, unlock PGY-2, in the drop pools and `?weapons=`): must be within ~50 px
+  or the primary just shows TOO FAR; a 0.3 s squeeze (you stand still, dashed ring over the target, the bulb squeezes over
+  your head), then one heavy drop on the nearest enemy: 30 base, ×3 vs MICROBE (small bugs die outright), ×0.3 vs every
+  other family, poisons, strips biofilm. 6 drops a room, refilled on clear; vial pickups (12% off microbe kills) refill 3.
+  The vial is your best held antibiotic boon and fires with its spectrum (alt cycles vials; none held → a generic vial,
+  ×1.5 vs MICROBE); the HUD slot shows the vial's name and colour. Per-room resistance: each drop teaches that microbe type
+  10% (max 60%), shown as a purple R pip on those enemies; resets each room.
+- **Antibiotic stewardship** (`§6c`): active antibiotics (Ceftriaxone, Pip-Tazo, Cipro, Vanco, Meropenem) are capped at 2 —
+  a third opens the stewardship prompt (STOP one → start it, or SKIP) at altars and in the shop. Per-run resistance meter per
+  antibiotic (`G.abxRes`): every covered microbe kill (and every Dropper drop) adds 2% × rate (broad-spectrum Pip-Tazo and
+  Meropenem ×2, Cipro ×1.5), lowering the boon's bonus by up to 50%; a bar under the boon's HUD icon. Collateral: while
+  running Pip-Tazo or Meropenem, 35% after each combat room that the next room grows 3 C. difficile pods (toxin clouds, burst
+  on death) or a Candida colony. Resistant strains in rooms 5+: ESBL E. coli (ignores Ceftriaxone), VRE (ignores Vanco), CRE
+  Klebsiella (ignores Meropenem, halves Pip-Tazo), red R badge, bestiary facts. Culture & Sensitivity: a rare door reward
+  (rooms 3–6, once) whose pickup reports the next room's microbes and their resistances and reveals them; clearing that room
+  on a matching narrow antibiotic with no broad one running pays a De-escalation bonus (+15 coins).
+- **Reps** (`REPS`): four invented salespeople from invented companies (Lumenex Surgical, StoneWorks Medical, OmniCautery
+  Systems, FluidLogic Devices) as procedural caricatures, each with 7 pitches (pushy / over-friendly / "off-label" / "new and
+  improved"), always ending "I'll just leave this with you." A big SKIP PITCH button (auto-advance after 4 s), a free pen /
+  swag button that does nothing but count, and a 25% free sample: an extra mod for a one-room drawback (−10% max HP or +10%
+  heat), declinable.
+- **Patrons** (`PATRONS`): boon altars belong to Civiale (LITHO), Young (CUT), Bovie (ENERGY), Foley (FLUID), Huggins
+  (oncology + insulin), Gleason (the Grading boon: grade one held boon up a tier, bonuses +50%/grade, very rare, only when
+  something is gradeable), Nitze (vision) and Fleming (antibiotics, honorary guest). Every existing boon sits in exactly one
+  pool; four small new boons fill thin pools (Smoke Evacuator, Bipolar Forceps, Continuous Bladder Irrigation, Cystoscopy).
+  The boon door plaque shows the patron's glyph and colour; the altar screen shows the caricature, a greeting and favor;
+  each boon taken earns favor that raises that patron's rare/epic odds. Generic (patron-less) altars still work.
+- **Fournier**: the boss card reads FOURNIER; the bestiary notes the disease is named after Jean Alfred Fournier (1883) and
+  that the boss is a cartoon of the disease. All human figures are stylized caricatures.
+
+**Verified:** headless Chromium, all earlier blocks (A–J) still pass; new blocks K (dropper numbers, range, squeeze,
+resistance, vials), L (cap + prompt flow, resistance meters, strains' bonuses, collateral spawns, culture + de-escalation)
+and M (cast, pools, favor odds, Grading, generic altar, new boons, pitch flow, free sample, Fournier, bestiary).
+**Next steps:** feel it on the phone: is 50 px too tight for the Dropper, is the 4 s pitch too long, does the 2-drug cap
+bite too early? Knobs: `DROPPER_MAX/RANGE/WIND`, `ABX_CAP`, `ABX_RES_STEP`, the 35% collateral roll, `+0.6 × favor`.
+**Open questions:** should the Dropper's generic vial also appear as a "saline" patron boon? Should De-escalation also
+require the culture to have shown a resistant strain? Fleming's pool is the only place antibiotics appear now (by design).
+
 ## 2026-11-09 (later 8) — 🔧 Uro Crawl: weapon upgrade paths (mods + capstones), aspects, Instrument Rep doors
 
 Andrew (via the brief): a Hades-style per-weapon upgrade system — Daedalus-hammer mods with branches and capstones, pre-run

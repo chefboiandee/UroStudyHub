@@ -25,6 +25,13 @@
   tiers 1-3 with prerequisites, up to 6 mods + 1 capstone per weapon per run, offered by "Instrument Rep" doors
   (the door plaque shows the weapon's glyph + class colour) and sold as shop samples. ASPECTS are 3 pre-run variants
   per starting instrument, chosen on the title screen; II and III unlock with residency level (PGY-2 / PGY-4).
+  The rep is one of four invented salespeople (REPS) with a skippable pitch, free swag that does nothing, and a 25%
+  free sample (an extra mod for a one-room drawback). Boon altars belong to PATRONS (Civiale, Young, Bovie, Foley,
+  Huggins, Gleason, Nitze, Fleming): themed pools, caricatures, favor that upgrades the next offer, glyph on the door.
+  Antibiotic stewardship (§6c): two active antibiotics at a time (a third prompts you to stop one), per-run resistance
+  meters that wear a boon's bonus down (broad-spectrum twice as fast), collateral C. difficile / Candida after rooms
+  run on Pip-Tazo or Meropenem, resistant strains (ESBL, VRE, CRE) in late rooms, and a Culture & Sensitivity pickup
+  that reveals the next room and pays a De-escalation bonus. The Antibiotic Dropper (FLUID) fires those vials.
 
   Keys:  WASD / arrows move · mouse aims · LMB fire · RMB or Space alt · Shift roll · 1-5 slots · Q/E or wheel cycle · R ultimate · Esc/P pause
   Touch: left thumb floating stick · FIRE (hold, auto-aim) · SWAP · ALT · ROLL · ULT (once you hold the da Vinci console) · tap weapon slots
@@ -121,6 +128,19 @@ p{margin:6px 0;color:#c9d6e0}
 .asphead b{font-size:17px}
 .asprow .cards{margin:6px 0 0;justify-content:flex-start}
 #aspectLine{display:block;margin-top:8px;color:var(--mute);font-size:12px}
+/* patrons (altars) + reps (sales cast) */
+.patron,.repcard{display:flex;gap:14px;align-items:flex-start;text-align:left;background:var(--panel2);border-radius:16px;padding:10px 14px;margin:6px 0 10px}
+.patron canvas,.repcard canvas{width:80px;height:80px;flex:0 0 80px;display:block}
+.patronwho,.repwho{flex:1;min-width:0}
+.patronwho b,.repwho b{font-size:20px;display:block;line-height:1.1}
+.patronwho small,.repwho small{color:var(--mute);display:block;font-size:12px}
+.patronwho em{display:block;margin-top:6px;color:#fff;font-size:15px}
+.patronwho .hint{display:block;margin-top:4px}
+.favor{display:inline-block;margin-top:6px;color:var(--gold);font-weight:900;font-size:12px;letter-spacing:.1em}
+.repwho .bubble{margin:8px 0 0}
+.repwho .bubble:after{left:22px}
+.card.sample{border-style:dashed;border-color:#ffd166}
+@media (max-width:640px){.patron canvas,.repcard canvas{width:56px;height:56px;flex-basis:56px}.patronwho b,.repwho b{font-size:16px}}
 @media (max-height:420px){.card.asp .desc{font-size:11px}.asprow{margin-top:6px;padding-top:4px}}
 
 /* settings */
@@ -262,9 +282,29 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 <div class="ov" id="ov-boon">
   <div class="panel wide" style="text-align:center">
     <h2 id="boonTitle">Choose a boon</h2>
+    <div class="patron" id="patronHead" style="display:none"><canvas id="patronFace" width="160" height="160"></canvas><div class="patronwho"><b id="patronName"></b><small id="patronFull"></small><em id="patronGreet"></em><span class="hint" id="patronBlurb"></span><span class="favor" id="patronFavor"></span></div></div>
     <p class="hint" id="boonSub">The pharmacy altar hums. Pick one.</p>
     <div class="cards" id="boonCards"></div>
     <div class="row center"><button class="btn" id="btnReroll">REROLL (25 RVU)</button><button class="btn" id="btnBoonSkip">SKIP</button></div>
+  </div>
+</div>
+
+<!-- ANTIBIOTIC STEWARDSHIP (the two-drug cap) -->
+<div class="ov" id="ov-steward">
+  <div class="panel narrow" style="text-align:center">
+    <h2>Antibiotic stewardship</h2>
+    <p class="hint" id="stewardSub"></p>
+    <div class="menu" id="stewardChoices"></div>
+  </div>
+</div>
+
+<!-- GLEASON GRADING (pick a held boon to grade up) -->
+<div class="ov" id="ov-grade">
+  <div class="panel wide" style="text-align:center">
+    <h2>Gleason grading</h2>
+    <p class="hint" id="gradeSub">Grade one of your boons up a tier: its bonuses grow by half of their base per grade (Grade 3 max).</p>
+    <div class="cards" id="gradeCards"></div>
+    <div class="row center"><button class="btn" id="btnGradeSkip">NOT NOW</button></div>
   </div>
 </div>
 
@@ -283,10 +323,13 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 <div class="ov" id="ov-mod">
   <div class="panel wide" style="text-align:center">
     <h2 id="modTitle">Instrument Rep</h2>
-    <div class="bubble" id="modTalk" style="text-align:left">Doc. DOC.</div>
-    <p class="hint" id="modSub"></p>
-    <div class="cards" id="modCards"></div>
-    <div class="row center"><button class="btn" id="btnModReroll">REROLL (20 RVU)</button><button class="btn" id="btnModSkip">NO THANKS</button></div>
+    <div class="repcard"><canvas id="repFace" width="160" height="160"></canvas><div class="repwho"><b id="repName"></b><small id="repCo"></small><div class="bubble" id="modTalk" style="text-align:left">Doc. DOC.</div></div></div>
+    <div class="row center" id="pitchRow"><button class="btn primary" id="btnSkipPitch">SKIP PITCH</button></div>
+    <div id="modChoice">
+      <p class="hint" id="modSub"></p>
+      <div class="cards" id="modCards"></div>
+      <div class="row center"><button class="btn" id="btnModReroll">REROLL (20 RVU)</button><button class="btn small" id="btnFreePen">TAKE A FREE PEN</button><button class="btn" id="btnModSkip">NO THANKS</button></div>
+    </div>
   </div>
 </div>
 
@@ -651,7 +694,7 @@ var Snd = {
   },
   setMusicMode: function (mode) { this.music.mode = mode; }
 };
-var SFX_GAP = { beam: 90, hit: 35, crit: 60, tink: 60, kill: 50, pickup: 50, coin: 35, hurt: 150, roll: 200, door: 400, click: 60, roar: 800, clear: 1000, heartbeat: 500, charge: 120, jet: 110, arc: 100, probe: 70, slash: 80, swing: 200, cauter: 120, freeze: 120, shatter: 120, shield: 150, spawn: 120, lob: 150, shot: 90, suck: 120, pop: 100, swap: 120, bossHit: 60, alarm: 1000, buy: 200, jingle: 2000, seed: 150 };
+var SFX_GAP = { beam: 90, hit: 35, crit: 60, tink: 60, kill: 50, pickup: 50, coin: 35, hurt: 150, roll: 200, door: 400, click: 60, roar: 800, clear: 1000, heartbeat: 500, charge: 120, jet: 110, arc: 100, probe: 70, slash: 80, swing: 200, cauter: 120, freeze: 120, shatter: 120, shield: 150, spawn: 120, lob: 150, shot: 90, suck: 120, pop: 100, swap: 120, bossHit: 60, alarm: 1000, buy: 200, jingle: 2000, seed: 150, drip: 80 };
 var SFX = {
   beam: function (S, p) { S.tone({ type: 'square', f0: 1400 + Math.random() * 300, f1: 900, dur: 0.06, vol: 0.05 }); },
   probe: function (S) { S.noise({ dur: 0.05, f: 500, q: 2, vol: 0.14 }); S.tone({ type: 'square', f0: 90, f1: 60, dur: 0.05, vol: 0.12 }); },
@@ -662,6 +705,7 @@ var SFX = {
   shot: function (S) { S.tone({ type: 'square', f0: 900, f1: 200, dur: 0.1, vol: 0.14 }); S.noise({ dur: 0.08, f: 1500, vol: 0.1 }); },
   lob: function (S) { S.tone({ type: 'sine', f0: 300, f1: 700, dur: 0.18, vol: 0.1 }); },
   seed: function (S) { S.tone({ type: 'sine', f0: 520, f1: 400, dur: 0.1, vol: 0.08 }); },
+  drip: function (S) { S.tone({ type: 'sine', f0: 980, f1: 260, dur: 0.14, vol: 0.14 }); S.noise({ dur: 0.07, f: 2600, vol: 0.06, delay: 0.09 }); },
   charge: function (S, p) { S.tone({ type: 'sine', f0: 200 + 600 * (p.v || 0), dur: 0.1, vol: 0.06 }); },
   shock: function (S) { S.tone({ type: 'sawtooth', f0: 120, f1: 30, dur: 0.4, vol: 0.3 }); S.noise({ dur: 0.3, f: 400, q: 0.6, vol: 0.25 }); },
   hit: function (S) { S.tone({ type: 'square', f0: 420, f1: 260, dur: 0.05, vol: 0.09 }); },
@@ -902,7 +946,7 @@ var WEAPONS = {
       var longPulse = wflag(w, 'longPulse'), asp = wasp(w), fragAsp = asp === 'fragmenting', popAsp = asp === 'popcorning' && !P.moving;
       if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.5); if (w.locked <= 0) w.heat = 0; w.tick = 0; return; }
       if (!held) { w.heat = Math.max(0, w.heat - dt * 0.42 * (longPulse ? 1.5 : 1)); w.tick = 0; return; }
-      if (!fragAsp) w.heat += dt / 3.4 / (longPulse ? 1.5 : 1) / (popAsp ? 1.3 : 1);   // the Fragmenting aspect heats per pulse instead
+      if (!fragAsp) w.heat += dt / 3.4 / (longPulse ? 1.5 : 1) / (popAsp ? 1.3 : 1) * heatMul();   // the Fragmenting aspect heats per pulse instead
       if (w.heat >= 1) { w.heat = 1; w.locked = longPulse ? 1.2 : 2; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); Snd.sfx('cauter'); return; }
       var frag = fragAsp || w.mode === 1, pulseDmg = fragAsp ? 26 : 24;
       var hits = beamFire(w, dt, fragAsp
@@ -910,7 +954,7 @@ var WEAPONS = {
         : { range: 230, hw: 5, interval: frag ? 0.45 : 0.08, dmg: frag ? 24 : 3.4, knock: frag ? 140 : 0, split: frag ? 'frag' : 'dust', sfx: 'beam', style: frag ? 'pulse' : 'beam' });
       if (popAsp && w.fx) w.fx.boil = true;   // the boiling tip is drawn every frame you stand still
       if (!hits) return;
-      if (fragAsp) w.heat += 0.1;
+      if (fragAsp) w.heat += 0.1 * heatMul();
       if (frag) { mosesPellets(w, muzzle(), pulseDmg); shakeIt(2); if (hits.length && wflag(w, 'popcorn')) popcornBurst(w, hits[0], pulseDmg * wmod(w, 'dmg')); }
       // Popcorning aspect: stand still and the beam tip boils — on each tick everything within 38 px of the tip takes 60%, fragments and dust get tossed
       if (popAsp && w.fx) {
@@ -1257,7 +1301,7 @@ var WEAPONS = {
     fire: function (w, dt, held) {
       if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.6); if (w.locked <= 0) w.heat = 0; return; }
       if (!held) { w.heat = Math.max(0, w.heat - dt * 0.5); w.tick = 0; return; }
-      w.heat += dt / 5; if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
+      w.heat += dt / 5 * heatMul(); if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
       var pulse = w.mode === 1;
       var hits = beamFire(w, dt, { range: 300, hw: 4, interval: pulse ? 0.2 : 0.05, dmg: pulse ? 8 : 1.9, split: pulse ? 'frag' : 'dust', sfx: 'beam', style: pulse ? 'pulse' : 'stream' });
       if (hits && pulse) mosesPellets(w, muzzle(), 8);
@@ -1283,7 +1327,7 @@ var WEAPONS = {
     fire: function (w, dt, held) {
       if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.6); if (w.locked <= 0) w.heat = 0; return; }
       if (!held) { w.heat = Math.max(0, w.heat - dt * 0.45); w.tick = 0; return; }
-      w.heat += dt / 4.5; if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
+      w.heat += dt / 4.5 * heatMul(); if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
       var focus = w.mode === 1;
       beamFire(w, dt, { range: focus ? 280 : 200, hw: focus ? 6 : 13, interval: 0.08, dmg: focus ? 3.6 : 3.1, pierce: focus ? 1 : 0, sfx: 'beam', style: 'green' });
     },
@@ -1461,13 +1505,52 @@ var WEAPONS = {
     fire: function (w, dt, held) {
       if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.6); if (w.locked <= 0) w.heat = 0; return; }
       if (!held) { w.heat = Math.max(0, w.heat - dt * 0.5); w.tick = 0; return; }
-      w.heat += dt / 5; if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
+      w.heat += dt / 5 * heatMul(); if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
       var wet = beamInWater(), pulse = w.mode === 1;
       if (wet && (!w.wetT || G.time - w.wetT > 1.2)) { w.wetT = G.time; addText(P.x, P.y - 34, 'ABSORBED (water)', { color: '#8ea2b6', size: 11 }); }
       beamFire(w, dt, { range: wet ? 60 : 320, hw: 3, interval: pulse ? 0.25 : 0.07, dmg: pulse ? 9.5 : 2.6, strip: pulse ? 0.3 : 0.12, sfx: 'beam', style: 'co2' });
     },
     altPress: function (w) { w.mode = 1 - w.mode; },
     meter: function (w) { return { v: w.heat, color: w.locked > 0 ? '#ff5c5c' : '#ffb630', label: w.locked > 0 ? 'HOT!' : 'heat' }; }
+  },
+  /* ───────────── Antibiotic Dropper ───────────── */
+  dropper: {
+    name: 'Antibiotic Dropper', cls: 'FLUID', kind: 'drop', tier: 'should', unlock: 2, famMult: { MICROBE: 3.0, STONE: 0.3, MALIGNANT: 0.3, BENIGN: 0.3, CLOT: 0.3 },
+    desc: 'Point blank (~50 px): a 0.3 s squeeze, then one heavy drop on the nearest enemy. ×3 vs MICROBE — small bugs die outright — and ×0.3 vs everything else. Poisons; a direct drop strips biofilm. 6 drops a room (refilled on clear); vial pickups refill 3.',
+    altDesc: 'The vial is your best antibiotic boon and fires with its spectrum (none held: a weak generic vial, ×1.5 vs MICROBE). Alt cycles the loaded vial. Each drop teaches that microbe type 10% resistance for the room (max 60%).',
+    fire: function (w, dt, held) {
+      if (w.squeeze) { // the wind-up: you stand still, the target is marked, the bulb squeezes
+        var s = w.squeeze, tg = s.e; s.t += dt;
+        if (!enemyTargetable(tg) || dist(P.x, P.y, tg.x, tg.y) > DROPPER_RANGE + tg.r + 40) { w.squeeze = null; w.cd = 0.25; addText(P.x, P.y - 34, 'MISSED', { color: '#8ea2b6', size: 11 }); return; }
+        w.fx = { kind: 'squeeze', x: tg.x, y: tg.y, r: tg.r, v: Math.min(1, s.t / DROPPER_WIND), t: 0.05, cls: 'FLUID', color: dropperVial(w).color };
+        if (s.t >= DROPPER_WIND) { w.squeeze = null; WEAPONS.dropper.drop(w, tg); }
+        return;
+      }
+      if (!held || w.cd > 0) return;
+      var e = nearestEnemy(P.x, P.y, DROPPER_RANGE, function (q) { return !q.def.isStump && !q.def.flat; });
+      if (!e) { WEAPONS.dropper.hint(w, 'TOO FAR — get within 50 px'); return; }
+      if (w.drops <= 0) { WEAPONS.dropper.hint(w, 'EMPTY — find a vial'); return; }
+      w.squeeze = { t: 0, e: e }; w.cd = 0.5; Snd.sfx('suck');
+    },
+    hint: function (w, msg) { w.cd = 0.2; if (!w.hintT || G.time - w.hintT > 0.6) { w.hintT = G.time; addText(P.x, P.y - 34, msg, { color: '#8ea2b6', size: 11 }); Snd.sfx('tink'); } },
+    // the drop itself: vial spectrum × this room's learned resistance; small microbes are lysed outright; always poisons and strips biofilm
+    drop: function (w, e) {
+      var vial = dropperVial(w), res = (G.dropRes && G.dropRes[e.id]) || 0, small = e.family === 'MICROBE' && e.r <= 12 && !e.boss && !e.isArm && !e.def.isLobe && !e.def.isStump;
+      var dmg = 30 * wmod(w, 'dmg') * vial.mult(e) * (1 - res);
+      dealDamage(e, dmg, 'FLUID', { wid: 'dropper', knock: 20, ang: ang(P.x, P.y, e.x, e.y), status: { poison: [4, 6] }, strip: 1, hx: e.x, hy: e.y, tag: res > 0 ? 'RESISTANT ' + Math.round(res * 100) + '%' : vial.short });
+      if (small && !e.dead) { e.hp = 0; addText(e.x, e.y - e.r - 24, 'LYSED', { color: vial.color, size: 13 }); killEnemy(e, 'FLUID', 'dropper'); }
+      if (e.family === 'MICROBE') { G.dropRes[e.id] = Math.min(0.6, res + 0.1); abxUse(vial.id, 1); }
+      w.drops--; w.cd = 0.35;
+      G.fxRings.push({ x: e.x, y: e.y, r: 4, r1: e.r + 18, t: 0.3, dur: 0.3, color: vial.color }); burst(e.x, e.y - e.r * 0.5, 10, { color: vial.color, speed: 120, life: 0.4, size: 3, kind: 'goo', g: 300 });
+      Snd.sfx('drip'); shakeIt(2);
+    },
+    altPress: function (w) {
+      var held = activeAbx(); if (!held.length) { addText(P.x, P.y - 34, 'GENERIC VIAL (no antibiotic boon held)', { color: '#8ea2b6', size: 11 }); return; }
+      var i = held.indexOf(dropperVial(w).id); w.vialPick = held[(i + 1) % held.length]; addText(P.x, P.y - 34, 'VIAL: ' + BOONS[w.vialPick].name.toUpperCase(), { color: ABX_VIALS[w.vialPick].color, size: 12 }); Snd.sfx('click');
+    },
+    meter: function (w) { var v = dropperVial(w); return { v: w.drops / DROPPER_MAX, color: v.color, label: w.drops + ' drop' + (w.drops === 1 ? '' : 's') }; },
+    slotLabel: function (w) { var v = dropperVial(w); return { text: v.short, color: v.color }; },   // the loaded vial, shown on the HUD slot
+    slowWhile: function (w) { return w.squeeze ? 0 : 1; }
   },
   /* ───────────── da Vinci console (ULTIMATE — not a slot) ───────────── */
   davinci: {
@@ -1477,7 +1560,7 @@ var WEAPONS = {
     fire: function () {}, meter: function () { return null; }
   },
 };
-var WEAPON_ORDER = ['holmium', 'scalpel', 'loop', 'bovie', 'trilogy', 'eswl', 'roller', 'irrigation', 'basket', 'thulium', 'cryo', 'button', 'biopsy', 'greenlight', 'brachy', 'aquablation', 'rezum', 'foley', 'stent', 'hifu', 'urethrotome', 'co2', 'davinci'];
+var WEAPON_ORDER = ['holmium', 'scalpel', 'loop', 'bovie', 'trilogy', 'eswl', 'roller', 'irrigation', 'basket', 'thulium', 'cryo', 'button', 'biopsy', 'greenlight', 'brachy', 'aquablation', 'rezum', 'foley', 'stent', 'hifu', 'urethrotome', 'co2', 'dropper', 'davinci'];
 (function () { for (var id in WEAPONS) WEAPONS[id].id = id; })();
 // rarity: a stat tweak so a second copy is an upgrade
 var RARITY_MODS = {
@@ -1916,7 +1999,7 @@ var ENEMIES = {
     init: function (e) { e.ph = rr(0, TAU); e.rot = rr(0, TAU); },
     update: function (e, dt, d, a) {
       e.ph += dt * 6; var sx = 0, sy = 0, cx = 0, cy = 0, n = 0, es = G.enemies;
-      for (var i = 0; i < es.length; i++) { var o = es[i]; if (o === e || o.dead || o.id !== 'ecoli') continue; var dd = dist(e.x, e.y, o.x, o.y); if (dd < 26 && dd > 0.1) { sx += (e.x - o.x) / dd; sy += (e.y - o.y) / dd; } if (dd < 120) { cx += o.x; cy += o.y; n++; } }
+      for (var i = 0; i < es.length; i++) { var o = es[i]; if (o === e || o.dead || o.id !== e.id) continue; var dd = dist(e.x, e.y, o.x, o.y); if (dd < 26 && dd > 0.1) { sx += (e.x - o.x) / dd; sy += (e.y - o.y) / dd; } if (dd < 120) { cx += o.x; cy += o.y; n++; } }
       var tx = Math.cos(a) * 1.0 + sx * 1.4 + (n ? (cx / n - e.x) / 120 * 0.3 : 0), ty = Math.sin(a) * 1.0 + sy * 1.4 + (n ? (cy / n - e.y) / 120 * 0.3 : 0);
       var l = Math.sqrt(tx * tx + ty * ty) || 1; e.vx = tx / l * 150; e.vy = ty / l * 150; e.rot = Math.atan2(e.vy, e.vx);
     },
@@ -2169,8 +2252,8 @@ var ENEMIES = {
     fact: '', init: function (e) {}, update: function (e, dt) {}, draw: function (c, e) { /* drawn by the boss renderer */ }
   },
   fournier: {
-    name: "Fournier's Gangrene", sub: 'BOSS — necrotizing fasciitis of the perineum', family: 'MICROBE', hp: 1800, r: 96, speed: 0, cost: 0, minRoom: 99, contact: 18, boss: true, stationary: true, noPush: true, noGrab: true,
-    fact: "Fournier's gangrene is a polymicrobial necrotizing fasciitis of the perineum: emergency debridement, broad-spectrum antibiotics and glucose control. Diabetes is the classic risk factor.",
+    name: 'Fournier', sub: "BOSS — Fournier's gangrene, necrotizing fasciitis of the perineum", family: 'MICROBE', hp: 1800, r: 96, speed: 0, cost: 0, minRoom: 99, contact: 18, boss: true, stationary: true, noPush: true, noGrab: true,
+    fact: "Fournier's gangrene is a polymicrobial necrotizing fasciitis of the perineum: emergency debridement, broad-spectrum antibiotics and glucose control; diabetes is the classic risk factor. The disease is named after Jean Alfred Fournier, the Parisian dermatologist who described it in 1883 (the boss is a cartoon of the disease, not of him).",
     init: function (e) { e.seed = 13; }, update: function (e, dt) {}, draw: function (c, e) { drawFournierBody(c, e); }
   },
   fourlobe: {
@@ -2182,7 +2265,36 @@ var ENEMIES = {
     fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 6; }, draw: function (c, e) { drawStump(c, e); }
   }
 };
-var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
+var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'esbl', 'vre', 'cre', 'cdiff', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
+/* ── antibiotic collateral + resistant strains (§6c) ──
+   cdiff: the broad-spectrum tax — stationary spore pods that puff toxin clouds and burst into one when killed. Never in the
+   normal pool (cost 0); spawned as collateral in the room after a combat room while you hold Pip-Tazo or Meropenem. */
+ENEMIES.cdiff = {
+  name: 'C. difficile Pod', sub: 'Clostridioides difficile (spore pod)', family: 'MICROBE', hp: 40, r: 14, speed: 0, cost: 0, minRoom: 99, contact: 5, stationary: true, noPush: true, grab: true, toxinOnDeath: true, collateral: true, abx: ['vanco'],
+  fact: 'C. difficile colitis follows broad-spectrum antibiotics that wipe out the gut flora; stewardship is the prevention, oral vancomycin or fidaxomicin the treatment.',
+  init: function (e) { e.timer = rr(2, 3); e.ph = rr(0, TAU); e.seed = rr(1, 99); },
+  update: function (e, dt, d, a) { e.ph += dt * 2; e.vx = e.vy = 0; e.timer -= dt; if (e.timer <= 0 && !e.atk) { e.timer = rr(3, 4); telegraph(e, 0.6, 'flash', null, function (e2) { addHazard({ kind: 'toxin', x: e2.x + rr(-20, 20), y: e2.y + rr(-20, 20), r: 40, t: 2.5 }); gasBubble(e2.x, e2.y - 8, 6); e2.sx = 1.25; e2.sy = 0.8; Snd.sfx('lob'); }); } },
+  draw: function (c, e) {
+    c.fillStyle = '#7a6a3a'; blobPath(c, e.r, e.ph, 5, 0.09); c.fill(); outline(c, 3.4);
+    c.fillStyle = '#e9e0b8'; for (var i = 0; i < 5; i++) { var sa = hsh(e.seed, i) * TAU, sr = e.r * (0.3 + 0.45 * hsh(e.seed, i + 9)); c.beginPath(); c.arc(Math.cos(sa) * sr, Math.sin(sa) * sr, 2.4, 0, TAU); c.fill(); }
+    cyclops(c, -e.r * 0.3, -e.r * 0.2, e.r * 0.13, e.look, e.blink, { veins: true }); cyclops(c, e.r * 0.35, -e.r * 0.1, e.r * 0.1, e.look, 1);
+    mouth(c, 0, e.r * 0.45, e.r * 0.25, 'wavy'); c.fillStyle = 'rgba(184,255,90,' + (0.3 + 0.25 * Math.sin(e.ph * 3)) + ')'; c.beginPath(); c.arc(0, -e.r * 0.95, 5 + 2 * Math.sin(e.ph * 3), 0, TAU); c.fill();
+  }
+};
+// resistant elite strains: a base microbe's look and behaviour with more HP, a red R badge, and `resistTo` — the factor applied to an antibiotic's bonus (0 = ignores it, 0.5 = halves it)
+function resistantVariant(baseId, o) {
+  var b = ENEMIES[baseId], d = {}; for (var k in b) d[k] = b[k];
+  d.name = o.name; d.sub = o.sub; d.fact = o.fact; d.hp = Math.round(b.hp * (o.hpMul || 1.6)); d.cost = o.cost; d.minRoom = o.minRoom || 5; d.resistTo = o.resistTo; d.abx = o.abx; d.base = baseId; d.variant = true; d.hidden = false; if (o.cluster) d.cluster = o.cluster;
+  var draw = b.draw; d.draw = function (c, e) { draw(c, e); drawResistBadge(c, e); };
+  return d;
+}
+function drawResistBadge(c, e) { c.save(); c.translate(e.r * 0.8, -e.r * 0.95); c.fillStyle = '#7a1f2e'; regPoly(c, 6.5, 6, 0.5); c.fill(); c.strokeStyle = '#ff4d6d'; c.lineWidth = 1.5; c.stroke(); c.fillStyle = '#fff'; c.font = '900 7px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('R', 0, 0.5); c.restore(); }
+ENEMIES.esbl = resistantVariant('ecoli', { name: 'ESBL E. coli', sub: 'Extended-spectrum β-lactamase producer', cost: 8, minRoom: 5, cluster: [4, 7], resistTo: { ceftriaxone: 0 }, abx: ['piptazo', 'meropenem', 'cipro'],
+  fact: 'ESBL enzymes chew up third-generation cephalosporins like ceftriaxone; carbapenems still work, which is exactly how resistance climbs the ladder.' });
+ENEMIES.vre = resistantVariant('enterococcus', { name: 'VRE Chain', sub: 'Vancomycin-resistant Enterococcus', cost: 7, minRoom: 5, resistTo: { vanco: 0 }, abx: ['piptazo', 'meropenem'],
+  fact: 'VRE shrugs off vancomycin: linezolid or daptomycin, and contact precautions for everyone it touches.' });
+ENEMIES.cre = resistantVariant('klebsiella', { name: 'CRE Klebsiella', sub: 'Carbapenem-resistant Klebsiella', cost: 7, minRoom: 5, resistTo: { meropenem: 0, piptazo: 0.5 }, abx: ['cipro'],
+  fact: 'Carbapenem-resistant Klebsiella is the stewardship nightmare: meropenem fails and Pip-Tazo barely works, leaving colistin and the newest agents.' });
 (function () { for (var id in ENEMIES) ENEMIES[id].id = id; })();
 // pips: the class an enemy is weakest to / resists most (class-level tweaks included)
 function enemyWeakness(def) {
@@ -2215,12 +2327,12 @@ var BOONS = {
   bep:         { name: 'BEP', kind: 'chemo', rarity: 'epic', unlock: 3, desc: 'EPIC: Bleomycin + etoposide + cisplatin. +60% vs Seminoma and +25% vs all MALIGNANT.',
     dmg: function (e) { return e.def.seminoma ? 1.6 : e.family === 'MALIGNANT' ? 1.25 : 1; }, poison: function (e) { return e.family === 'MALIGNANT'; } },
   /* antibiotics (spectrum matters a little; fungi ignore them) */
-  ceftriaxone: { name: 'Ceftriaxone', kind: 'abx', rarity: 'common', desc: '+35% vs E. coli and Proteus. Weak (×0.9) vs Pseudomonas and Enterococcus.',
+  ceftriaxone: { name: 'Ceftriaxone', kind: 'abx', abxActive: true, spectrum: 'narrow', resRate: 1, potency: 2, rarity: 'common', desc: '+35% vs E. coli and Proteus. Weak (×0.9) vs Pseudomonas and Enterococcus.',
     dmg: function (e) { if (e.def.fungus) return 1; if (e.id === 'ecoli' || e.id === 'proteus') return 1.35; if (e.id === 'pseudomonas' || e.id === 'enterococcus' || e.id === 'entero_link') return 0.9; return 1; } },
-  piptazo:     { name: 'Pip-Tazo', kind: 'abx', rarity: 'common', desc: '+25% vs all bacteria and your hits strip biofilm faster.', dmg: function (e) { return e.family === 'MICROBE' && !e.def.fungus ? 1.25 : 1; }, strip: 0.3 },
-  cipro:       { name: 'Ciprofloxacin', kind: 'abx', rarity: 'common', desc: '+30% vs bacteria and your hits poison them.', dmg: function (e) { return e.family === 'MICROBE' && !e.def.fungus ? 1.3 : 1; }, poison: function (e) { return e.family === 'MICROBE' && !e.def.fungus; } },
-  vanco:       { name: 'Vancomycin', kind: 'abx', rarity: 'common', desc: '+60% vs Enterococcus only.', dmg: function (e) { return (e.id === 'enterococcus' || e.id === 'entero_link') ? 1.6 : 1; } },
-  meropenem:   { name: 'Meropenem', kind: 'abx', rarity: 'epic', unlock: 3, desc: 'EPIC: +45% vs all bacteria including the resistant ones; they burst on death.',
+  piptazo:     { name: 'Pip-Tazo', kind: 'abx', abxActive: true, spectrum: 'broad', resRate: 2, potency: 4, rarity: 'common', desc: '+25% vs all bacteria and your hits strip biofilm faster.', dmg: function (e) { return e.family === 'MICROBE' && !e.def.fungus ? 1.25 : 1; }, strip: 0.3 },
+  cipro:       { name: 'Ciprofloxacin', kind: 'abx', abxActive: true, spectrum: 'medium', resRate: 1.5, potency: 3, rarity: 'common', desc: '+30% vs bacteria and your hits poison them.', dmg: function (e) { return e.family === 'MICROBE' && !e.def.fungus ? 1.3 : 1; }, poison: function (e) { return e.family === 'MICROBE' && !e.def.fungus; } },
+  vanco:       { name: 'Vancomycin', kind: 'abx', abxActive: true, spectrum: 'narrow', resRate: 1, potency: 2, rarity: 'common', desc: '+60% vs Enterococcus only.', dmg: function (e) { return (e.id === 'enterococcus' || e.id === 'entero_link') ? 1.6 : 1; } },
+  meropenem:   { name: 'Meropenem', kind: 'abx', abxActive: true, spectrum: 'broad', resRate: 2, potency: 5, rarity: 'epic', unlock: 3, desc: 'EPIC: +45% vs all bacteria including the resistant ones; they burst on death.',
     dmg: function (e) { return e.family === 'MICROBE' && !e.def.fungus ? 1.45 : 1; }, onKill: function (e) { if (e.family === 'MICROBE') { var hs = enemiesNear(e.x, e.y, 60); for (var i = 0; i < hs.length; i++) if (hs[i] !== e) dealDamage(hs[i], 12, 'NEUTRAL', { wid: 'meropenem' }); burst(e.x, e.y, 6, { color: '#c9f0ff', speed: 120, life: 0.3, size: 2 }); } } },
   antibiogram: { name: 'Antibiogram', kind: 'abx', rarity: 'rare', requires: ['ceftriaxone', 'piptazo'], desc: 'DUO: cultures are back. +20% vs all MICROBE, fungi included.', dmg: function (e) { return e.family === 'MICROBE' ? 1.2 : 1; } },
   fosfomycin:  { name: 'Fosfomycin', kind: 'abx', rarity: 'common', desc: 'Single-dose oral nuke: in the NEXT room every bacterium spawns already poisoned.', oneShot: true },
@@ -2245,11 +2357,201 @@ var BOONS = {
   backup:      { name: 'Backup Instrument', kind: 'gear', rarity: 'rare', desc: 'A fifth weapon slot.', apply: function () { G.maxWeapons = 5; } },
   perfectswap: { name: 'Perfect Swap', kind: 'gear', rarity: 'rare', desc: 'The Right Tool bonus after a swap is +50% instead of +25%.' },
   quickhands:  { name: 'Quick Hands', kind: 'gear', rarity: 'common', desc: 'Weapon swap delay halved.' },
-  wolf:        { name: 'Wolf in Scrubs', kind: 'gear', rarity: 'rare', desc: '5 kills within 6 s: 2 s of invulnerability and +40% speed.' }
+  wolf:        { name: 'Wolf in Scrubs', kind: 'gear', rarity: 'rare', desc: '5 kills within 6 s: 2 s of invulnerability and +40% speed.' },
+  /* the patrons' own additions (§6d) */
+  smokevac:    { name: 'Smoke Evacuator', kind: 'gear', rarity: 'common', desc: 'Your own burn zones and steam no longer hurt you, and the burns you set do +25% over time.' },
+  bipolar:     { name: 'Bipolar Forceps', kind: 'gear', rarity: 'uncommon', desc: 'Cauterize bonuses deal +50%, and any ENERGY hit on a bleeding enemy cauterizes it.' },
+  cbi:         { name: 'Continuous Bladder Irrigation', kind: 'gear', rarity: 'common', desc: 'FLUID hits do +15% and strip biofilm faster; you walk through slime and goo at full speed.', dmg: function (e, cls) { return cls === 'FLUID' ? 1.15 : 1; }, strip: 0.3, stripCls: 'FLUID' },
+  cystoscope:  { name: 'Cystoscopy', kind: 'gear', rarity: 'uncommon', desc: 'Every enemy spawns revealed: its weakness, what it resists, and any antibiotic it ignores. +5% crit chance.' },
+  grading:     { name: 'Gleason Grading', kind: 'grade', rarity: 'epic', consumable: true, desc: 'Grade one boon you hold up a tier (Grade 3 max): its bonuses grow by half of their base per grade. One use; Gleason only offers it.', consume: function () { return false; } }
 };
-var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf'];
+var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'grading'];
 (function () { for (var id in BOONS) BOONS[id].id = id; })();
-var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ffd166' };
+var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ffd166', grade: '#ffd166' };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §6c  ANTIBIOTICS — the Dropper's vials, the two-drug cap, per-run resistance meters, resistant strains,
+   and Gleason grading of boons. An antibiotic boon's effective bonus against an enemy is
+   abxBonus(): spectrum (its dmg fn) × strain resistance (def.resistTo) × the run's resistance meter × grade.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var ABX_CAP = 2, ABX_RES_STEP = 0.02, DROPPER_MAX = 6, DROPPER_RANGE = 50, DROPPER_WIND = 0.3;
+var ABX_VIALS = { ceftriaxone: { short: 'CEFTRIAX', color: '#6fd3ff' }, piptazo: { short: 'PIP-TAZO', color: '#b58cff' }, cipro: { short: 'CIPRO', color: '#7dffb0' }, vanco: { short: 'VANCO', color: '#ffb3a3' }, meropenem: { short: 'MEROPENEM', color: '#ffd166' }, generic: { short: 'GENERIC', color: '#9fb6c9' } };
+function activeAbx() { var out = []; for (var i = 0; i < G.boons.length; i++) if (BOONS[G.boons[i]] && BOONS[G.boons[i]].abxActive) out.push(G.boons[i]); return out; }
+function abxCapBlocks(id) { var b = BOONS[id]; return !!(b && b.abxActive && !hasBoon(id) && activeAbx().length >= ABX_CAP); }
+function hasBroadAbx() { return hasBoon('piptazo') || hasBoon('meropenem'); }
+function abxRes(id) { return (G.abxRes && G.abxRes[id]) || 0; }
+function abxUse(id, n) {
+  if (!G.abxRes) G.abxRes = {}; var rate = BOONS[id] ? (BOONS[id].resRate || 1) : 1, before = G.abxRes[id] || 0;
+  G.abxRes[id] = Math.min(1, before + ABX_RES_STEP * rate * (n || 1));
+  if (before < 1 && G.abxRes[id] >= 1 && P) addText(P.x, P.y - 52, (BOONS[id] ? BOONS[id].name : 'Generic vial').toUpperCase() + ': FULL RESISTANCE', { color: '#c45cff', size: 12 });
+}
+function boonTierMul(id) { return 1 + 0.5 * (((G.boonTier && G.boonTier[id]) || 1) - 1); }
+function abxBonus(id, e) {
+  var b = BOONS[id]; if (!b || !b.dmg) return 1;
+  var raw = b.dmg(e, 'FLUID', 'dropper'), rf = (e.def && e.def.resistTo && e.def.resistTo[id] !== undefined) ? e.def.resistTo[id] : 1;
+  return 1 + (raw - 1) * rf * (1 - 0.5 * abxRes(id)) * boonTierMul(id);
+}
+// the Dropper's loaded vial: a manual pick (alt), else the held antibiotic with the best potency × remaining susceptibility, else a generic vial
+function dropperVial(w) {
+  var held = activeAbx(), id = 'generic';
+  if (held.length) { if (w.vialPick && held.indexOf(w.vialPick) >= 0) id = w.vialPick; else { var bs = -1; for (var i = 0; i < held.length; i++) { var s = (BOONS[held[i]].potency || 1) * (1 - 0.5 * abxRes(held[i])); if (s > bs) { bs = s; id = held[i]; } } } }
+  var v = ABX_VIALS[id] || ABX_VIALS.generic;
+  return { id: id, short: v.short, color: v.color, mult: function (e) { return id === 'generic' ? (e.family === 'MICROBE' ? 1 + 0.5 * (1 - 0.5 * abxRes('generic')) : 1) : abxBonus(id, e); } };
+}
+function carriedWeapon(id) { for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === id) return G.weapons[i]; return null; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §6d  PATRONS (the altars) and REPS (the sales cast). Every human figure here is a procedural cartoon
+   caricature (drawCaricature): stylized, never a likeness. Patrons own themed boon pools; taking a boon
+   earns favor that upgrades that patron's next offer. Reps are invented people from invented companies.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var PATRONS = {
+  civiale: { name: 'Civiale', full: 'Jean Civiale (1792–1867)', color: '#38e8ff', glyph: 'diamond', pool: ['kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'moses', 'dualfreq', 'bigfiber'],
+    blurb: 'Lithotrity, 1824: the first to crush a bladder stone through the urethra instead of cutting for it.',
+    greet: ['Why cut when one may crush? Choose, and crush well.', 'A stone is only a problem of patience and the right instrument.', 'Paris taught me: the smallest fragment still counts.'],
+    look: { skin: '#f1c9a3', hair: '#3a2a22', hairStyle: 'wild', facial: 'muttonchops', glasses: 'none', collar: 'cravat', suit: '#2b2f4a', tie: '#e8eef5', acc: 'none', grin: 'line' } },
+  young:   { name: 'Young', full: 'Hugh Hampton Young (1870–1945)', color: '#ff4d6d', glyph: 'tri', pool: ['txa', 'perfectswap', 'quickhands', 'backup', 'wolf', 'ketorolac'],
+    blurb: 'Built modern urology at Johns Hopkins: the perineal prostatectomy, the punch, the first urology journal.',
+    greet: ['Steady hands, sharp steel, and a plan for the bleeding.', 'Baltimore sends its regards. Take what a surgeon needs.', 'A new specialty needs new tools. Here are a few.'],
+    look: { skin: '#f4d2b0', hair: '#555b66', hairStyle: 'side', facial: 'none', glasses: 'round', collar: 'bowtie', suit: '#2a2a2a', tie: '#ff4d6d', acc: 'none', grin: 'grin' } },
+  bovie:   { name: 'Bovie', full: 'William T. Bovie (1882–1958)', color: '#ffb630', glyph: 'bolt', pool: ['groundpad', 'debride', 'smokevac', 'bipolar'],
+    blurb: 'The physicist whose electrosurgical generator (1926, with Cushing) still carries his name in every OR.',
+    greet: ['Current cuts, current coagulates. Mind the ground pad.', 'Every surgeon says my name and few know my face. Fitting.', 'Physics in the operating room. You are welcome.'],
+    look: { skin: '#efc7a0', hair: '#8a7a66', hairStyle: 'bald', facial: 'none', glasses: 'square', collar: 'labcoat', suit: '#e8eef5', tie: '#ffb630', acc: 'bolt', grin: 'grin' } },
+  foley:   { name: 'Foley', full: 'Frederic Foley (1891–1966)', color: '#5df07a', glyph: 'drop', pool: ['hydrophilic', 'hydration', 'cbi'],
+    blurb: 'The balloon catheter that bears his name (1930s), designed to hold itself in place.',
+    greet: ['Drainage, irrigation, patience. The rest is plumbing.', 'A balloon in the right place saves a great deal of trouble.', 'Keep the fluid moving, Doctor.'],
+    look: { skin: '#f4d2b0', hair: '#2a1a10', hairStyle: 'slick', facial: 'mustache', glasses: 'none', collar: 'suit', suit: '#1f3a4c', tie: '#5df07a', acc: 'balloon', grin: 'grin' } },
+  huggins: { name: 'Huggins', full: 'Charles Huggins (1901–1997)', color: '#d98cff', glyph: 'medal', pool: ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'insulin'],
+    blurb: 'Nobel Prize 1966: showed that prostate cancer depends on hormones — cancer could be treated with chemistry.',
+    greet: ['Cancer is not a stone; it listens to chemistry.', 'Take away what the tumour feeds on.', 'Stockholm was pleasant. The prostate, less so.'],
+    look: { skin: '#f1c9a3', hair: '#d8d8d8', hairStyle: 'side', facial: 'none', glasses: 'none', collar: 'suit', suit: '#3a2a5a', tie: '#d98cff', acc: 'medal', grin: 'line' } },
+  gleason: { name: 'Gleason', full: 'Donald Gleason (1920–2008)', color: '#ffd166', glyph: 'grade', pool: ['grading'], rare: true,
+    blurb: 'The pathologist whose 1966 grading system scores prostate cancer by the architecture of its glands.',
+    greet: ['Pattern three plus pattern four. Everything is a grade.', 'I do not treat. I describe. Describing changes everything.', 'Show me the architecture.'],
+    look: { skin: '#f4d2b0', hair: '#4a3a2a', hairStyle: 'side', facial: 'none', glasses: 'square', collar: 'labcoat', suit: '#e8eef5', tie: '#ffd166', acc: 'pencil', grin: 'line' } },
+  nitze:   { name: 'Nitze', full: 'Maximilian Nitze (1848–1906)', color: '#eef4f8', glyph: 'eye', pool: ['coldlight', 'digiscope', 'cystoscope'],
+    blurb: 'Built the first practical cystoscope (1879): a lens, a tube and a glowing platinum wire.',
+    greet: ['You cannot treat what you cannot see. So: see.', 'Light at the tip, lens at the eye. The bladder has no secrets.', 'Look first. Then act.'],
+    look: { skin: '#efc7a0', hair: '#2a1a10', hairStyle: 'slick', facial: 'beard', glasses: 'pince', collar: 'suit', suit: '#2a2f3a', tie: '#eef4f8', acc: 'mirror', grin: 'line' } },
+  fleming: { name: 'Fleming', full: 'Alexander Fleming (1881–1955) · honorary guest', color: '#7ad7ff', glyph: 'petri', pool: ['ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin'], guest: true,
+    blurb: 'Not a urologist: an honorary guest. His mouldy plate (1928) gave you antibiotics, and he warned you about resistance.',
+    greet: ['I did not invent penicillin; I noticed it. Notice your cultures.', 'Use them wisely, or the microbes will educate you.', 'Narrow when you can. Broad when you must.'],
+    look: { skin: '#f4d2b0', hair: '#d8d8d8', hairStyle: 'side', facial: 'none', glasses: 'none', collar: 'labcoat', suit: '#e8eef5', tie: '#7ad7ff', acc: 'petri', grin: 'grin' } }
+};
+var PATRON_ORDER = Object.keys(PATRONS);
+(function () { for (var id in PATRONS) PATRONS[id].id = id; })();
+function patronPool(pid) {
+  var p = PATRONS[pid], out = []; if (!p) return out;
+  for (var i = 0; i < p.pool.length; i++) {
+    var id = p.pool[i], b = BOONS[id]; if (!b) continue;
+    if (id === 'grading') { if (gradeable().length) out.push(id); continue; }
+    if (hasBoon(id) || !boonUnlocked(id)) continue;
+    if (b.requires) { var ok = true; for (var r = 0; r < b.requires.length; r++) if (!hasBoon(b.requires[r])) ok = false; if (!ok) continue; }
+    out.push(id);
+  }
+  return out;
+}
+// which patron owns a boon door / altar: anyone with something left to give; Gleason is rare and only shows when a boon can be graded
+function pickPatron() {
+  var pool = []; for (var i = 0; i < PATRON_ORDER.length; i++) { var pid = PATRON_ORDER[i]; if (!patronPool(pid).length) continue; pool.push([pid, PATRONS[pid].rare ? 0.25 : 1]); }
+  if (!pool.length) return null;
+  var tot = 0; for (var p = 0; p < pool.length; p++) tot += pool[p][1];
+  var x = rnd() * tot; for (var q = 0; q < pool.length; q++) { x -= pool[q][1]; if (x <= 0) return pool[q][0]; }
+  return pool[pool.length - 1][0];
+}
+function patronOf(id) { for (var i = 0; i < PATRON_ORDER.length; i++) if (PATRONS[PATRON_ORDER[i]].pool.indexOf(id) >= 0) return PATRON_ORDER[i]; return null; }
+/* Gleason grading: a held boon's numeric bonuses scale with its grade (boonTierMul) */
+function gradeable() { var out = []; for (var i = 0; i < G.boons.length; i++) { var id = G.boons[i], b = BOONS[id]; if ((b.dmg || b.strip) && (((G.boonTier && G.boonTier[id]) || 1) < 3)) out.push(id); } return out; }
+function gradeBoon(id) {
+  if (!BOONS[id] || !hasBoon(id)) return false; if (!G.boonTier) G.boonTier = {};
+  G.boonTier[id] = Math.min(3, ((G.boonTier[id]) || 1) + 1); G.stats.grades = (G.stats.grades || 0) + 1; recordSeen('b:grading');
+  if (P) addText(P.x, P.y - 44, 'GLEASON GRADE ' + G.boonTier[id] + ' · ' + BOONS[id].name.toUpperCase(), { color: '#ffd166', size: 14 }); Snd.sfx('jingle');
+  return true;
+}
+var gradeRef = null;
+function openGradeChooser(onDone, onCancel) {
+  gradeRef = { onDone: onDone, onCancel: onCancel }; openOverlay('grade'); var wrap = $('gradeCards'); wrap.innerHTML = '';
+  var list = gradeable(); if (!list.length) wrap.appendChild(el('p', 'hint', 'Nothing here can be graded yet: hold a damage or strip boon below Grade 3.'));
+  for (var i = 0; i < list.length; i++) (function (id) {
+    var t = (G.boonTier && G.boonTier[id]) || 1, card = boonCard(id, function () { var ref = gradeRef; gradeRef = null; gradeBoon(id); ref.onDone(); });
+    card.appendChild(el('div', '', '<span class="tag capstone">Grade ' + t + ' → ' + (t + 1) + '</span>')); wrap.appendChild(card);
+  })(list[i]);
+}
+/* patron glyphs for door plaques and altars */
+function drawPatronGlyph(c, pid, x, y, s) {
+  var p = PATRONS[pid]; if (!p) return; var col = p.color, g = p.glyph;
+  if (g === 'diamond' || g === 'tri' || g === 'bolt' || g === 'drop') { drawGlyph(c, { diamond: 'LITHO', tri: 'CUT', bolt: 'ENERGY', drop: 'FLUID' }[g], x, y, s, false); return; }
+  c.save(); c.translate(x, y); c.lineJoin = 'round'; c.lineCap = 'round';
+  if (g === 'medal') { c.fillStyle = '#c23b5a'; c.beginPath(); c.moveTo(-s * 0.45, -s * 1.0); c.lineTo(s * 0.45, -s * 1.0); c.lineTo(s * 0.2, -s * 0.15); c.lineTo(-s * 0.2, -s * 0.15); c.closePath(); c.fill(); outline(c, s * 0.12); c.fillStyle = col; c.beginPath(); c.arc(0, s * 0.35, s * 0.6, 0, TAU); c.fill(); outline(c, s * 0.14); c.fillStyle = '#fff'; c.save(); c.translate(0, s * 0.35); starPath(c, s * 0.32, s * 0.14, 5, -Math.PI / 2); c.fill(); c.restore(); }
+  else if (g === 'grade') { for (var i = 0; i < 5; i++) { var h = s * (0.35 + i * 0.3); c.fillStyle = i < 3 ? col : '#ff6b8a'; c.fillRect(-s * 0.95 + i * s * 0.4, s * 0.9 - h, s * 0.3, h); } c.strokeStyle = OUTLINE; c.lineWidth = s * 0.12; c.beginPath(); c.moveTo(-s, s * 0.95); c.lineTo(s, s * 0.95); c.stroke(); }
+  else if (g === 'eye') { c.fillStyle = '#fff'; c.beginPath(); c.moveTo(-s, 0); c.quadraticCurveTo(0, -s * 1.1, s, 0); c.quadraticCurveTo(0, s * 1.1, -s, 0); c.closePath(); c.fill(); outline(c, s * 0.14); c.fillStyle = '#38e8ff'; c.beginPath(); c.arc(0, 0, s * 0.42, 0, TAU); c.fill(); c.fillStyle = OUTLINE; c.beginPath(); c.arc(0, 0, s * 0.2, 0, TAU); c.fill(); }
+  else if (g === 'petri') { c.fillStyle = '#e8f4ff'; c.beginPath(); c.arc(0, 0, s * 0.9, 0, TAU); c.fill(); outline(c, s * 0.16); c.fillStyle = hexA(col, 0.45); c.beginPath(); c.arc(0, 0, s * 0.68, 0, TAU); c.fill(); c.fillStyle = col; for (var pd = 0; pd < 5; pd++) { c.beginPath(); c.arc(Math.cos(pd * 1.3) * s * 0.4, Math.sin(pd * 1.3) * s * 0.4, s * 0.14, 0, TAU); c.fill(); } }
+  c.restore();
+}
+/* the caricature engine: a bust in a ~64-unit box (head radius 20), parameterised by a `look`. Stylized and symbolic, never a likeness. */
+function drawCaricature(c, L, s) {
+  s = s || 1; c.save(); c.scale(s, s); c.lineJoin = 'round'; c.lineCap = 'round';
+  var skin = L.skin || '#f4c89a', hair = L.hair || '#3a2a1a';
+  c.fillStyle = L.suit || '#23324a'; c.beginPath(); c.moveTo(-30, 44); c.quadraticCurveTo(-30, 22, -14, 20); c.lineTo(14, 20); c.quadraticCurveTo(30, 22, 30, 44); c.closePath(); c.fill(); outline(c, 3);
+  if (L.collar === 'labcoat') { c.fillStyle = '#f4f8ff'; c.beginPath(); c.moveTo(-30, 44); c.quadraticCurveTo(-30, 22, -14, 20); c.lineTo(-4, 34); c.lineTo(-4, 44); c.closePath(); c.fill(); outline(c, 2.5); c.beginPath(); c.moveTo(30, 44); c.quadraticCurveTo(30, 22, 14, 20); c.lineTo(4, 34); c.lineTo(4, 44); c.closePath(); c.fill(); outline(c, 2.5); c.fillStyle = L.tie || '#ffd166'; c.fillRect(-2, 24, 4, 20); }
+  else if (L.collar === 'cravat') { c.fillStyle = L.tie || '#e8eef5'; c.beginPath(); c.moveTo(-10, 20); c.quadraticCurveTo(0, 38, 10, 20); c.quadraticCurveTo(0, 27, -10, 20); c.fill(); outline(c, 2); }
+  else if (L.collar === 'bowtie') { c.fillStyle = L.tie || '#ff4d6d'; c.beginPath(); c.moveTo(-9, 20); c.lineTo(-1, 24); c.lineTo(-9, 28); c.closePath(); c.moveTo(9, 20); c.lineTo(1, 24); c.lineTo(9, 28); c.closePath(); c.fill(); outline(c, 2); }
+  else if (L.collar === 'polo') { c.fillStyle = L.tie || '#ffb630'; c.beginPath(); c.moveTo(-9, 20); c.lineTo(0, 30); c.lineTo(9, 20); c.lineTo(6, 36); c.lineTo(-6, 36); c.closePath(); c.fill(); outline(c, 2); }
+  else { c.fillStyle = '#f4f8ff'; c.beginPath(); c.moveTo(-8, 20); c.lineTo(0, 34); c.lineTo(8, 20); c.closePath(); c.fill(); c.fillStyle = L.tie || '#38e8ff'; c.beginPath(); c.moveTo(-2.5, 22); c.lineTo(2.5, 22); c.lineTo(3.5, 40); c.lineTo(0, 44); c.lineTo(-3.5, 40); c.closePath(); c.fill(); outline(c, 1.5); }
+  c.fillStyle = skin; c.beginPath(); c.ellipse(0, -4, 20, 23, 0, 0, TAU); c.fill(); outline(c, 3.2);
+  c.beginPath(); c.arc(-20, -2, 4.5, 0, TAU); c.arc(20, -2, 4.5, 0, TAU); c.fill(); outline(c, 2);
+  c.fillStyle = hair;
+  if (L.hairStyle === 'slick') { c.beginPath(); c.ellipse(0, -18, 21, 11, 0, Math.PI, 0); c.lineTo(21, -14); c.quadraticCurveTo(0, -8, -21, -14); c.closePath(); c.fill(); outline(c, 2.5); }
+  else if (L.hairStyle === 'side') { c.beginPath(); c.ellipse(0, -16, 21, 12, 0, Math.PI, 0); c.lineTo(21, -10); c.lineTo(-21, -10); c.closePath(); c.fill(); outline(c, 2.5); c.fillStyle = skin; c.beginPath(); c.ellipse(5, -20, 10, 6, 0.2, 0, TAU); c.fill(); }
+  else if (L.hairStyle === 'wild') { for (var i = 0; i < 7; i++) { var a = Math.PI + i / 6 * Math.PI; c.beginPath(); c.ellipse(Math.cos(a) * 17, -6 + Math.sin(a) * 19, 8, 11, a, 0, TAU); c.fill(); outline(c, 2); } }
+  else if (L.hairStyle === 'bob') { c.beginPath(); c.ellipse(0, -14, 24, 20, 0, Math.PI, 0); c.lineTo(24, 10); c.lineTo(15, 10); c.lineTo(15, -6); c.quadraticCurveTo(0, -11, -15, -6); c.lineTo(-15, 10); c.lineTo(-24, 10); c.closePath(); c.fill(); outline(c, 2.5); }
+  else if (L.hairStyle === 'curls') { for (var k = 0; k < 9; k++) { var ca = Math.PI * 0.9 + k / 8 * Math.PI * 1.2; c.beginPath(); c.arc(Math.cos(ca) * 19, -8 + Math.sin(ca) * 20, 7, 0, TAU); c.fill(); outline(c, 2); } }
+  else if (L.hairStyle === 'bald') { c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(-6, -20, 6, 3, -0.4, 0, TAU); c.fill(); }
+  eyes(c, 0, -4, 7.5, 4.6, L.look === undefined ? -0.4 : L.look, 1, L.mood || null, { asym: 0.9 });
+  if (L.glasses === 'round' || L.glasses === 'pince') { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.beginPath(); c.arc(-7.5, -4, 6.5, 0, TAU); c.moveTo(14, -4); c.arc(7.5, -4, 6.5, 0, TAU); c.moveTo(-1, -4); c.lineTo(1, -4); c.stroke(); if (L.glasses === 'pince') { c.beginPath(); c.moveTo(14, -4); c.quadraticCurveTo(23, 4, 21, 16); c.stroke(); } }
+  else if (L.glasses === 'square') { c.strokeStyle = OUTLINE; c.lineWidth = 2; c.strokeRect(-14, -9.5, 12, 11); c.strokeRect(2, -9.5, 12, 11); c.beginPath(); c.moveTo(-2, -4); c.lineTo(2, -4); c.stroke(); }
+  c.strokeStyle = OUTLINE; c.lineWidth = 2; c.beginPath(); c.moveTo(1, 0); c.quadraticCurveTo(4, 5, 0, 6); c.stroke();
+  var grin = L.grin || 'grin';
+  if (L.facial === 'mustache') { c.fillStyle = hair; c.beginPath(); c.ellipse(-6, 9, 7, 3, 0.3, 0, TAU); c.ellipse(6, 9, 7, 3, -0.3, 0, TAU); c.fill(); outline(c, 1.5); mouth(c, 0, 14, 5, grin); }
+  else if (L.facial === 'beard') { c.fillStyle = hair; c.beginPath(); c.moveTo(-17, 2); c.quadraticCurveTo(-18, 26, 0, 28); c.quadraticCurveTo(18, 26, 17, 2); c.quadraticCurveTo(10, 14, 0, 14); c.quadraticCurveTo(-10, 14, -17, 2); c.closePath(); c.fill(); outline(c, 2); c.fillStyle = skin; c.beginPath(); c.ellipse(0, 11, 5, 2.5, 0, 0, TAU); c.fill(); }
+  else if (L.facial === 'muttonchops') { c.fillStyle = hair; c.beginPath(); c.ellipse(-16, 6, 5, 11, 0.2, 0, TAU); c.ellipse(16, 6, 5, 11, -0.2, 0, TAU); c.fill(); outline(c, 1.5); mouth(c, 0, 12, 6, grin); }
+  else if (L.facial === 'goatee') { c.fillStyle = hair; c.beginPath(); c.moveTo(-5, 14); c.lineTo(5, 14); c.lineTo(0, 23); c.closePath(); c.fill(); outline(c, 1.5); mouth(c, 0, 11, 6, grin); }
+  else { mouth(c, 0, 11, 7, grin); if (L.teeth && grin === 'grin') teeth(c, 0, 9, 6, L.teeth, false); }
+  if (L.acc === 'headset') { c.strokeStyle = '#111'; c.lineWidth = 2.5; c.beginPath(); c.arc(0, -8, 23, Math.PI * 1.05, Math.PI * 1.95); c.stroke(); c.fillStyle = '#111'; c.beginPath(); c.arc(-22, -4, 4, 0, TAU); c.fill(); c.beginPath(); c.moveTo(-22, 0); c.quadraticCurveTo(-18, 14, -8, 14); c.stroke(); c.beginPath(); c.arc(-8, 14, 2.5, 0, TAU); c.fill(); }
+  else if (L.acc === 'mirror') { c.strokeStyle = '#333'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-20, -14); c.quadraticCurveTo(0, -30, 20, -14); c.stroke(); c.fillStyle = '#cfe8ff'; c.beginPath(); c.arc(0, -29, 8, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = '#333'; c.beginPath(); c.arc(0, -29, 2.5, 0, TAU); c.fill(); }
+  else if (L.acc === 'medal') { c.fillStyle = '#c23b5a'; c.fillRect(10, 22, 6, 12); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(13, 38, 6, 0, TAU); c.fill(); outline(c, 1.5); }
+  else if (L.acc === 'pencil') { c.save(); c.translate(19, -10); c.rotate(-0.5); c.fillStyle = '#ffd166'; c.fillRect(-2, -12, 4, 20); c.fillStyle = '#f4c89a'; c.beginPath(); c.moveTo(-2, 8); c.lineTo(2, 8); c.lineTo(0, 13); c.closePath(); c.fill(); outline(c, 1.2); c.restore(); }
+  else if (L.acc === 'petri') { c.fillStyle = '#e8f4ff'; c.beginPath(); c.ellipse(22, 36, 10, 5, 0, 0, TAU); c.fill(); outline(c, 1.5); c.fillStyle = '#7ad7ff'; for (var pd = 0; pd < 4; pd++) { c.beginPath(); c.arc(22 + Math.cos(pd * 1.6) * 5, 36 + Math.sin(pd * 1.6) * 2, 1.6, 0, TAU); c.fill(); } }
+  else if (L.acc === 'balloon') { c.fillStyle = 'rgba(93,240,122,0.8)'; c.beginPath(); c.arc(24, 24, 7, 0, TAU); c.fill(); outline(c, 1.5); c.strokeStyle = OUTLINE; c.lineWidth = 1.2; c.beginPath(); c.moveTo(24, 31); c.lineTo(20, 44); c.stroke(); }
+  else if (L.acc === 'bolt') { drawGlyph(c, 'ENERGY', -16, 32, 5, false); }
+  else if (L.acc === 'lanyard') { c.strokeStyle = L.tie || '#38e8ff'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-10, 22); c.lineTo(-4, 40); c.moveTo(10, 22); c.lineTo(4, 40); c.stroke(); c.fillStyle = '#fff'; c.fillRect(-7, 38, 14, 9); c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.strokeRect(-7, 38, 14, 9); }
+  c.restore();
+}
+/* the reps: four invented salespeople from invented device companies */
+var REPS = [
+  { id: 'brax', name: 'Brax Calloway', company: 'Lumenex Surgical', title: 'Regional Director of Everything', color: '#38e8ff',
+    look: { skin: '#f4c89a', hair: '#2a1a10', hairStyle: 'slick', facial: 'none', glasses: 'none', collar: 'suit', suit: '#1d2a4a', tie: '#38e8ff', acc: 'headset', grin: 'grin', teeth: 4, look: -0.3 },
+    pitches: ['Doc. DOC. Lumenex just dropped the new and improved coupling. Off-label? Technically. Game-changing? Absolutely.', 'I flew in for this. Not for you — for the quota — but still. The attachment practically installs itself.', 'The competitor down the hall already has three of these. That is not pressure. That is information.', 'Trial period: forever. Return policy: a handshake. Warranty: my cell number.', 'This is the one. I said that about the last one. This is the one.', 'Evidence? Level One. I have a binder. The binder is in the car.', 'Branded pens. Branded sticky notes. A branded lanyard. None of it does anything. All of it is yours.'] },
+  { id: 'kiki', name: 'Kiki Marchetti', company: 'StoneWorks Medical', title: 'Clinical Specialist (Enthusiasm)', color: '#ffd166',
+    look: { skin: '#f1c9a3', hair: '#5a2a1a', hairStyle: 'bob', facial: 'none', glasses: 'round', collar: 'suit', suit: '#4a2a5a', tie: '#ffd166', acc: 'lanyard', grin: 'grin', mood: 'happy' },
+    pitches: ['Oh my gosh, hi! Love the scrubs. Is that teal? Anyway: new and improved fiber, off-label for basically everything.', 'I brought snacks, I brought stickers, I brought the upgrade. The upgrade is the important one. The snacks are good though.', 'You remember me! You don’t? That is okay. I remember you. I remember everyone.', 'This attachment is my favourite. All of them are my favourite. This one especially.', 'We did a lunch-and-learn for your attendings. They loved it. They also loved the lunch.', 'Sticky notes shaped like kidneys! They don’t do anything. They are adorable.', 'Off-label is just a label waiting to happen. Stay positive!'] },
+  { id: 'rex', name: 'Rex Pennington', company: 'OmniCautery Systems', title: 'Clinical Liaison (not a doctor)', color: '#ffb630',
+    look: { skin: '#efc7a0', hair: '#8a7a66', hairStyle: 'bald', facial: 'goatee', glasses: 'square', collar: 'polo', suit: '#3a3a3a', tie: '#ffb630', acc: 'none', grin: 'grin', look: 0.2 },
+    pitches: ['I can’t legally say what this does. So I will wink. Off-label. There, I said it.', 'Cleared for something. Doesn’t matter what. Surgeons are creative. Be creative.', 'The last rep told you theirs was new and improved. They were lying. THIS is new and improved.', 'Keep the pen. Keep the sticky notes. They do nothing, which is more than my last job did.', 'Somebody in Ohio uses it for the thing you are thinking of. Off-label. Allegedly.', 'My badge says Clinical Liaison. My mom says I am basically a doctor. I am not a doctor.', 'Warranty void if used as directed. Kidding. Mostly.'] },
+  { id: 'sunny', name: 'Sunny Okafor', company: 'FluidLogic Devices', title: 'Director of New and Improved', color: '#5df07a',
+    look: { skin: '#9a6a46', hair: '#1a1210', hairStyle: 'curls', facial: 'none', glasses: 'none', collar: 'suit', suit: '#1f3a4c', tie: '#5df07a', acc: 'lanyard', grin: 'grin', teeth: 5, mood: 'happy' },
+    pitches: ['New and improved! The old one was also new and improved. This one is newer. Improved-er.', 'Version 2.0 fixed 1.0. Version 3.0 fixed 2.0. This is 3.1. Off-label since 2.0.', 'We renamed it. Same device, new name, new and improved. The name is doing a lot of work.', 'Free pens, free sticky notes, free pizza next Tuesday. The pens don’t work. The pizza will.', 'Our engineers made it 12% better. At what? They were vague. Twelve percent, though.', 'The sticker says NEW. The sticker is itself new. Everything here is new.', 'If it breaks, that was a feature of the old version. This is the new version.'] }
+];
+var REP_CLOSER = 'I’ll just leave this with you.';
+function repById(id) { for (var i = 0; i < REPS.length; i++) if (REPS[i].id === id) return REPS[i]; return REPS[0]; }
+// the rep's free-sample drawback lasts the current room (restored in enterRoom)
+function applySampleDrawback(kind) {
+  G.roomDebuff = { kind: kind, room: G.roomIndex };
+  if (kind === 'hp') { var loss = Math.max(1, Math.round(P.maxHp * 0.1)); P.maxHp -= loss; P.hp = Math.min(P.hp, P.maxHp); G.roomDebuff.loss = loss; addText(P.x, P.y - 44, '−' + loss + ' MAX HP THIS ROOM', { color: '#ff6b8a', size: 13 }); }
+  else addText(P.x, P.y - 44, '+10% HEAT THIS ROOM', { color: '#ff9f43', size: 13 });
+}
+function heatMul() { return G.roomDebuff && G.roomDebuff.kind === 'heat' && G.roomDebuff.room === G.roomIndex ? 1.1 : 1; }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §11 ROOM TEMPLATES — obstacles (rect | circle) + floor hazards + clot walls. Doors: W entrance,
@@ -2283,6 +2585,7 @@ var DOOR_TYPES = {
   shop:    { label: 'Supply closet (shop)',  icon: 'coin',  color: '#ffd166' },
   elite:   { label: 'ELITE · crate + altar', icon: 'skull', color: '#ff4d6d' },
   rep:     { label: 'Combat · Instrument Rep (a mod for one of your weapons)', icon: 'rep', color: '#ffd166' },   // colour/icon come from the door's weapon
+  culture: { label: 'Combat · Culture & Sensitivity (reveals the next room\'s microbes)', icon: 'petri', color: '#9fe6ff' },
   mystery: { label: '???',                   icon: 'question', color: '#8fa6b8' },
   rest:    { label: 'Call room (rest)',      icon: 'bed',   color: '#7dffb0' },
   boss:    { label: 'THE STAGHORN',          icon: 'antler', color: '#38e8ff' }
@@ -2310,7 +2613,8 @@ var G = {
   roomIndex: 0, room: null, cleared: false, waves: null, banner: null, tutorial: null, aimTarget: null,
   stats: null, over: false, won: false, fosfo: false, fosfoRoom: -1, killChain: [], wolfT: 0, lowHpT: 0, fps: 0, frames: 0, fpsT: 0,
   spawner: false, endT: 0, visited: [], ult: null,
-  fields: [], detailT: 0, detailSlot: -1   // damage fields (wire whip); weapon-detail card timer after a slot tap
+  fields: [], detailT: 0, detailSlot: -1,  // damage fields (wire whip); weapon-detail card timer after a slot tap
+  dropRes: {}, abxRes: {}, boonTier: {}, favor: {}, collateral: null, culture: null, roomDebuff: null, pens: 0, revealRoom: -1   // §6c antibiotics · patrons · reps
 };
 var P = null;
 var vignette = null;
@@ -2330,7 +2634,8 @@ function recordBestiary(id, killed) { var b = META.bestiary[id] || (META.bestiar
 function makeWeapon(id, rarity) {
   rarity = rarity || 'common';
   var w = { id: id, def: WEAPONS[id], mode: 0, heat: 0, power: 1, pressure: 0, charge: 0, cd: 0, cd2: 0, tick: 0, locked: 0, rarity: rarity, mods: RARITY_MODS[rarity](), fx: null, fx2: null, held: null, wire: null, swing: null, lunge: 0, burst: 0, burstT: 0, bal: null, drained: false, suck: false, active: false, full: false, dir: 1,
-    modIds: [], capstone: null, ms: {}, flags: {}, aspect: chosenAspect(id) };   // mods + aspect (§6b); ms/flags are derived by recomputeWeapon
+    modIds: [], capstone: null, ms: {}, flags: {}, aspect: chosenAspect(id),   // mods + aspect (§6b); ms/flags are derived by recomputeWeapon
+    drops: DROPPER_MAX, squeeze: null, vialPick: null };                         // Antibiotic Dropper state
   recomputeWeapon(w);
   return w;
 }
@@ -2377,14 +2682,35 @@ function updateWeapons(dt) {
 }
 
 /* ── boons ── */
-function giveBoon(id) {
+function giveBoon(id, force) {
   var b = BOONS[id]; if (!b || hasBoon(id)) return false;
+  if (b.abxActive && !force && abxCapBlocks(id)) return false;   // two antibiotics at a time: the UI goes through tryTakeBoon → stewardship prompt
+  if (b.consumable) { return b.consume ? b.consume() : false; }   // e.g. Gleason Grading: acts once, is not carried
   G.boons.push(id); if (b.apply) b.apply(); if (b.oneShot) G.fosfo = true; G.stats.boons.push(id); recordSeen('b:' + id);
   Snd.sfx('pickup'); if (P) addText(P.x, P.y - 44, b.name, { color: BOON_COLORS[b.kind], size: 15 });
   return true;
 }
-function boonMult(e, cls, wid) { var m = 1; for (var i = 0; i < G.boons.length; i++) { var b = BOONS[G.boons[i]]; if (b.dmg) m *= b.dmg(e, cls, wid); } return m; }
-function boonStrip() { var s = 0; for (var i = 0; i < G.boons.length; i++) { var b = BOONS[G.boons[i]]; if (b.strip) s += b.strip; } return s; }
+function dropBoon(id) { var i = G.boons.indexOf(id); if (i < 0) return false; G.boons.splice(i, 1); if (P) addText(P.x, P.y - 60, 'STOPPED ' + BOONS[id].name.toUpperCase(), { color: '#8ea2b6', size: 12 }); return true; }
+// UI path for taking a boon: the antibiotic cap opens the stewardship prompt (stop one, or skip); grading opens its chooser
+var stewardRef = null;
+function tryTakeBoon(id, onDone, onCancel) {
+  if (abxCapBlocks(id)) { openSteward(id, onDone, onCancel); return; }
+  if (id === 'grading') { openGradeChooser(onDone, onCancel); return; }
+  giveBoon(id); onDone();
+}
+function openSteward(id, onDone, onCancel) {
+  stewardRef = { id: id, onDone: onDone, onCancel: onCancel }; openOverlay('steward');
+  var b = BOONS[id], held = activeAbx(), box = $('stewardChoices'); box.innerHTML = '';
+  $('stewardSub').textContent = 'Two antibiotics at a time — that is the rule. To start ' + b.name + ', stop one of the two you are running, or skip it. Resistance you have bred stays with the run.';
+  held.forEach(function (hid) {
+    var btn = el('button', 'btn', 'STOP <b>' + esc(BOONS[hid].name) + '</b> → start ' + esc(b.name) + ' <span class="hint">(' + Math.round(abxRes(hid) * 100) + '% resistance)</span>'); btn.type = 'button';
+    btn.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); var ref = stewardRef; stewardRef = null; dropBoon(hid); giveBoon(id, true); ref.onDone(); }); box.appendChild(btn);
+  });
+  var skip = el('button', 'btn danger', 'SKIP ' + esc(b.name.toUpperCase())); skip.type = 'button'; skip.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); var ref2 = stewardRef; stewardRef = null; ref2.onCancel(); }); box.appendChild(skip);
+}
+// antibiotics go through abxBonus() (spectrum × strain × run resistance × grade); everything else scales its bonus by its Gleason grade
+function boonMult(e, cls, wid) { var m = 1; for (var i = 0; i < G.boons.length; i++) { var id = G.boons[i], b = BOONS[id]; if (!b.dmg) continue; m *= b.abxActive ? abxBonus(id, e) : 1 + (b.dmg(e, cls, wid) - 1) * boonTierMul(id); } return m; }
+function boonStrip(cls) { var s = 0; for (var i = 0; i < G.boons.length; i++) { var id = G.boons[i], b = BOONS[id]; if (b.strip && (!b.stripCls || b.stripCls === cls)) s += b.strip * boonTierMul(id); } return s; }
 function boonWantsPoison(e) { for (var i = 0; i < G.boons.length; i++) { var b = BOONS[G.boons[i]]; if (b.poison && b.poison(e)) return true; } return false; }
 function boonsOnKill(e) { for (var i = 0; i < G.boons.length; i++) { var b = BOONS[G.boons[i]]; if (b.onKill) { try { b.onKill(e); } catch (err) {} } } }
 
@@ -2394,7 +2720,7 @@ function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (t
 function dealDamage(e, base, cls, o) {
   o = o || {};
   if (!e || e.dead || e.spawnT > 0) return 0;
-  if (e.def.isStump) { if (o.cauterize && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
+  if (e.def.isStump) { if ((o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'))) && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
   m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid);
@@ -2422,13 +2748,13 @@ function dealDamage(e, base, cls, o) {
   if (e.elite) { if (!e.armorCls && cls !== 'NEUTRAL') { e.armorCls = cls; addText(e.x, e.y - e.r - 16, 'ARMORED vs ' + CLASSES[cls].name.toUpperCase(), { color: '#ffd166', size: 11 }); } else if (cls === e.armorCls && !o.pierceArmor) m *= 0.2; }
   var rightTool = false;
   if (G.swapBonusT > 0 && mBase >= 1.5 && cls !== 'NEUTRAL') { m *= hasBoon('perfectswap') ? 1.5 : 1.25; G.swapBonusT = 0; rightTool = true; }
-  var critChance = (o.crit || 0) + (hasBoon('digiscope') ? 0.1 : 0), crit = critChance > 0 && rnd() < critChance;
+  var critChance = (o.crit || 0) + (hasBoon('digiscope') ? 0.1 : 0) + (hasBoon('cystoscope') ? 0.05 : 0), crit = critChance > 0 && rnd() < critChance;
   var dmg = base * m * (crit ? 2 : 1);
   if (o.split) e.lastSplit = o.split;
   e.lastHitT = G.time; e.lastHit = G.time;
   // shield
   if (e.shield > 0 && !o.pierceArmor) {
-    var strip = (o.strip || 0) + (cls === 'FLUID' ? 0.05 : 0) + boonStrip() * (o.strip || cls === 'FLUID' || o.wid === 'bovie' ? 1 : 0.15);
+    var strip = (o.strip || 0) + (cls === 'FLUID' ? 0.05 : 0) + boonStrip(cls) * (o.strip || cls === 'FLUID' || o.wid === 'bovie' ? 1 : 0.15);
     if (hasBoon('debride') && rnd() < 0.15) strip = 1;
     e.shield = Math.max(0, e.shield - strip);
     if (e.shield <= 0) { addText(e.x, e.y - e.r - 14, 'SHIELD STRIPPED', { color: '#5df07a', size: 12 }); burst(e.x, e.y, 10, { color: '#7cf29a', speed: 140, life: 0.35, size: 3 }); Snd.sfx('shatter'); }
@@ -2456,9 +2782,10 @@ function dealDamage(e, base, cls, o) {
   if (crit) burst(e.x, e.y - e.r * 0.5, 5, { color: '#fff', speed: 120, life: 0.25, size: 2 });
   G.stats.dmg[cls] = (G.stats.dmg[cls] || 0) + dmg; if (m >= 1.5) G.stats.superHits++;
   // statuses
-  if (o.status) for (var k in o.status) applyStatus(e, k, o.status[k][0], o.status[k][1], !!o.bleedStack && k === 'bleed');
+  if (o.status) for (var k in o.status) applyStatus(e, k, o.status[k][0], o.status[k][1] * (k === 'burn' && hasBoon('smokevac') ? 1.25 : 1), !!o.bleedStack && k === 'bleed');
   if (o.stun) applyStatus(e, 'stun', o.stun, 1);
-  if (o.cauterize && e.st.bleed) { delete e.st.bleed; var bonus = 12 * MATRIX.ENERGY[fam]; e.hp -= bonus; addText(e.x, e.y - e.r - 20, 'CAUTERIZED +' + Math.round(bonus), { color: '#ffb630', size: 12 }); burst(e.x, e.y, 6, { color: '#ffb630', speed: 90, life: 0.3, size: 2, kind: 'smoke' }); Snd.sfx('cauter'); if (e.onCauterized) e.onCauterized(e); }
+  var caut = o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'));   // Bipolar Forceps: any ENERGY hit cauterizes
+  if (caut && e.st.bleed) { delete e.st.bleed; var bonus = 12 * MATRIX.ENERGY[fam] * (hasBoon('bipolar') ? 1.5 : 1); e.hp -= bonus; addText(e.x, e.y - e.r - 20, 'CAUTERIZED +' + Math.round(bonus), { color: '#ffb630', size: 12 }); burst(e.x, e.y, 6, { color: '#ffb630', speed: 90, life: 0.3, size: 2, kind: 'smoke' }); Snd.sfx('cauter'); if (e.onCauterized) e.onCauterized(e); }
   if (hasBoon('bcg') && fam === 'MALIGNANT') applyStatus(e, 'mark', 5, 1);
   if (boonWantsPoison(e)) applyStatus(e, 'poison', 3, 4);
   if (e.onDamaged) e.onDamaged(e, dmg, cls, o);
@@ -2505,6 +2832,7 @@ function spawnEnemy(id, x, y, opts) {
   if (!insideArena(e.x, e.y, e.r)) { e.x = clamp(e.x, ARENA.x + e.r, ARENA.x + ARENA.w - e.r); e.y = clamp(e.y, ARENA.y + e.r, ARENA.y + ARENA.h - e.r); }
   G.enemies.push(e); def.init(e);
   if (G.fosfoRoom === G.roomIndex && e.family === 'MICROBE' && !def.fungus) applyStatus(e, 'poison', 4, 10);
+  if ((G.revealRoom === G.roomIndex && e.family === 'MICROBE') || hasBoon('cystoscope')) applyStatus(e, 'reveal', 999, 1);   // culture result / Nitze's cystoscope: spawn revealed
   if (!def.hidden) { recordSeen('e:' + id); recordBestiary(id, false); }
   if (!opts.instant) G.teles.push({ kind: 'spawn', x: x, y: y, r: e.r, t: 0.7, dur: 0.7 });
   return e;
@@ -2531,6 +2859,7 @@ function killEnemy(e, cls, wid) {
     var hearts = def.hearts || 0; if (!hearts && rnd() < (def.miniBoss ? 1 : 0.04)) hearts = 1;
     for (var h = 0; h < hearts; h++) spawnPickup('iv', e.x, e.y);
     if (def.miniBoss && rnd() < 0.5) spawnPickup('heart', e.x, e.y);
+    if (fam === 'MICROBE' && !def.hidden && carriedWeapon('dropper') && rnd() < 0.12) spawnPickup('vial', e.x, e.y);   // Dropper refills
   }
   if (e.inhaled) addRVU(1, e.x, e.y);
   // stone splitting: fragments or dust
@@ -2551,9 +2880,11 @@ function killEnemy(e, cls, wid) {
   if (e.drained) { addHazard({ kind: 'pus', x: e.x, y: e.y, r: 46, t: 6, dps: 5 }); burst(e.x, e.y, 24, { color: '#d4ff5a', speed: 220, life: 0.5, size: 4, kind: 'goo', g: 350 }); Snd.sfx('pop'); }
   if (def.gasOnDeath && !e.silent) { radialBurst(e.x, e.y, 6, 150, 6, { color: '#b8ff5a', r: 6, life: 2.5 }); burst(e.x, e.y, 10, { color: '#b8ff5a', speed: 100, life: 0.4, size: 4, kind: 'smoke' }); }
   if (def.id === 'cyst') { addHazard({ kind: 'water', x: e.x, y: e.y, r: 42, t: 10 }); if (e.complex) for (var c2 = 0; c2 < 2; c2++) spawnEnemy('ecoli', e.x + rr(-16, 16), e.y + rr(-16, 16), {}); }
-  if (def.id === 'enterococcus') { for (var l = 0; l < G.enemies.length; l++) { var lk = G.enemies[l]; if (lk.id === 'entero_link' && lk.head === e && !lk.dead) { lk.hp = 0; lk.silent = false; killEnemy(lk, cls, wid); } } }
+  if (def.id === 'enterococcus' || def.base === 'enterococcus') { for (var l = 0; l < G.enemies.length; l++) { var lk = G.enemies[l]; if (lk.id === 'entero_link' && lk.head === e && !lk.dead) { lk.hp = 0; lk.silent = false; killEnemy(lk, cls, wid); } } }
+  if (def.toxinOnDeath && !e.silent) { addHazard({ kind: 'toxin', x: e.x, y: e.y, r: 58, t: 3.5 }); burst(e.x, e.y, 14, { color: '#b8ff5a', speed: 110, life: 0.5, size: 5, kind: 'smoke' }); addText(e.x, e.y - e.r - 24, 'TOXIN CLOUD', { color: '#b8ff5a', size: 12 }); }   // C. difficile pods burst
   if (e.heldBy) { var bw = curWeapon(); if (bw && bw.held === e) bw.held = null; }
   boonsOnKill(e); modsOnKill(e, cls, wid);
+  if (fam === 'MICROBE' && !e.silent) { var ab = activeAbx(); for (var ai = 0; ai < ab.length; ai++) if (BOONS[ab[ai]].dmg(e, cls, wid) > 1) abxUse(ab[ai], 1); }   // every covered microbe kill teaches resistance
   if (wid === 'roller' && (fam === 'BENIGN' || fam === 'CLOT')) healPlayer(3);
   // kill chain → Wolf in Scrubs
   if (!e.silent && !def.hidden) { G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
@@ -2660,11 +2991,12 @@ function updatePlayer(dt) {
   if (P.moving && G.tutorial && !G.tutorial.moved) G.tutorial.moved = true;
   var sp = P.speed * (hasBoon('ketorolac') ? 1.1 : 1) * (G.wolfT > 0 ? 1.4 : 1);
   var cur = curWeapon(); if (cur && cur.def.slowWhile) sp *= cur.def.slowWhile(cur);
-  if (inHazard(P.x, P.y, 'slime') || inHazard(P.x, P.y, 'sticky') || inHazard(P.x, P.y, 'biofilm')) sp *= 0.62;
-  var goo = inHazard(P.x, P.y, 'goo'); if (goo) { sp *= 0.7; P.gooT = (P.gooT || 0) - dt; if (P.gooT <= 0) { P.gooT = 0.5; hurtPlayer(1.5, 'goo', 0, true); } }
+  if (!hasBoon('cbi') && (inHazard(P.x, P.y, 'slime') || inHazard(P.x, P.y, 'sticky') || inHazard(P.x, P.y, 'biofilm'))) sp *= 0.62;   // Foley's CBI: full speed through slime and goo
+  var goo = inHazard(P.x, P.y, 'goo'); if (goo) { if (!hasBoon('cbi')) sp *= 0.7; P.gooT = (P.gooT || 0) - dt; if (P.gooT <= 0) { P.gooT = 0.5; hurtPlayer(1.5, 'goo', 0, true); } }
+  var tox = inHazard(P.x, P.y, 'toxin'); if (tox) { sp *= 0.85; P.toxT = (P.toxT || 0) - dt; if (P.toxT <= 0) { P.toxT = 0.5; hurtPlayer(2, 'toxin', 0, true); } }   // C. difficile toxin cloud
   var pus = inHazard(P.x, P.y, 'pus'); if (pus) { sp *= 0.8; P.pusT = (P.pusT || 0) - dt; if (P.pusT <= 0) { P.pusT = 0.5; hurtPlayer(1.5, 'pus', 0, true); } }
   if (P.necroSlow) { sp *= 0.6; P.necroSlow = false; }
-  if (inHazard(P.x, P.y, 'burn')) P.burn = Math.max(P.burn, 1.5);
+  if (!hasBoon('smokevac') && inHazard(P.x, P.y, 'burn')) P.burn = Math.max(P.burn, 1.5);   // Bovie's Smoke Evacuator: your own burn zones don't hurt you
   if (P.roll > 0) {
     P.roll -= dt; P.x += P.rollDx * dt; P.y += P.rollDy * dt; P.rollT = (P.rollT || 0) + dt;
     if (P.rollT > 0.04) { P.rollT = 0; P.after.push({ x: P.x, y: P.y, t: 0.25, a: P.aim }); }
@@ -2920,6 +3252,8 @@ function updatePickups(dt) {
       else if (p.kind === 'iv') { healPlayer(hasBoon('insulin') ? 31 : 25); Snd.sfx('heal'); }
       else if (p.kind === 'heart') { P.maxHp += 10; healPlayer(hasBoon('insulin') ? 13 : 10); addText(P.x, P.y - 44, 'MAX HP +10', { color: '#ff6b8a', size: 15 }); Snd.sfx('heal'); }
       else if (p.kind === 'vent') { for (var w = 0; w < G.weapons.length; w++) { var ww = G.weapons[w]; ww.heat = 0; ww.locked = 0; ww.power = 1; ww.pressure = 0; ww.drained = false; ww.cd = 0; } addText(P.x, P.y - 44, 'VENTED', { color: '#38e8ff', size: 14 }); Snd.sfx('pickup'); }
+      else if (p.kind === 'vial') { var dw = carriedWeapon('dropper'); if (dw) { dw.drops = Math.min(DROPPER_MAX, dw.drops + 3); addText(P.x, P.y - 44, '+3 DROPS', { color: dropperVial(dw).color, size: 14 }); } else addRVU(3, P.x, P.y); Snd.sfx('pickup'); }
+      else if (p.kind === 'culture') { G.culture = { pending: true }; addText(P.x, P.y - 44, 'CULTURE SENT — results in the next room', { color: '#9fe6ff', size: 13 }); Snd.sfx('jingle'); }
     }
   }
   if (G.coinPop) { G.coinPopT = (G.coinPopT || 0) + dt; if (G.coinPopT > 0.35) { addText(P.x, P.y - 34, '+' + G.coinPop + ' RVU', { color: '#ffd166', size: 12, vy: -40 }); G.coinPop = 0; G.coinPopT = 0; } }
@@ -2939,6 +3273,7 @@ function boonUnlocked(id) { var b = BOONS[id]; return !b.unlock || residencyLeve
 function startRun() {
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
   G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.detailT = 0; G.detailSlot = -1;
+  G.dropRes = {}; G.abxRes = {}; G.boonTier = {}; G.favor = {}; G.collateral = null; G.culture = null; G.roomDebuff = null; G.pens = 0; G.revealRoom = -1;
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
@@ -2946,7 +3281,7 @@ function startRun() {
   var ws = Q.weapons ? Q.weapons.split(',') : ['holmium', 'scalpel'];
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
   if (!G.weapons.length) giveWeapon('holmium');
-  if (Q.boons) { var bs = Q.boons.split(','); for (var j = 0; j < bs.length; j++) giveBoon(bs[j]); }
+  if (Q.boons) { var bs = Q.boons.split(','); for (var j = 0; j < bs.length; j++) giveBoon(bs[j], true); }
   if (Q.mods) { // ?mods=holmium_joules,… : install at run start; a mod for a weapon you don't carry grants the weapon first
     var qm = Q.mods.split(',');
     for (var mi = 0; mi < qm.length; mi++) { var md = MODS[qm[mi]]; if (!md) continue; var have = false; for (var ci = 0; ci < G.weapons.length; ci++) if (G.weapons[ci].id === md.weapon) have = true; if (!have) giveWeapon(md.weapon); giveMod(qm[mi], true); }
@@ -2965,6 +3300,7 @@ function makeRoomPlan(index, doorType, door) {
     case 'combat': kind = 'combat'; reward = 'weapon'; break;
     case 'boon': kind = 'combat'; reward = 'boon'; break;
     case 'rep': kind = 'combat'; reward = 'rep'; break;
+    case 'culture': kind = 'combat'; reward = 'culture'; break;
     case 'heal': kind = 'heal'; reward = 'heal'; break;
     case 'coins': kind = 'combat'; reward = 'coins'; break;
     case 'shop': kind = 'shop'; reward = null; break;
@@ -2975,7 +3311,7 @@ function makeRoomPlan(index, doorType, door) {
   var template;
   if (kind === 'tutorial') template = 'open'; else if (kind === 'boss') template = 'boss'; else if (kind === 'rest') template = 'rest'; else if (kind === 'shop') template = 'shop';
   else { var cands = TEMPLATE_POOL.filter(function (t) { return ROOM_TEMPLATES[t].minRoom <= index && t !== G.lastTemplate; }); template = pick(cands); }
-  return { index: index, kind: kind, reward: reward, template: template, doorType: doorType, name: ROOM_TEMPLATES[template].name, repWeapon: door && door.weapon ? door.weapon : null };
+  return { index: index, kind: kind, reward: reward, template: template, doorType: doorType, name: ROOM_TEMPLATES[template].name, repWeapon: door && door.weapon ? door.weapon : null, patron: door && door.patron ? door.patron : null };
 }
 function findSpawnPos(r, preferRight, tries) {
   tries = tries || 40;
@@ -2995,7 +3331,7 @@ function freeSpot(x, y, r) { var p = { x: x, y: y }; for (var i = 0; i < 30; i++
 
 function enterRoom(plan) {
   G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null;
-  G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = [];
+  G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.dropRes = {};
   for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.bal = null; w.swing = null; w.lunge = 0; w.fx = null; w.fx2 = null; w.charge = 0; }
   P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0;
   var t = ROOM_TEMPLATES[plan.template].build();
@@ -3005,21 +3341,30 @@ function enterRoom(plan) {
   if (plan.reward === 'boon' || plan.reward === 'elite') G.plan.boons++;
   if (plan.reward === 'weapon' || plan.reward === 'elite') G.plan.weapons++;
   if (plan.kind === 'shop') G.plan.shops = (G.plan.shops || 0) + 1;
+  if (plan.reward === 'culture') G.plan.culture = (G.plan.culture || 0) + 1;
+  if (G.roomDebuff && G.roomDebuff.room !== plan.index) { if (G.roomDebuff.kind === 'hp' && G.roomDebuff.loss) { P.maxHp += G.roomDebuff.loss; addText(P.x, P.y - 50, 'MAX HP RESTORED', { color: '#7dffb0', size: 12 }); } G.roomDebuff = null; }   // the rep's free-sample drawback lasted one room
   // exits (closed until clear)
   var exits = genDoorOptions(plan), sides = ['E', 'N', 'S'];
   for (var d = 0; d < exits.length; d++) {
     var dp = DOOR_POS[sides[d]], door = { side: sides[d], type: exits[d], x: dp.x, y: dp.y, w: dp.w, h: dp.h, open: false, anim: 0 };
     if (door.type === 'rep') { var repW = pickRepWeapon(); if (repW) door.weapon = repW.id; else door.type = 'combat'; }   // a rep door serves ONE carried weapon; its plaque shows that glyph
+    if (door.type === 'boon') door.patron = pickPatron();                                                                  // a boon door belongs to a patron; its plaque shows the patron's glyph
     G.doors.push(door);
   }
   G.waves = buildWaves(plan);
+  var collateral = G.collateral; G.collateral = null; if (collateral && G.waves) spawnCollateral(collateral);               // the broad-spectrum tax rolled in the last room
   if (plan.kind === 'tutorial') G.tutorial = { step: 0, moved: false, fired: false, rolled: false, swapped: false, t: 0 }; else G.tutorial = null;
   if (plan.kind === 'boss') spawnBoss(G.bossId || 'staghorn');
-  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360 }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); }
+  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
   if (!G.waves) roomCleared(true);
   else setBanner('ROOM ' + plan.index + (plan.kind === 'elite' ? ' · ELITE' : ''), plan.name, 1.6);
+  if (collateral && G.waves) setBanner('COLLATERAL DAMAGE', collateral === 'cdiff' ? 'C. difficile — the broad-spectrum tax' : 'Candida overgrowth — the broad-spectrum tax', 2.6);
+  if (G.culture && G.culture.pending) { // Culture & Sensitivity: the lab calls back with what grows in this room (and what it resists)
+    var cul = cultureReport(G.waves); G.culture = { pending: false, room: plan.index, microbes: cul.ids };
+    if (cul.ids.length) { G.revealRoom = plan.index; setBanner('CULTURE RESULT', cul.text, 3.6); } else setBanner('CULTURE: NO GROWTH', 'no microbes in this room', 2.2);
+  }
   if (plan.kind === 'boss') Snd.setMusicMode('boss'); else Snd.setMusicMode('calm');
   Snd.sfx('clang'); shakeIt(2);
   META.lastRoom = plan.index; saveMeta();
@@ -3034,7 +3379,7 @@ function genDoorOptions(plan) {
   if (next <= 6 && 2 - G.plan.boons >= left) forced.push('boon');
   if (next <= 6 && 2 - G.plan.weapons >= left) forced.push('combat');
   if (forced.length >= 2) return ['elite', 'boon', 'combat'].slice(0, Math.max(n, 2));
-  var pool = [['combat', 3], ['boon', 3], ['heal', P.hp / P.maxHp < 0.5 ? 2.2 : 1], ['shop', next >= 3 && !G.plan.shops ? 1.1 : 0], ['elite', next >= 4 ? 1.3 : 0], ['mystery', 1], ['rep', next >= 3 && anyRepTarget() ? 2.4 : 0]];
+  var pool = [['combat', 3], ['boon', 3], ['heal', P.hp / P.maxHp < 0.5 ? 2.2 : 1], ['shop', next >= 3 && !G.plan.shops ? 1.1 : 0], ['elite', next >= 4 ? 1.3 : 0], ['mystery', 1], ['rep', next >= 3 && anyRepTarget() ? 2.4 : 0], ['culture', next >= 3 && next <= 6 && !G.plan.culture ? 0.6 : 0]];
   var out = forced.slice(0);
   var guard = 0;
   while (out.length < n && guard++ < 50) {
@@ -3107,9 +3452,10 @@ function roomCleared(quiet) {
     burst(480, 120, 50, { color: '#ffd166', speed: 260, life: 1.2, size: 4, kind: 'confetti' }); burst(480, 120, 40, { color: '#38e8ff', speed: 260, life: 1.2, size: 4, kind: 'confetti' }); burst(480, 120, 40, { color: '#ff6b8a', speed: 260, life: 1.2, size: 4, kind: 'confetti' });
     addXPLive(10);
   }
+  var dw = carriedWeapon('dropper'); if (dw) dw.drops = DROPPER_MAX;   // the Dropper refills on clear
   var rw = plan.reward, spot;
   if (rw === 'weapon' || rw === 'elite' || (rw === 'coins' && rnd() < 0.5)) { spot = freeSpot(520, 270, 30); G.rewards.push({ kind: 'crate', x: spot.x, y: spot.y, item: rollWeaponDrop() }); }
-  if (rw === 'boon' || rw === 'elite') { spot = freeSpot(rw === 'elite' ? 440 : 480, rw === 'elite' ? 330 : 270, 30); G.rewards.push({ kind: 'altar', x: spot.x, y: spot.y }); }
+  if (rw === 'boon' || rw === 'elite') { spot = freeSpot(rw === 'elite' ? 440 : 480, rw === 'elite' ? 330 : 270, 30); G.rewards.push({ kind: 'altar', x: spot.x, y: spot.y, patron: plan.patron || pickPatron() }); }   // the door's patron keeps the altar
   if (rw === 'rep') { // the Instrument Rep waits by the exit with 3 mods for the door's weapon (falls back if you swapped it out mid-room)
     var repId = plan.repWeapon, carried = false; for (var rc = 0; rc < G.weapons.length; rc++) if (G.weapons[rc].id === repId) carried = true;
     if (!carried) { var altW = pickRepWeapon(); repId = altW ? altW.id : null; }
@@ -3118,10 +3464,33 @@ function roomCleared(quiet) {
   }
   if (rw === 'heal') { spawnPickup('iv', 480, 250); if (rnd() < 0.4) spawnPickup('heart', 520, 290); }
   if (rw === 'coins') { for (var c = 0; c < 14; c++) spawnPickup('coin', 480, 270, { value: 1 }); }
+  if (rw === 'culture') spawnPickup('culture', 480, 250);
+  if (!quiet && G.culture && !G.culture.pending && G.culture.room === plan.index) { // De-escalation: cleared a cultured room on a matching NARROW antibiotic, no broad-spectrum running
+    if (G.culture.microbes.length && !hasBroadAbx() && narrowMatches(G.culture.microbes)) { setBanner('DE-ESCALATION', 'culture-guided narrow antibiotic · +15 RVU', 2.4); for (var dc = 0; dc < 15; dc++) spawnPickup('coin', 480, 270, { value: 1 }); G.stats.deesc = (G.stats.deesc || 0) + 1; Snd.sfx('jingle'); }
+    G.culture = null;
+  }
+  if (!quiet && hasBroadAbx() && plan.index < 8 && rnd() < 0.35) G.collateral = rnd() < 0.5 ? 'cdiff' : 'candida';   // 35%: the next room grows C. diff pods or a Candida colony
   if (rw === 'starter') { openWeaponScreen({ starter: true }); }
   if (plan.kind !== 'boss') openDoors();
 }
 function openDoors() { for (var i = 0; i < G.doors.length; i++) { G.doors[i].open = true; G.doors[i].anim = 0; } if (G.doors.length) Snd.sfx('door'); }
+/* ── antibiotic stewardship helpers: collateral spawns, the culture report, de-escalation matching ── */
+function spawnCollateral(kind) {
+  if (kind === 'cdiff') { for (var i = 0; i < 3; i++) { var pos = findSpawnPos(14, true); spawnEnemy('cdiff', pos.x, pos.y, {}); } }
+  else { var pos2 = findSpawnPos(15, true); spawnEnemy('candida', pos2.x, pos2.y, {}); for (var k = 0; k < 2; k++) spawnEnemy('bud', pos2.x + rr(-30, 30), pos2.y + rr(-30, 30), {}); }
+  G.stats.collateral = (G.stats.collateral || 0) + 1;
+}
+function cultureReport(waves) {
+  var counts = {}, ids = [], parts = [];
+  if (waves) for (var w = 0; w < waves.list.length; w++) for (var i = 0; i < waves.list[w].length; i++) { var id = waves.list[w][i].id, d = ENEMIES[id]; if (!d || d.family !== 'MICROBE') continue; if (!counts[id]) { counts[id] = 0; ids.push(id); } counts[id] += d.cluster ? d.cluster[0] : 1; }
+  for (var k = 0; k < ids.length; k++) { var def = ENEMIES[ids[k]], note = []; if (def.resistTo) for (var r in def.resistTo) note.push((def.resistTo[r] === 0 ? 'ignores ' : 'half ') + BOONS[r].name); parts.push(def.name + ' ×' + counts[ids[k]] + (note.length ? ' (' + note.join(', ') + ')' : '')); }
+  return { ids: ids, text: parts.join(' · ') };
+}
+function narrowMatches(ids) {
+  var ab = activeAbx();
+  for (var i = 0; i < ab.length; i++) { if (BOONS[ab[i]].spectrum !== 'narrow') continue; for (var k = 0; k < ids.length; k++) { var def = ENEMIES[ids[k]]; if (def && abxBonus(ab[i], { id: ids[k], def: def, family: def.family, st: {} }) > 1) return true; } }
+  return false;
+}
 function updateDoors(dt) {
   for (var i = 0; i < G.doors.length; i++) {
     var d = G.doors[i]; if (!d.open) continue; d.anim = Math.min(1, d.anim + dt * 2);
@@ -3149,12 +3518,14 @@ function rollWeaponDrop() {
   var rr0 = rnd() + idx * 0.03, rarity = rr0 < 0.6 ? 'common' : rr0 < 0.9 ? 'uncommon' : 'rare';
   return { id: chosen, rarity: rarity };
 }
-function rollBoons(n, exclude) {
-  var pool = [];
+// n boons for an altar. With a patron, only that patron's pool, and favor earned there raises the rare/epic weights.
+function rollBoons(n, exclude, patron) {
+  var pool = [], favor = patron ? ((G.favor && G.favor[patron]) || 0) : 0, allowed = patron ? patronPool(patron) : null;
   for (var i = 0; i < BOON_ORDER.length; i++) {
-    var id = BOON_ORDER[i], b = BOONS[id]; if (hasBoon(id) || !boonUnlocked(id) || (exclude && exclude.indexOf(id) >= 0)) continue;
-    if (b.requires) { var ok = true; for (var r = 0; r < b.requires.length; r++) if (!hasBoon(b.requires[r])) ok = false; if (!ok) continue; }
-    pool.push([id, b.requires ? 3 : b.rarity === 'epic' ? 0.22 : b.rarity === 'rare' ? 0.5 : 1]);
+    var id = BOON_ORDER[i], b = BOONS[id]; if (allowed ? allowed.indexOf(id) < 0 : (id === 'grading' || hasBoon(id) || !boonUnlocked(id))) continue; if (exclude && exclude.indexOf(id) >= 0) continue;
+    if (!allowed && b.requires) { var ok = true; for (var r = 0; r < b.requires.length; r++) if (!hasBoon(b.requires[r])) ok = false; if (!ok) continue; }
+    var wgt = b.requires ? 3 : b.rarity === 'epic' ? 0.22 : b.rarity === 'rare' ? 0.5 : 1; if (b.rarity === 'epic' || b.rarity === 'rare') wgt *= 1 + 0.6 * favor;
+    pool.push([id, id === 'grading' ? 1 : wgt]);
   }
   var out = [];
   while (out.length < n && pool.length) { var tot = 0; for (var p = 0; p < pool.length; p++) tot += pool[p][1]; var x = rnd() * tot, idx = 0; for (var q = 0; q < pool.length; q++) { x -= pool[q][1]; if (x <= 0) { idx = q; break; } } out.push(pool[idx][0]); pool.splice(idx, 1); }
@@ -3339,7 +3710,7 @@ var LOBE_ANGLES = [0.5, 1.02, 1.57, 2.12, 2.64];
 function spawnFournier() {
   var body = spawnEnemy('fournier', 480, 124, { instant: true, force: true });
   body.inv = true; body.invText = 'DEBRIDE 3 LOBES'; body.necro = 1; body.noClear = false; body.shield = 0; body.shieldMax = 0;
-  var B = G.boss = { kind: 'fournier', body: body, lobes: [], arms: [], phase: 1, t: 0, slamT: 4, spitT: 3, gasT: 3, addT: 6, necrosis: [], sugar: [], sugarT: 10, sepsis: false, sepsisT: 45, sepsisMax: 45, removed: 0, queue: [], legs: [], name: "FOURNIER'S GANGRENE", sub: 'BOSS · necrotizing fasciitis', phases: ['NECROSIS', 'SPREAD', 'SEPSIS'], hint: '', eyesBlink: [], dead: false };
+  var B = G.boss = { kind: 'fournier', body: body, lobes: [], arms: [], phase: 1, t: 0, slamT: 4, spitT: 3, gasT: 3, addT: 6, necrosis: [], sugar: [], sugarT: 10, sepsis: false, sepsisT: 45, sepsisMax: 45, removed: 0, queue: [], legs: [], name: 'FOURNIER', sub: "BOSS · Fournier's gangrene — necrotizing fasciitis", phases: ['NECROSIS', 'SPREAD', 'SEPSIS'], hint: '', eyesBlink: [], dead: false };
   for (var i = 0; i < LOBE_ANGLES.length; i++) addLobe(B, LOBE_ANGLES[i], true, null);
   for (var l = 0; l < 9; l++) B.legs.push({ a: 0.3 + l / 8 * 2.55, len: rr(80, 140), ph: rr(0, TAU), w: rr(10, 16) });
   for (var k = 0; k < 11; k++) B.eyesBlink.push(rr(1, 5));
@@ -3494,6 +3865,7 @@ function drawDoorIcon(c, type, x, y, s) {
   else if (icon === 'skull') { c.fillStyle = '#f4f8ff'; c.beginPath(); c.arc(0, -s * 0.15, s * 0.75, Math.PI, 0); c.lineTo(s * 0.55, s * 0.45); c.lineTo(-s * 0.55, s * 0.45); c.closePath(); c.fill(); outline(c, s * 0.16); c.fillRect(-s * 0.4, s * 0.45, s * 0.8, s * 0.35); c.strokeRect(-s * 0.4, s * 0.45, s * 0.8, s * 0.35); c.fillStyle = col; c.beginPath(); c.arc(-s * 0.3, -s * 0.1, s * 0.22, 0, TAU); c.arc(s * 0.3, -s * 0.1, s * 0.22, 0, TAU); c.fill(); c.fillStyle = OUTLINE; c.fillRect(-s * 0.08, s * 0.2, s * 0.16, s * 0.2); }
   else if (icon === 'bed') { c.fillStyle = '#f4f8ff'; c.fillRect(-s * 0.9, -s * 0.2, s * 1.8, s * 0.7); outline(c, s * 0.16); c.strokeRect(-s * 0.9, -s * 0.2, s * 1.8, s * 0.7); c.fillStyle = col; c.fillRect(-s * 0.8, -s * 0.55, s * 0.6, s * 0.4); c.strokeRect(-s * 0.8, -s * 0.55, s * 0.6, s * 0.4); c.fillStyle = OUTLINE; c.fillRect(-s * 0.9, s * 0.5, s * 0.16, s * 0.3); c.fillRect(s * 0.74, s * 0.5, s * 0.16, s * 0.3); }
   else if (icon === 'rep') { c.fillStyle = '#5a3b22'; roundRect(c, -s * 0.9, -s * 0.45, s * 1.8, s * 1.2, s * 0.2); c.fill(); outline(c, s * 0.16); c.fillStyle = '#44546a'; roundRect(c, -s * 0.35, -s * 0.8, s * 0.7, s * 0.4, s * 0.1); c.fill(); outline(c, s * 0.12); c.fillStyle = col; c.fillRect(-s * 0.9, -s * 0.05, s * 1.8, s * 0.16); }
+  else if (icon === 'petri') { c.fillStyle = '#e8f4ff'; c.beginPath(); c.arc(0, 0, s * 0.9, 0, TAU); c.fill(); outline(c, s * 0.16); c.fillStyle = hexA(col, 0.45); c.beginPath(); c.arc(0, 0, s * 0.68, 0, TAU); c.fill(); c.fillStyle = col; for (var pd = 0; pd < 5; pd++) { c.beginPath(); c.arc(Math.cos(pd * 1.3) * s * 0.4, Math.sin(pd * 1.3) * s * 0.4, s * 0.14, 0, TAU); c.fill(); } }
   else if (icon === 'antler') { c.strokeStyle = OUTLINE; c.lineWidth = s * 0.42; c.beginPath(); c.moveTo(0, s * 0.9); c.lineTo(0, -s * 0.1); c.lineTo(-s * 0.7, -s * 0.9); c.moveTo(0, -s * 0.1); c.lineTo(s * 0.7, -s * 0.9); c.moveTo(0, s * 0.35); c.lineTo(-s * 0.6, s * 0.05); c.moveTo(0, s * 0.35); c.lineTo(s * 0.6, s * 0.05); c.stroke(); c.strokeStyle = col; c.lineWidth = s * 0.22; c.stroke(); }
   else { c.fillStyle = col; c.font = '900 ' + Math.round(s * 1.9) + 'px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = s * 0.3; c.strokeStyle = OUTLINE; c.strokeText('?', 0, s * 0.1); c.fillText('?', 0, s * 0.1); }
   c.restore();
@@ -3527,6 +3899,7 @@ function drawTool(c, id, s, col) {
     case 'urethrotome': rod(s * 0.75, s * 0.14, '#aab7c6'); c.fillStyle = '#e8eef5'; c.beginPath(); c.moveTo(s * 0.75, -s * 0.07); c.lineTo(s * 1.0, -s * 0.22); c.lineTo(s * 1.05, -s * 0.02); c.lineTo(s * 0.78, s * 0.08); c.closePath(); c.fill(); outline(c, s * 0.06); c.fillStyle = col; c.fillRect(s * 0.8, -s * 0.03, s * 0.2, s * 0.04); grip(); break;
     case 'co2': rod(s * 0.5, s * 0.2, '#aab7c6'); c.fillStyle = '#44546a'; c.beginPath(); c.arc(s * 0.55, 0, s * 0.14, 0, TAU); c.fill(); outline(c, s * 0.06); rod(s * 0.9, s * 0.12, '#cfd8e3'); c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(s * 1.02, 0, s * 0.08, 0, TAU); c.fill(); c.strokeStyle = hexA(col, 0.9); c.lineWidth = s * 0.05; c.beginPath(); c.moveTo(s * 0.9, 0); c.lineTo(s * 1.15, 0); c.stroke(); grip(); break;
     case 'davinci': c.fillStyle = '#44546a'; c.beginPath(); c.arc(0, 0, s * 0.22, 0, TAU); c.fill(); outline(c, s * 0.07); for (var ai = 0; ai < 4; ai++) { var aa0 = -2.2 + ai * 1.45, ex0 = Math.cos(aa0) * s * 0.55, ey0 = Math.sin(aa0) * s * 0.55, tx0 = Math.cos(aa0 + 0.6) * s * 0.95, ty0 = Math.sin(aa0 + 0.6) * s * 0.95; c.strokeStyle = OUTLINE; c.lineWidth = s * 0.16; c.beginPath(); c.moveTo(0, 0); c.lineTo(ex0, ey0); c.lineTo(tx0, ty0); c.stroke(); c.strokeStyle = '#cfd8e3'; c.lineWidth = s * 0.09; c.stroke(); c.fillStyle = [CLASSES.CUT.color, CLASSES.ENERGY.color, CLASSES.FLUID.color, CLASSES.LITHO.color][ai]; c.beginPath(); c.arc(tx0, ty0, s * 0.09, 0, TAU); c.fill(); } break;
+    case 'dropper': c.fillStyle = '#cfe8ff'; c.beginPath(); c.moveTo(-s * 0.1, -s * 0.09); c.lineTo(s * 0.86, -s * 0.05); c.lineTo(s * 0.86, s * 0.05); c.lineTo(-s * 0.1, s * 0.09); c.closePath(); c.fill(); outline(c, s * 0.06); c.fillStyle = col; c.fillRect(s * 0.32, -s * 0.04, s * 0.5, s * 0.08); c.fillStyle = '#5a3b6e'; c.beginPath(); c.ellipse(-s * 0.3, 0, s * 0.3, s * 0.22, 0, 0, TAU); c.fill(); outline(c, s * 0.08); c.fillStyle = col; c.beginPath(); c.arc(s * 0.98, s * 0.14, s * 0.09, 0, TAU); c.fill(); outline(c, s * 0.05); break;
     default: rod(s * 0.7, s * 0.2); grip();
   }
   c.restore();
@@ -3560,7 +3933,7 @@ function drawDoors(c) {
   // entrance (always shut behind you)
   var wd = DOOR_POS.W; c.fillStyle = '#0d1a24'; c.fillRect(wd.x, wd.y, wd.w, wd.h); c.fillStyle = PAL.wallEdge; for (var b = 0; b < 4; b++) c.fillRect(wd.x + 4 + b * 7, wd.y + 6, 3, wd.h - 12);
   for (var i = 0; i < G.doors.length; i++) {
-    var d = G.doors[i], col = d.type === 'rep' && d.weapon ? CLASSES[WEAPONS[d.weapon].cls].color : DOOR_TYPES[d.type].color, cx = d.x + d.w / 2, cy = d.y + d.h / 2, vert = d.side === 'E';
+    var d = G.doors[i], col = d.type === 'rep' && d.weapon ? CLASSES[WEAPONS[d.weapon].cls].color : d.type === 'boon' && d.patron ? PATRONS[d.patron].color : DOOR_TYPES[d.type].color, cx = d.x + d.w / 2, cy = d.y + d.h / 2, vert = d.side === 'E';
     c.fillStyle = '#0d1a24'; c.fillRect(d.x, d.y, d.w, d.h);
     if (!d.open) { c.fillStyle = PAL.wallEdge; for (var k = 0; k < 4; k++) { if (vert) c.fillRect(d.x + 4 + k * 7, d.y + 6, 3, d.h - 12); else c.fillRect(d.x + 6, d.y + 4 + k * 7, d.w - 12, 3); } c.fillStyle = '#3a5568'; c.beginPath(); c.arc(cx, cy, 6, 0, TAU); c.fill(); continue; }
     var a = d.anim, glow = 0.25 + 0.15 * Math.sin(G.realTime * 4);
@@ -3571,7 +3944,7 @@ function drawDoors(c) {
     // icon plaque just inside the arena
     var ix = vert ? d.x - 34 : cx, iy = vert ? cy : (d.side === 'N' ? d.y + d.h + 30 : d.y - 30);
     c.fillStyle = '#0b1620'; c.beginPath(); c.arc(ix, iy, 24, 0, TAU); c.fill(); c.strokeStyle = col; c.lineWidth = 3; c.stroke();
-    if (d.type === 'rep' && d.weapon) drawRepIcon(c, d.weapon, ix, iy, 11); else drawDoorIcon(c, d.type, ix, iy, 11);
+    if (d.type === 'rep' && d.weapon) drawRepIcon(c, d.weapon, ix, iy, 11); else if (d.type === 'boon' && d.patron) drawPatronGlyph(c, d.patron, ix, iy, 11); else drawDoorIcon(c, d.type, ix, iy, 11);
   }
 }
 // Instrument Rep plaque: the door's weapon silhouette in its class colour with the class glyph as a badge, so you can steer the run
@@ -3589,7 +3962,7 @@ function drawObstacles(c) {
     else { c.beginPath(); c.arc(o.x, o.y, o.r, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.35, 0, TAU); c.fill(); if (o.r < 12) { c.fillStyle = '#5a7a90'; c.beginPath(); c.arc(o.x, o.y, o.r * 0.5, 0, TAU); c.fill(); } }
   }
 }
-var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'] };
+var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'], toxin: ['rgba(120,170,60,0.32)', 'rgba(184,255,90,0.6)'] };
 function drawHazards(c) {
   for (var i = 0; i < G.decals.length; i++) { var d = G.decals[i]; c.globalAlpha = Math.min(1, d.t / 3); c.fillStyle = d.color; c.beginPath(); c.ellipse(d.x, d.y, d.r, d.r * 0.7, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
@@ -3618,21 +3991,23 @@ function drawRewards(c) {
   for (var i = 0; i < G.rewards.length; i++) {
     var r = G.rewards[i]; if (r.used) continue; var bob = Math.sin(G.realTime * 3 + i) * 3, glow = 0.35 + 0.25 * Math.sin(G.realTime * 4 + i);
     c.save(); c.translate(r.x, r.y);
-    var col = r.kind === 'altar' ? '#d98cff' : r.kind === 'crate' ? '#ff9f43' : r.kind === 'rep' && r.weapon ? CLASSES[WEAPONS[r.weapon].cls].color : '#ffd166';
+    var col = r.kind === 'altar' ? (r.patron ? PATRONS[r.patron].color : '#d98cff') : r.kind === 'crate' ? '#ff9f43' : r.kind === 'rep' && r.weapon ? CLASSES[WEAPONS[r.weapon].cls].color : '#ffd166';
     c.fillStyle = hexA(col, glow * 0.5); c.beginPath(); c.ellipse(0, 14, 34, 14, 0, 0, TAU); c.fill();
     c.fillStyle = '#2a3b4c'; roundRect(c, -24, 4, 48, 16, 6); c.fill(); outline(c, 3);
     c.translate(0, bob);
-    if (r.kind === 'altar') { c.fillStyle = '#3a2a5a'; roundRect(c, -16, -30, 32, 36, 8); c.fill(); outline(c, 3); c.fillStyle = col; c.beginPath(); c.ellipse(0, -24, 12, 6, 0, 0, TAU); c.fill(); drawDoorIcon(c, 'boon', 0, -12, 8); }
+    if (r.kind === 'altar' && r.patron) { // a patron's altar: the plinth, the glyph, and the patron's caricature bust behind it
+      c.save(); c.translate(0, -48); drawCaricature(c, PATRONS[r.patron].look, 0.5); c.restore();
+      c.fillStyle = '#3a2a5a'; roundRect(c, -16, -22, 32, 28, 8); c.fill(); outline(c, 3); c.fillStyle = col; c.beginPath(); c.ellipse(0, -18, 12, 5, 0, 0, TAU); c.fill(); drawPatronGlyph(c, r.patron, 0, -6, 7);
+      text(c, PATRONS[r.patron].name.toUpperCase(), 0, 16, 9, col, 'center', 900);
+    }
+    else if (r.kind === 'altar') { c.fillStyle = '#3a2a5a'; roundRect(c, -16, -30, 32, 36, 8); c.fill(); outline(c, 3); c.fillStyle = col; c.beginPath(); c.ellipse(0, -24, 12, 6, 0, 0, TAU); c.fill(); drawDoorIcon(c, 'boon', 0, -12, 8); }
     else if (r.kind === 'crate') { c.fillStyle = '#c97d3a'; roundRect(c, -22, -26, 44, 32, 6); c.fill(); outline(c, 3); c.fillStyle = '#8a4f1e'; c.fillRect(-22, -14, 44, 5); c.fillStyle = '#ffd166'; c.fillRect(-4, -20, 8, 20); c.fillRect(-12, -14, 24, 8); if (r.item) drawGlyph(c, WEAPONS[r.item.id].cls, 14, -32, 7); }
-    else if (r.kind === 'rep') { // the Instrument Rep: suit, lanyard grin, sample case with the class glyph; the instrument on offer floats overhead
-      var wd = WEAPONS[r.weapon], rc = CLASSES[wd.cls].color;
-      c.fillStyle = '#23324a'; roundRect(c, -13, -22, 26, 30, 7); c.fill(); outline(c, 3);
-      c.fillStyle = '#f4f8ff'; c.beginPath(); c.moveTo(-5, -22); c.lineTo(5, -22); c.lineTo(0, -9); c.closePath(); c.fill(); c.fillStyle = rc; c.fillRect(-1.5, -21, 3, 11);
-      c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -32, 10, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#3a2a1a'; c.beginPath(); c.arc(0, -35, 10, Math.PI, 0); c.fill();
-      eyes(c, 0, -33, 4.5, 2.6, Math.atan2(P.y - (r.y - 32), P.x - r.x), 1, null, {}); mouth(c, 0, -27, 5, 'grin');
+    else if (r.kind === 'rep') { // the Instrument Rep: one of the four-person cast as a caricature, sample case with the class glyph, the instrument on offer floating overhead
+      var wd = WEAPONS[r.weapon], rc = CLASSES[wd.cls].color, rep = repById(r.rep || REPS[0].id), lk = {}; for (var lkk in rep.look) lk[lkk] = rep.look[lkk]; lk.look = Math.atan2(P.y - (r.y - 32), P.x - r.x);
+      c.save(); c.translate(0, -26); drawCaricature(c, lk, 0.5); c.restore();
       c.fillStyle = '#5a3b22'; roundRect(c, 11, -8, 18, 14, 3); c.fill(); outline(c, 2.5); drawGlyph(c, wd.cls, 20, -1, 4, false);
-      c.save(); c.translate(0, -56 + Math.sin(G.realTime * 3 + i) * 2); c.rotate(-0.5); drawTool(c, r.weapon, 26, rc); c.restore();
-      text(c, 'REP', 0, 16, 10, rc, 'center', 900);
+      c.save(); c.translate(0, -66 + Math.sin(G.realTime * 3 + i) * 2); c.rotate(-0.5); drawTool(c, r.weapon, 26, rc); c.restore();
+      text(c, rep.name.split(' ')[0].toUpperCase(), 0, 16, 9, rc, 'center', 900);
     }
     else { c.fillStyle = '#f0e0b0'; c.beginPath(); c.arc(0, -16, 16, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#2fa38a'; c.beginPath(); c.arc(0, -16, 14, Math.PI, 0); c.fill(); c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -10, 8, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = '#1a1218'; c.fillRect(-5, -11, 3, 3); c.fillRect(2, -11, 3, 3); c.fillStyle = '#fff'; c.font = '900 11px ' + FONT; c.textAlign = 'center'; c.strokeStyle = OUTLINE; c.lineWidth = 3; c.strokeText('SHOP', 0, 14); c.fillText('SHOP', 0, 14); }
     c.restore();
@@ -3646,6 +4021,8 @@ function drawPickups(c) {
     else if (p.kind === 'iv') { drawDoorIcon(c, 'heal', 0, 0, 9); }
     else if (p.kind === 'heart') { c.fillStyle = '#ff4d6d'; c.beginPath(); c.moveTo(0, 10); c.bezierCurveTo(-14, -2, -8, -14, 0, -6); c.bezierCurveTo(8, -14, 14, -2, 0, 10); c.closePath(); c.fill(); outline(c, 2.5); highlight(c, -4, -5, 3); }
     else if (p.kind === 'vent') { c.fillStyle = '#38e8ff'; roundRect(c, -9, -9, 18, 18, 4); c.fill(); outline(c, 2.5); c.fillStyle = OUTLINE; c.fillRect(-6, -2, 12, 4); c.fillStyle = '#fff'; c.font = '900 9px ' + FONT; c.textAlign = 'center'; c.fillText('VENT', 0, 20); }
+    else if (p.kind === 'vial') { var dw2 = carriedWeapon('dropper'), vc = dw2 ? dropperVial(dw2).color : '#7ad7ff'; c.fillStyle = '#e8f4ff'; roundRect(c, -5, -10, 10, 21, 4); c.fill(); outline(c, 2); c.fillStyle = vc; roundRect(c, -4, 1, 8, 9, 3); c.fill(); c.fillStyle = '#44546a'; c.fillRect(-6, -13, 12, 4); }
+    else if (p.kind === 'culture') { c.fillStyle = '#e8f4ff'; c.beginPath(); c.arc(0, 0, 11, 0, TAU); c.fill(); outline(c, 2.5); c.fillStyle = 'rgba(159,230,255,0.5)'; c.beginPath(); c.arc(0, 0, 8, 0, TAU); c.fill(); c.fillStyle = '#7ad7ff'; for (var cd = 0; cd < 4; cd++) { c.beginPath(); c.arc(Math.cos(cd * 1.7 + p.bob) * 4.5, Math.sin(cd * 1.7 + p.bob) * 4.5, 1.8, 0, TAU); c.fill(); } c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.fillText('C&S', 0, 20); }
     c.restore();
   }
 }
@@ -3688,12 +4065,15 @@ function drawEnemy(c, e) {
   var top = e.y - e.r * e.sy - 14, names = [];
   for (var k in e.st) names.push(k);
   if (names.length) { var sx0 = e.x - (names.length - 1) * 7; for (var n = 0; n < names.length; n++) { drawStatusIcon(c, names[n], sx0 + n * 14, top - 14); if (names[n] === 'bleed' && e.st.bleed.stacks > 1) { c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.fillText('×' + e.st.bleed.stacks, sx0 + n * 14 + 8, top - 18); } } }
+  // Dropper resistance pip: this microbe type has learned to shrug off the vial (10% per drop, max 60%, this room only)
+  var dres = e.family === 'MICROBE' && G.dropRes ? (G.dropRes[e.id] || 0) : 0;
+  if (dres > 0) { c.save(); c.translate(e.x + e.r * 0.85 + 6, top - 12); c.fillStyle = '#4a1f6e'; regPoly(c, 6.5, 6, G.realTime * 0.6); c.fill(); c.strokeStyle = '#c45cff'; c.lineWidth = 1.5; c.stroke(); c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('R', 0, 0.5); c.strokeStyle = '#ff6bff'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, 9.5, -Math.PI / 2, -Math.PI / 2 + TAU * (dres / 0.6)); c.stroke(); c.restore(); }
   if (!e.boss && !e.def.flat && !e.def.isStump && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
     var bw = Math.max(30, e.r * 1.7), bx = e.x - bw / 2, by = top - 3, wk = e.wk || (e.wk = enemyWeakness(e.def));
     c.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(c, bx - 1, by - 1, bw + 2, 6, 3); c.fill();
     c.fillStyle = e.hp / e.maxHp > 0.5 ? '#7dffb0' : e.hp / e.maxHp > 0.25 ? '#ffd166' : '#ff6b8a'; c.fillRect(bx, by, bw * clamp(e.hp / e.maxHp, 0, 1), 4);
     drawGlyph(c, wk.weak, bx - 8, by + 2, 5, false); drawGlyph(c, wk.resist, bx + bw + 8, by + 2, 4.5, true);
-    if (e.st.reveal) { c.fillStyle = '#ffd166'; c.font = '800 9px ' + FONT; c.textAlign = 'center'; c.fillText('weak: ' + CLASSES[wk.weak].name.toUpperCase() + ' · resists: ' + CLASSES[wk.resist].name.toUpperCase(), e.x, by - 8); }
+    if (e.st.reveal) { var rnote = ''; if (e.def.resistTo) { var rn = []; for (var rk in e.def.resistTo) rn.push(BOONS[rk].name); rnote = ' · R: ' + rn.join(', '); } c.fillStyle = '#ffd166'; c.font = '800 9px ' + FONT; c.textAlign = 'center'; c.fillText('weak: ' + CLASSES[wk.weak].name.toUpperCase() + ' · resists: ' + CLASSES[wk.resist].name.toUpperCase() + rnote, e.x, by - 8); }
   }
   if (e.elite && e.armorCls) { c.fillStyle = '#ffd166'; c.font = '800 9px ' + FONT; c.textAlign = 'center'; c.fillText('ARMOR: ' + CLASSES[e.armorCls].name.toUpperCase(), e.x, top - 26); }
 }
@@ -3814,6 +4194,11 @@ function drawFx(c, fx, w) {
     c.globalAlpha = 0.9; c.strokeStyle = fx.v >= 1 ? (pl > 0.5 ? '#fff' : col) : col; c.lineWidth = 2.5; c.beginPath(); c.ellipse(fx.x, fx.y, fx.rad, fx.rad * 0.55, 0, 0, TAU); c.stroke(); c.beginPath(); c.moveTo(fx.x - 6, fx.y); c.lineTo(fx.x + 6, fx.y); c.moveTo(fx.x, fx.y - 6); c.lineTo(fx.x, fx.y + 6); c.stroke();
   } else if (fx.kind === 'charge') {
     c.strokeStyle = col; c.lineWidth = 3; c.globalAlpha = 0.9; c.beginPath(); c.arc(fx.x, fx.y, 6 + 26 * (1 - fx.v), 0, TAU); c.stroke(); c.fillStyle = hexA(col, 0.4 + 0.5 * fx.v); c.beginPath(); c.arc(fx.x, fx.y, 4 + 10 * fx.v, 0, TAU); c.fill();
+  } else if (fx.kind === 'squeeze') { // Dropper wind-up: a closing dashed ring over the target, a drop forming above it, the bulb squeezing over the surgeon
+    var sq = fx.v, vc = fx.color || col; c.globalAlpha = 0.9; c.strokeStyle = vc; c.lineWidth = 3; c.setLineDash([5, 5]); c.lineDashOffset = -G.realTime * 80; c.beginPath(); c.arc(fx.x, fx.y, fx.r + 12 + (1 - sq) * 26, 0, TAU); c.stroke(); c.setLineDash([]);
+    c.fillStyle = hexA(vc, 0.3 + 0.6 * sq); c.beginPath(); c.arc(fx.x, fx.y - fx.r - 12 - (1 - sq) * 20, 4 + 5 * sq, 0, TAU); c.fill(); outline(c, 1.5);
+    c.save(); c.translate(P.x + 15, P.y - 30); c.scale(1 + 0.3 * sq, 1 - 0.35 * sq); c.fillStyle = '#5a3b6e'; c.beginPath(); c.ellipse(0, 0, 9, 7, 0, 0, TAU); c.fill(); outline(c, 2); c.restore();
+    c.fillStyle = '#cfe8ff'; c.fillRect(P.x + 13, P.y - 23, 4, 13); c.fillStyle = vc; c.fillRect(P.x + 13, P.y - 18 + 6 * (1 - sq), 4, 3 + 5 * sq);
   }
   c.restore();
 }
@@ -3949,7 +4334,11 @@ function drawHUD(c) {
   if (P.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.5)'; roundRect(c, hx, hy, hpw, 16, 6); c.fill(); }
   text(c, 'HP ' + Math.ceil(P.hp) + ' / ' + P.maxHp, hx + 8, hy + 8, 12, '#fff', 'left');
   // boons
-  for (var b = 0; b < G.boons.length; b++) { var bn = BOONS[G.boons[b]], bx = hx + 10 + (b % 11) * 18, by = hy + 34 + Math.floor(b / 11) * 18; c.fillStyle = BOON_COLORS[bn.kind]; roundRect(c, bx - 7, by - 8, 14, 16, 5); c.fill(); outline(c, 2); if (bn.rarity === 'epic') { c.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * Math.sin(G.realTime * 5 + b)) + ')'; c.lineWidth = 1.5; c.stroke(); } text(c, bn.name.charAt(0), bx, by + 1, 9, '#10202c', 'center', 900, false); }
+  for (var b = 0; b < G.boons.length; b++) {
+    var bn = BOONS[G.boons[b]], bx = hx + 10 + (b % 11) * 18, by = hy + 34 + Math.floor(b / 11) * 22; c.fillStyle = BOON_COLORS[bn.kind]; roundRect(c, bx - 7, by - 8, 14, 16, 5); c.fill(); outline(c, 2); if (bn.rarity === 'epic') { c.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * Math.sin(G.realTime * 5 + b)) + ')'; c.lineWidth = 1.5; c.stroke(); } text(c, bn.name.charAt(0), bx, by + 1, 9, '#10202c', 'center', 900, false);
+    if (bn.abxActive) { var ar = abxRes(G.boons[b]); c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(bx - 7, by + 9, 14, 3); c.fillStyle = ar >= 0.99 ? '#ff4d6d' : '#c45cff'; c.fillRect(bx - 7, by + 9, 14 * ar, 3); }   // resistance meter (per run)
+    var gt = G.boonTier && G.boonTier[G.boons[b]]; if (gt > 1) text(c, 'G' + gt, bx + 8, by - 8, 7, '#ffd166', 'center', 900, false);   // Gleason grade
+  }
   // room strip (minimap)
   var sx = W / 2 - 9 * 20 / 2, sy = 18;
   for (var r = 1; r <= 9; r++) {
@@ -3978,6 +4367,7 @@ function drawHUD(c) {
     drawGlyph(c, cls, rct.x + 10, rct.y + yoff + 10, 5.5, false);
     if (Input.mode === 'kb') text(c, String(i + 1), rct.x + rct.w - 8, rct.y + yoff + 9, 10, '#8fa6b8', 'center', 800, false);
     var modes = w.def.modes; if (modes) text(c, modes[w.mode], rct.x + rct.w / 2, rct.y + yoff + rct.h - 15, 8, col, 'center', 900, false);
+    else if (w.def.slotLabel) { var sl = w.def.slotLabel(w); c.fillStyle = sl.color; roundRect(c, rct.x + rct.w - 14, rct.y + yoff + 4, 7, 11, 2); c.fill(); outline(c, 1.2); text(c, sl.text, rct.x + rct.w / 2, rct.y + yoff + rct.h - 15, 8, sl.color, 'center', 900, false); }   // the Dropper's loaded vial
     var mt = w.def.meter ? w.def.meter(w) : null;
     if (mt) { c.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(c, rct.x + 6, rct.y + yoff + rct.h - 8, rct.w - 12, 4, 2); c.fill(); c.fillStyle = mt.pulse ? (Math.floor(G.realTime * 8) % 2 ? '#fff' : mt.color) : mt.color; roundRect(c, rct.x + 6, rct.y + yoff + rct.h - 8, (rct.w - 12) * clamp(mt.v, 0, 1), 4, 2); c.fill(); }
     drawModPips(c, w, rct.x, rct.y + yoff + rct.h + 5, rct.w);
@@ -4067,7 +4457,7 @@ function render(dtReal) {
    §17 SCREENS (HTML overlays) — title, help, bestiary, settings, pause, boon altar, crate, shop, summary
    Every overlay has a way out; the sim is frozen while one is open.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary', 'mod', 'aspects'];
+var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary', 'mod', 'aspects', 'steward', 'grade'];
 function hideScreens() { for (var i = 0; i < OVERLAYS.length; i++) $('ov-' + OVERLAYS[i]).classList.remove('show'); G.overlay = null; clearEdges(); }
 function openOverlay(id) { hideScreens(); $('ov-' + id).classList.add('show'); G.overlay = id; Snd.sfx('click'); }
 var settingsFrom = 'title', pendingStart = false, offerCache = null;
@@ -4167,22 +4557,32 @@ function boonCard(id, onPick) {
   var b = BOONS[id], card = el('button', 'card ' + b.rarity); card.type = 'button';
   if (isNew('b:' + id)) card.appendChild(el('span', 'new', 'NEW'));
   card.appendChild(boonIcon(b)); card.appendChild(el('h4', '', esc(b.name)));
-  card.appendChild(el('div', '', '<span class="tag ' + b.kind + '">' + { chemo: 'chemo', abx: 'antibiotic', med: 'medical', gear: 'gear' }[b.kind] + '</span> <span class="tag ' + b.rarity + '">' + b.rarity + '</span>'));
+  card.appendChild(el('div', '', '<span class="tag ' + b.kind + '">' + ({ chemo: 'chemo', abx: 'antibiotic', med: 'medical', gear: 'gear', grade: 'grading' }[b.kind] || b.kind) + '</span> <span class="tag ' + b.rarity + '">' + b.rarity + '</span>' + (b.abxActive ? ' <span class="tag">' + b.spectrum + ' spectrum</span>' : '')));
   card.appendChild(el('div', 'desc', esc(b.desc)));
   card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); onPick(id); });
   return card;
 }
 var altarRef = null;
 function openBoonScreen(reward) {
-  altarRef = reward; if (!reward.offer) { reward.offer = rollBoons(3); reward.rerolled = false; }
+  altarRef = reward;
+  if (reward.patron && !patronPool(reward.patron).length) reward.patron = pickPatron();   // the patron ran out of boons since the door was made: another steps in
+  if (!reward.offer) { reward.offer = rollBoons(3, null, reward.patron); reward.rerolled = false; if (reward.patron) reward.greet = pick(PATRONS[reward.patron].greet); }
   openOverlay('boon'); renderBoonCards();
 }
 function renderBoonCards() {
-  var wrap = $('boonCards'); wrap.innerHTML = '';
-  var offer = altarRef.offer; if (!offer.length) wrap.appendChild(el('p', 'hint', 'The pharmacy is out of stock. (You hold everything available.)'));
-  for (var i = 0; i < offer.length; i++) wrap.appendChild(boonCard(offer[i], function (id) { giveBoon(id); altarRef.used = true; altarRef = null; hideScreens(); }));
+  var wrap = $('boonCards'), pid = altarRef.patron, pt = pid ? PATRONS[pid] : null; wrap.innerHTML = '';
+  $('patronHead').style.display = pt ? '' : 'none'; $('boonTitle').textContent = pt ? pt.name + '’s altar' : 'Choose a boon';
+  if (pt) { // the patron's caricature, greeting and favor
+    var cv = $('patronFace'), c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 160, 160); c.scale(2, 2); c.translate(40, 34); drawCaricature(c, pt.look, 0.95);
+    $('patronName').textContent = pt.name; $('patronName').style.color = pt.color; $('patronFull').textContent = pt.full; $('patronGreet').textContent = '“' + (altarRef.greet || pt.greet[0]) + '”'; $('patronBlurb').textContent = pt.blurb;
+    var fav = (G.favor && G.favor[pid]) || 0; $('patronFavor').textContent = 'FAVOR ' + (fav ? '★'.repeat(Math.min(fav, 5)) + (fav > 5 ? ' +' + (fav - 5) : '') : '—') + (fav ? ' · better odds of rare and epic' : '');
+  }
+  var offer = altarRef.offer; if (!offer.length) wrap.appendChild(el('p', 'hint', pt ? pt.name + ' has nothing left for you.' : 'The pharmacy is out of stock. (You hold everything available.)'));
+  for (var i = 0; i < offer.length; i++) wrap.appendChild(boonCard(offer[i], function (id) {
+    tryTakeBoon(id, function () { if (altarRef && altarRef.patron) G.favor[altarRef.patron] = (G.favor[altarRef.patron] || 0) + 1; if (altarRef) altarRef.used = true; altarRef = null; hideScreens(); }, function () { openOverlay('boon'); renderBoonCards(); });
+  }));
   $('btnReroll').disabled = altarRef.rerolled || G.rvu < 25; $('btnReroll').textContent = altarRef.rerolled ? 'REROLLED' : 'REROLL (25 RVU)';
-  $('boonSub').textContent = 'You have ' + G.rvu + ' RVU. Pick one — it lasts the whole run.';
+  $('boonSub').textContent = 'You have ' + G.rvu + ' RVU. Pick one — it lasts the whole run.' + (pt ? ' Taking a boon here earns ' + pt.name + '’s favor.' : '');
 }
 /* weapon crate / starter pick / shop weapon */
 function weaponCard(item, mode, onPick) {
@@ -4216,22 +4616,57 @@ function openWeaponScreen(o) {
   }));
   if (full) for (var s = 0; s < G.weapons.length; s++) (function (slot) { var w = G.weapons[slot], nMods = w.modIds.length + (w.capstone ? 1 : 0), b = el('button', 'btn small', 'Replace <b style="color:' + CLASSES[wcls(w)].color + '">' + esc(w.def.name) + '</b>' + (nMods ? ' <span class="hint">(loses ' + nMods + ' mod' + (nMods > 1 ? 's' : '') + ')</span>' : '')); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); replaceWeapon(slot, item.id, item.rarity); selectWeapon(slot); if (crateRef) crateRef.used = true; hideScreens(); Snd.sfx('buy'); }); sp.appendChild(b); })(s);
 }
-/* Instrument Rep: three mods for one carried weapon, one reroll for RVU */
-var repRef = null;
-var REP_TALK = ['Doc. DOC. This attachment changes everything. Also my quota.', 'Free sample. Well — free for you. Admin hears about it later.', 'Our competitors? Never heard of them. Pick one, I have a flight.', 'This one is evidence-based. The evidence is me, saying it.', 'Sign here. Kidding. Just take the upgrade.', 'I was a scrub tech once. Now I have a lanyard and a Tesla.'];
+/* Instrument Rep: one of four salespeople pitches (skippable), then three mods for one carried weapon, one reroll for RVU,
+   sometimes a free sample (an extra mod with a one-room drawback), always a free pen that does nothing */
+var repRef = null, repTimer = null;
 function repWeapon() { if (!repRef) return null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === repRef.weapon) return G.weapons[i]; return null; }
 function openRepScreen(reward) {
   repRef = reward; var w = repWeapon();
   if (!w) { reward.used = true; repRef = null; return; }
-  if (!reward.offer) { reward.offer = rollModOffer(w, 3); reward.rerolled = false; }
-  openOverlay('mod'); $('modTalk').textContent = REP_TALK[Math.floor(vr() * REP_TALK.length)]; renderModCards();
+  if (!reward.rep) reward.rep = pick(REPS).id;
+  if (!reward.offer) {
+    reward.offer = rollModOffer(w, 3); reward.rerolled = false;
+    if (rnd() < 0.25) { // a free sample: a mod beyond the three on the table — from this instrument's case if it has more, else from another carried instrument's
+      var extra = rollModOffer(w, 1, reward.offer, true);
+      if (!extra.length) { var others = []; for (var oi = 0; oi < G.weapons.length; oi++) { var ow = G.weapons[oi]; if (ow !== w && availableMods(ow).filter(function (m) { return !m.capstone; }).length) others.push(ow); } if (others.length) extra = rollModOffer(pick(others), 1, null, true); }
+      if (extra.length) reward.sample = { id: extra[0], drawback: rnd() < 0.5 ? 'hp' : 'heat', taken: false };
+    }
+  }
+  if (!reward.pitch) reward.pitch = pick(repById(reward.rep).pitches);
+  openOverlay('mod'); renderRepHeader();
+  if (reward.pitched) showModChoice(); else showPitch();
+}
+function renderRepHeader() {
+  var rep = repById(repRef.rep), w = repWeapon(), cv = $('repFace'), c = cv.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 160, 160); c.scale(2, 2); c.translate(40, 34); drawCaricature(c, rep.look, 0.95);
+  $('repName').textContent = rep.name; $('repName').style.color = rep.color; $('repCo').textContent = rep.company + ' · ' + rep.title;
+  $('modTitle').innerHTML = 'Instrument Rep · <span style="color:' + CLASSES[WEAPONS[w.id].cls].color + '">' + esc(w.def.name) + '</span>';
+}
+function showPitch() {
+  $('modChoice').style.display = 'none'; $('pitchRow').style.display = '';
+  $('modTalk').textContent = repRef.pitch + ' ' + REP_CLOSER;
+  if (repTimer) clearTimeout(repTimer); repTimer = setTimeout(function () { repTimer = null; if (repRef && G.overlay === 'mod') showModChoice(); }, 4000);
+}
+function showModChoice() {
+  if (repTimer) { clearTimeout(repTimer); repTimer = null; } if (!repRef) return; repRef.pitched = true;
+  $('pitchRow').style.display = 'none'; $('modChoice').style.display = ''; $('modTalk').textContent = REP_CLOSER; renderModCards();
+}
+function takeFreePen() {
+  if (!repRef) return; G.pens = (G.pens || 0) + 1; var swag = ['a pen (clicks, does nothing)', 'kidney-shaped sticky notes (do nothing)', 'a lanyard (does nothing)', 'a stress ball shaped like a bladder (does nothing)'][(G.pens - 1) % 4];
+  $('modTalk').textContent = 'Here, have ' + swag + '. ' + REP_CLOSER; $('btnFreePen').textContent = 'FREE SWAG: ' + G.pens; Snd.sfx('click'); if (P) addText(P.x, P.y - 44, 'FREE SWAG +1 (does nothing)', { color: '#8ea2b6', size: 11 });
 }
 function renderModCards() {
   var w = repWeapon(), wrap = $('modCards'); wrap.innerHTML = ''; if (!w) { hideScreens(); return; }
-  $('modTitle').innerHTML = 'Instrument Rep · <span style="color:' + CLASSES[WEAPONS[w.id].cls].color + '">' + esc(w.def.name) + '</span>';
+  $('modTitle').innerHTML = 'Instrument Rep · <span style="color:' + CLASSES[WEAPONS[w.id].cls].color + '">' + esc(w.def.name) + '</span>';   // a reroll can switch the case to another instrument
   var offer = repRef.offer;
   if (!offer.length) wrap.appendChild(el('p', 'hint', 'Nothing left in the sample case for this instrument.'));
   for (var i = 0; i < offer.length; i++) wrap.appendChild(modCard(offer[i], function (id) { giveMod(id); if (repRef) repRef.used = true; repRef = null; hideScreens(); }));
+  var smd = repRef.sample && !repRef.sample.taken ? MODS[repRef.sample.id] : null, smw = smd ? carriedWeapon(smd.weapon) : null;
+  if (smd && smw && modAvailable(smw, smd)) { // the free sample: an extra mod now (maybe for another instrument), a one-room drawback
+    var sm = repRef.sample, sc = modCard(sm.id, function (id) { giveMod(id); applySampleDrawback(sm.drawback); sm.taken = true; renderModCards(); }, 'TAKE THE FREE SAMPLE');
+    sc.className += ' sample'; sc.insertBefore(el('div', '', '<span class="tag capstone">FREE SAMPLE</span> <span class="tag">' + esc(WEAPONS[smd.weapon].name) + '</span> <span class="tag">this room: ' + (sm.drawback === 'hp' ? '−10% max HP' : '+10% heat generation') + '</span>'), sc.children[sc.children.length - 1]); wrap.appendChild(sc);
+  }
+  $('btnFreePen').textContent = G.pens ? 'FREE SWAG: ' + G.pens : 'TAKE A FREE PEN';
   var tgt = repRerollTarget();
   $('btnModReroll').disabled = repRef.rerolled || G.rvu < MOD_REROLL_COST || !tgt; $('btnModReroll').textContent = repRef.rerolled ? 'REROLLED' : !tgt ? 'NOTHING TO REROLL' : (tgt.switched ? 'REROLL → ANOTHER INSTRUMENT (' : 'REROLL (') + MOD_REROLL_COST + ' RVU)';
   $('modSub').textContent = 'You have ' + G.rvu + ' RVU · ' + w.def.name + ' holds ' + w.modIds.length + ' / ' + MOD_CAP + ' mods' + (w.capstone ? ' + its capstone' : '') + '. A mod lasts the whole run. One reroll per rep: new samples, or another instrument’s case when this one is out.';
@@ -4253,13 +4688,13 @@ function modIcon(m) {
   if (m.capstone) { c.fillStyle = '#ffd166'; c.save(); c.translate(18, -18); starPath(c, 8, 3.5, 5, -Math.PI / 2); c.fill(); outline(c, 2); c.restore(); }
   return cv;
 }
-function modCard(id, onPick) {
+function modCard(id, onPick, btnText) {
   var m = MODS[id], card = el('button', 'card ' + (m.capstone ? 'capstone' : m.rarity)); card.type = 'button';
   if (isNew('m:' + id)) card.appendChild(el('span', 'new', 'NEW'));
   card.appendChild(modIcon(m)); card.appendChild(el('h4', '', esc(m.name)));
   card.appendChild(el('div', '', '<span class="tag br-' + m.branch + '">' + BRANCHES[m.branch].name + ' ' + ['I', 'II', 'III'][m.tier - 1] + '</span> <span class="tag ' + (m.capstone ? 'capstone' : m.rarity) + '">' + (m.capstone ? 'capstone' : m.rarity) + '</span>'));
   card.appendChild(el('div', 'desc', esc(m.desc)));
-  card.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (m.capstone ? 'TAKE THE CAPSTONE' : 'INSTALL') + '</span>'));
+  card.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (btnText || (m.capstone ? 'TAKE THE CAPSTONE' : 'INSTALL')) + '</span>'));
   card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); onPick(id); });
   return card;
 }
@@ -4279,7 +4714,8 @@ function renderShop() {
     var pr = el('span', 'price', it.sold ? 'SOLD' : it.price + ' RVU'); line.appendChild(pr);
     var b = el('button', 'btn small' + (it.sold || G.rvu < it.price ? '' : ' primary'), it.sold ? '—' : 'BUY'); b.type = 'button'; b.disabled = it.sold || G.rvu < it.price;
     b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (it.sold || G.rvu < it.price) return; G.rvu -= it.price; it.sold = true; Snd.sfx('buy');
-      if (it.kind === 'boon') giveBoon(it.id); else if (it.kind === 'iv') healPlayer(25); else if (it.kind === 'heart') { P.maxHp += 10; healPlayer(10); }
+      if (it.kind === 'boon') { if (abxCapBlocks(it.id) || it.id === 'grading') { tryTakeBoon(it.id, function () { openOverlay('shop'); renderShop(); }, function () { G.rvu += it.price; it.sold = false; openOverlay('shop'); renderShop(); }); return; } giveBoon(it.id); }
+      else if (it.kind === 'iv') healPlayer(25); else if (it.kind === 'heart') { P.maxHp += 10; healPlayer(10); }
       else if (it.kind === 'mod') { if (!giveMod(it.id)) { G.rvu += it.price; it.sold = false; Snd.sfx('tink'); } }
       else if (it.kind === 'weapon') { var owned = false; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === it.item.id) owned = true; if (owned || WEAPONS[it.item.id].ultimate || G.weapons.length < G.maxWeapons) { giveWeapon(it.item.id, it.item.rarity); } else { openWeaponScreen({ item: it.item, paid: true }); return; } }
       renderShop(); });
@@ -4292,6 +4728,7 @@ function openSummary(won, xp, newLevel, isBest) {
   $('sumTitle').textContent = won ? 'DISCHARGED!' : 'CODE BLUE'; $('sumTitle').style.color = won ? '#5df07a' : '#ff4d6d';
   $('sumSub').textContent = won ? 'The Staghorn is rubble. Stone-free, no stent, no complications. Go eat something.' : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
   var tiles = [['Rooms cleared', st.rooms + ' / 9'], ['Kills', st.kills], ['RVU earned', st.rvu], ['Time', fmtTime(G.time)], ['Super-effective hits', st.superHits], ['Swaps / rolls', st.swaps + ' / ' + st.rolls], ['Damage taken', Math.round(st.dmgTaken)]];
+  if (G.pens) tiles.push(['Free swag (does nothing)', G.pens]); if (st.grades) tiles.push(['Gleason grades', st.grades]); if (st.collateral) tiles.push(['Collateral rooms', st.collateral]); if (st.deesc) tiles.push(['De-escalations', st.deesc]);
   var html = ''; for (var i = 0; i < tiles.length; i++) html += '<div><small>' + tiles[i][0] + '</small><b>' + tiles[i][1] + '</b></div>';
   for (var c = 0; c < CLASS_LIST.length; c++) html += '<div style="border-left:4px solid ' + CLASSES[CLASS_LIST[c]].color + '"><small>' + CLASSES[CLASS_LIST[c]].name + ' damage</small><b>' + Math.round(st.dmg[CLASS_LIST[c]] || 0) + '</b></div>';
   $('sumStats').innerHTML = html;
@@ -4357,7 +4794,9 @@ onTap('btnBestiary', openBestiary); onTap('btnBestBack', showTitle);
 onTap('btnSettings', function () { openSettings('title'); }); onTap('btnSetBack', closeSettings);
 onTap('btnExit', exitEmbed); onTap('btnPauseExit', exitEmbed);
 onTap('btnResume', resumeGame); onTap('btnPauseSettings', function () { openSettings('pause'); }); onTap('btnQuit', function () { G.running = false; showTitle(); });
-onTap('btnReroll', function () { if (!altarRef || altarRef.rerolled || G.rvu < 25) return; G.rvu -= 25; altarRef.rerolled = true; altarRef.offer = rollBoons(3, altarRef.offer); Snd.sfx('buy'); renderBoonCards(); });
+onTap('btnReroll', function () { if (!altarRef || altarRef.rerolled || G.rvu < 25) return; G.rvu -= 25; altarRef.rerolled = true; altarRef.offer = rollBoons(3, altarRef.offer, altarRef.patron); Snd.sfx('buy'); renderBoonCards(); });
+onTap('btnSkipPitch', showModChoice); onTap('btnFreePen', takeFreePen);
+onTap('btnGradeSkip', function () { var ref = gradeRef; gradeRef = null; if (ref) ref.onCancel(); else hideScreens(); });
 onTap('btnBoonSkip', function () { altarRef = null; hideScreens(); });
 onTap('btnAspects', openAspects); onTap('btnAspectsBack', showTitle);
 onTap('btnModReroll', function () {
@@ -4385,14 +4824,15 @@ window.UroCrawl = {
   player: function () { return P; },
   spawn: function (id, x, y, opts) { if (!G.running) return null; return spawnEnemy(id, x === undefined ? P.x + 200 : x, y === undefined ? P.y : y, opts || { instant: true }); },
   giveWeapon: function (id, rarity) { return G.running ? giveWeapon(id, rarity) : false; },
-  giveBoon: function (id) { return G.running ? giveBoon(id) : false; },
+  giveBoon: function (id, force) { return G.running ? giveBoon(id, force) : false; },
   giveMod: function (id) { return G.running ? giveMod(id) : false; },
+  gradeBoon: gradeBoon, dropBoon: dropBoon, abxRes: abxRes, abxBonus: abxBonus, activeAbx: activeAbx, pickPatron: pickPatron, patronPool: patronPool, rollBoons: rollBoons, dropperVial: dropperVial, cultureReport: cultureReport,
   setAspect: setAspect, chosenAspect: chosenAspect, detailSlot: detailSlot, genDoorOptions: genDoorOptions, pickRepWeapon: pickRepWeapon, rollModOffer: rollModOffer, availableMods: availableMods,
   skipRoom: skipRoom,
   step: function (n) { n = n || 1; if (!G.running) return; for (var i = 0; i < n; i++) { if (G.over) { G.endT -= STEP; if (G.endT <= 0 && G.overlay !== 'summary') { G.timeScale = 1; finishRun(); } continue; } update(STEP); } },
   startRun: function () { if (!G.running) { META.helpSeen = true; beginRun(); } },
   selectWeapon: selectWeapon, dealDamage: dealDamage, hurtPlayer: hurtPlayer, seed: function () { return SEED; },
-  tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES },
+  tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };
 resize(); setTimeout(resize, 100);
