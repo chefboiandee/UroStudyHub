@@ -19,13 +19,15 @@ inside another workspace; nothing here depends on that one any more.)
 - `UroStudyHub.html` — the app (React + in-browser Babel, ~13k lines: grep → slice).
   `python3 build.py` → `UroStudyHub.min.html`, which Pages serves (`index.html` redirects to it).
 - `games/` — arcade games that are their own page; the app hosts them in a frame
-  (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`).
+  (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
+  `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, pure canvas, no deps).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
   In-Service sprint: `node tools/ise-plan.test.mjs` (pure Node, scheduler) and `node tools/ise-plan.drive.mjs`
   (headless E2E; set `CDN_DIR` to a node_modules with react/react-dom 18.2.0, @babel/standalone 7.23.9, katex 0.16.9 when offline).
   Arcade card games (Snap Decision, Board Buzzer, Staging Attack, the retired-games refund): `node tools/arcade-cards.drive.mjs` (same `CDN_DIR` trick).
+  Uro Crawl: `node tools/uro-crawl.drive.mjs` (needs the `urostudyhub` server; no CDN: the game has no dependencies).
 
 ## Run and verify
 
