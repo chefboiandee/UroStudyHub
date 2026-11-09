@@ -250,7 +250,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 
 | Game | ID | Description | Multi-Specialty Potential |
 |------|----|-------------|--------------------------|
-| 🪨 Stone Crusher | `blaster` | Click falling kidney stones before they hit bottom | Urology-specific — would need specialty variants (e.g. catch arrhythmias for cardiology, identify lesions for derm) |
+| 👆 Snap Decision | `snap` | Swipe binary clinical calls; a different theme each round (Bench or OR, Surveillance or Intervention, Stent or No Stent, Admit or Discharge, Biopsy or Hold, Antibiotics or Not, Cut or Drug); built-in decks + AI decks; shared card-game shell with Board Buzzer (free game since 2026-11-09; Stone Blaster and Visual Dx retired that day, see STATUS) | **Universal** — themes are data (`SNAP_MODES`): any specialty is a new set of binary calls |
 | 🏥 Uro Rush | `rush` | Top-down doctor sim, one shift that switches at random between outpatient clinic (incl. 🚑 Send to ED) and the inpatient consult pager; walk into a room and pick the right first step, then sign it at the nurses' station / workstation computer (rooms stay full until signed; arrivals back up into the hall). Merged the old Uro Clinic Rush (`clinic`) + Inpatient Consults (`consults`) in Oct 2026; either old unlock carries over. Own page `games/uro-rush.html` (canvas, floating joystick on touch) hosted in a frame (postMessage `rush:claim`/`rush:exit`); harness `tools/uro-rush.drive.mjs` | **Highly adaptable** — cases + order sets are data; swap scenarios for any specialty (EM triage, ortho clinic, peds, etc.) |
 | 🛂 Pre-Op, Please | `preop` | Papers, Please-style pre-op desk: check each patient's papers against a policy binder that grows by day (identity, labs, culture, consent/side → blood-thinner holds per drug + β-hCG → infected-obstructed ESCALATE + the pre-op antibiotic order from the last 3 culture susceptibilities). Own page `games/preop-please.html` hosted in a frame (postMessage claim/exit); harness `tools/preop-please.drive.mjs` | **Highly adaptable** — rules + flaws are data; any "check the chart before the case" specialty |
 | 💊 Drug Match | `drugmatch` | Conveyor belt — catch pills in correct drug class bucket | **Universal** — works for any specialty by swapping drug categories (abx classes, psych meds, chemo regimens, etc.) |
@@ -538,10 +538,10 @@ mode** — zero rAF, one full draw per interaction, ‹ › node stepping.
 - Desktop: WASD + spacebar / mouse click, preserves current muscle memory for users on laptop.
 
 **Tech notes:**
-- Reuse existing ship/bullet/collision infra from StoneCrusherGame.
+- The old StoneCrusherGame ship/bullet/collision code is gone from the app (git history before 2026-11-09 has it); Stone Squadron's three.js scene is the live reference.
 - Bullet patterns driven by JSON wave definitions — makes adding future bosses data-driven (aligns with Phase 4 specialty-agnostic goal).
 - Side-scrolling simplifies physics: enemies move only on X axis at fixed speeds, bullets use simple parametric patterns.
-- Keep gameId = `"blaster"` for continuity, or bump to `"blaster2"` with migration logic if save compat matters.
+- Stone Blaster (`blaster`) was retired on 2026-11-09 (`migrateArcade` refunds its upgrades/unlock), so a shooter would be a new game id and a new page in `games/` like Stone Squadron.
 
 **Estimated effort:** Medium-large. ~1-2 weeks of focused work. Bullet patterns and boss phases are where time goes.
 

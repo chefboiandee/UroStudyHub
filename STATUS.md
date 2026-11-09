@@ -3,6 +3,45 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later) — 🎮 Arcade: card-game shell, Snap Decision themes, Board Buzzer with the why; Blaster + Visual Dx retired
+
+Andrew's call on the audit below: toss Stone Blaster and Visual Dx, give the Shop back to generic upgrades (themes, XP
+and coin boosts; game-specific upgrades can return with a roguelike later), and build the shared shell, with Snap
+Decision dealing a different theme every round.
+
+**Done (`UroStudyHub.html`, built, 58/58 in `tools/arcade-cards.drive.mjs`):**
+- **Retired** `StoneCrusherGame` and `VisualDxGame`, their tiles, the `STONES` table and the five Blaster-only Shop
+  upgrades (Extra Lives, Laser Power, Time Extend, Critical Hit, Coin Magnet). `migrateArcade` (runs once per saved
+  profile via `arcadeV`) refunds every coin spent on those upgrades and on the Visual Dx / Snap unlocks, drops the
+  dead keys, and the Arcade shows a dismissible banner with the amount. Snap Decision is now the ★ free game (touch
+  first, works everywhere incl. the Boox); Buzzer stays at 300 💰.
+- **Card-game shell** (`// ═══ CARD GAME SHELL`): `GameFrame` (header with 🔊 toggle, `< Games`, ✕), `ReadyCard`
+  (how-to bullets, best score), `RunHud` (score / progress / streak / lives / countdown bar), `OverCard` (score, New
+  best!, accuracy, best streak, `+N 💰 · +M XP` preview, **REVIEW · N MISSED** list with your call → right call and the
+  why, Claim ▸ / Play again), `useRoundTimer`, `useGameBest` (persisted in `s.gameBest`), `cardRewards` (capped
+  150 💰 / 80 XP like the framed games; paid through `gameReward(…, keepOpen)`), `fetchAiDeck` (strict-JSON helper).
+  Synthesized sound + haptics live outside the component (`GAME_AUDIO`, `gameSfx`, `uroStudyHub_gameSound`) because the
+  game overlay is memoized.
+- **Snap Decision**: 7 themes in `SNAP_MODES`, 123 built-in cards with a why each — Bench or OR?, Surveillance or
+  Intervention?, Stent or No Stent?, Admit or Discharge?, Biopsy or Hold?, Antibiotics or Not?, Cut or Drug?. Random
+  theme per round (never the same twice in a row) or pin one with a chip. 20 s a card, speed + streak scoring, swipe /
+  buttons / ← → keys, timeout counts as a miss. "✨ Fresh AI deck" generates 10 cards for the dealt theme and caches
+  them (`uroStudyHub_snapAi`, 40 per theme) so built-in rounds draw on them later; failure falls back to the deck.
+- **Board Buzzer**: 50-question bank (was 24, no explanations; two outdated items fixed), every answer shows the why,
+  1–4 / A–D keys, 12 s, 3 lives, "✨ Fresh AI questions" with the same fallback. Same debrief.
+- Docs: `UroStudyHub_CLAUDE.md` game table + shooter notes, `CLAUDE.md` harness list.
+
+**Verified:** headless Chrome (phone viewport too): migration refund maths and banner, Shop contents, full Snap rounds
+(pinned + random, keyboard, timeout, claim pays once, best persists), Buzzer round with lives, Drug Match and Staging
+Attack still open, no console errors. Not verified on a real iPad or the Boox; the AI-deck path is exercised only by
+its fallback (no model in the sandbox).
+
+**Next steps:** Andrew to play a few rounds on the live site (and once on the Boox). Then, from the audit: Staging
+Attack → tap-to-stage on the shell; Drug Match → pure tap-sort (own canvas page?). Tie "Fresh AI deck" to the ISE
+sprint's weak groups / miss log.
+**Open questions:** should Buzzer be free too (it is the most Boox-friendly game)? Reward tuning: a perfect Snap round
+pays ~25 💰 vs up to 150 from the framed games.
+
 ## 2026-11-09 — 🎮 Audit of the six in-app arcade games (no code changes)
 
 Andrew asked which arcade games have gone stale and how to bring them up to the polish of Uro Rush /

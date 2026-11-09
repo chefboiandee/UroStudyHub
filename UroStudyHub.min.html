@@ -1450,22 +1450,10 @@ if (xp < RANKS[i].minXP) return RANKS[i];
 }
 return null;
 }
-var STONES = [
-{ name: "CaOx", hp: 2, sz: 40, col: "#8B7355", pts: 10, e: "🪨", boss: false },
-{ name: "Uric Acid", hp: 1, sz: 32, col: "#DAA520", pts: 5, e: "🟡", boss: false },
-{ name: "Struvite", hp: 6, sz: 58, col: "#708090", pts: 40, e: "💀", boss: true, shootRate: 45, projSpd: 2.5 },
-{ name: "Cystine", hp: 3, sz: 45, col: "#FFB6C1", pts: 15, e: "💎", boss: false },
-{ name: "Staghorn", hp: 8, sz: 70, col: "#CD853F", pts: 50, e: "🦌", boss: false },
-];
 const UPGRADES = [
 { id: "xp_boost", name: "Research Grant", desc: "+10% XP", cost: 80, icon: "📝", max: 3 },
 { id: "streak_shield", name: "Streak Shield", desc: "Protect streak", cost: 120, icon: "🛡", max: 5 },
 { id: "coin_boost", name: "NIH Funding", desc: "+20% coins", cost: 100, icon: "💰", max: 3 },
-{ id: "game_life", name: "Extra Lives", desc: "+1 game life", cost: 60, icon: "❤️", max: 3 },
-{ id: "laser_power", name: "Laser Power", desc: "+1 damage", cost: 80, icon: "🔫", max: 3 },
-{ id: "time_ext", name: "Time Extend", desc: "+5s game time", cost: 50, icon: "⏱", max: 3 },
-{ id: "crit", name: "Critical Hit", desc: "+8% crit chance", cost: 100, icon: "💥", max: 3 },
-{ id: "magnet", name: "Coin Magnet", desc: "+1x coin mult", cost: 90, icon: "🧲", max: 3 },
 ];
 const THEMES = [
 { id: "default", name: "Night Shift", c: { bg: "#0f172a", cd: "#1e293b", a: "#818cf8", a2: "#c084fc" }, lc: { bg: "#f3f5f8", cd: "#ffffff", a: "#4f46e5", a2: "#9333ea" }, cost: 0 },
@@ -2503,6 +2491,49 @@ var SYSTEM_PROMPT_SURGICAL = [
 "",
 "Accuracy matters — this learner is clinically training. Use the MODULE REFERENCE provided below as your factual backbone and expand on it conversationally; do not contradict it. No medical-advice disclaimers — this is skills coaching between colleagues."
 ].join("\n");
+var ARCADE_VERSION = 2;
+var ARCADE_RETIRED_UPS = { game_life: 60, laser_power: 80, time_ext: 50, crit: 100, magnet: 90 };
+var ARCADE_RETIRED_UNLOCKS = { blaster: 0, imgrec: 200, snap: 150 };
+function migrateArcade(st) {
+if (!st || (st.arcadeV || 0) >= ARCADE_VERSION) return st;
+var refund = 0, ups = Object.assign({}, st.ups || {}), ug = Object.assign({}, st.unlockedGames || {}), id, i;
+for (id in ARCADE_RETIRED_UPS) {
+var lv = ups[id] || 0;
+for (i = 0; i < lv; i++) refund += ARCADE_RETIRED_UPS[id] * (i + 1); // buyUpgrade charges cost × (level + 1)
+delete ups[id];
+}
+for (id in ARCADE_RETIRED_UNLOCKS) { if (ug[id]) { refund += ARCADE_RETIRED_UNLOCKS[id]; delete ug[id]; } }
+ug.snap = true;
+return Object.assign({}, st, { arcadeV: ARCADE_VERSION, ups: ups, unlockedGames: ug, coins: (st.coins || 0) + refund, arcadeRefund: (st.arcadeRefund || 0) + refund });
+}
+var GAME_AUDIO = { ctx: null, on: true };
+try { GAME_AUDIO.on = localStorage.getItem("uroStudyHub_gameSound") !== "off"; } catch (e) {  }
+function primeGameAudio() { // call from inside a click/touch handler (iPad autoplay policy)
+try {
+var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+if (!GAME_AUDIO.ctx) GAME_AUDIO.ctx = new AC();
+if (GAME_AUDIO.ctx.state === "suspended") GAME_AUDIO.ctx.resume().catch(function() {});
+} catch (e) { GAME_AUDIO.ctx = null; }
+}
+function setGameSound(on) { GAME_AUDIO.on = !!on; try { localStorage.setItem("uroStudyHub_gameSound", on ? "on" : "off"); } catch (e) {  } }
+function gameTone(f, at, dur, o) {
+var c = GAME_AUDIO.ctx; if (!c || !GAME_AUDIO.on) return; o = o || {};
+try {
+var t0 = c.currentTime + (at || 0), osc = c.createOscillator(), g = c.createGain();
+osc.type = o.type || "sine"; osc.frequency.setValueAtTime(f, t0);
+if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(o.vol || 0.12, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+osc.connect(g); g.connect(c.destination); osc.start(t0); osc.stop(t0 + dur + 0.05);
+} catch (e) {  }
+}
+var gameSfx = {
+ok: function(n) { var b = 523.25 * Math.pow(2, Math.min(n || 0, 9) / 24); [0, 4, 7, 12].forEach(function(st, k) { gameTone(b * Math.pow(2, st / 12), k * 0.055, 0.22, { type: "triangle", vol: 0.1 }); }); },
+bad: function() { gameTone(196, 0, 0.3, { type: "sawtooth", vol: 0.06, to: 104 }); try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) {  } },
+tick: function() { gameTone(988, 0, 0.05, { type: "square", vol: 0.025 }); },
+flip: function() { gameTone(880, 0, 0.05, { type: "triangle", vol: 0.05 }); gameTone(1175, 0.05, 0.06, { type: "triangle", vol: 0.04 }); },
+fanfare: function() { [0, 4, 7, 12].forEach(function(st, k) { gameTone(440 * Math.pow(2, st / 12), k * 0.09, 0.32, { type: "triangle", vol: 0.1 }); }); },
+over: function() { gameTone(392, 0, 0.5, { type: "triangle", vol: 0.09, to: 196 }); }
+};
 const INIT = {
 role: "", // "" = not set, "resident", "student"
 ankiEnabled: true, // toggle Anki integration on/off
@@ -2517,7 +2548,9 @@ studyMinsPerDay: 60, // target minutes per study session
 done: {}, medDone: {}, xp: 0, coins: 0, streak: 0, lastDay: null,
 sessions: 0, conf: {}, ups: {}, themes: ["default"], theme: "default",
 hi: 0, games: 0, shields: 0, ankiCards: [], savedLectures: [],
-tokens: 0, tokensEarned: 0, tokensSpent: 0, unlockedGames: { blaster: true },
+tokens: 0, tokensEarned: 0, tokensSpent: 0, unlockedGames: { snap: true },
+gameBest: {}, // best score per card game, { snap: n, buzzer: n }
+arcadeV: 0, arcadeRefund: 0, // migrateArcade stamps ARCADE_VERSION; a saved profile without the key must read as 0 after the INIT merge
 activityLog: [],
 ankiReviews: 0, ankiReviewGoal: 50,
 pomodorosToday: 0, lastPomDate: null,
@@ -3613,9 +3646,9 @@ export default function UroStudyHub() {
 var [s, setS] = useState(function() {
 try {
 var saved = localStorage.getItem("uroStudyHub_progress");
-if (saved) return Object.assign({}, INIT, JSON.parse(saved));
+if (saved) return migrateArcade(Object.assign({}, INIT, JSON.parse(saved)));
 } catch (e) {  }
-return INIT;
+return migrateArcade(INIT);
 });
 var [page, setPage] = useState("hub");
 var [tView, setTView] = useState("schedule");
@@ -4344,7 +4377,7 @@ var [editText, setEditText] = useState("");
 var [editFront, setEditFront] = useState("");
 var [editBack, setEditBack] = useState("");
 var [previewCloze, setPreviewCloze] = useState(null);
-var [showGame, setShowGame] = useState(""); // "", "select", or a game id from GAMES ("blaster", "rush", "preop", …)
+var [showGame, setShowGame] = useState(""); // "", "select", or a game id from GAMES ("snap", "rush", "preop", …)
 var [convertingChat, setConvertingChat] = useState("");
 var [lectureMode, setLectureMode] = useState(false);
 var [masteryMode, setMasteryMode] = useState(false); // third tutor mode: micro-step mastery drill
@@ -6279,15 +6312,13 @@ background: (a.color || "#c084fc") + "15"
 var [gameTab, setGameTab] = useState("play"); // "play" or "shop"
 function GameSelectScreen() {
 var GAMES = [
-{ id: "blaster", name: "Stone Blaster", icon: "🚀", desc: "Blast kidney stones! WASD + mouse aim.", color: "#c084fc", main: true, unlockCost: 0, reqs: { keyboard: true, mouse: true } },
+{ id: "snap", name: "Snap Decision", icon: "👆", desc: "Swipe clinical calls. A new theme every round: OR or not, stent or not, admit or discharge…", color: "#ec4899", main: true, unlockCost: 0, reqs: { touch: true } },
 { id: "rush", name: "Uro Rush", icon: "🏥", desc: "Clinic and the consult pager in one shift, switching at random. Joystick on touch.", color: "#38bdf8", unlockCost: 150, reqs: { touch: true } },
 { id: "preop", name: "Pre-Op, Please", icon: "🛂", desc: "Check tomorrow's cases against the policy binder — clear, defer, or escalate.", color: "#d9b44a", unlockCost: 200, reqs: { touch: true } },
 { id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
 { id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
-{ id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire urology questions!", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
-{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Type the correct TNM stage to destroy tumors!", color: "#10b981", unlockCost: 350, reqs: { keyboard: true } },
-{ id: "imgrec", name: "Visual Dx", icon: "🔍", desc: "ID the diagnosis from imaging & cysto findings!", color: "#06b6d4", unlockCost: 200, reqs: { touch: true } },
-{ id: "snap", name: "Snap Decision", icon: "👆", desc: "Tinder-style clinical calls. Swipe to decide.", color: "#ec4899", unlockCost: 150, reqs: { touch: true } }
+{ id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
+{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Type the correct TNM stage to destroy tumors!", color: "#10b981", unlockCost: 350, reqs: { keyboard: true } }
 ];
 var deviceNow = getEffectiveDevice(s.devicePref);
 var showAllGames = s.gamesShowAll === true;
@@ -6329,6 +6360,12 @@ return (
 <div style={{ fontSize: 9, color: "#64748b" }}>{isAdmin ? <span style={{ color: "var(--a-or2)", fontWeight: 800 }}>ADMIN — Free Play</span> : (s.tokens || 0) > 0 ? (s.tokens || 0) + " token" + ((s.tokens || 0) !== 1 ? "s" : "") + " — 1 per session" : "Earn tokens to play full sessions"} | {s.games || 0} played</div>
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { gamesShowAll: !p.gamesShowAll }); }); }} style={{ background: showAllGames ? c.a + "20" : "transparent", border: "1px solid " + (showAllGames ? c.a + "50" : "var(--c-br-50)"), borderRadius: 10, padding: "2px 8px", cursor: "pointer", color: showAllGames ? c.a : "#64748b", fontSize: 8, fontWeight: 600, whiteSpace: "nowrap" }} title={"Currently showing " + (showAllGames ? "all games" : "games that fit your " + deviceNow)}>{showAllGames ? "All games" : deviceNow === "phone" ? "📱 Phone fit" : deviceNow === "tablet" ? "📱 iPad fit" : "💻 Desktop fit"}</button>
 </div>
+{(s.arcadeRefund || 0) > 0 && (
+<div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#fbbf2414", border: "1px solid #fbbf2444", borderRadius: 8, fontSize: 9, color: "var(--c-mut)", lineHeight: 1.45 }}>
+<span style={{ flex: 1 }}>{"Stone Blaster and Visual Dx have retired. "}<b style={{ color: "var(--a-am)" }}>{s.arcadeRefund + " 💰"}</b>{" spent on their upgrades and unlocks is back in your wallet. Snap Decision is now the free game."}</span>
+<button onClick={function() { setS(function(p) { return Object.assign({}, p, { arcadeRefund: 0 }); }); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", padding: "0 4px" }}>{"✕"}</button>
+</div>
+)}
 {(function() {
 var sorted = GAMES.slice().sort(function(a, b) {
 var fa = deviceFitsGame(deviceNow, a.reqs).fits ? 0 : 1;
@@ -6792,30 +6829,56 @@ actions={[]}
 );
 }
 var BUZZER_QS = [
-{ q: "Most common type of kidney stone?", a: 0, opts: ["Calcium oxalate", "Uric acid", "Struvite", "Cystine"] },
-{ q: "Organism most associated with struvite stones?", a: 0, opts: ["Proteus mirabilis", "E. coli", "Klebsiella", "Pseudomonas"] },
-{ q: "PSA is produced by which cells?", a: 0, opts: ["Prostatic epithelial cells", "Stromal cells", "Basal cells", "Neuroendocrine cells"] },
-{ q: "Most common cause of bladder cancer?", a: 0, opts: ["Smoking", "Aniline dyes", "Schistosomiasis", "Radiation"] },
-{ q: "Testicular torsion — the classic physical exam finding?", a: 0, opts: ["High-riding testis, absent cremasteric reflex", "Positive transillumination", "Blue dot sign", "Bag of worms appearance"] },
-{ q: "Most common histology of testicular cancer in young men?", a: 0, opts: ["Mixed germ cell tumor", "Seminoma", "Leydig cell", "Sertoli cell"] },
-{ q: "First-line imaging for renal colic?", a: 0, opts: ["Non-contrast CT abdomen/pelvis", "Renal ultrasound", "KUB X-ray", "MRI abdomen"] },
-{ q: "Bosniak III renal cyst management?", a: 0, opts: ["Surgical excision or active surveillance", "Aspiration", "Observation only", "Antibiotics"] },
-{ q: "Alpha-blocker mechanism in BPH?", a: 0, opts: ["Relaxes smooth muscle in prostate/bladder neck", "Shrinks the prostate", "Blocks DHT", "Reduces detrusor contractions"] },
-{ q: "Most common location for ureteral stones to get stuck?", a: 0, opts: ["Ureterovesical junction", "UPJ", "Crossing iliac vessels", "Mid-ureter"] },
-{ q: "Wilms tumor — classic triad?", a: 0, opts: ["Flank mass, hematuria, hypertension", "Fever, weight loss, hematuria", "Pain, mass, hematuria", "Dysuria, mass, fever"] },
-{ q: "Drug of choice for overactive bladder?", a: 0, opts: ["Antimuscarinics (oxybutynin)", "Alpha-blockers", "Beta-3 agonists", "5-ARIs"] },
-{ q: "Peyronie disease — what is the pathologic finding?", a: 0, opts: ["Fibrous plaque in tunica albuginea", "Smooth muscle hypertrophy", "Calcification of corpus cavernosum", "Intimal fibrosis of dorsal vein"] },
-{ q: "What is the Gleason grading system used for?", a: 0, opts: ["Prostate cancer", "Bladder cancer", "Renal cell carcinoma", "Testicular cancer"] },
-{ q: "Most common type of renal cell carcinoma?", a: 0, opts: ["Clear cell", "Papillary", "Chromophobe", "Collecting duct"] },
-{ q: "Classic triad of renal cell carcinoma?", a: 0, opts: ["Flank pain, hematuria, palpable mass", "Fever, weight loss, hematuria", "Hypertension, mass, pain", "Hematuria, varicocele, edema"] },
-{ q: "Urethral injury above the UG diaphragm — what kind?", a: 0, opts: ["Posterior urethral injury", "Anterior urethral injury", "Bladder neck injury", "Meatal injury"] },
-{ q: "Most common cause of epididymitis in men >35?", a: 0, opts: ["E. coli / coliforms", "Chlamydia", "Gonorrhea", "TB"] },
-{ q: "Phimosis treatment in adults?", a: 0, opts: ["Topical steroids, then circumcision if fails", "Immediate circumcision", "Antibiotics", "Observation only"] },
-{ q: "VHL syndrome — classic renal finding?", a: 0, opts: ["Bilateral clear cell RCC", "Oncocytoma", "AML", "Collecting duct carcinoma"] },
-{ q: "Fournier gangrene — what kind of infection?", a: 0, opts: ["Necrotizing fasciitis (polymicrobial)", "Abscess", "Cellulitis", "Gas gangrene (clostridial)"] },
-{ q: "Nutcracker syndrome involves compression of which vein?", a: 0, opts: ["Left renal vein", "Right renal vein", "Gonadal vein", "IVC"] },
-{ q: "Post-vasectomy, when is a semen analysis checked?", a: 0, opts: ["~3 months / 20 ejaculations", "1 week", "6 months", "Immediately"] },
-{ q: "5-alpha reductase inhibitors work by blocking conversion to?", a: 0, opts: ["DHT", "Estradiol", "Testosterone", "DHEA"] },
+{ q: "Most common type of kidney stone?", opts: ["Calcium oxalate", "Uric acid", "Struvite", "Cystine"], why: "Calcium oxalate is ~75% of stones; uric acid stones are the radiolucent ones." },
+{ q: "Organism most associated with struvite stones?", opts: ["Proteus mirabilis", "E. coli", "Enterococcus", "Pseudomonas"], why: "Urease splits urea to ammonia, alkalinizes the urine and precipitates magnesium ammonium phosphate." },
+{ q: "PSA is produced by which cells?", opts: ["Prostatic luminal epithelial cells", "Stromal cells", "Basal cells", "Neuroendocrine cells"], why: "PSA (kallikrein-3) is a serine protease from the luminal epithelium that liquefies semen." },
+{ q: "Strongest risk factor for bladder cancer in the US?", opts: ["Cigarette smoking", "Aniline dye exposure", "Schistosomiasis", "Pelvic radiation"], why: "Smoking accounts for about half of cases; schistosomiasis drives squamous cancer in endemic regions." },
+{ q: "Classic exam finding of testicular torsion?", opts: ["High-riding testis, absent cremasteric reflex", "Positive transillumination", "Blue dot sign", "Bag of worms"], why: "Blue dot = torsed appendix testis; bag of worms = varicocele; transillumination = hydrocele." },
+{ q: "Most common single histology of testicular germ cell tumor?", opts: ["Seminoma", "Embryonal carcinoma", "Yolk sac tumor", "Teratoma"], why: "Seminoma is ~50% of GCTs in adults; yolk sac tumor is the most common in young children." },
+{ q: "First-line imaging for suspected renal colic?", opts: ["Non-contrast CT abdomen/pelvis", "Renal ultrasound", "KUB x-ray", "MRI abdomen"], why: "NCCT is most sensitive and specific; ultrasound first in pregnancy and children." },
+{ q: "A Bosniak III renal cyst is…", opts: ["Indeterminate (~50% malignant): surgery or surveillance", "A benign simple cyst", "Minimally complex, no follow-up needed", "Unequivocally malignant"], why: "III = thick, irregular enhancing walls or septa. IIF gets imaging follow-up; IV is treated as cancer." },
+{ q: "Alpha-blockers relieve BPH symptoms by…", opts: ["Relaxing smooth muscle in the prostate and bladder neck", "Shrinking the prostate", "Blocking DHT", "Reducing detrusor contractions"], why: "That is the dynamic component; 5-ARIs shrink the gland (static component) and take months." },
+{ q: "Where do ureteral stones most often get stuck?", opts: ["Ureterovesical junction", "Ureteropelvic junction", "Crossing the iliac vessels", "Mid-ureter"], why: "Three narrowings: UPJ, iliac crossing, UVJ. The UVJ is the tightest." },
+{ q: "Classic presentation of Wilms tumor?", opts: ["Painless abdominal mass, sometimes hematuria or hypertension", "Fever and weight loss", "Bilateral flank pain", "Scrotal swelling"], why: "Most are found by a parent as an asymptomatic mass; neuroblastoma more often crosses the midline." },
+{ q: "Which OAB drug class avoids the cognitive side effects of antimuscarinics?", opts: ["Beta-3 agonists (mirabegron, vibegron)", "Alpha-blockers", "5-alpha reductase inhibitors", "PDE5 inhibitors"], why: "AUA/SUFU: antimuscarinics and beta-3 agonists are both second-line options; prefer beta-3 when cognition or dry mouth is a concern (watch BP with mirabegron)." },
+{ q: "What is the pathologic lesion of Peyronie's disease?", opts: ["Fibrous plaque in the tunica albuginea", "Smooth muscle hypertrophy", "Corporal calcification", "Dorsal vein fibrosis"], why: "The plaque will not expand with erection, so the penis curves toward it. Collagenase is for stable dorsal/lateral curvature of 30 to 90 degrees." },
+{ q: "The Gleason grade group system grades which cancer?", opts: ["Prostate adenocarcinoma", "Urothelial carcinoma", "Renal cell carcinoma", "Testicular germ cell tumor"], why: "GG1 = 3+3, GG5 = 9 to 10. RCC uses the WHO/ISUP nucleolar grade." },
+{ q: "Most common RCC subtype?", opts: ["Clear cell", "Papillary", "Chromophobe", "Collecting duct"], why: "Clear cell is ~75%, arises from the proximal tubule and is VHL-driven; chromophobe carries the best prognosis." },
+{ q: "Classic triad of renal cell carcinoma?", opts: ["Flank pain, hematuria, palpable mass", "Fever, night sweats, weight loss", "Hypertension, hematuria, edema", "Hematuria, varicocele, anemia"], why: "Seen in under 10% today; most RCC is incidental. A new left varicocele that does not decompress supine suggests renal vein involvement." },
+{ q: "Urethral injury with a pelvic fracture is usually…", opts: ["Posterior (membranous) urethra", "Anterior bulbar urethra", "Penile urethra", "Bladder neck"], why: "Straddle injuries hit the bulbar urethra. Blood at the meatus means retrograde urethrogram before any catheter." },
+{ q: "Most common cause of epididymitis in men over 35?", opts: ["Enteric organisms such as E. coli", "Chlamydia", "Gonorrhea", "Mumps"], why: "Under 35 and sexually active, think chlamydia and gonorrhea: ceftriaxone plus doxycycline." },
+{ q: "First-line treatment for adult phimosis?", opts: ["Topical steroid, circumcision if it fails", "Immediate circumcision", "Antibiotics", "Observation only"], why: "Betamethasone for 4 to 8 weeks works in most; lichen sclerosus (BXO) usually needs circumcision." },
+{ q: "Classic renal lesion in von Hippel-Lindau?", opts: ["Bilateral multifocal clear cell RCC", "Oncocytoma", "Angiomyolipoma", "Collecting duct carcinoma"], why: "VHL is on 3p. Also pheochromocytoma, hemangioblastoma and pancreatic cysts; nephron-sparing surgery once tumors reach 3 cm." },
+{ q: "Fournier's gangrene is…", opts: ["Polymicrobial necrotizing fasciitis of the perineum", "A scrotal abscess", "Scrotal cellulitis", "Clostridial gas gangrene"], why: "Broad-spectrum antibiotics plus immediate debridement. Diabetes is the most common risk factor." },
+{ q: "Nutcracker syndrome compresses which vein?", opts: ["Left renal vein between the SMA and aorta", "Right renal vein", "Left gonadal vein", "Inferior vena cava"], why: "Left flank pain, hematuria and a left varicocele." },
+{ q: "When is the post-vasectomy semen analysis checked?", opts: ["8 to 16 weeks (about 3 months)", "1 week", "6 months", "1 year"], why: "AUA: 8 to 16 weeks. Azoospermia or rare non-motile sperm (100,000/mL or fewer) is success." },
+{ q: "5-alpha reductase inhibitors block the conversion of testosterone to…", opts: ["Dihydrotestosterone", "Estradiol", "Androstenedione", "DHEA"], why: "They shrink the gland by 20 to 25% and halve PSA by 6 to 12 months, so double the PSA when screening on a 5-ARI." },
+{ q: "Which stone type is radiolucent on a plain KUB?", opts: ["Uric acid", "Calcium oxalate", "Struvite", "Cystine"], why: "Invisible on plain film, visible on CT, and the only common stone you can dissolve: alkalinize urine to pH 6.5 to 7." },
+{ q: "Cystinuria still forming stones despite fluids and alkalinization: next drug?", opts: ["Tiopronin (or penicillamine)", "Allopurinol", "Hydrochlorothiazide", "Acetazolamide"], why: "Thiol drugs bind cysteine into a more soluble complex. Target urine output above 3 L and pH about 7 to 7.5." },
+{ q: "Recurrent calcium stones with hypercalciuria: the preventive drug?", opts: ["A thiazide diuretic", "Allopurinol", "Tiopronin", "Furosemide"], why: "Thiazides lower urinary calcium; loop diuretics raise it. Add potassium citrate to offset hypokalemia and hypocitraturia." },
+{ q: "Preferred first-line treatment for a 2.5 cm renal pelvis stone?", opts: ["Percutaneous nephrolithotomy", "Shock wave lithotripsy", "Observation", "Open pyelolithotomy"], why: "AUA: PCNL first-line for renal stones over 20 mm; SWL or ureteroscopy for smaller burdens." },
+{ q: "Painful, rigid erection lasting more than 4 hours: which type of priapism?", opts: ["Ischemic (low-flow)", "Non-ischemic (high-flow)", "Stuttering only", "Neurogenic"], why: "Ischemic priapism is a compartment syndrome: aspiration and phenylephrine, then a shunt. High-flow follows perineal trauma and is not painful." },
+{ q: "Which tumor marker is never produced by pure seminoma?", opts: ["AFP", "Beta-hCG", "LDH", "PLAP"], why: "An elevated AFP means a non-seminomatous (yolk sac) component whatever the pathology report says." },
+{ q: "First imaging for a child's first febrile UTI?", opts: ["Renal and bladder ultrasound", "VCUG for everyone", "DMSA scan", "CT urogram"], why: "AAP: ultrasound first; VCUG if the ultrasound is abnormal or after a second febrile UTI." },
+{ q: "BCG-unresponsive high-risk NMIBC in a fit patient: standard treatment?", opts: ["Radical cystectomy", "Another course of BCG", "Observation", "Partial cystectomy"], why: "Pembrolizumab, nadofaragene or gemcitabine/docetaxel are for those who decline or cannot have cystectomy." },
+{ q: "Backbone of therapy for metastatic hormone-sensitive prostate cancer?", opts: ["ADT plus an androgen receptor pathway inhibitor", "Estrogen", "Ketoconazole", "Prednisone alone"], why: "ADT alone is no longer standard: add abiraterone, enzalutamide, apalutamide or darolutamide (with or without docetaxel)." },
+{ q: "How is the testosterone flare from a GnRH agonist prevented?", opts: ["A short course of an antiandrogen", "Prednisone", "Half-dose agonist", "Finasteride"], why: "Or use a GnRH antagonist (degarelix, relugolix), which has no flare. Matters most with spinal metastases or obstruction." },
+{ q: "Why is detrusor-sphincter dyssynergia dangerous?", opts: ["High storage pressures damage the upper tracts", "It always causes incontinence", "It causes urethral stricture", "It causes bladder cancer"], why: "Keep detrusor leak point pressure under 40 cmH2O with antimuscarinics or botulinum toxin plus intermittent catheterization." },
+{ q: "Which lesion level causes detrusor-sphincter dyssynergia?", opts: ["Suprasacral spinal cord, below the pons", "Pontine (brainstem) lesion", "Sacral cord or cauda equina", "Peripheral nerve"], why: "Pontine lesions give overactivity with a coordinated sphincter; sacral lesions give an acontractile bladder." },
+{ q: "Stable patient, blunt grade IV renal laceration with urinary extravasation: first step?", opts: ["Observe, repeat imaging in 48 to 72 h, stent if the leak persists", "Immediate nephrectomy", "Immediate renorrhaphy", "Immediate angioembolization"], why: "Most high-grade blunt injuries are managed nonoperatively; intervene for instability, an expanding hematoma or a persistent urinoma." },
+{ q: "Timing of hypospadias repair?", opts: ["6 to 18 months", "Newborn period", "3 to 5 years", "After puberty"], why: "AAP window. Do not circumcise first: the foreskin may be needed for the repair." },
+{ q: "Orchidopexy for an undescended testis should be done by…", opts: ["18 months (ideally 6 to 12)", "6 weeks", "5 years", "Puberty"], why: "Descent after 6 months is unlikely and hormonal therapy is not recommended." },
+{ q: "Most common surgically correctable cause of male infertility?", opts: ["Varicocele", "Cryptorchidism", "Klinefelter syndrome", "Y-chromosome microdeletion"], why: "Repair a palpable varicocele when semen parameters are abnormal; subclinical varicoceles are not repaired." },
+{ q: "Classic urodynamic finding of stress urinary incontinence?", opts: ["Leak with Valsalva and no detrusor contraction", "Detrusor overactivity", "High post-void residual", "Low compliance"], why: "An abdominal leak point pressure under 60 cmH2O suggests intrinsic sphincter deficiency." },
+{ q: "First-line surgery for uncomplicated female stress incontinence?", opts: ["Midurethral sling", "Botulinum toxin injection", "Sacral neuromodulation", "Anterior colporrhaphy"], why: "Botulinum toxin and sacral neuromodulation treat refractory urgency incontinence, not stress." },
+{ q: "Which ED drug class is contraindicated with nitrates?", opts: ["PDE5 inhibitors", "Intracavernosal alprostadil", "Testosterone", "Vacuum erection device"], why: "Profound hypotension. Also separate dosing from alpha-blockers." },
+{ q: "Chemotherapy for good-risk metastatic non-seminoma?", opts: ["BEP x3 (or EP x4)", "Gemcitabine/cisplatin", "MVAC", "TIP"], why: "Intermediate and poor risk get BEP x4; TIP is salvage; gem/cis and MVAC are urothelial regimens." },
+{ q: "A single intravesical chemo dose after nephroureterectomy for UTUC reduces…", opts: ["Bladder recurrence", "Contralateral upper tract recurrence", "Distant metastasis", "Local recurrence in the bed"], why: "One post-op dose of mitomycin or gemcitabine cuts bladder recurrence (ODMIT-C)." },
+{ q: "Before biopsy or surgery of any adrenal mass, you must exclude…", opts: ["Pheochromocytoma (plasma or urine metanephrines)", "Primary hyperaldosteronism", "Cushing syndrome", "Adrenocortical carcinoma"], why: "Alpha-blockade before surgery; instrumenting an unblocked pheochromocytoma can trigger a hypertensive crisis." },
+{ q: "Most common pediatric renal tumor?", opts: ["Wilms tumor", "Neuroblastoma", "Renal cell carcinoma", "Clear cell sarcoma of the kidney"], why: "Peak at 3 to 4 years, WT1 on 11p. Neuroblastoma is adrenal, not renal; mesoblastic nephroma is the neonatal tumor." },
+{ q: "Which oral antibiotic should not be used for pyelonephritis?", opts: ["Nitrofurantoin", "Ciprofloxacin", "TMP-SMX", "Cefpodoxime"], why: "Nitrofurantoin concentrates only in the urine, so it is fine for cystitis and useless for tissue infection." },
+{ q: "Cyclophosphamide causes bladder cancer and hemorrhagic cystitis through…", opts: ["Its metabolite acrolein", "Direct alkylation of urothelial DNA", "Immunosuppression", "Radiation sensitization"], why: "Mesna binds acrolein in the urine; hydrate and give mesna with high-dose cyclophosphamide." },
+{ q: "Most durable repair for a short (under 2 cm) first-time bulbar stricture?", opts: ["Excision and primary anastomosis", "Repeated dilation", "A second internal urethrotomy", "Perineal urethrostomy"], why: "One urethrotomy is reasonable for a short first-time bulbar stricture; recurrences should go to urethroplasty, not repeat DVIU." }
 ];
 var STAGING_CANCERS = [
 { name: "Renal Cell Carcinoma", short: "RCC", col: "#ef4444",
@@ -7158,1148 +7221,672 @@ return (
 </div>
 );
 }
-function BoardBuzzer() {
-var TOTAL_QS = 10, TIME_PER_Q = 12;
-var [bgs, setBgs] = useState("ready");
-var [bIdx, setBIdx] = useState(0);
-var [bScore, setBScore] = useState(0);
-var [bTime, setBTime] = useState(TIME_PER_Q);
-var [bLives, setBLives] = useState(3);
-var [bStreak, setBStreak] = useState(0);
-var [bFb, setBFb] = useState(null);
-var [bRwd, setBRwd] = useState(null);
-var [bQs, setBQs] = useState([]);
-var [bPicked, setBPicked] = useState(-1);
-var bTimerRef = useRef(null);
-function shuffleAndPick() {
-var arr = BUZZER_QS.slice();
-var ready = arr.map(function(q) {
-var correct = q.opts[q.a];
-var shuffled = q.opts.slice();
-for (var i = shuffled.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp; }
-return { q: q.q, opts: shuffled, a: shuffled.indexOf(correct) };
-});
-for (var i = ready.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = ready[i]; ready[i] = ready[j]; ready[j] = tmp; }
-return ready.slice(0, TOTAL_QS);
-}
-function startBuzzer() {
-var qs = shuffleAndPick();
-setBQs(qs); setBIdx(0); setBScore(0); setBLives(3); setBStreak(0); setBFb(null); setBRwd(null); setBPicked(-1); setBTime(TIME_PER_Q);
-setBgs("playing");
-}
-function endBuzzer(sc) {
-if (bTimerRef.current) clearInterval(bTimerRef.current);
-bTimerRef.current = null;
-setBgs("over");
-setBRwd({ coins: Math.ceil(sc * 0.15), xp: Math.ceil(sc * 0.08), score: sc });
-}
-function nextQ(sc, lv, sk) {
-if (bIdx + 1 >= bQs.length || lv <= 0) { endBuzzer(sc); return; }
-setBIdx(function(i) { return i + 1; }); setBTime(TIME_PER_Q); setBPicked(-1); setBFb(null);
-}
-function handleAnswer(optIdx) {
-if (bPicked >= 0) return;
-setBPicked(optIdx);
-if (bTimerRef.current) clearInterval(bTimerRef.current); bTimerRef.current = null;
-var q = bQs[bIdx];
-if (optIdx === q.a) {
-var ns = bStreak + 1;
-var pts = 10 + (bTime > 8 ? 5 : bTime > 4 ? 3 : 0) + (ns >= 3 ? ns * 2 : 0);
-var newScore = bScore + pts;
-setBStreak(ns); setBScore(newScore);
-setBFb({ text: "Correct! +" + pts + (ns >= 3 ? " (" + ns + "x streak)" : ""), color: "var(--a-grn)" });
-setTimeout(function() { nextQ(newScore, bLives, ns); }, 1200);
-} else {
-var newLv = bLives - 1;
-setBStreak(0); setBLives(newLv);
-var correctText = q.opts[q.a];
-setBFb({ text: "Wrong! Answer: " + correctText, color: "var(--a-red)" });
-if (newLv <= 0) { setTimeout(function() { endBuzzer(bScore); }, 1500); }
-else { setTimeout(function() { nextQ(bScore, newLv, 0); }, 1500); }
-}
-}
-useEffect(function() {
-if (bgs !== "playing" || bPicked >= 0) return;
-bTimerRef.current = setInterval(function() {
-setBTime(function(t) {
-if (t <= 1) {
-clearInterval(bTimerRef.current); bTimerRef.current = null;
-setBPicked(-2);
-var q = bQs[bIdx];
-setBStreak(0);
-var newLv = bLives - 1;
-setBLives(newLv);
-setBFb({ text: "Time's up! Answer: " + q.opts[q.a], color: "var(--a-or)" });
-if (newLv <= 0) { setTimeout(function() { endBuzzer(bScore); }, 1500); }
-else { setTimeout(function() { nextQ(bScore, newLv, 0); }, 1500); }
-return 0;
-}
-return t - 1;
-});
-}, 1000);
-return function() { if (bTimerRef.current) clearInterval(bTimerRef.current); };
-}, [bgs, bIdx, bPicked]);
-useEffect(function() {
-return function() { if (bTimerRef.current) clearInterval(bTimerRef.current); };
-}, []);
-var curQ = bQs[bIdx] || null;
-return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}>
-<div style={{ width: 380, maxHeight: "95vh", background: "var(--c-dp)", borderRadius: 16, border: "1px solid #f472b633", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-<div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-cd)" }}>
-<span style={{ fontSize: 14, fontWeight: 800, color: "var(--a-pnk)" }}>{"⚡ Board Buzzer"}</span>
-<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-<button onClick={function() { if (bTimerRef.current) clearInterval(bTimerRef.current); setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer" }}>{"< Games"}</button>
-<button onClick={function() { if (bTimerRef.current) clearInterval(bTimerRef.current); setShowGame(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer" }}>{"✕"}</button>
-</div>
-</div>
-<div style={{ flex: 1, padding: 16, overflow: "auto" }}>
-{bgs === "ready" && (
-<div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "40px 0" }}>
-<div style={{ fontSize: 48 }}>{"⚡"}</div>
-<div style={{ fontSize: 20, fontWeight: 800, color: "var(--a-pnk)" }}>Board Buzzer</div>
-<p style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center", maxWidth: 280, lineHeight: 1.6 }}>10 rapid-fire urology board questions. Answer fast for bonus points. 3 lives, {TIME_PER_Q}s per question!</p>
-<button onClick={startBuzzer} style={{ padding: "12px 36px", background: "linear-gradient(135deg, var(--a-pnk), var(--a-pur))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Buzz In</button>
-</div>
-)}
-{bgs === "playing" && curQ && (
-<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-<div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--c-tx)" }}>
-<span>Q {bIdx + 1}/{bQs.length}</span>
-<span>{"🎯 "}{bScore}</span>
-<span>{Array(Math.max(0, bLives)).fill("❤️").join("")}</span>
-<span style={{ color: bTime <= 4 ? "var(--a-red)" : "var(--c-mut)" }}>{bTime}s</span>
-</div>
-<div style={{ height: 4, background: "var(--c-cd)", borderRadius: 2, overflow: "hidden" }}>
-<div style={{ width: (bTime / TIME_PER_Q * 100) + "%", height: "100%", background: bTime <= 4 ? "var(--a-red)" : bTime <= 8 ? "var(--a-am)" : "var(--a-pnk)", transition: "width 0.3s" }} />
-</div>
-{bStreak >= 3 && <div style={{ fontSize: 10, color: "var(--a-pur)", fontWeight: 800, textAlign: "center" }}>{bStreak + "x STREAK!"}</div>}
-<div style={{ background: "var(--c-bg)", borderRadius: 10, padding: 16, border: "1px solid var(--c-cd)" }}>
-<div style={{ fontSize: 14, fontWeight: 700, color: "var(--c-tx)", lineHeight: 1.5 }}>{curQ.q}</div>
-</div>
-<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-{curQ.opts.map(function(opt, oi) {
-var picked = bPicked === oi;
-var isCorrect = oi === curQ.a;
-var showResult = bPicked >= 0 || bPicked === -2;
-var bg = showResult ? (isCorrect ? "#4ade8020" : (picked ? "#ef444420" : "var(--c-bg)")) : "var(--c-bg)";
-var border = showResult ? (isCorrect ? "#4ade8060" : (picked ? "#ef444460" : "var(--c-cd)")) : "var(--c-cd)";
-var color = showResult ? (isCorrect ? "var(--a-grn)" : (picked ? "var(--a-red)" : "var(--c-mut)")) : "var(--c-tx)";
-return (
-<button key={oi} onClick={function() { handleAnswer(oi); }} disabled={bPicked >= 0 || bPicked === -2} style={{ padding: "10px 14px", fontSize: 12, fontWeight: 600, background: bg, border: "1px solid " + border, borderRadius: 8, color: color, cursor: bPicked >= 0 ? "default" : "pointer", textAlign: "left", transition: "all 0.2s" }}>
-{String.fromCharCode(65 + oi) + ". " + opt}
-</button>
-);
-})}
-</div>
-{bFb && (
-<div style={{ padding: "8px 12px", borderRadius: 8, background: bFb.color + "15", border: "1px solid " + bFb.color + "40", textAlign: "center", fontSize: 12, fontWeight: 700, color: bFb.color }}>{bFb.text}</div>
-)}
-</div>
-)}
-{bgs === "over" && bRwd && (
-<div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: "40px 0" }}>
-<div style={{ fontSize: 36 }}>{"⚡"}</div>
-<div style={{ fontSize: 22, fontWeight: 900, color: "var(--a-pnk)" }}>Round Over</div>
-<div style={{ fontSize: 32, fontWeight: 900, color: "var(--a-am)" }}>{bRwd.score} pts</div>
-<div style={{ display: "flex", gap: 20, marginTop: 6 }}>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-am)" }}>{"🪙 "}{bRwd.coins}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>Coins</div>
-</div>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-pnk)" }}>{"⚡ "}{bRwd.xp}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>XP</div>
-</div>
-</div>
-<div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-<button onClick={function() { gameReward(bRwd.coins, bRwd.xp); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg, var(--a-pnk), var(--a-pur))", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-<button onClick={startBuzzer} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
-</div>
-</div>
-)}
-</div>
-</div>
-</div>
-);
-}
-function StoneCrusherGame() {
-var W = 360, H = 480;
-var [gs, setGs] = useState("ready");
-var [score, setScore] = useState(0);
-var [time, setTime] = useState(45);
-var [combo, setCombo] = useState(0);
-var [lives, setLives] = useState(3);
-var [renderTick, setRenderTick] = useState(0);
-var [rwd, setRwd] = useState(null);
-var areaRef = useRef(null);
-var loopRef = useRef(null);
-var timerRef = useRef(null);
-var keysRef = useRef({});
-var mouseRef = useRef({ x: W / 2, y: H / 2 });
-var G = useRef({
-ship: { x: W / 2, y: H - 60, vx: 0, vy: 0 },
-angle: 0, bullets: [], stones: [], parts: [], flts: [], projs: [],
-sc: 0, co: 0, lv: 3, tm: 45, spawnT: 0, fireCD: 0, invuln: 0
-});
-var xL = s.ups.game_life || 0;
-var lD = 1 + (s.ups.laser_power || 0);
-var tB = (s.ups.time_ext || 0) * 5;
-var cr = (s.ups.crit || 0) * 0.08;
-var cM = 1 + (s.ups.magnet || 0);
-var ACCEL = 1.2, FRICTION = 0.88, MAX_V = 5.5, BULLET_SPD = 9, FIRE_RATE = 8;
-function endGame() {
-if (loopRef.current) clearInterval(loopRef.current);
-if (timerRef.current) clearInterval(timerRef.current);
-loopRef.current = null; timerRef.current = null;
-setGs("over");
-setRwd({ coins: Math.ceil(G.current.sc * 0.15 * cM), xp: Math.ceil(G.current.sc * 0.08), score: G.current.sc });
-}
-function startGame() {
-var tl = 3 + xL, tt = 45 + tB;
-G.current = {
-ship: { x: W / 2, y: H - 60, vx: 0, vy: 0 },
-angle: 0, bullets: [], stones: [], parts: [], flts: [], projs: [],
-sc: 0, co: 0, lv: tl, tm: tt, spawnT: 0, fireCD: 0, invuln: 0
-};
-keysRef.current = {};
-setLives(tl); setTime(tt); setScore(0); setCombo(0); setRwd(null);
-setGs("playing");
-}
-useEffect(function() {
-if (gs !== "playing") return;
-function kd(e) {
-var k = e.key.toLowerCase();
-if (k === "w" || k === "a" || k === "s" || k === "d" || k === " ") { e.preventDefault(); keysRef.current[k] = true; }
-}
-function ku(e) {
-var k = e.key.toLowerCase();
-keysRef.current[k] = false;
-}
-window.addEventListener("keydown", kd);
-window.addEventListener("keyup", ku);
-return function() { window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); };
-}, [gs]);
-function handleMouseMove(e) {
-if (gs !== "playing" || !areaRef.current) return;
-var rect = areaRef.current.getBoundingClientRect();
-mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-useEffect(function() {
-if (gs !== "playing") return;
-timerRef.current = setInterval(function() {
-G.current.tm--;
-setTime(G.current.tm);
-if (G.current.tm <= 0) endGame();
-}, 1000);
-return function() { if (timerRef.current) clearInterval(timerRef.current); };
-}, [gs]);
-useEffect(function() {
-if (gs !== "playing") return;
-loopRef.current = setInterval(function() {
-var g = G.current, sh = g.ship, k = keysRef.current, m = mouseRef.current;
-if (k["a"]) sh.vx -= ACCEL;
-if (k["d"]) sh.vx += ACCEL;
-if (k["w"]) sh.vy -= ACCEL;
-if (k["s"]) sh.vy += ACCEL;
-sh.vx *= FRICTION; sh.vy *= FRICTION;
-var spd = Math.sqrt(sh.vx * sh.vx + sh.vy * sh.vy);
-if (spd > MAX_V) { sh.vx = sh.vx / spd * MAX_V; sh.vy = sh.vy / spd * MAX_V; }
-sh.x += sh.vx; sh.y += sh.vy;
-if (sh.x < 14) { sh.x = 14; sh.vx = 0; }
-if (sh.x > W - 14) { sh.x = W - 14; sh.vx = 0; }
-if (sh.y < 14) { sh.y = 14; sh.vy = 0; }
-if (sh.y > H - 14) { sh.y = H - 14; sh.vy = 0; }
-g.angle = Math.atan2(m.y - sh.y, m.x - sh.x);
-if (g.fireCD > 0) g.fireCD--;
-if (k[" "] && g.fireCD <= 0) {
-g.fireCD = FIRE_RATE;
-var cos = Math.cos(g.angle), sin = Math.sin(g.angle);
-g.bullets.push({ x: sh.x + cos * 16, y: sh.y + sin * 16, vx: cos * BULLET_SPD, vy: sin * BULLET_SPD, life: 60, crit: Math.random() < cr });
-}
-g.bullets = g.bullets.map(function(b) {
-return Object.assign({}, b, { x: b.x + b.vx, y: b.y + b.vy, life: b.life - 1 });
-}).filter(function(b) { return b.life > 0 && b.x > -10 && b.x < W + 10 && b.y > -10 && b.y < H + 10; });
-g.spawnT++;
-var spawnRate = Math.max(20, 50 - Math.floor(g.sc / 100) * 3);
-if (g.spawnT >= spawnRate) {
-g.spawnT = 0;
-var struviteOnScreen = g.stones.some(function(st) { return st.boss; });
-var roll = Math.random();
-var t;
-if (roll < 0.08 && !struviteOnScreen && g.sc >= 50) {
-t = STONES[2]; // Struvite boss
-} else {
-var nonBoss = STONES.filter(function(s) { return !s.boss; });
-t = nonBoss[Math.floor(Math.random() * nonBoss.length)];
-}
-var side = Math.floor(Math.random() * 4);
-var sx, sy, svx, svy;
-if (side === 0) { sx = Math.random() * W; sy = -40; svx = (Math.random() - 0.5) * 1.5; svy = 0.5 + Math.random() * 1; }
-else if (side === 1) { sx = Math.random() * W; sy = H + 40; svx = (Math.random() - 0.5) * 1.5; svy = -(0.5 + Math.random() * 1); }
-else if (side === 2) { sx = -40; sy = Math.random() * H; svx = 0.5 + Math.random() * 1; svy = (Math.random() - 0.5) * 1.5; }
-else { sx = W + 40; sy = Math.random() * H; svx = -(0.5 + Math.random() * 1); svy = (Math.random() - 0.5) * 1.5; }
-var stoneObj = { id: Math.random(), name: t.name, hp: t.hp, sz: t.sz, col: t.col, pts: t.pts, e: t.e, x: sx, y: sy, vx: svx, vy: svy, chp: t.hp, rot: Math.random() * 360, rs: (Math.random() - 0.5) * 3, boss: t.boss || false, shootCD: 0, shootRate: t.shootRate || 0, projSpd: t.projSpd || 0 };
-if (stoneObj.boss) { stoneObj.vx *= 0.5; stoneObj.vy *= 0.5; stoneObj.rs *= 0.4; }
-g.stones.push(stoneObj);
-}
-g.stones = g.stones.map(function(st) {
-return Object.assign({}, st, { x: st.x + st.vx, y: st.y + st.vy, rot: st.rot + st.rs });
-});
-g.stones = g.stones.filter(function(st) { return st.x > -80 && st.x < W + 80 && st.y > -80 && st.y < H + 80; });
-for (var bsi = 0; bsi < g.stones.length; bsi++) {
-var bs = g.stones[bsi];
-if (bs.boss && bs.shootRate > 0 && bs.x > 0 && bs.x < W && bs.y > 0 && bs.y < H) {
-bs.shootCD = (bs.shootCD || 0) + 1;
-if (bs.shootCD >= bs.shootRate) {
-bs.shootCD = 0;
-var pdx = sh.x - bs.x, pdy = sh.y - bs.y;
-var pdist = Math.sqrt(pdx * pdx + pdy * pdy);
-if (pdist > 1) {
-var spread = (Math.random() - 0.5) * 0.4;
-var pAngle = Math.atan2(pdy, pdx) + spread;
-g.projs.push({ x: bs.x, y: bs.y, vx: Math.cos(pAngle) * bs.projSpd, vy: Math.sin(pAngle) * bs.projSpd, life: 150, col: "#00ff88" });
-if (g.sc >= 200) {
-var spread2 = (Math.random() - 0.5) * 0.6;
-var pAngle2 = Math.atan2(pdy, pdx) + spread2;
-g.projs.push({ x: bs.x, y: bs.y, vx: Math.cos(pAngle2) * bs.projSpd, vy: Math.sin(pAngle2) * bs.projSpd, life: 150, col: "#00ff88" });
-}
-}
-}
-}
-}
-g.projs = g.projs.map(function(p) {
-return Object.assign({}, p, { x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1 });
-}).filter(function(p) { return p.life > 0 && p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20; });
-if (g.invuln <= 0) {
-for (var pi = g.projs.length - 1; pi >= 0; pi--) {
-var pr = g.projs[pi];
-var prdx = sh.x - pr.x, prdy = sh.y - pr.y;
-if (Math.sqrt(prdx * prdx + prdy * prdy) < 14) {
-g.lv--;
-g.co = 0;
-g.invuln = 60;
-g.projs.splice(pi, 1);
-g.flts.push({ x: sh.x, y: sh.y - 12, text: "PROTEUS HIT!", color: "#00ff88", life: 80 });
-for (var ppj = 0; ppj < 16; ppj++) {
-g.parts.push({ x: sh.x, y: sh.y, vx: (Math.random() - 0.5) * 7, vy: (Math.random() - 0.5) * 7, life: 45, color: "#00ff88", size: 2.5 });
-}
-setLives(g.lv); setCombo(0);
-if (g.lv <= 0) { endGame(); return; }
-break;
-}
-}
-}
-var hitBullets = {};
-for (var bi = g.bullets.length - 1; bi >= 0; bi--) {
-var b = g.bullets[bi];
-for (var si = g.stones.length - 1; si >= 0; si--) {
-var st = g.stones[si];
-var dx = b.x - st.x, dy = b.y - st.y;
-if (Math.sqrt(dx * dx + dy * dy) < st.sz * 0.5 + 3) {
-hitBullets[bi] = true;
-var dm = b.crit ? lD * 2 : lD;
-for (var j = 0; j < (b.crit ? 8 : 4); j++) {
-g.parts.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, life: 40, color: b.crit ? "var(--a-am)" : st.col, size: b.crit ? 3 : 2 });
-}
-if (st.chp - dm <= 0) {
-g.co++;
-var pts = Math.ceil(st.pts * (1 + g.co * 0.15) * (b.crit ? 2 : 1));
-g.sc += pts;
-g.flts.push({ x: st.x, y: st.y, text: b.crit ? "CRIT +" + pts : "+" + pts, color: b.crit ? "var(--a-am)" : "var(--a-grn)", life: 70 });
-if (g.co > 1 && g.co % 3 === 0) g.flts.push({ x: st.x, y: st.y - 18, text: g.co + "x COMBO", color: "#c084fc", life: 80 });
-if (st.boss) {
-g.flts.push({ x: st.x, y: st.y - 30, text: "PROTEUS ELIMINATED!", color: "#00ff88", life: 100 });
-g.projs = []; // clear all enemy projectiles
-for (var bk = 0; bk < 24; bk++) {
-g.parts.push({ x: st.x, y: st.y, vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 12, life: 80, color: "#00ff88", size: 2 + Math.random() * 5 });
-}
-}
-for (var pk = 0; pk < 12; pk++) {
-g.parts.push({ x: st.x, y: st.y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 60, color: st.col, size: 2 + Math.random() * 4 });
-}
-g.stones.splice(si, 1);
-} else {
-g.stones[si] = Object.assign({}, st, { chp: st.chp - dm });
-}
-break;
-}
-}
-}
-g.bullets = g.bullets.filter(function(b, i) { return !hitBullets[i]; });
-if (g.invuln > 0) g.invuln--;
-if (g.invuln <= 0) {
-for (var ci = g.stones.length - 1; ci >= 0; ci--) {
-var cst = g.stones[ci];
-var cdx = sh.x - cst.x, cdy = sh.y - cst.y;
-if (Math.sqrt(cdx * cdx + cdy * cdy) < cst.sz * 0.4 + 12) {
-g.lv--;
-g.co = 0;
-g.invuln = 60; // 2 seconds of invuln
-for (var pj = 0; pj < 20; pj++) {
-g.parts.push({ x: sh.x, y: sh.y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 50, color: "#ef4444", size: 3 });
-}
-g.stones.splice(ci, 1);
-setLives(g.lv); setCombo(0);
-if (g.lv <= 0) { endGame(); return; }
-break;
-}
-}
-}
-g.parts = g.parts.map(function(p) {
-return Object.assign({}, p, { x: p.x + p.vx, y: p.y + p.vy, life: p.life - 1.5 });
-}).filter(function(p) { return p.life > 0; });
-g.flts = g.flts.map(function(f) {
-return Object.assign({}, f, { y: f.y - 1, life: f.life - 1.5 });
-}).filter(function(f) { return f.life > 0; });
-setScore(g.sc); setCombo(g.co);
-setRenderTick(function(t) { return t + 1; });
-}, 33);
-return function() { if (loopRef.current) clearInterval(loopRef.current); };
-}, [gs]);
-useEffect(function() {
-return function() {
-if (loopRef.current) clearInterval(loopRef.current);
-if (timerRef.current) clearInterval(timerRef.current);
-};
-}, []);
-var g = G.current, sh = g.ship, ang = g.angle;
-var cos = Math.cos(ang), sin = Math.sin(ang);
-var noseX = sh.x + cos * 16, noseY = sh.y + sin * 16;
-var lx = sh.x + Math.cos(ang + 2.5) * 12, ly = sh.y + Math.sin(ang + 2.5) * 12;
-var rx = sh.x + Math.cos(ang - 2.5) * 12, ry = sh.y + Math.sin(ang - 2.5) * 12;
-var shipPoly = noseX + "," + noseY + " " + lx + "," + ly + " " + rx + "," + ry;
-var blink = g.invuln > 0 && Math.floor(g.invuln / 4) % 2 === 0;
-return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}>
-<div style={{ width: W, maxHeight: "95vh", background: "var(--c-dp)", borderRadius: 16, border: "1px solid " + c.a + "33", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-<div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-cd)" }}>
-<span style={{ fontSize: 14, fontWeight: 800, color: c.a }}>{"🚀 Stone Blaster"}</span>
-<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-<button onClick={function() { if (loopRef.current) clearInterval(loopRef.current); if (timerRef.current) clearInterval(timerRef.current); setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer" }}>{"< Games"}</button>
-<button onClick={function() { setShowGame(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer" }}>{"✕"}</button>
-</div>
-</div>
-{gs !== "ready" && (
-<div style={{ padding: "5px 16px", display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--c-tx)", background: "var(--c-bg)" }}>
-<span>{"🎯 "}{score}</span>
-<span style={{ color: combo > 2 ? "var(--a-pur)" : "var(--c-br2)" }}>{combo > 0 ? combo + "x" : ""}</span>
-<span>{Array(Math.max(0, lives)).fill("❤️").join("")}</span>
-<span style={{ color: time <= 10 ? "var(--a-red)" : "var(--c-mut)" }}>{time}s</span>
-</div>
-)}
-<div ref={areaRef} onMouseMove={handleMouseMove} style={{ position: "relative", width: W, height: H, background: "var(--c-dp)", cursor: gs === "playing" ? "none" : "default", overflow: "hidden", userSelect: "none", outline: "none" }} tabIndex={0}>
-<svg style={{ position: "absolute", inset: 0, pointerEvents: "none" }} width={W} height={H}>
-{[42,97,156,201,267,312,58,134,289,78,220,345,15,180].map(function(sx, i) {
-return <circle key={i} cx={sx} cy={(sx * 7 + i * 41) % H} r={i % 3 === 0 ? 1.5 : 0.8} fill={i % 5 === 0 ? "var(--c-br)" : "var(--c-cd)"} />;
-})}
-</svg>
-{gs === "ready" && (
-<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-<div style={{ fontSize: 48 }}>{"🚀"}</div>
-<div style={{ fontSize: 20, fontWeight: 800, color: c.a }}>Stone Blaster</div>
-<p style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center", maxWidth: 280, lineHeight: 1.6 }}>Pilot your ship through kidney stone fields. Watch for Struvite bosses - Proteus fires back!</p>
-<div style={{ fontSize: 10, color: "var(--c-br2)", textAlign: "center", lineHeight: 1.8 }}>
-<b style={{ color: "var(--c-mut)" }}>WASD</b> move &nbsp; <b style={{ color: "var(--c-mut)" }}>MOUSE</b> aim &nbsp; <b style={{ color: "var(--c-mut)" }}>SPACE</b> fire
-</div>
-<button onClick={startGame} style={{ padding: "12px 36px", background: "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>LAUNCH</button>
-</div>
-)}
-{gs === "playing" && (
-<svg style={{ position: "absolute", inset: 0 }} width={W} height={H}>
-<line x1={noseX} y1={noseY} x2={noseX + cos * 40} y2={noseY + sin * 40} stroke={c.a + "20"} strokeWidth={1} strokeDasharray="4,4" />
-{!blink && <polygon points={shipPoly} fill={c.a} stroke={c.a2} strokeWidth={1.5} style={{ filter: "drop-shadow(0 0 6px " + c.a + "66)" }} />}
-{!blink && <circle cx={sh.x + cos * 6} cy={sh.y + sin * 6} r={2} fill="#fff" />}
-{!blink && (keysRef.current["w"] || keysRef.current["a"] || keysRef.current["s"] || keysRef.current["d"]) && (
-<circle cx={sh.x - cos * 10} cy={sh.y - sin * 10} r={4 + Math.random() * 3} fill="var(--a-or)" opacity={0.6} />
-)}
-{g.bullets.map(function(b, i) {
-return <circle key={i} cx={b.x} cy={b.y} r={b.crit ? 4 : 2.5} fill={b.crit ? "var(--a-am)" : c.a} style={{ filter: "drop-shadow(0 0 4px " + (b.crit ? "var(--a-am)" : c.a) + ")" }} />;
-})}
-{g.projs.map(function(pr, i) {
-return <g key={"pr" + i}>
-<circle cx={pr.x} cy={pr.y} r={4} fill={pr.col} opacity={0.9} style={{ filter: "drop-shadow(0 0 6px " + pr.col + ")" }} />
-<circle cx={pr.x} cy={pr.y} r={2} fill="#ffffff" opacity={0.7} />
-</g>;
-})}
-<circle cx={mouseRef.current.x} cy={mouseRef.current.y} r={10} fill="none" stroke={c.a + "40"} strokeWidth={1} />
-<circle cx={mouseRef.current.x} cy={mouseRef.current.y} r={2} fill={c.a + "60"} />
-</svg>
-)}
-{g.stones.map(function(st) {
-var isBoss = st.boss;
-var bossGlow = isBoss ? "0 0 16px #00ff8866, 0 0 32px #00ff8833" : "none";
-return (
-<div key={st.id} style={{ position: "absolute", left: st.x - st.sz / 2, top: st.y - st.sz / 2, width: st.sz, height: st.sz, borderRadius: "50%", background: isBoss ? st.col + "50" : st.col + "30", transform: "rotate(" + Math.round(st.rot) + "deg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: st.sz * 0.4, border: isBoss ? "2px solid #00ff8888" : "2px solid " + st.col + "60", pointerEvents: "none", boxShadow: bossGlow }}>
-{st.e}
-<div style={{ position: "absolute", bottom: -6, width: st.sz * 0.7, height: 3, background: "#000", borderRadius: 2, overflow: "hidden" }}>
-<div style={{ width: (st.chp / st.hp * 100) + "%", height: "100%", background: st.chp / st.hp > 0.5 ? "var(--a-grn)" : "var(--a-red)" }} />
-</div>
-{isBoss && <div style={{ position: "absolute", top: -14, fontSize: 8, fontWeight: 900, color: "var(--a-neon)", whiteSpace: "nowrap", textShadow: "0 0 6px #00ff8888" }}>{"Proteus \uD83E\uDDA0"}</div>}
-</div>
-);
-})}
-{g.parts.map(function(p, i) {
-return <div key={i} style={{ position: "absolute", left: p.x, top: p.y, width: p.size, height: p.size, borderRadius: "50%", background: p.color, opacity: Math.max(0, p.life / 50), pointerEvents: "none" }} />;
-})}
-{g.flts.map(function(f, i) {
-return <div key={i} style={{ position: "absolute", left: f.x, top: f.y, fontSize: 12, fontWeight: 900, color: f.color, opacity: Math.max(0, f.life / 70), pointerEvents: "none", textShadow: "0 0 8px " + f.color, transform: "translateX(-50%)", whiteSpace: "nowrap" }}>{f.text}</div>;
-})}
-{gs === "over" && rwd && (
-<div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(5,8,16,.85)", gap: 10 }}>
-<div style={{ fontSize: 36 }}>{"💥"}</div>
-<div style={{ fontSize: 22, fontWeight: 900, color: c.a }}>Mission Complete</div>
-<div style={{ fontSize: 32, fontWeight: 900, color: "var(--a-am)" }}>{rwd.score} pts</div>
-<div style={{ display: "flex", gap: 20, marginTop: 6 }}>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-am)" }}>{"🪙 "}{rwd.coins}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>Coins</div>
-</div>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: c.a }}>{"⚡ "}{rwd.xp}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>XP</div>
-</div>
-</div>
-<div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-<button onClick={function() { gameReward(rwd.coins, rwd.xp); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg," + c.a + "," + c.a2 + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-<button onClick={startGame} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
-</div>
-</div>
-)}
-</div>
-</div>
-</div>
-);
-}
-function VisualDxGame() {
-var VISUAL_CASES = [
-{ id: "staghorn", modality: "KUB / X-Ray", desc: "Large branching radiopaque density filling the renal collecting system", answer: "Staghorn Calculus", choices: ["Staghorn Calculus", "Renal Cell Carcinoma", "UPJO", "Polycystic Kidney"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="#111" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">KUB</text>
-<ellipse cx="70" cy="80" rx="35" ry="50" fill="none" stroke="#333" strokeWidth="1.5"/>
-<text x="70" y="40" textAnchor="middle" fill="var(--c-cd)" fontSize="7">L KIDNEY</text>
-<path d="M65,60 C60,55 48,50 42,48 M65,60 L65,100 M65,60 C70,55 82,50 88,48 M65,80 C58,78 50,75 44,72 M65,80 C72,78 80,75 86,72" stroke="#e8e8e8" strokeWidth="3" fill="none" strokeLinecap="round"/>
-<ellipse cx="140" cy="80" rx="35" ry="50" fill="none" stroke="#333" strokeWidth="1.5"/>
-<text x="140" y="40" textAnchor="middle" fill="var(--c-cd)" fontSize="7">R KIDNEY</text>
-<rect x="55" y="135" width="90" height="20" rx="6" fill="none" stroke="#333" strokeWidth="1"/>
-<text x="100" y="148" textAnchor="middle" fill="var(--c-cd)" fontSize="7">BLADDER</text>
-</svg>); }},
-{ id: "hydro", modality: "Renal Ultrasound", desc: "Dilated renal pelvis and calyces with thinned parenchyma. No stone visualized.", answer: "Hydronephrosis", choices: ["Hydronephrosis", "Renal Cyst", "Staghorn Calculus", "Pyonephrosis"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">RENAL US</text>
-<ellipse cx="100" cy="85" rx="55" ry="45" fill="var(--c-dp6)" stroke="#444" strokeWidth="1.5"/>
-<ellipse cx="100" cy="85" rx="38" ry="30" fill="var(--c-bg)" stroke="#555" strokeWidth="1"/>
-<ellipse cx="100" cy="80" rx="22" ry="18" fill="var(--c-dp4)"/>
-<ellipse cx="82" cy="65" rx="10" ry="8" fill="var(--c-dp4)"/>
-<ellipse cx="118" cy="65" rx="10" ry="8" fill="var(--c-dp4)"/>
-<ellipse cx="82" cy="100" rx="10" ry="8" fill="var(--c-dp4)"/>
-<ellipse cx="118" cy="100" rx="10" ry="8" fill="var(--c-dp4)"/>
-<text x="100" y="155" textAnchor="middle" fill="var(--c-br)" fontSize="7">R KIDNEY LONG</text>
-</svg>); }},
-{ id: "papillary", modality: "Cystoscopy", desc: "Frond-like papillary growth with visible stalk arising from lateral wall, waving in irrigation", answer: "Papillary Bladder Tumor", choices: ["Papillary Bladder Tumor", "CIS", "Trabeculated Bladder", "Bladder Diverticulum"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="#0a0808" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CYSTOSCOPY</text>
-<circle cx="100" cy="85" r="65" fill="#2a0a0a" stroke="#661111" strokeWidth="2"/>
-<circle cx="100" cy="85" r="60" fill="#1a0505"/>
-<path d="M130,100 C130,90 128,80 132,70 C136,60 140,55 138,50 M130,100 C130,88 134,78 130,68 C126,58 124,52 128,46 M130,100 C132,92 138,85 136,75 C134,65 130,58 134,52" stroke="var(--a-red3)" strokeWidth="1.5" fill="none"/>
-<circle cx="138" cy="48" r="3" fill="var(--a-red3)" opacity="0.7"/>
-<circle cx="128" cy="44" r="3" fill="var(--a-red3)" opacity="0.7"/>
-<circle cx="134" cy="50" r="4" fill="var(--a-red3)" opacity="0.6"/>
-<circle cx="132" cy="42" r="2.5" fill="var(--a-red3)" opacity="0.7"/>
-<circle cx="140" cy="53" r="2.5" fill="var(--a-red3)" opacity="0.5"/>
-<line x1="128" y1="105" x2="132" y2="100" stroke="#993333" strokeWidth="2"/>
-</svg>); }},
-{ id: "torsion_us", modality: "Scrotal Ultrasound", desc: "Enlarged left testis. Absent color Doppler flow compared to normal right side.", answer: "Testicular Torsion", choices: ["Testicular Torsion", "Epididymitis", "Testicular Tumor", "Hydrocele"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">SCROTAL US — COLOR DOPPLER</text>
-<ellipse cx="60" cy="85" rx="30" ry="38" fill="var(--c-dp6)" stroke="#444" strokeWidth="1.5"/>
-<text x="60" y="135" textAnchor="middle" fill="var(--a-grn2)" fontSize="7" fontWeight="600">R — NORMAL</text>
-<circle cx="50" cy="75" r="2" fill="var(--a-red)"/><circle cx="65" cy="80" r="2" fill="var(--a-blu)"/>
-<circle cx="55" cy="90" r="1.5" fill="var(--a-red)"/><circle cx="68" cy="70" r="1.5" fill="var(--a-blu)"/>
-<circle cx="58" cy="85" r="2" fill="var(--a-red)"/><circle cx="45" cy="88" r="1.5" fill="var(--a-blu)"/>
-<ellipse cx="140" cy="85" rx="34" ry="42" fill="var(--c-dp6)" stroke="#666" strokeWidth="2"/>
-<text x="140" y="135" textAnchor="middle" fill="var(--a-red)" fontSize="7" fontWeight="700">L — NO FLOW</text>
-<text x="140" y="90" textAnchor="middle" fill="#333" fontSize="16">∅</text>
-</svg>); }},
-{ id: "ureteral_stone_ct", modality: "CT Abdomen/Pelvis", desc: "Axial non-contrast CT showing high-density focus in left proximal ureter with mild perinephric stranding and proximal hydroureter", answer: "Ureteral Stone with Obstruction", choices: ["Ureteral Stone with Obstruction", "Appendicitis", "Renal Cell Carcinoma", "Phlebolith"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CT A/P NON-CON — AXIAL</text>
-<ellipse cx="100" cy="85" rx="80" ry="55" fill="var(--c-dp6)" stroke="#333" strokeWidth="1"/>
-<ellipse cx="55" cy="75" rx="18" ry="22" fill="#222" stroke="#444" strokeWidth="1"/>
-<text x="55" y="55" textAnchor="middle" fill="var(--c-cd)" fontSize="6">R</text>
-<ellipse cx="145" cy="75" rx="20" ry="24" fill="#252525" stroke="#555" strokeWidth="1.5"/>
-<text x="145" y="53" textAnchor="middle" fill="var(--c-cd)" fontSize="6">L</text>
-<ellipse cx="145" cy="75" rx="12" ry="14" fill="var(--c-dp6)"/>
-<circle cx="132" cy="95" r="4" fill="#eee" stroke="#fff" strokeWidth="1"/>
-<line x1="132" y1="89" x2="132" y2="82" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
-<text x="148" y="115" textAnchor="middle" fill="#555" fontSize="6">perinephric stranding</text>
-<line x1="148" y1="110" x2="155" y2="98" stroke="#333" strokeWidth="0.5" strokeDasharray="2"/>
-<rect x="90" y="75" width="20" height="15" rx="3" fill="#333" stroke="#444" strokeWidth="0.5"/>
-<text x="100" y="85" textAnchor="middle" fill="var(--c-cd)" fontSize="5">SPINE</text>
-</svg>); }},
-{ id: "renal_mass_ct", modality: "CT Abdomen — Contrast", desc: "Contrast-enhanced CT showing heterogeneously enhancing solid mass arising from the left kidney, 5cm", answer: "Renal Cell Carcinoma", choices: ["Renal Cell Carcinoma", "Angiomyolipoma", "Oncocytoma", "Renal Abscess"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CT A/P WITH CONTRAST</text>
-<ellipse cx="100" cy="85" rx="80" ry="55" fill="var(--c-dp6)" stroke="#333" strokeWidth="1"/>
-<ellipse cx="60" cy="78" rx="18" ry="22" fill="#2a2a2a" stroke="#555" strokeWidth="1"/>
-<ellipse cx="145" cy="75" rx="18" ry="22" fill="#2a2a2a" stroke="#555" strokeWidth="1"/>
-<circle cx="160" cy="68" r="16" fill="#3a2020" stroke="#884444" strokeWidth="1.5"/>
-<circle cx="155" cy="65" r="4" fill="#2a1515"/>
-<circle cx="165" cy="72" r="3" fill="#4a2525"/>
-<text x="160" y="95" textAnchor="middle" fill="#884444" fontSize="6">enhancing mass</text>
-<rect x="90" y="75" width="20" height="15" rx="3" fill="#333"/>
-</svg>); }},
-{ id: "cis_cysto", modality: "Cystoscopy", desc: "Flat, velvety erythematous patch on the bladder dome. No papillary component. Positive for malignancy on biopsy.", answer: "Carcinoma in Situ (CIS)", choices: ["Carcinoma in Situ (CIS)", "Papillary Bladder Tumor", "Radiation Cystitis", "Squamous Metaplasia"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="#0a0808" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CYSTOSCOPY</text>
-<circle cx="100" cy="85" r="65" fill="#1a0505" stroke="#661111" strokeWidth="2"/>
-<ellipse cx="95" cy="55" rx="25" ry="15" fill="#551111" opacity="0.7"/>
-<ellipse cx="100" cy="58" rx="20" ry="10" fill="#662222" opacity="0.5"/>
-<ellipse cx="85" cy="50" rx="8" ry="5" fill="#773333" opacity="0.4"/>
-<text x="100" y="145" textAnchor="middle" fill="#553333" fontSize="7">flat erythematous patch — dome</text>
-</svg>); }},
-{ id: "bph_cysto", modality: "Cystoscopy", desc: "Enlarged median lobe protruding into bladder lumen. Prominent trabeculations and cellules throughout.", answer: "BPH with Trabeculated Bladder", choices: ["BPH with Trabeculated Bladder", "Bladder Tumor", "Neurogenic Bladder", "Bladder Diverticulum"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="#0a0808" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CYSTOSCOPY</text>
-<circle cx="100" cy="85" r="65" fill="#1a0505" stroke="#661111" strokeWidth="2"/>
-{[30,55,80,105,130,155].map(function(a,i){return <line key={i} x1={50+i*6} y1={40+Math.sin(a)*8} x2={55+i*8} y2={130-Math.cos(a)*8} stroke="#441111" strokeWidth="1" opacity="0.5"/>;})}
-{[0,1,2,3,4,5,6,7].map(function(i){return <circle key={i} cx={65+i*10} cy={60+Math.sin(i*1.2)*15} r={4+Math.random()*2} fill="none" stroke="#441111" strokeWidth="0.8" opacity="0.4"/>;})}
-<ellipse cx="100" cy="130" rx="22" ry="12" fill="#2a0808" stroke="#882222" strokeWidth="1.5"/>
-<text x="100" y="133" textAnchor="middle" fill="#553333" fontSize="6">MEDIAN LOBE</text>
-</svg>); }},
-{ id: "horseshoe", modality: "CT Abdomen", desc: "Both kidneys fused at the lower poles across midline, anterior to the aorta, at the level of the inferior mesenteric artery.", answer: "Horseshoe Kidney", choices: ["Horseshoe Kidney", "Pelvic Kidney", "Crossed Fused Ectopia", "Bilateral Hydronephrosis"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CT CORONAL REFORMAT</text>
-<ellipse cx="60" cy="70" rx="22" ry="35" fill="#222" stroke="#555" strokeWidth="1.5"/>
-<ellipse cx="140" cy="70" rx="22" ry="35" fill="#222" stroke="#555" strokeWidth="1.5"/>
-<path d="M60,105 C60,120 80,125 100,125 C120,125 140,120 140,105" fill="#222" stroke="#555" strokeWidth="1.5"/>
-<line x1="100" y1="30" x2="100" y2="140" stroke="#444" strokeWidth="2" strokeDasharray="4"/>
-<text x="100" y="148" textAnchor="middle" fill="var(--c-br)" fontSize="6">MIDLINE (AORTA)</text>
-<text x="100" y="118" textAnchor="middle" fill="#666" fontSize="6">isthmus</text>
-</svg>); }},
-{ id: "puj_us", modality: "Renal Ultrasound", desc: "Markedly dilated renal pelvis (3.5cm AP). No ureteral dilation. No stone seen. Cortex preserved.", answer: "UPJ Obstruction", choices: ["UPJ Obstruction", "Ureteral Stone", "VUR", "Multicystic Dysplastic Kidney"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">RENAL US — L KIDNEY</text>
-<ellipse cx="100" cy="85" rx="55" ry="48" fill="var(--c-dp6)" stroke="#444" strokeWidth="1.5"/>
-<ellipse cx="100" cy="90" rx="32" ry="28" fill="var(--c-dp4)" stroke="var(--c-br)" strokeWidth="1"/>
-<text x="100" y="93" textAnchor="middle" fill="var(--c-br)" fontSize="7">DILATED PELVIS</text>
-<text x="100" y="103" textAnchor="middle" fill="var(--c-br)" fontSize="6">3.5 cm AP</text>
-<ellipse cx="80" cy="68" rx="8" ry="7" fill="var(--c-dp4)"/>
-<ellipse cx="120" cy="68" rx="8" ry="7" fill="var(--c-dp4)"/>
-<line x1="100" y1="118" x2="100" y2="128" stroke="var(--c-dp6)" strokeWidth="2"/>
-<text x="100" y="140" textAnchor="middle" fill="var(--a-red)" fontSize="6" fontWeight="600">× NO URETER SEEN</text>
-<text x="100" y="152" textAnchor="middle" fill="var(--c-br)" fontSize="6">No stone</text>
-</svg>); }},
-{ id: "varicocele", modality: "Scrotal Ultrasound", desc: "Multiple dilated serpiginous veins (>3mm) superior to the left testis, increasing with Valsalva", answer: "Varicocele", choices: ["Varicocele", "Spermatocele", "Epididymal Cyst", "Inguinal Hernia"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">SCROTAL US — L TESTIS</text>
-<ellipse cx="100" cy="100" rx="35" ry="40" fill="var(--c-dp6)" stroke="#444" strokeWidth="1.5"/>
-<path d="M70,50 C65,55 75,58 70,63 C65,68 78,70 72,75" stroke="var(--a-blu)" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-<path d="M85,45 C80,52 90,55 85,60 C80,65 92,67 86,72" stroke="var(--a-blu)" strokeWidth="3" fill="none" strokeLinecap="round"/>
-<path d="M100,42 C95,48 105,52 98,58 C93,63 103,65 98,70" stroke="var(--a-blu)" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-<path d="M115,48 C110,53 120,56 113,62 C108,66 118,68 112,73" stroke="var(--a-blu)" strokeWidth="2" fill="none" strokeLinecap="round"/>
-<text x="100" y="150" textAnchor="middle" fill="var(--a-blu)" fontSize="7">dilated veins &gt;3mm</text>
-</svg>); }},
-{ id: "bladder_divert", modality: "Cystogram / CT", desc: "Outpouching from the bladder wall (posterolateral), with narrow neck communicating with the bladder lumen", answer: "Bladder Diverticulum", choices: ["Bladder Diverticulum", "Bladder Tumor", "Urachal Cyst", "Hutch Diverticulum"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CYSTOGRAM</text>
-<ellipse cx="90" cy="90" rx="40" ry="45" fill="var(--c-dp6)" stroke="#888" strokeWidth="2"/>
-<text x="90" y="93" textAnchor="middle" fill="#444" fontSize="8">BLADDER</text>
-<path d="M130,75 C135,73 140,72 148,74 C156,76 160,82 160,90 C160,98 156,104 148,106 C140,108 135,107 130,105" fill="var(--c-dp6)" stroke="#888" strokeWidth="2"/>
-<line x1="130" y1="75" x2="130" y2="105" stroke="var(--c-dp5)" strokeWidth="3"/>
-<text x="150" y="93" textAnchor="middle" fill="#666" fontSize="6">DIVERT</text>
-<text x="130" y="120" textAnchor="middle" fill="#555" fontSize="6">narrow neck</text>
-</svg>); }},
-{ id: "aml", modality: "CT Abdomen", desc: "Well-defined renal mass with macroscopic fat (negative Hounsfield units) and no calcification", answer: "Angiomyolipoma (AML)", choices: ["Angiomyolipoma (AML)", "Renal Cell Carcinoma", "Oncocytoma", "Renal Cyst"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">CT ABDOMEN — NON-CON</text>
-<ellipse cx="100" cy="85" rx="80" ry="55" fill="var(--c-dp6)" stroke="#333" strokeWidth="1"/>
-<ellipse cx="140" cy="78" rx="20" ry="24" fill="#2a2a2a" stroke="#555" strokeWidth="1"/>
-<circle cx="155" cy="68" r="13" fill="var(--c-dp5)" stroke="#888" strokeWidth="1.5"/>
-<text x="155" y="65" textAnchor="middle" fill="#888" fontSize="7" fontWeight="600">-30</text>
-<text x="155" y="73" textAnchor="middle" fill="#888" fontSize="5">HU</text>
-<text x="155" y="90" textAnchor="middle" fill="#666" fontSize="6">fat density</text>
-<rect x="88" y="78" width="18" height="14" rx="3" fill="#333"/>
-</svg>); }},
-{ id: "pcn", modality: "Fluoroscopy", desc: "Percutaneous catheter in renal pelvis with contrast showing dilated collecting system and no passage to the bladder", answer: "Percutaneous Nephrostomy (Pyonephrosis)", choices: ["Percutaneous Nephrostomy (Pyonephrosis)", "Ureteral Stent", "Renal Biopsy", "PCNL Access"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">FLUOROSCOPY — NEPHROSTOGRAM</text>
-<ellipse cx="100" cy="85" rx="40" ry="50" fill="none" stroke="#444" strokeWidth="1.5"/>
-<ellipse cx="100" cy="85" rx="25" ry="30" fill="#222" stroke="#888" strokeWidth="1"/>
-<ellipse cx="85" cy="65" rx="10" ry="7" fill="#222" stroke="#888" strokeWidth="0.8"/>
-<ellipse cx="115" cy="65" rx="10" ry="7" fill="#222" stroke="#888" strokeWidth="0.8"/>
-<ellipse cx="85" cy="105" rx="10" ry="7" fill="#222" stroke="#888" strokeWidth="0.8"/>
-<line x1="170" y1="40" x2="115" y2="80" stroke="var(--a-am)" strokeWidth="2.5" strokeDasharray="4"/>
-<circle cx="115" cy="80" r="3" fill="var(--a-am)"/>
-<text x="170" y="35" textAnchor="middle" fill="var(--a-am)" fontSize="7">PCN tube</text>
-<text x="100" y="148" textAnchor="middle" fill="var(--a-red)" fontSize="6">× NO DISTAL PASSAGE</text>
-</svg>); }},
-{ id: "double_j", modality: "KUB", desc: "Radiopaque curvilinear tube with coiled ends in the renal pelvis and bladder", answer: "Ureteral (Double-J) Stent", choices: ["Ureteral (Double-J) Stent", "Foley Catheter", "Nephrostomy Tube", "VP Shunt"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">KUB</text>
-<ellipse cx="70" cy="55" rx="25" ry="30" fill="none" stroke="#333" strokeWidth="1"/>
-<rect x="60" y="120" width="80" height="25" rx="10" fill="none" stroke="#333" strokeWidth="1"/>
-<path d="M60,48 C55,42 58,38 65,38 C72,38 75,42 75,48" stroke="#eee" strokeWidth="2" fill="none" strokeLinecap="round"/>
-<line x1="75" y1="48" x2="90" y2="125" stroke="#eee" strokeWidth="2"/>
-<path d="M85,130 C80,136 83,140 90,140 C97,140 100,136 95,130" stroke="#eee" strokeWidth="2" fill="none" strokeLinecap="round"/>
-<text x="130" y="80" fill="#555" fontSize="7">proximal curl</text>
-<line x1="120" y1="78" x2="72" y2="45" stroke="#333" strokeWidth="0.5"/>
-<text x="130" y="140" fill="#555" fontSize="7">distal curl</text>
-<line x1="120" y1="138" x2="96" y2="137" stroke="#333" strokeWidth="0.5"/>
-</svg>); }},
-{ id: "testis_mass_us", modality: "Scrotal Ultrasound", desc: "Hypoechoic solid intratesticular mass with irregular borders and increased vascularity on Doppler", answer: "Testicular Tumor", choices: ["Testicular Tumor", "Testicular Torsion", "Epididymal Cyst", "Orchitis"],
-svg: function(W2, H2) { return (<svg width={W2} height={H2} viewBox="0 0 200 160">
-<rect width="200" height="160" fill="var(--c-dp5)" rx="4"/>
-<text x="100" y="14" textAnchor="middle" fill="var(--c-br)" fontSize="8" fontWeight="600">SCROTAL US — R TESTIS</text>
-<ellipse cx="100" cy="90" rx="40" ry="45" fill="var(--c-dp6)" stroke="#444" strokeWidth="1.5"/>
-<ellipse cx="115" cy="80" rx="18" ry="20" fill="#111" stroke="#666" strokeWidth="1.5"/>
-<circle cx="110" cy="75" r="2" fill="var(--a-red)"/><circle cx="120" cy="82" r="1.5" fill="var(--a-blu)"/>
-<circle cx="115" cy="88" r="2" fill="var(--a-red)"/><circle cx="108" cy="82" r="1.5" fill="var(--a-blu)"/>
-<text x="115" y="110" textAnchor="middle" fill="#666" fontSize="6">hypoechoic mass</text>
-<text x="115" y="120" textAnchor="middle" fill="var(--a-red)" fontSize="6">↑ vascularity</text>
-</svg>); }},
-];
-var [vdGs, setVdGs] = useState("ready"); // ready, playing, over
-var [vdScore, setVdScore] = useState(0);
-var [vdIdx, setVdIdx] = useState(0);
-var [vdQueue, setVdQueue] = useState([]);
-var [vdPicked, setVdPicked] = useState(null);
-var [vdCorrect, setVdCorrect] = useState(0);
-var [vdTotal, setVdTotal] = useState(0);
-var [vdTimer, setVdTimer] = useState(20);
-var [vdStreak, setVdStreak] = useState(0);
-var [vdShuffledChoices, setVdShuffledChoices] = useState([]);
-var vdTimerRef = useRef(null);
-var ROUND_COUNT = 10;
-function shuffleCases() {
-var arr = VISUAL_CASES.slice();
-for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
-return arr.slice(0, ROUND_COUNT);
+var CARD_COIN_CAP = 150, CARD_XP_CAP = 80;
+function cardRewards(score) {
+var sc = Math.max(0, score || 0);
+return { coins: Math.min(CARD_COIN_CAP, Math.ceil(sc * 0.14)), xp: Math.min(CARD_XP_CAP, Math.ceil(sc * 0.07)) };
 }
 function shuffleArr(arr) {
 var a = arr.slice();
 for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = a[i]; a[i] = a[j]; a[j] = tmp; }
 return a;
 }
-function startVd() {
-var q = shuffleCases();
-setVdQueue(q); setVdIdx(0); setVdScore(0); setVdCorrect(0); setVdTotal(0); setVdPicked(null); setVdStreak(0); setVdTimer(20);
-setVdShuffledChoices(shuffleArr(q[0].choices));
-setVdGs("playing");
+function useGameBest(gameId) {
+var ref = useRef((s.gameBest || {})[gameId] || 0);
+return {
+get: function() { return ref.current; },
+record: function(score) {
+var isNew = score > ref.current;
+if (isNew) {
+ref.current = score;
+setS(function(p) { var gb = Object.assign({}, p.gameBest || {}); gb[gameId] = score; return Object.assign({}, p, { gameBest: gb }); });
 }
+return isNew;
+}
+};
+}
+function useRoundTimer(running, seconds, resetKey, onExpire) {
+var [t, setT] = useState(seconds);
+var expRef = useRef(onExpire); expRef.current = onExpire;
 useEffect(function() {
-if (vdGs !== "playing" || vdPicked !== null) return;
-setVdTimer(20);
-if (vdTimerRef.current) clearInterval(vdTimerRef.current);
-vdTimerRef.current = setInterval(function() {
-setVdTimer(function(t) {
-if (t <= 1) {
-clearInterval(vdTimerRef.current);
-setVdPicked("timeout");
-setTimeout(function() { advanceVd(); }, 1800);
-return 0;
-}
-return t - 1;
-});
+if (!running) return;
+var left = seconds; setT(left);
+var id = setInterval(function() {
+left--;
+if (left <= 0) { clearInterval(id); setT(0); expRef.current(); return; }
+if (left <= 3) gameSfx.tick();
+setT(left);
 }, 1000);
-return function() { if (vdTimerRef.current) clearInterval(vdTimerRef.current); };
-}, [vdGs, vdIdx, vdPicked]);
-function pickAnswer(choice) {
-if (vdPicked !== null) return;
-if (vdTimerRef.current) clearInterval(vdTimerRef.current);
-var current = vdQueue[vdIdx];
-var correct = choice === current.answer;
-setVdPicked(choice);
-setVdTotal(function(t) { return t + 1; });
-if (correct) {
-var bonus = vdStreak >= 2 ? Math.floor(vdStreak * 1.5) : 0;
-var pts = 10 + Math.floor(vdTimer * 0.5) + bonus;
-setVdScore(function(s2) { return s2 + pts; });
-setVdCorrect(function(c2) { return c2 + 1; });
-setVdStreak(function(sk) { return sk + 1; });
-} else {
-setVdStreak(0);
+return function() { clearInterval(id); };
+}, [running, resetKey]);
+return t;
 }
-setTimeout(function() { advanceVd(); }, 2000);
-}
-function advanceVd() {
-if (vdIdx + 1 >= vdQueue.length) {
-setVdGs("over");
-} else {
-var nextIdx = vdIdx + 1;
-setVdIdx(nextIdx);
-setVdPicked(null);
-setVdShuffledChoices(shuffleArr(vdQueue[nextIdx].choices));
-}
-}
-useEffect(function() {
-return function() { if (vdTimerRef.current) clearInterval(vdTimerRef.current); };
-}, []);
-var W2 = 380, H2 = 180;
+function bigBtn(col) { return { padding: "12px 20px", background: "linear-gradient(135deg," + col + ",var(--a-ind))", border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", minHeight: 44 }; }
+function altBtn(col) { return { padding: "10px 20px", background: "var(--c-bg)", border: "1px solid " + col + "55", borderRadius: 10, color: col, fontSize: 12, fontWeight: 700, cursor: "pointer", minHeight: 40 }; }
+function LoadingCard(props) {
 return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}>
-<div style={{ width: 420, maxWidth: "95vw", maxHeight: "95vh", background: "var(--c-dp)", borderRadius: 16, border: "1px solid #06b6d433", overflow: "auto", display: "flex", flexDirection: "column" }}>
-<div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-cd)" }}>
-<span style={{ fontSize: 14, fontWeight: 800, color: "var(--a-cy2)" }}>{"🔍 Visual Dx"}</span>
-<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-<button onClick={function() { if (vdTimerRef.current) clearInterval(vdTimerRef.current); setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer" }}>{"< Games"}</button>
-<button onClick={function() { if (vdTimerRef.current) clearInterval(vdTimerRef.current); setShowGame(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer" }}>{"✕"}</button>
+<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 40 }}>
+<div style={{ width: 40, height: 40, border: "3px solid " + props.color + "33", borderTopColor: props.color, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+<div style={{ fontSize: 11, color: "var(--c-mut)" }}>{props.text}</div>
+</div>
+);
+}
+function fetchAiDeck(prompt, norm, minCards, onDone, onFail) {
+callAI(
+"You are a urology board-prep content generator. Output valid JSON only: no markdown fences, no prose, no preamble.",
+[{ role: "user", content: prompt }],
+{ temperature: 0.9, max_tokens: 3000 },
+function(text) {
+try {
+var cleaned = String(text || "").trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+var a = cleaned.indexOf("["), b = cleaned.lastIndexOf("]");
+if (a >= 0 && b > a) cleaned = cleaned.slice(a, b + 1);
+var parsed = JSON.parse(cleaned);
+if (!Array.isArray(parsed)) throw new Error("not a list");
+var ok = parsed.map(function(c) { try { return norm(c); } catch (e) { return null; } }).filter(function(c) { return !!c; });
+if (ok.length < minCards) throw new Error("only " + ok.length + " usable cards");
+onDone(ok);
+} catch (err) { onFail("Couldn't use the AI deck (" + (err && err.message ? err.message : "bad JSON") + ")"); }
+},
+function(err) { onFail((err && err.message) || "AI request failed"); }
+);
+}
+function GameFrame(props) {
+var [snd, setSnd] = useState(GAME_AUDIO.on);
+var col = props.color;
+function leave(to) { if (props.onLeave) props.onLeave(); setShowGame(to); }
+return (
+<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12, paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+<div style={{ width: props.width || 400, maxWidth: "100%", maxHeight: "95vh", background: "var(--c-dp)", borderRadius: 16, border: "1px solid " + col + "44", overflow: "auto", display: "flex", flexDirection: "column" }}>
+<div style={{ padding: "6px 8px 6px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-cd)", flexShrink: 0 }}>
+<span style={{ fontSize: 14, fontWeight: 800, color: col, whiteSpace: "nowrap" }}>{props.icon + " " + props.title}</span>
+<div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+<button onClick={function() { var nv = !snd; setGameSound(nv); setSnd(nv); if (nv) { primeGameAudio(); gameSfx.flip(); } }} title={snd ? "Sound on" : "Sound off"} style={{ background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", padding: "4px 6px", minHeight: 32 }}>{snd ? "🔊" : "🔇"}</button>
+<button onClick={function() { leave("select"); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", padding: "4px 6px", minHeight: 32 }}>{"< Games"}</button>
+<button onClick={function() { leave(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer", padding: "0 6px", minHeight: 32 }}>{"✕"}</button>
 </div>
 </div>
-{vdGs === "ready" && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "30px 16px" }}>
-<div style={{ fontSize: 48 }}>{"🔍"}</div>
-<div style={{ fontSize: 20, fontWeight: 800, color: "var(--a-cy2)" }}>Visual Dx</div>
-<p style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center", maxWidth: 320, lineHeight: 1.6 }}>You'll see imaging findings, cystoscopy views, and radiologic studies. Identify the correct diagnosis from 4 choices. Faster answers score more!</p>
-<div style={{ fontSize: 10, color: "var(--c-br2)", textAlign: "center" }}>{ROUND_COUNT} rounds · 20s per image</div>
-<button onClick={startVd} style={{ padding: "12px 36px", background: "linear-gradient(135deg, var(--a-cy2), var(--a-blu))", border: "none", borderRadius: 10, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginTop: 8 }}>Start</button>
+{props.children}
 </div>
+</div>
+);
+}
+function ReadyCard(props) {
+return (
+<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "22px 18px 26px" }}>
+<div style={{ fontSize: 46, lineHeight: 1 }}>{props.icon}</div>
+<div style={{ fontSize: 20, fontWeight: 800, color: props.color, textAlign: "center" }}>{props.title}</div>
+{props.sub && <div style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center", maxWidth: 320, lineHeight: 1.55 }}>{props.sub}</div>}
+{props.how && props.how.length > 0 && (
+<ul style={{ margin: 0, padding: "10px 12px 10px 26px", background: "var(--c-bg)", border: "1px solid var(--c-cd)", borderRadius: 10, fontSize: 11, color: "var(--c-mut)", lineHeight: 1.6, alignSelf: "stretch" }}>
+{props.how.map(function(h, i) { return <li key={i}>{h}</li>; })}
+</ul>
 )}
-{vdGs === "playing" && vdQueue[vdIdx] && (function() {
-var current = vdQueue[vdIdx];
-var isCorrect = vdPicked === current.answer;
-var isTimeout = vdPicked === "timeout";
-var choices = vdShuffledChoices.length > 0 ? vdShuffledChoices : current.choices;
+{props.children}
+{props.best > 0 && <div style={{ fontSize: 10, color: "#64748b" }}>{"Best: " + props.best}</div>}
+{props.note && <div style={{ fontSize: 9, color: "var(--a-red0)", textAlign: "center", maxWidth: 300 }}>{props.note}</div>}
+</div>
+);
+}
+function RunHud(props) {
+var pct = props.timeMax ? Math.max(0, Math.min(100, props.time / props.timeMax * 100)) : 0;
+var low = !!props.timeMax && props.time <= Math.max(3, Math.round(props.timeMax / 4));
 return (
-<div style={{ padding: "10px 14px" }}>
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-<span style={{ fontSize: 10, fontWeight: 700, color: "var(--c-tx)" }}>{"🎯 "}{vdScore} pts</span>
-<span style={{ fontSize: 10, color: "var(--a-cy2)" }}>{vdIdx + 1}/{vdQueue.length}</span>
-<span style={{ fontSize: 10, fontWeight: 700, color: vdTimer <= 5 ? "var(--a-red)" : "var(--c-mut)", fontFamily: "monospace" }}>{"⏱ "}{vdTimer}s</span>
+<div style={{ padding: "8px 14px 0" }}>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 700, color: "var(--c-tx)", gap: 8 }}>
+<span>{"🎯 " + props.score}</span>
+<span style={{ color: props.color }}>{(props.idx + 1) + "/" + props.total}</span>
+<span style={{ color: "var(--a-or2)", minWidth: 28, textAlign: "center" }}>{props.streak >= 2 ? "🔥 " + props.streak : ""}</span>
+{props.lives != null && <span>{Array(Math.max(0, props.lives)).fill("❤️").join("") || "💔"}</span>}
+{props.timeMax ? <span style={{ fontFamily: "monospace", color: low ? "var(--a-red)" : "var(--c-mut)" }}>{props.time + "s"}</span> : null}
 </div>
-<div style={{ height: 3, background: "var(--c-cd)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
-<div style={{ height: "100%", width: (vdTimer / 20 * 100) + "%", background: vdTimer <= 5 ? "var(--a-red)" : "var(--a-cy2)", transition: "width 1s linear" }} />
+{props.timeMax ? (
+<div style={{ height: 4, background: "var(--c-cd)", borderRadius: 2, overflow: "hidden", marginTop: 6 }}>
+<div style={{ width: pct + "%", height: "100%", background: low ? "var(--a-red)" : props.color, transition: "width 1s linear" }} />
 </div>
-<div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
-<span style={{ padding: "3px 10px", background: "#06b6d415", border: "1px solid #06b6d430", borderRadius: 5, fontSize: 9, fontWeight: 700, color: "var(--a-cy2)" }}>{current.modality}</span>
+) : null}
 </div>
-<div style={{ display: "flex", justifyContent: "center", marginBottom: 8, background: "#000", borderRadius: 8, border: "1px solid var(--c-cd)", overflow: "hidden" }}>
-{current.svg(W2, H2)}
-</div>
-<div style={{ fontSize: 10, color: "var(--c-tx2)", lineHeight: 1.6, marginBottom: 10, padding: "6px 10px", background: "var(--c-bg)", borderRadius: 6, border: "1px solid var(--c-cd)" }}>
-{current.desc}
-</div>
-<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-{choices.map(function(ch) {
-var isCh = vdPicked === ch;
-var isAns = ch === current.answer;
-var bg = vdPicked === null ? "var(--c-bg)" : isAns ? "#4ade8025" : isCh ? "#ef444425" : "var(--c-bg)";
-var brd = vdPicked === null ? "var(--c-br)" : isAns ? "#4ade8060" : isCh ? "#ef444460" : "var(--c-cd)";
-var col = vdPicked === null ? "var(--c-tx)" : isAns ? "var(--a-grn)" : isCh ? "var(--a-red)" : "var(--c-br2)";
+);
+}
+function OverCard(props) {
+var r = props.rewards, misses = props.misses || [];
+var pct = props.total ? Math.round(props.correct / props.total * 100) : 0;
+var head = props.total > 0 && props.correct === props.total ? "🏆 Perfect round" : props.cutShort ? "💔 " + props.cutShort : pct >= 70 ? "🎉 Round complete" : "🧠 Round complete";
 return (
-<button key={ch} onClick={function() { pickAnswer(ch); }} disabled={vdPicked !== null} style={{ padding: "10px 8px", background: bg, border: "1px solid " + brd, borderRadius: 8, color: col, fontSize: 10, fontWeight: 600, cursor: vdPicked ? "default" : "pointer", textAlign: "center", lineHeight: 1.4 }}>
-{vdPicked !== null && isAns ? "✓ " : ""}{vdPicked !== null && isCh && !isAns ? "✗ " : ""}{ch}
+<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "20px 16px 22px" }}>
+<div style={{ fontSize: 20, fontWeight: 900, color: props.color, textAlign: "center" }}>{head}</div>
+{props.sub && <div style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center" }}>{props.sub}</div>}
+<div style={{ fontSize: 34, fontWeight: 900, color: "var(--a-am)", lineHeight: 1 }}>{props.score}</div>
+<div style={{ fontSize: 10, color: props.newBest ? "var(--a-grn)" : "#64748b", fontWeight: props.newBest ? 800 : 500 }}>{props.newBest ? "New best!" : "Best: " + props.best}</div>
+<div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--c-mut)", flexWrap: "wrap", justifyContent: "center" }}>
+<span>{"✓ " + props.correct + "/" + props.total + " (" + pct + "%)"}</span>
+{props.bestStreak != null && <span>{"🔥 Best streak " + props.bestStreak}</span>}
+</div>
+<div style={{ padding: "6px 14px", background: "#fbbf2418", border: "1px solid #fbbf2455", borderRadius: 999, fontSize: 12, fontWeight: 800, color: "var(--a-am)" }}>{"+" + r.coins + " 💰 · +" + r.xp + " XP"}</div>
+{misses.length > 0 ? (
+<div style={{ alignSelf: "stretch", marginTop: 6 }}>
+<div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, color: "var(--a-red0)", marginBottom: 6 }}>{"REVIEW · " + misses.length + " MISSED"}</div>
+<div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 230, overflow: "auto" }}>
+{misses.map(function(m, i) {
+return (
+<div key={i} style={{ background: "var(--c-bg)", border: "1px solid var(--c-cd)", borderLeft: "3px solid var(--a-red0)", borderRadius: 8, padding: "8px 10px" }}>
+<div style={{ fontSize: 10, color: "var(--c-tx)", lineHeight: 1.45 }}>{m.prompt}</div>
+<div style={{ fontSize: 10, color: "var(--c-mut)", marginTop: 4 }}>{(m.you ? "You: " + m.you : "Ran out of time") + " → "}<b style={{ color: "var(--a-grn)" }}>{m.answer}</b></div>
+{m.why && <div style={{ fontSize: 10, color: "var(--c-mut)", marginTop: 3, lineHeight: 1.45, fontStyle: "italic" }}>{m.why}</div>}
+</div>
+);
+})}
+</div>
+</div>
+) : <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>No misses. Clean round. 👏</div>}
+<div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", justifyContent: "center" }}>
+<button onClick={props.onClaim} disabled={props.claimed} style={{ padding: "11px 24px", background: props.claimed ? "var(--c-cd)" : "linear-gradient(135deg," + props.color + ",var(--a-ind))", border: "none", borderRadius: 10, color: props.claimed ? "var(--c-mut)" : "#fff", fontSize: 13, fontWeight: 800, cursor: props.claimed ? "default" : "pointer", minHeight: 40 }}>{props.claimed ? "Claimed ✓" : "Claim ▸"}</button>
+<button onClick={props.onAgain} style={{ padding: "11px 18px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 12, fontWeight: 700, cursor: "pointer", minHeight: 40 }}>{props.againLabel || "Play again"}</button>
+</div>
+</div>
+);
+}
+var BUZZER_AI_PROMPT = "Write exactly 10 rapid-fire urology board-review questions for a buzzer game. Return STRICT JSON only, no markdown, no prose: " +
+"[{\"q\":\"question under 110 characters\",\"opts\":[\"four short answer options\"],\"a\":\"the correct option, copied exactly from opts\",\"why\":\"one-sentence teaching point\"}]. " +
+"Mix topics (stones, oncology, pediatrics, andrology, voiding dysfunction, trauma, infection, anatomy). One unambiguous best answer per question, consistent with current AUA/EAU guidelines. No repeats, no real patient data.";
+function BoardBuzzer() {
+var TOTAL_QS = 10, TIME_PER_Q = 12, LIVES = 3, TCOL = "#f472b6";
+var best = useGameBest("buzzer");
+var [bgs, setBgs] = useState("ready"); // ready | loading | playing | over
+var [tick, setTick] = useState(0);
+var [picked, setPicked] = useState(-1); // -1 none yet, -2 timed out, else the option index
+var [err, setErr] = useState("");
+var [claimed, setClaimed] = useState(false);
+var R = useRef(null); // the run: { qs, idx, answered, score, lives, streak, bestStreak, correct, misses, src, newBest }
+var alive = useRef(true);
+useEffect(function() { alive.current = true; return function() { alive.current = false; }; }, []);
+function rerender() { setTick(function(t) { return t + 1; }); }
+function prepQs(bank) {
+return shuffleArr(bank).slice(0, TOTAL_QS).map(function(q) {
+var opts = shuffleArr(q.opts);
+return { q: q.q, opts: opts, a: opts.indexOf(q.opts[0]), why: q.why || "" };
+});
+}
+function begin(bank, src) {
+primeGameAudio();
+R.current = { qs: prepQs(bank), idx: 0, answered: 0, score: 0, lives: LIVES, streak: 0, bestStreak: 0, correct: 0, misses: [], src: src, newBest: false };
+setPicked(-1); setClaimed(false);
+setBgs("playing"); gameSfx.flip();
+}
+function startAi() {
+primeGameAudio(); setErr(""); setBgs("loading");
+fetchAiDeck(BUZZER_AI_PROMPT, function(c) {
+if (!c || typeof c.q !== "string" || !Array.isArray(c.opts) || c.opts.length !== 4 || typeof c.why !== "string") return null;
+var opts = c.opts.map(function(o) { return String(o); }), a = String(c.a);
+if (opts.indexOf(a) < 0) return null;
+return { q: c.q, opts: [a].concat(opts.filter(function(o) { return o !== a; })).slice(0, 4), why: c.why };
+}, 6,
+function(cards) { if (alive.current) begin(cards, "ai"); },
+function(msg) { if (!alive.current) return; setErr(msg + " — using the built-in bank."); begin(BUZZER_QS, "bank"); });
+}
+function finish() {
+var r = R.current;
+r.newBest = best.record(r.score);
+setBgs("over");
+if (r.correct === r.answered) gameSfx.fanfare(); else gameSfx.over();
+}
+function advance() {
+if (!alive.current) return;
+var r = R.current;
+if (r.lives <= 0 || r.idx + 1 >= r.qs.length) { finish(); return; }
+r.idx++; setPicked(-1); rerender();
+}
+function answer(oi, timeLeft) { // oi === -2: timed out
+var r = R.current; if (!r || bgs !== "playing" || pickedRef.current !== -1) return;
+var q = r.qs[r.idx];
+r.answered++;
+if (oi === q.a) {
+r.streak++; r.correct++; if (r.streak > r.bestStreak) r.bestStreak = r.streak;
+r.score += 10 + (timeLeft > 8 ? 5 : timeLeft > 4 ? 3 : 0) + (r.streak >= 3 ? r.streak * 2 : 0);
+gameSfx.ok(r.streak);
+} else {
+r.streak = 0; r.lives--;
+r.misses.push({ prompt: q.q, you: oi >= 0 ? q.opts[oi] : null, answer: q.opts[q.a], why: q.why });
+gameSfx.bad();
+}
+pickedRef.current = oi; setPicked(oi);
+setTimeout(advance, oi === q.a ? 1300 : 2400);
+}
+var pickedRef = useRef(picked); pickedRef.current = picked;
+var time = useRoundTimer(bgs === "playing" && picked === -1, TIME_PER_Q, (R.current ? R.current.idx : 0) + ":" + bgs, function() { answer(-2, 0); });
+var timeRef = useRef(time); timeRef.current = time;
+useEffect(function() { // 1-4 or A-D answer from the keyboard
+if (bgs !== "playing") return;
+function kd(e) {
+if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+var k = e.key || "";
+var oi = k >= "1" && k <= "4" ? k.charCodeAt(0) - 49 : /^[a-dA-D]$/.test(k) ? k.toLowerCase().charCodeAt(0) - 97 : -1;
+if (oi >= 0) { e.preventDefault(); answer(oi, timeRef.current); }
+}
+window.addEventListener("keydown", kd);
+return function() { window.removeEventListener("keydown", kd); };
+}, [bgs, tick]);
+var r = R.current, cur = r && r.qs[r.idx];
+var how = [
+TOTAL_QS + " board questions, " + TIME_PER_Q + " seconds each. Tap an answer or press 1 to 4.",
+"Faster answers score more; three or more in a row adds a streak bonus.",
+LIVES + " lives. Every answer shows the why, and misses come back in the debrief."
+];
+return (
+<GameFrame title="Board Buzzer" icon="⚡" color={TCOL} width={400}>
+{bgs === "ready" && (
+<ReadyCard icon="⚡" title="Board Buzzer" color={TCOL} sub="Rapid-fire urology board questions, with the why." how={how} best={best.get()} note={err}>
+<div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 280 }}>
+<button onClick={function() { setErr(""); begin(BUZZER_QS, "bank"); }} style={bigBtn(TCOL)}>Buzz in ▸</button>
+<button onClick={startAi} style={altBtn(TCOL)}>✨ Fresh AI questions</button>
+<div style={{ fontSize: 9, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>{"Built-in bank: " + BUZZER_QS.length + " questions. AI questions use the model in Settings."}</div>
+</div>
+</ReadyCard>
+)}
+{bgs === "loading" && <LoadingCard color={TCOL} text="Writing fresh questions…" />}
+{bgs === "playing" && cur && (
+<div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 14 }}>
+<RunHud color={TCOL} score={r.score} idx={r.idx} total={r.qs.length} streak={r.streak} lives={r.lives} time={time} timeMax={TIME_PER_Q} />
+<div style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+<div style={{ background: "var(--c-bg)", borderRadius: 10, padding: 14, border: "1px solid var(--c-cd)", fontSize: 14, fontWeight: 700, color: "var(--c-tx)", lineHeight: 1.5 }}>{cur.q}</div>
+<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+{cur.opts.map(function(opt, oi) {
+var show = picked !== -1, isA = oi === cur.a, isP = picked === oi;
+var bg = show ? (isA ? "#4ade8020" : isP ? "#ef444420" : "var(--c-bg)") : "var(--c-bg)";
+var br = show ? (isA ? "#4ade8060" : isP ? "#ef444460" : "var(--c-cd)") : "var(--c-cd)";
+var col = show ? (isA ? "var(--a-grn)" : isP ? "var(--a-red)" : "var(--c-mut)") : "var(--c-tx)";
+return (
+<button key={oi} onClick={function() { answer(oi, timeRef.current); }} disabled={show} style={{ padding: "11px 14px", fontSize: 12, fontWeight: 600, background: bg, border: "1px solid " + br, borderRadius: 8, color: col, cursor: show ? "default" : "pointer", textAlign: "left", minHeight: 42, transition: "all 0.2s" }}>
+{String.fromCharCode(65 + oi) + ". " + opt}
 </button>
 );
 })}
 </div>
-{vdPicked !== null && (
-<div style={{ textAlign: "center", marginTop: 8, fontSize: 11, fontWeight: 700, color: isTimeout ? "var(--a-or)" : isCorrect ? "var(--a-grn)" : "var(--a-red)" }}>
-{isTimeout ? "⏱ Time's up! Answer: " + current.answer : isCorrect ? "✓ Correct!" + (vdStreak >= 3 ? " 🔥 " + vdStreak + "x streak!" : "") : "✗ Incorrect — " + current.answer}
-</div>
-)}
-</div>
-);
-})()}
-{vdGs === "over" && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: "30px 16px" }}>
-<div style={{ fontSize: 36 }}>{"🔍"}</div>
-<div style={{ fontSize: 22, fontWeight: 900, color: "var(--a-cy2)" }}>Rounds Complete</div>
-<div style={{ fontSize: 32, fontWeight: 900, color: "var(--a-am)" }}>{vdScore} pts</div>
-<div style={{ fontSize: 11, color: "var(--c-mut)" }}>{vdCorrect}/{vdTotal} correct ({vdTotal > 0 ? Math.round(vdCorrect / vdTotal * 100) : 0}%)</div>
-<div style={{ display: "flex", gap: 20, marginTop: 6 }}>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-am)" }}>{"🪙 "}{Math.ceil(vdScore * 0.12)}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>Coins</div>
-</div>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-cy2)" }}>{"⚡ "}{Math.ceil(vdScore * 0.06)}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>XP</div>
-</div>
-</div>
-<div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-<button onClick={function() { gameReward(Math.ceil(vdScore * 0.12), Math.ceil(vdScore * 0.06)); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg, var(--a-cy2), var(--a-blu))", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-<button onClick={startVd} style={{ padding: "10px 24px", background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Again</button>
-</div>
+{picked !== -1 && (
+<div style={{ padding: "8px 12px", borderRadius: 8, background: picked === cur.a ? "#4ade8012" : "#ef444412", border: "1px solid " + (picked === cur.a ? "#4ade8040" : "#ef444440"), fontSize: 11, lineHeight: 1.5 }}>
+<b style={{ color: picked === cur.a ? "var(--a-grn)" : "var(--a-red)" }}>{picked === cur.a ? "✓ Correct" + (r.streak >= 3 ? " · " + r.streak + " in a row" : "") : picked === -2 ? "⏱ Time's up — " + cur.opts[cur.a] : "✗ " + cur.opts[cur.a]}</b>
+{cur.why ? <span style={{ color: "var(--c-mut)" }}>{" " + cur.why}</span> : null}
 </div>
 )}
 </div>
 </div>
+)}
+{bgs === "over" && r && (
+<OverCard color={TCOL} score={r.score} best={best.get()} newBest={r.newBest} correct={r.correct} total={r.answered} bestStreak={r.bestStreak}
+rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed}
+sub={r.src === "ai" ? "Fresh AI questions" : "Built-in bank"} cutShort={r.lives <= 0 && r.answered < r.qs.length ? "Out of lives" : ""}
+onClaim={function() { var rw = cardRewards(r.score); gameReward(rw.coins, rw.xp, true); setClaimed(true); }}
+onAgain={function() { setBgs("ready"); }} />
+)}
+</GameFrame>
 );
 }
 var SNAP_MODES = [
-{
-id: "benchor",
-label: "Bench or OR?",
-icon: "🔪",
-color: "#ec4899",
-leftLabel: "Bench",
-leftHint: "Medical/observe",
-leftEmoji: "💊",
-rightLabel: "OR",
-rightHint: "Take to surgery",
-rightEmoji: "🔪",
-prompt: "Generate exactly 10 urology clinical vignette cards for a board-prep training game. Each vignette presents a scenario where the correct call is either 'take to the OR (surgery/procedure)' or 'bench (manage medically or observe)'. Return STRICT JSON only — no markdown, no prose, no preamble:\n[{\"vignette\":\"...\",\"answer\":\"or\"|\"bench\",\"explanation\":\"...\"}, ...]\nVignettes: 2-3 sentences, specific clinical details, realistic lab values and imaging. Mix difficulty (3 easy, 4 medium, 3 hard). Balance answers ~50/50 between 'or' and 'bench'. Explanations: one sentence naming the decisive factor. No repeats across the 10 cards."
-}
+{ id: "benchor", label: "Bench or OR?", icon: "🔪", color: "#ec4899",
+left: { key: "bench", label: "Bench", hint: "Medical / observe", emoji: "💊" }, right: { key: "or", label: "OR", hint: "Take to surgery or a procedure", emoji: "🔪" },
+ai: "Cases where the decisive question is whether this patient needs an operation or procedure now versus medical management or observation.",
+cards: [
+{ v: "22F, T 39.5, flank pain, 5 mm stone obstructing the mid ureter on CT, Cr 2.1, WBC 18, BP 95/60.", a: "or", why: "Infected obstructed system: emergent decompression with a stent or nephrostomy; treat the stone later." },
+{ v: "65M, asymptomatic 4 mm non-obstructing lower-pole stone found on a CT done for another reason. Normal renal function.", a: "bench", why: "Small asymptomatic non-obstructing stone: surveillance, fluids and metabolic prevention." },
+{ v: "19M, acute scrotal pain for 2 hours, high-riding testis, absent cremasteric reflex, nausea. Ultrasound not available.", a: "or", why: "Testicular torsion is a clinical diagnosis: explore within the 6-hour window, do not wait for imaging." },
+{ v: "58M, ischemic priapism for 5 hours, failed in-clinic aspiration and phenylephrine irrigation.", a: "or", why: "Refractory ischemic priapism goes to a distal shunt (Winter, T-shunt) before the corpora fibrose." },
+{ v: "45F, four uncomplicated UTIs a year, pan-sensitive E. coli each time, normal imaging, normal post-void residual.", a: "bench", why: "Recurrent uncomplicated UTI: behavioral measures and prophylaxis; nothing to operate on." },
+{ v: "72M, post-TURP day 2, gross hematuria with clot retention. Irrigation will not clear it and Hgb has fallen 10 to 7.5.", a: "or", why: "Clot retention that defeats irrigation plus a falling hemoglobin: clot evacuation and fulguration in the OR." },
+{ v: "35M, unilateral painless scrotal swelling that transilluminates, stable for years, mildly uncomfortable in tight pants.", a: "bench", why: "Simple hydrocele: observation, or elective repair if he wants it. Never urgent." },
+{ v: "50M, scrotal and perineal necrosis with crepitus, HR 130, WBC 22, lactate 4.5.", a: "or", why: "Fournier's gangrene: broad-spectrum antibiotics and emergent surgical debridement, in that order of minutes." },
+{ v: "40M, 6 mm distal ureteral stone, pain controlled on oral meds, afebrile, normal renal function.", a: "bench", why: "A 6 mm distal stone gets a trial of medical expulsive therapy with an alpha-blocker and a recheck in 2 to 4 weeks." },
+{ v: "28F, blunt abdominal trauma, CT shows a grade IV renal laceration with active contrast extravasation, BP 85/50 despite 2 L of crystalloid.", a: "or", why: "Hemodynamic instability with active bleeding: angioembolization or surgery, not observation." },
+{ v: "55M, BCG-unresponsive high-grade T1 bladder cancer with CIS after two induction courses, fit for surgery.", a: "or", why: "BCG-unresponsive high-risk NMIBC: radical cystectomy is the standard; systemic and intravesical options are for those who cannot or will not." },
+{ v: "30M, Peyronie's plaque with a stable 25-degree curvature for 18 months, penetration preserved, no pain.", a: "bench", why: "Stable, non-disabling curvature under 30 degrees: observation or intralesional therapy, not surgery." },
+{ v: "62M, enhancing 2.5 cm renal mass in a solitary kidney, Cr 1.8, prior partial nephrectomy on the other side before it was lost.", a: "or", why: "Imperative nephron-sparing indication: partial nephrectomy or ablation; surveillance risks the only kidney." },
+{ v: "75M, asymptomatic PSA 3.8 stable over 3 years, no family history, normal DRE.", a: "bench", why: "Stable PSA below the usual threshold in a man over 70: no biopsy, continue shared-decision screening." },
+{ v: "70M on apixaban with painless gross hematuria, Hgb 13 and stable, voiding well, no clots.", a: "bench", why: "Hematuria on anticoagulation still gets the full work-up (CT urogram plus cystoscopy), but electively; nothing to operate on tonight." },
+{ v: "Healthy 8-month-old with bilateral undescended testes, both palpable in the inguinal canal.", a: "or", why: "Descent after 6 months is unlikely: orchidopexy, ideally by 12 to 18 months. Hormonal therapy is not recommended." },
+{ v: "32F, 3 weeks postpartum with new stress urinary incontinence after a vaginal delivery.", a: "bench", why: "Postpartum SUI often improves over months: pelvic floor physiotherapy first, surgery is a later conversation." },
+{ v: "Blunt trauma, grade IV renal laceration, hemodynamically stable, no urinary extravasation, no other injuries.", a: "bench", why: "Most high-grade blunt renal injuries are managed nonoperatively: bed rest, serial hemoglobin, repeat imaging at 48 to 72 hours." }
+] },
+{ id: "watchact", label: "Surveillance or Intervention?", icon: "👁️", color: "#38bdf8",
+left: { key: "watch", label: "Watch", hint: "Active surveillance / leave it alone", emoji: "👁️" }, right: { key: "treat", label: "Treat", hint: "Intervene now", emoji: "⚡" },
+ai: "Cases where the decisive question is active surveillance or observation versus treating now (surgery, ablation, chemotherapy, radiation).",
+cards: [
+{ v: "78M, 2.8 cm enhancing solid renal mass, biopsy low-grade clear cell RCC, CKD stage 3b, ASA 3.", a: "watch", why: "Small renal mass under 3 cm in an older comorbid patient: active surveillance is guideline-endorsed; metastatic risk is low." },
+{ v: "52M, healthy, 3.5 cm enhancing renal mass that has grown 0.6 cm a year across two scans.", a: "treat", why: "Growing mass over 3 cm in a healthy patient: partial nephrectomy. Growth rate and size both argue against watching." },
+{ v: "66M, PSA 5.2, grade group 1 in 2 of 12 cores, under 50% of each core, PSA density 0.10.", a: "watch", why: "Low-risk prostate cancer: active surveillance is the preferred management." },
+{ v: "58M, PSA 9, grade group 3 in 6 of 12 cores, 15-year life expectancy.", a: "treat", why: "Unfavorable intermediate risk with a long life expectancy: prostatectomy or radiation plus short-course ADT." },
+{ v: "45M, asymptomatic 5 mm lower-pole renal stone, no infection, normal anatomy.", a: "watch", why: "Asymptomatic small renal stones can be observed with periodic imaging and a metabolic work-up." },
+{ v: "40F, 7 mm lower-pole stone, now two episodes of renal colic in 6 months.", a: "treat", why: "Symptomatic renal stone: ureteroscopy (or SWL) rather than more episodes of colic." },
+{ v: "Bosniak IIF renal cyst, unchanged on imaging for 4 years.", a: "watch", why: "IIF is followed with imaging; stability for about 5 years ends the follow-up." },
+{ v: "Bosniak IIF cyst that has developed a new enhancing mural nodule on this year's scan, now class IV.", a: "treat", why: "A new enhancing nodule upgrades it to Bosniak IV: treat as renal cancer." },
+{ v: "Incidental 2 cm simple renal cyst (Bosniak I), asymptomatic.", a: "watch", why: "Bosniak I needs no treatment and no follow-up imaging." },
+{ v: "Clinical stage I seminoma after orchiectomy, tumor 3 cm, no rete testis invasion, reliable patient.", a: "watch", why: "Surveillance is the preferred management for stage I seminoma; relapses are salvaged with near-100% cure." },
+{ v: "Clinical stage IIB non-seminoma, 4 cm retroperitoneal mass, AFP and hCG elevated after orchiectomy.", a: "treat", why: "Stage IIB NSGCT with elevated markers: cisplatin-based chemotherapy (BEP x3 or EP x4)." },
+{ v: "Incidental 2 cm adrenal mass, 4 HU on non-contrast CT, normal metanephrines, normal cortisol suppression, normal aldosterone-renin ratio.", a: "watch", why: "Lipid-rich, non-functional adenoma under 4 cm: no surgery; most guidelines need no or minimal follow-up." },
+{ v: "4.5 cm adrenal mass, 30 HU, absolute washout under 60%, plasma metanephrines three times normal.", a: "treat", why: "Indeterminate imaging plus elevated metanephrines: pheochromocytoma. Alpha-blockade, then adrenalectomy." },
+{ v: "24M, grade 2 left varicocele, normal semen analysis, no pain, no testicular atrophy, not trying to conceive.", a: "watch", why: "Asymptomatic varicocele with normal semen and symmetric testes: no repair." },
+{ v: "15M, grade 3 left varicocele, left testis 25% smaller than the right.", a: "treat", why: "Adolescent varicocele with a size discrepancy over 20%: varicocelectomy." },
+{ v: "Airline pilot with an asymptomatic 5 mm non-obstructing renal stone found on screening.", a: "treat", why: "High-risk occupation (pilots, some military roles): asymptomatic stones are removed because colic in the cockpit is unacceptable." },
+{ v: "70F, 1.2 cm papillary bladder tumor on surveillance cystoscopy, prior low-grade Ta, no hematuria.", a: "treat", why: "A new papillary tumor is resected (or fulgurated if tiny) for pathology; surveillance is for the interval, not the lesion." },
+{ v: "Fit 60M, 6 cm complex renal mass with retroperitoneal nodes and a 2 cm lung nodule, good performance status.", a: "treat", why: "Metastatic RCC with good performance status: systemic therapy, with cytoreductive nephrectomy for selected patients. Not surveillance." }
+] },
+{ id: "stent", label: "Stent or No Stent?", icon: "🪢", color: "#a78bfa",
+left: { key: "nostent", label: "No stent", hint: "Leave the ureter alone", emoji: "🚫" }, right: { key: "stent", label: "Stent", hint: "Place or leave a ureteral stent", emoji: "🪢" },
+ai: "Cases where the decisive question is whether to place (or leave) a ureteral stent, mostly around ureteroscopy, obstruction and ureteral injury.",
+cards: [
+{ v: "Uncomplicated ureteroscopy for a 6 mm distal stone, no access sheath, no residual fragments, normal contralateral kidney.", a: "nostent", why: "AUA: stenting may be omitted after uncomplicated ureteroscopy; stents add pain and storage symptoms." },
+{ v: "Ureteroscopy through a 12/14 Fr access sheath for 90 minutes; mucosal abrasion seen on withdrawal.", a: "stent", why: "Access sheath, long case and ureteral trauma: stent for a few days to a week." },
+{ v: "Ureteroscopy in a solitary kidney, stone fully cleared, no trauma.", a: "stent", why: "A solitary kidney makes any post-operative edema an anuric emergency: stent." },
+{ v: "Ureteral perforation recognized during ureteroscopy for a proximal stone.", a: "stent", why: "Stop, stent for 2 to 4 weeks, and come back for the stone." },
+{ v: "30 weeks pregnant, obstructing 7 mm stone, T 38.8, WBC 17.", a: "stent", why: "Infected obstruction in pregnancy: urgent decompression (stent or nephrostomy); definitive treatment after delivery or once afebrile." },
+{ v: "6 mm obstructing stone, afebrile, pain controlled, normal creatinine, starting medical expulsive therapy.", a: "nostent", why: "Uncomplicated obstruction without infection or renal failure: alpha-blocker and a 2 to 4 week trial, no stent." },
+{ v: "After ureteroscopy of a 1.5 cm stone a large residual fragment burden remains; second look planned in 2 weeks.", a: "stent", why: "Significant residual burden and a planned second look: stent to drain and passively dilate the ureter." },
+{ v: "Short ureteral stricture balloon-dilated to 15 Fr.", a: "stent", why: "Stent for 2 to 4 weeks after dilation or endoureterotomy." },
+{ v: "8 mm proximal stone, no infection, normal creatinine, ureteroscopy next week. Should you pre-stent?", a: "nostent", why: "Routine pre-stenting is not recommended; stent only if the ureter will not admit the scope." },
+{ v: "Impacted distal stone; the ureteroscope will not pass the UVJ despite gentle attempts.", a: "stent", why: "Leave a stent for passive dilation and return in 1 to 2 weeks rather than force the scope." },
+{ v: "Bilateral ureteroscopy today, both sides cleared uneventfully.", a: "stent", why: "Bilateral ureteral instrumentation gets a stent on at least one side; bilateral edema is anuria." },
+{ v: "Shock wave lithotripsy planned for a 9 mm renal pelvis stone; the patient asks for a stent first.", a: "nostent", why: "Routine stenting before SWL does not improve stone-free rates and adds symptoms." },
+{ v: "Uncomplicated ureteroscopy for a 5 mm stone in a transplant kidney.", a: "stent", why: "A transplant kidney is functionally solitary with a short, often tortuous ureter: stent." },
+{ v: "Partial ureteral transection (under 50% circumference) recognized during a hysterectomy.", a: "stent", why: "Primary repair over a stent; the stent stays 4 to 6 weeks." },
+{ v: "Ureteroscopy for a 7 mm mid-ureteral stone in a healthy 35F, ureter admitted the scope easily, fragments all extracted.", a: "nostent", why: "Same rule as the first card: uncomplicated ureteroscopy does not need a stent." },
+{ v: "Obstructing 9 mm stone, Cr 3.0 from a baseline of 1.0, afebrile, in a patient with two kidneys.", a: "stent", why: "Obstruction with acute kidney injury is an indication to decompress even without infection." }
+] },
+{ id: "admit", label: "Admit or Discharge?", icon: "🛏️", color: "#f59e0b",
+left: { key: "home", label: "Discharge", hint: "Home with a plan", emoji: "🏠" }, right: { key: "admit", label: "Admit", hint: "Needs the hospital", emoji: "🛏️" },
+ai: "Emergency department urology consults where the decisive question is admission versus safe discharge with follow-up.",
+cards: [
+{ v: "Renal colic, 5 mm distal stone, pain controlled after one dose of ketorolac, afebrile, creatinine normal.", a: "home", why: "Uncomplicated colic: discharge with medical expulsive therapy, analgesia and follow-up." },
+{ v: "Obstructing 6 mm stone, T 38.9, WBC 16, lactate 2.8.", a: "admit", why: "Infected obstructed kidney: admit for decompression and IV antibiotics; this one can die." },
+{ v: "Obstructing stone, afebrile, intractable vomiting; cannot keep down fluids or analgesics.", a: "admit", why: "Cannot tolerate oral intake: admit for IV hydration and analgesia even without infection." },
+{ v: "14M, grade 3 renal laceration from a handlebar, hemodynamically stable, no extravasation.", a: "admit", why: "High-grade renal trauma is observed in hospital: bed rest, serial hemoglobin, repeat imaging if anything changes." },
+{ v: "Acute urinary retention from BPH, 900 mL drained, Cr 1.1, otherwise well.", a: "home", why: "Simple retention: catheter, start an alpha-blocker, voiding trial in 3 to 7 days." },
+{ v: "Urinary retention, 1.8 L drained, Cr 4.2, K 5.6.", a: "admit", why: "Obstructive renal failure and hyperkalemia: admit to watch for post-obstructive diuresis and correct electrolytes." },
+{ v: "28F, uncomplicated pyelonephritis, tolerating oral intake, no obstruction on ultrasound, hemodynamically normal.", a: "home", why: "Uncomplicated pyelonephritis: oral antibiotics (fluoroquinolone or a first IV dose then oral) and follow-up." },
+{ v: "64M, diabetic, pyelonephritis with gas in the renal parenchyma on CT.", a: "admit", why: "Emphysematous pyelonephritis: admit, IV antibiotics, drainage or nephrectomy depending on extent." },
+{ v: "Ischemic priapism, detumesced after aspiration and phenylephrine, soft for the last hour, pain resolved.", a: "home", why: "Resolved ischemic priapism: discharge with urology follow-up and advice to return if it recurs." },
+{ v: "Gross hematuria with clots and retention; bedside clot evacuation cleared the bladder but irrigation keeps turning red.", a: "admit", why: "Ongoing bleeding needing continuous bladder irrigation is inpatient care." },
+{ v: "Painless gross hematuria, no clots, voiding well, Hgb normal, not anticoagulated.", a: "home", why: "Stable painless hematuria: discharge with an outpatient CT urogram and cystoscopy." },
+{ v: "24M, epididymitis, afebrile, tolerating oral intake, no abscess on ultrasound.", a: "home", why: "Uncomplicated epididymitis: ceftriaxone plus doxycycline as an outpatient." },
+{ v: "Epididymo-orchitis with a 2 cm scrotal abscess on ultrasound, T 39.", a: "admit", why: "Abscess and fever: admit for IV antibiotics and drainage." },
+{ v: "Minor blunt abdominal trauma, hemodynamically stable, microscopic hematuria only, no gross hematuria.", a: "home", why: "Stable adult with microhematuria alone needs no renal imaging and no admission." },
+{ v: "Renal colic in a solitary kidney, 6 mm obstructing stone, Cr 2.0 from a baseline of 1.0, afebrile.", a: "admit", why: "Obstructed solitary kidney with rising creatinine: admit and decompress." },
+{ v: "70F, 2 days after an uneventful ureteroscopy with a stent, now flank pain and dysuria, afebrile, drinking well, no vomiting.", a: "home", why: "Classic stent symptoms without fever: alpha-blocker, anticholinergic and analgesia at home." },
+{ v: "Scrotal pain with crepitus, dusky perineal skin, T 38.5, glucose 400.", a: "admit", why: "Fournier's gangrene: admit straight to the OR for debridement. Nobody with crepitus goes home." },
+{ v: "Post-vasectomy day 3, tender 3 cm scrotal hematoma, afebrile, not expanding, hemoglobin normal.", a: "home", why: "Small, stable post-vasectomy hematoma: support, ice, analgesia, follow-up." }
+] },
+{ id: "biopsy", label: "Biopsy or Hold?", icon: "🎯", color: "#10b981",
+left: { key: "hold", label: "Hold", hint: "No biopsy now", emoji: "✋" }, right: { key: "biopsy", label: "Biopsy", hint: "Get tissue", emoji: "🎯" },
+ai: "Cases where the decisive question is whether to biopsy now (prostate, kidney, bladder, adrenal, testis, upper tract) or to hold off.",
+cards: [
+{ v: "PSA 5.1, MRI PI-RADS 2, PSA density 0.09, no family history, normal DRE.", a: "hold", why: "Negative MRI with a low PSA density: a biopsy can be deferred with PSA and MRI surveillance." },
+{ v: "PSA 6.0, MRI shows a 1.2 cm PI-RADS 4 lesion in the peripheral zone.", a: "biopsy", why: "PI-RADS 4 or 5: targeted plus systematic biopsy." },
+{ v: "48M, PSA 7, known BRCA2 mutation.", a: "biopsy", why: "BRCA2 carriers have aggressive disease at younger ages; a PSA of 7 at 48 is biopsied." },
+{ v: "PSA 4.6 drawn one week after treatment for acute bacterial prostatitis.", a: "hold", why: "Prostatitis inflates PSA for weeks: repeat in 6 to 8 weeks before deciding anything." },
+{ v: "84M, PSA 11, severe COPD on home oxygen, life expectancy under 10 years.", a: "hold", why: "No biopsy when the result would not change management; treatment would not extend his life." },
+{ v: "60M, PSA 3.2 with a firm nodule in the left lobe on DRE.", a: "biopsy", why: "An abnormal DRE is an indication at any PSA." },
+{ v: "PSA 4.2, repeat 8 weeks later 4.0, free PSA 28%, normal DRE, no family history.", a: "hold", why: "Borderline PSA with a high free fraction: low cancer probability, continue surveillance." },
+{ v: "PSA 3.8, PI-RADS 3 lesion, PSA density 0.20.", a: "biopsy", why: "PI-RADS 3 is equivocal; a PSA density of 0.15 or more tips it to biopsy." },
+{ v: "55M, healthy, 2.5 cm enhancing renal mass; partial nephrectomy already planned.", a: "hold", why: "Renal mass biopsy is not needed when surgery is planned regardless of the result." },
+{ v: "4 cm renal mass in a patient with a history of lymphoma, considering ablation versus surveillance.", a: "biopsy", why: "Biopsy when it changes management: lymphoma or metastasis would avoid an operation, and ablation needs tissue first." },
+{ v: "Hypoechoic 2 cm intratesticular mass on ultrasound, AFP elevated.", a: "hold", why: "Never needle a testis through the scrotum: radical inguinal orchiectomy is both diagnosis and treatment." },
+{ v: "Flat velvety red patch on the bladder dome at cystoscopy, positive urine cytology.", a: "biopsy", why: "Possible carcinoma in situ: cold-cup biopsies of the lesion and mapping biopsies." },
+{ v: "3 cm adrenal mass with plasma metanephrines four times normal.", a: "hold", why: "Suspected pheochromocytoma is never biopsied: alpha-blockade and adrenalectomy." },
+{ v: "Microscopic hematuria with a 1.5 cm filling defect in the renal pelvis on CT urogram, cytology atypical.", a: "biopsy", why: "Ureteroscopy with biopsy establishes grade before choosing nephroureterectomy versus kidney-sparing treatment." },
+{ v: "72M on finasteride for 5 years; PSA has risen from a nadir of 0.8 to 1.9 over 18 months.", a: "biopsy", why: "On a 5-ARI the PSA should halve and stay down; any sustained rise from nadir is a cancer flag (double it: 3.8)." },
+{ v: "67M, PSA 5.5, MRI PI-RADS 5, bone scan already shows multiple sclerotic metastases, PSMA PET avid.", a: "biopsy", why: "Tissue is still needed to confirm the diagnosis and histology before systemic therapy; a positive scan is not pathology." },
+{ v: "3 mm incidental echogenic renal lesion on ultrasound, most consistent with a tiny angiomyolipoma or scar.", a: "hold", why: "Lesions under 1 cm cannot be reliably biopsied or characterized; repeat imaging." }
+] },
+{ id: "abx", label: "Antibiotics or Not?", icon: "💊", color: "#fb923c",
+left: { key: "noabx", label: "No antibiotics", hint: "Don't treat / no prophylaxis", emoji: "🙅" }, right: { key: "abx", label: "Treat", hint: "Antibiotics are indicated", emoji: "💊" },
+ai: "Cases where the decisive question is whether antibiotics (treatment or procedural prophylaxis) are indicated, including asymptomatic bacteriuria and catheter-associated scenarios.",
+cards: [
+{ v: "70F, asymptomatic, urine culture with 10^5 E. coli sent before a routine clinic visit.", a: "noabx", why: "Asymptomatic bacteriuria in a non-pregnant adult: do not treat; it breeds resistance and does not prevent infection." },
+{ v: "26F, 14 weeks pregnant, asymptomatic bacteriuria on screening.", a: "abx", why: "Pregnancy is an exception: treat asymptomatic bacteriuria to prevent pyelonephritis and preterm birth." },
+{ v: "Asymptomatic bacteriuria found on the pre-operative urine culture before a TURP.", a: "abx", why: "Treat before any procedure that breaches the urothelium (TURP, ureteroscopy, PCNL)." },
+{ v: "Chronic indwelling catheter, cloudy foul-smelling urine, no fever, no flank pain, feels fine.", a: "noabx", why: "Cloudy or smelly catheter urine without symptoms is colonization: change the catheter, no antibiotics." },
+{ v: "Chronic indwelling catheter, T 38.6, flank pain, no other source.", a: "abx", why: "Catheter-associated UTI with systemic signs: change the catheter, culture from the new one, treat." },
+{ v: "Spinal cord injury on intermittent catheterization; bacteriuria with new increased spasticity and autonomic dysreflexia.", a: "abx", why: "In SCI the UTI symptoms are atypical: spasticity, dysreflexia or malaise count as symptoms." },
+{ v: "Healthy patient, office flexible cystoscopy, no risk factors, sterile urine.", a: "noabx", why: "No prophylaxis for simple cystoscopy without risk factors." },
+{ v: "Ureteroscopy for a stone, pre-operative urine culture negative.", a: "abx", why: "AUA: a single dose of peri-operative prophylaxis for ureteroscopy, even with sterile urine." },
+{ v: "Transrectal prostate biopsy tomorrow.", a: "abx", why: "Prophylaxis is mandatory for transrectal biopsy (fluoroquinolone or culture-directed); transperineal may need none." },
+{ v: "Urodynamics in a healthy woman with no risk factors and sterile urine.", a: "noabx", why: "No prophylaxis for urodynamics without risk factors." },
+{ v: "1-year-old with grade IV vesicoureteral reflux and a history of febrile UTI.", a: "abx", why: "Continuous antibiotic prophylaxis for infants with high-grade reflux, especially after febrile UTI." },
+{ v: "Postmenopausal woman with recurrent UTIs, now infection-free, asking for daily antibiotics; has never tried vaginal estrogen.", a: "noabx", why: "Vaginal estrogen first for postmenopausal recurrent UTI; prophylaxis comes after non-antibiotic measures." },
+{ v: "Asymptomatic candiduria (10^4) in a catheterized ICU patient.", a: "noabx", why: "Asymptomatic candiduria: remove or change the catheter; no antifungal." },
+{ v: "19M, sexually active, tender swollen epididymis, afebrile.", a: "abx", why: "Epididymitis: ceftriaxone plus doxycycline (cover chlamydia and gonorrhea in men under 35)." },
+{ v: "Fever, perineal pain, dysuria, exquisitely tender boggy prostate.", a: "abx", why: "Acute bacterial prostatitis: 2 to 4 weeks of a fluoroquinolone or TMP-SMX; do not massage the prostate." },
+{ v: "Post-op day 2, catheter just removed, culture from the catheter grew Enterococcus, patient asymptomatic.", a: "noabx", why: "Catheter colonization without symptoms is not treated." },
+{ v: "Percutaneous nephrolithotomy scheduled, urine culture negative.", a: "abx", why: "PCNL always gets prophylaxis (and treatment of any positive culture first); infection is the main serious complication." },
+{ v: "Elderly man with asymptomatic bacteriuria and new confusion, no fever, no urinary symptoms, delirium work-up otherwise incomplete.", a: "noabx", why: "Delirium alone does not make bacteriuria a UTI; look for the real cause before reaching for antibiotics." }
+] },
+{ id: "cutdrug", label: "Cut or Drug?", icon: "⚔️", color: "#ef4444",
+left: { key: "drug", label: "Drug", hint: "Systemic therapy / intravesical / radiation", emoji: "💉" }, right: { key: "cut", label: "Cut", hint: "Surgery first", emoji: "🔪" },
+ai: "Genitourinary oncology cases where the decisive question is surgery versus systemic therapy (chemotherapy, hormonal, immunotherapy, intravesical, radiation) as the next step.",
+cards: [
+{ v: "Newly diagnosed prostate cancer with six bone metastases and PSA 80.", a: "drug", why: "Metastatic hormone-sensitive disease: ADT plus an androgen receptor pathway inhibitor; there is no role for prostatectomy." },
+{ v: "Residual 3 cm retroperitoneal mass after BEP x3 for non-seminoma, markers normalized.", a: "cut", why: "Post-chemotherapy RPLND for any residual NSGCT mass over 1 cm: teratoma or viable tumor in about half." },
+{ v: "BCG-unresponsive carcinoma in situ of the bladder in a fit 62M.", a: "cut", why: "Radical cystectomy is the standard for BCG-unresponsive high-risk NMIBC." },
+{ v: "Muscle-invasive bladder cancer, cT2N0M0, cisplatin-eligible, cystectomy planned.", a: "drug", why: "Neoadjuvant cisplatin-based chemotherapy before cystectomy improves survival; surgery comes after." },
+{ v: "cT3b renal cell carcinoma with a tumor thrombus in the IVC below the hepatic veins, no metastases.", a: "cut", why: "Radical nephrectomy with thrombectomy; locally advanced RCC is a surgical disease." },
+{ v: "Metastatic clear cell RCC, IMDC poor risk with four risk factors, symptomatic primary.", a: "drug", why: "Poor-risk metastatic RCC: systemic therapy first (CARMENA); cytoreductive nephrectomy is for selected good-risk patients." },
+{ v: "Solitary 2 cm lung metastasis 3 years after nephrectomy for RCC, no other disease.", a: "cut", why: "Metastasectomy for an isolated, resectable, late metastasis offers long disease-free intervals." },
+{ v: "Penile cancer with fixed, bulky 5 cm inguinal nodes and skin involvement.", a: "drug", why: "Bulky or fixed nodes: neoadjuvant chemotherapy (TIP) first, then lymphadenectomy in responders." },
+{ v: "Penile cancer pT1b, one mobile 2 cm palpable inguinal node after a course of antibiotics.", a: "cut", why: "A persistent palpable mobile node gets an inguinal lymph node dissection." },
+{ v: "8 cm localized adrenocortical carcinoma, no metastases.", a: "cut", why: "Complete en bloc resection is the only curative therapy for adrenocortical carcinoma." },
+{ v: "Stage IIA seminoma (one 1.5 cm retroperitoneal node) after orchiectomy.", a: "drug", why: "Seminoma stage IIA: radiotherapy or chemotherapy, not RPLND." },
+{ v: "Castration-resistant prostate cancer, PSMA-avid, progressed on an ARPI and docetaxel.", a: "drug", why: "Lutetium-177 PSMA or another systemic line; surgery has no role here." },
+{ v: "Newly diagnosed high-grade T1 bladder cancer with CIS; restaging TUR shows no muscle invasion.", a: "drug", why: "High-risk NMIBC after complete resection: BCG induction and maintenance." },
+{ v: "3-year-old with a unilateral 9 cm Wilms tumor, no metastases, no thrombus, in North America.", a: "cut", why: "COG approach: upfront nephrectomy, then chemotherapy by stage and histology (SIOP in Europe gives chemotherapy first)." },
+{ v: "After orchiectomy for non-seminoma the AFP keeps rising to 1,200 with no disease on CT (stage IS).", a: "drug", why: "Persistently rising markers mean occult metastatic disease: chemotherapy, not RPLND." },
+{ v: "cT1 renal mass 3.5 cm in a healthy 50M.", a: "cut", why: "Localized RCC is surgical: partial nephrectomy. There is no adjuvant or systemic role at this stage." },
+{ v: "Upper tract urothelial carcinoma, high grade, invasive, in a patient with a normal contralateral kidney.", a: "cut", why: "Radical nephroureterectomy with a bladder cuff (consider neoadjuvant chemotherapy while the kidney is still there)." },
+{ v: "Low-grade non-invasive UTUC, 1 cm, in a solitary kidney.", a: "drug", why: "Kidney-sparing: endoscopic ablation plus mitomycin gel (or intracavitary therapy) rather than losing the only kidney." }
+] }
 ];
-var SNAP_SEED = {
-benchor: [
-{ vignette: "22F with T 39.5, flank pain, 5mm stone obstructing the mid ureter on CT, Cr 2.1, WBC 18. BP 95/60.", answer: "or", explanation: "Septic obstructed stone — emergent decompression with stent or PCN, then treat stone later." },
-{ vignette: "65M asymptomatic, 4mm non-obstructing lower-pole stone found incidentally on CT done for unrelated reason. Normal renal function.", answer: "bench", explanation: "Small non-obstructing stone — surveillance, hydration, no intervention." },
-{ vignette: "19M with acute scrotal pain x2 hours, high-riding testis, absent cremasteric reflex, nausea. US unavailable.", answer: "or", explanation: "Testicular torsion — emergent exploration within 6h window, do not delay for imaging." },
-{ vignette: "58M with ischemic priapism x5 hours, failed in-clinic aspiration plus phenylephrine irrigation.", answer: "or", explanation: "Refractory ischemic priapism — proceed to distal shunt (Winter, T-shunt) to prevent fibrosis." },
-{ vignette: "45F with 4 uncomplicated UTIs/year, pan-sensitive E. coli cultures, normal imaging, normal post-void residual.", answer: "bench", explanation: "Recurrent uncomplicated UTIs — behavioral measures + prophylaxis, no surgery indicated." },
-{ vignette: "72M post-TURP day 2, gross hematuria with clot retention. Foley irrigation failed to clear. Hgb dropped 10 → 7.5.", answer: "or", explanation: "CBI-refractory clot retention with bleeding — OR for clot evacuation and fulguration." },
-{ vignette: "35M with unilateral painless scrotal swelling, positive transillumination, stable over years, mildly uncomfortable with tight pants.", answer: "bench", explanation: "Simple hydrocele — observation vs. elective repair, never urgent." },
-{ vignette: "50M with scrotal/perineal necrosis, crepitus, tachycardia 130, WBC 22, lactate 4.5.", answer: "or", explanation: "Fournier's gangrene — immediate broad-spectrum antibiotics AND emergent surgical debridement." },
-{ vignette: "40M with a 6mm distal ureteral stone, pain controlled on PO meds, no fever, normal renal function.", answer: "bench", explanation: "Manageable distal stone — MET trial with alpha blocker, reassess in 2-4 weeks." },
-{ vignette: "28F with blunt abdominal trauma, CT shows grade IV renal laceration with active contrast extravasation, BP 85/50 despite 2L crystalloid.", answer: "or", explanation: "Hemodynamic instability + active bleeding — angio or surgery, not observation." },
-{ vignette: "55M with BCG-unresponsive high-grade T1 bladder CIS after 2 induction courses.", answer: "or", explanation: "BCG-unresponsive high-risk NMIBC — radical cystectomy is standard; systemic options exist but cysto is guideline." },
-{ vignette: "30M with Peyronie's plaque, stable curvature 25° for 18 months, penetration preserved, no pain.", answer: "bench", explanation: "Stable non-disabling Peyronie's — observation or intralesional, not surgery." },
-{ vignette: "62M with an enhancing 2.5cm renal mass, solitary kidney, Cr 1.8, prior partial nephrectomy on contralateral side.", answer: "or", explanation: "Enhancing small renal mass in imperative case — nephron-sparing partial or ablation, active surveillance risky." },
-{ vignette: "75M with asymptomatic PSA 3.8, stable over 3 years, no family history, normal DRE.", answer: "bench", explanation: "Stable PSA below threshold — no biopsy indicated; continue routine screening." }
-]
-};
+function snapModeById(id) { for (var i = 0; i < SNAP_MODES.length; i++) if (SNAP_MODES[i].id === id) return SNAP_MODES[i]; return SNAP_MODES[0]; }
+function snapSide(m, key) { return key === m.left.key ? m.left : m.right; }
+function snapAiCache(modeId) { try { var all = JSON.parse(localStorage.getItem("uroStudyHub_snapAi") || "{}"); return Array.isArray(all[modeId]) ? all[modeId] : []; } catch (e) { return []; } }
+function snapAiRemember(modeId, cards) {
+try {
+var all = JSON.parse(localStorage.getItem("uroStudyHub_snapAi") || "{}"); if (!all || typeof all !== "object") all = {};
+var seen = {}, out = [];
+cards.concat(all[modeId] || []).forEach(function(c) { var k = c.v.toLowerCase().slice(0, 60); if (!seen[k]) { seen[k] = 1; out.push(c); } });
+all[modeId] = out.slice(0, 40);
+localStorage.setItem("uroStudyHub_snapAi", JSON.stringify(all));
+} catch (e) {  }
+}
+function snapAiPrompt(m) {
+return "Write exactly 10 urology clinical vignette cards for a swipe game called \"" + m.label + "\". For each case the right call is either \"" + m.left.key + "\" (" + m.left.label + ": " + m.left.hint + ") or \"" + m.right.key + "\" (" + m.right.label + ": " + m.right.hint + "). " + (m.ai || "") +
+" Return STRICT JSON only, no markdown, no prose: [{\"case\":\"2-3 sentence vignette with specific details (age, vitals, labs, imaging)\",\"call\":\"" + m.left.key + "\" or \"" + m.right.key + "\",\"why\":\"one sentence naming the decisive factor\"}]. " +
+"Mix difficulty (3 easy, 4 medium, 3 hard), balance the two calls about 50/50, follow current AUA/EAU guidelines, no repeats, no real patient data.";
+}
 function SnapDecisionGame() {
+var CARDS_PER_ROUND = 10, TIME_PER_CARD = 20, COMMIT = 80, TCOL = "#ec4899";
+var best = useGameBest("snap");
 var [snGs, setSnGs] = useState("ready"); // ready | loading | playing | reveal | over
-var [snMode, setSnMode] = useState(SNAP_MODES[0].id);
-var [snDeck, setSnDeck] = useState([]);
-var [snIdx, setSnIdx] = useState(0);
-var [snScore, setSnScore] = useState(0);
-var [snStreak, setSnStreak] = useState(0);
-var [snCorrect, setSnCorrect] = useState(0);
-var [snDrag, setSnDrag] = useState(0);
-var [snPick, setSnPick] = useState(null); // "or" | "bench" after commit
-var [snRwd, setSnRwd] = useState(null);
-var [snErr, setSnErr] = useState("");
-var snDragStart = useRef(null);
-var mode = SNAP_MODES.filter(function(m) { return m.id === snMode; })[0] || SNAP_MODES[0];
-var COMMIT_THRESHOLD = 80;
-function startDeck(useAI) {
-setSnErr("");
-if (!useAI) {
-var seed = (SNAP_SEED[snMode] || []).slice();
-for (var i = seed.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = seed[i]; seed[i] = seed[j]; seed[j] = tmp; }
-setSnDeck(seed.slice(0, 10));
-setSnIdx(0); setSnScore(0); setSnStreak(0); setSnCorrect(0); setSnPick(null); setSnDrag(0);
-setSnGs("playing");
+var [pin, setPin] = useState("random"); // theme chip: "random" or a mode id
+var [tick, setTick] = useState(0);
+var [drag, setDrag] = useState(0);
+var [pick, setPick] = useState(null); // side key after a swipe, "" after a timeout
+var [err, setErr] = useState("");
+var [claimed, setClaimed] = useState(false);
+var R = useRef(null); // the run: { mode, deck, idx, score, streak, bestStreak, correct, misses, src, newBest }
+var dragStart = useRef(null);
+var lastMode = useRef("");
+var alive = useRef(true);
+useEffect(function() { alive.current = true; return function() { alive.current = false; }; }, []);
+function pickMode() {
+if (pin !== "random") return snapModeById(pin);
+var pool = SNAP_MODES.filter(function(m) { return m.id !== lastMode.current; });
+return pool[Math.floor(Math.random() * pool.length)];
+}
+function buildDeck(mode, aiCards) {
+var seen = {}, pool = [];
+(aiCards || []).concat(mode.cards, snapAiCache(mode.id)).forEach(function(c) {
+var k = String(c.v || "").toLowerCase().slice(0, 60);
+if (c.v && !seen[k]) { seen[k] = 1; pool.push(c); }
+});
+var fresh = shuffleArr(aiCards || []), rest = shuffleArr(pool.filter(function(c) { return fresh.indexOf(c) < 0; }));
+return fresh.concat(rest).slice(0, CARDS_PER_ROUND);
+}
+function begin(mode, aiCards, src) {
+primeGameAudio();
+lastMode.current = mode.id;
+R.current = { mode: mode, deck: buildDeck(mode, aiCards), idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, misses: [], src: src, newBest: false };
+setPick(null); setDrag(0); setClaimed(false);
+setSnGs("playing"); gameSfx.flip();
+}
+function startAi() {
+var mode = pickMode();
+primeGameAudio(); setErr(""); setSnGs("loading");
+fetchAiDeck(snapAiPrompt(mode), function(c) {
+if (!c) return null;
+var v = c["case"] || c.vignette || c.v, a = c.call || c.answer || c.a, why = c.why || c.explanation || "";
+if (typeof v !== "string" || v.length < 20 || typeof why !== "string") return null;
+a = String(a || "").toLowerCase().trim();
+if (a !== mode.left.key && a !== mode.right.key) return null;
+return { v: v, a: a, why: why };
+}, 5,
+function(cards) { if (!alive.current) return; snapAiRemember(mode.id, cards); begin(mode, cards, "ai"); },
+function(msg) { if (!alive.current) return; setErr(msg + " — dealing the built-in deck."); begin(mode, null, "bank"); });
+}
+function commit(side) { // side key, or null when the clock ran out
+var r = R.current; if (!r || gsRef.current !== "playing") return;
+var card = r.deck[r.idx], m = r.mode;
+if (side === card.a) {
+r.streak++; r.correct++; if (r.streak > r.bestStreak) r.bestStreak = r.streak;
+r.score += 10 + Math.min(10, (r.streak - 1) * 2) + Math.min(5, Math.floor(timeRef.current / 4));
+gameSfx.ok(r.streak);
+} else {
+r.streak = 0;
+r.misses.push({ prompt: card.v, you: side ? snapSide(m, side).label : null, answer: snapSide(m, card.a).label, why: card.why });
+gameSfx.bad();
+}
+gsRef.current = "reveal";
+setPick(side || "");
+setDrag(side === m.right.key ? 26 : side === m.left.key ? -26 : 0); // settle with a nod toward the call; the why has to stay readable
+setSnGs("reveal");
+}
+function next() {
+var r = R.current; if (!r || gsRef.current !== "reveal") return;
+setPick(null); setDrag(0);
+if (r.idx + 1 >= r.deck.length) {
+r.newBest = best.record(r.score);
+gsRef.current = "over"; setSnGs("over");
+if (r.correct === r.deck.length) gameSfx.fanfare(); else gameSfx.over();
 return;
 }
-setSnGs("loading");
-callAI(
-"You are a urology board-prep content generator. Output valid JSON only, no markdown fences.",
-[{ role: "user", content: mode.prompt }],
-{ temperature: 0.9, max_tokens: 3000 },
-function(text) {
-try {
-var cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
-var parsed = JSON.parse(cleaned);
-if (!Array.isArray(parsed) || parsed.length < 5) throw new Error("Invalid deck");
-var valid = parsed.filter(function(c) { return c.vignette && (c.answer === "or" || c.answer === "bench") && c.explanation; });
-if (valid.length < 5) throw new Error("Too few valid cards");
-setSnDeck(valid.slice(0, 10));
-setSnIdx(0); setSnScore(0); setSnStreak(0); setSnCorrect(0); setSnPick(null); setSnDrag(0);
-setSnGs("playing");
-} catch (err) {
-setSnErr("Couldn't parse AI response — using the built-in deck instead.");
-startDeck(false);
+r.idx++; gsRef.current = "playing"; setSnGs("playing"); gameSfx.flip();
 }
-},
-function(err) {
-setSnErr((err && err.message) || "AI request failed — using the built-in deck.");
-startDeck(false);
+var gsRef = useRef(snGs); gsRef.current = snGs;
+var time = useRoundTimer(snGs === "playing", TIME_PER_CARD, R.current ? R.current.idx : 0, function() { commit(null); });
+var timeRef = useRef(time); timeRef.current = time;
+function onDown(e) { if (gsRef.current !== "playing") return; var pt = e.touches ? e.touches[0] : e; dragStart.current = { x: pt.clientX, y: pt.clientY }; }
+function onMove(e) { if (!dragStart.current || gsRef.current !== "playing") return; var pt = e.touches ? e.touches[0] : e; setDrag(pt.clientX - dragStart.current.x); }
+function onUp() {
+if (!dragStart.current) return;
+dragStart.current = null;
+if (gsRef.current !== "playing") return;
+var r = R.current;
+if (drag > COMMIT) commit(r.mode.right.key);
+else if (drag < -COMMIT) commit(r.mode.left.key);
+else setDrag(0);
 }
-);
+useEffect(function() { // keyboard: ← / → to call, Enter or Space for the next card
+if (snGs !== "playing" && snGs !== "reveal") return;
+function kd(e) {
+if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+var r = R.current; if (!r) return;
+if (snGs === "playing" && e.key === "ArrowLeft") { e.preventDefault(); commit(r.mode.left.key); }
+else if (snGs === "playing" && e.key === "ArrowRight") { e.preventDefault(); commit(r.mode.right.key); }
+else if (snGs === "reveal" && (e.key === "Enter" || e.key === " " || e.key === "ArrowRight")) { e.preventDefault(); next(); }
 }
-function commitSwipe(side) {
-if (snGs !== "playing") return;
-var card = snDeck[snIdx];
-if (!card) return;
-var correct = side === card.answer;
-var pts = correct ? (10 + Math.min(10, snStreak * 2)) : 0;
-setSnPick(side);
-setSnScore(function(s) { return s + pts; });
-setSnStreak(function(s) { return correct ? s + 1 : 0; });
-if (correct) setSnCorrect(function(c) { return c + 1; });
-setSnGs("reveal");
-setSnDrag(side === "or" ? 200 : -200);
-}
-function nextCard() {
-setSnPick(null);
-setSnDrag(0);
-var nxt = snIdx + 1;
-if (nxt >= snDeck.length) {
-var totalPts = snScore;
-setSnRwd({ coins: Math.ceil(totalPts * 0.14), xp: Math.ceil(totalPts * 0.07), score: totalPts, correct: snCorrect, total: snDeck.length });
-setSnGs("over");
-} else {
-setSnIdx(nxt);
-setSnGs("playing");
-}
-}
-function onPointerDown(e) {
-if (snGs !== "playing") return;
-var pt = e.touches ? e.touches[0] : e;
-snDragStart.current = { x: pt.clientX, y: pt.clientY };
-}
-function onPointerMove(e) {
-if (!snDragStart.current || snGs !== "playing") return;
-var pt = e.touches ? e.touches[0] : e;
-var dx = pt.clientX - snDragStart.current.x;
-setSnDrag(dx);
-}
-function onPointerUp(e) {
-if (!snDragStart.current || snGs !== "playing") { snDragStart.current = null; return; }
-var dx = snDrag;
-snDragStart.current = null;
-if (dx > COMMIT_THRESHOLD) { commitSwipe("or"); }
-else if (dx < -COMMIT_THRESHOLD) { commitSwipe("bench"); }
-else { setSnDrag(0); }
-}
-var curCard = snDeck[snIdx] || null;
-var rotation = Math.max(-15, Math.min(15, snDrag / 15));
-var leftGlow = Math.max(0, Math.min(1, -snDrag / COMMIT_THRESHOLD));
-var rightGlow = Math.max(0, Math.min(1, snDrag / COMMIT_THRESHOLD));
+window.addEventListener("keydown", kd);
+return function() { window.removeEventListener("keydown", kd); };
+}, [snGs]);
+var r = R.current, m = r && r.mode, card = r && r.deck[r.idx];
+var rotation = Math.max(-15, Math.min(15, drag / (snGs === "reveal" ? 8 : 15)));
+var leftGlow = Math.max(0, Math.min(1, -drag / COMMIT)), rightGlow = Math.max(0, Math.min(1, drag / COMMIT));
+var totalCards = SNAP_MODES.reduce(function(n, md) { return n + md.cards.length; }, 0);
+var how = [
+"Read the case, then swipe left or right (or tap a button). The two calls are printed on every card.",
+"A different theme each round: OR or not, stent or not, admit or discharge, biopsy or hold…",
+TIME_PER_CARD + " seconds a card; faster calls and streaks score more. Misses come back in the debrief with the why."
+];
+var chipModes = [{ id: "random", icon: "🎲", label: "Random theme", color: TCOL }].concat(SNAP_MODES);
 return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}>
-<div style={{ width: 400, maxWidth: "100%", maxHeight: "95vh", background: "var(--c-dp)", borderRadius: 16, border: "1px solid " + mode.color + "44", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-<div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-cd)" }}>
-<span style={{ fontSize: 14, fontWeight: 800, color: mode.color }}>{"👆 Snap Decision"}</span>
-<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-<button onClick={function() { setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer" }}>{"< Games"}</button>
-<button onClick={function() { setShowGame(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer" }}>{"✕"}</button>
-</div>
-</div>
+<GameFrame title="Snap Decision" icon="👆" color={m ? m.color : TCOL} width={400}>
 {snGs === "ready" && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: "24px 18px" }}>
-<div style={{ fontSize: 46 }}>{mode.icon}</div>
-<div style={{ fontSize: 20, fontWeight: 800, color: mode.color }}>{mode.label}</div>
-<p style={{ fontSize: 11, color: "var(--c-mut)", textAlign: "center", maxWidth: 300, lineHeight: 1.6, margin: 0 }}>Swipe <b style={{ color: "var(--a-red0)" }}>left</b> for <b>{mode.leftLabel}</b> ({mode.leftHint}). Swipe <b style={{ color: "var(--a-grn)" }}>right</b> for <b>{mode.rightLabel}</b> ({mode.rightHint}). 10 cards per round.</p>
+<ReadyCard icon="👆" title="Snap Decision" color={TCOL} sub="Swipe clinical calls. The theme changes every round." how={how} best={best.get()} note={err}>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center" }}>
+{chipModes.map(function(md) {
+var on = pin === md.id;
+return <button key={md.id} onClick={function() { setPin(md.id); }} style={{ padding: "5px 9px", borderRadius: 999, border: "1px solid " + (on ? md.color : "var(--c-br)"), background: on ? md.color + "22" : "var(--c-bg)", color: on ? md.color : "var(--c-mut)", fontSize: 10, fontWeight: 700, cursor: "pointer", minHeight: 30 }}>{md.icon + " " + md.label}</button>;
+})}
+</div>
 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 280 }}>
-<button onClick={function() { startDeck(true); }} style={{ padding: "12px 20px", background: "linear-gradient(135deg," + mode.color + ",var(--a-am2))", border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{"🎲 Fresh AI Deck"}</button>
-<button onClick={function() { startDeck(false); }} style={{ padding: "10px 20px", background: "var(--c-bg)", border: "1px solid " + mode.color + "55", borderRadius: 10, color: mode.color, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{"📚 Built-in Deck"}</button>
+<button onClick={function() { setErr(""); begin(pickMode(), null, "bank"); }} style={bigBtn(TCOL)}>Start round ▸</button>
+<button onClick={startAi} style={altBtn(TCOL)}>✨ Fresh AI deck</button>
+<div style={{ fontSize: 9, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>{"Built-in: " + totalCards + " cards across " + SNAP_MODES.length + " themes. AI decks use the model in Settings and are kept for later rounds."}</div>
 </div>
-{snErr && <div style={{ fontSize: 9, color: "var(--a-red0)", textAlign: "center", maxWidth: 280 }}>{snErr}</div>}
-</div>
+</ReadyCard>
 )}
-{snGs === "loading" && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 40 }}>
-<div style={{ width: 40, height: 40, border: "3px solid " + mode.color + "33", borderTopColor: mode.color, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-<div style={{ fontSize: 11, color: "var(--c-mut)" }}>Generating fresh cases…</div>
+{snGs === "loading" && <LoadingCard color={TCOL} text="Writing fresh cases…" />}
+{(snGs === "playing" || snGs === "reveal") && card && (
+<div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, paddingBottom: 14 }}>
+<RunHud color={m.color} score={r.score} idx={r.idx} total={r.deck.length} streak={r.streak} time={time} timeMax={TIME_PER_CARD} />
+<div style={{ position: "relative", flex: 1, minHeight: 330, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "pan-y", userSelect: "none", padding: "0 14px" }}
+onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} onTouchCancel={onUp}
+onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
+<div style={{ position: "absolute", left: 6, top: 20, bottom: 20, width: 80, borderRadius: 12, background: "linear-gradient(90deg, #ef444430, transparent)", opacity: leftGlow, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>{leftGlow > 0.3 && <div style={{ fontSize: 28 }}>{m.left.emoji}</div>}</div>
+<div style={{ position: "absolute", right: 6, top: 20, bottom: 20, width: 80, borderRadius: 12, background: "linear-gradient(-90deg, #22c55e30, transparent)", opacity: rightGlow, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>{rightGlow > 0.3 && <div style={{ fontSize: 28 }}>{m.right.emoji}</div>}</div>
+<div style={{ width: "100%", maxWidth: 330, minHeight: 280, background: "linear-gradient(160deg, var(--c-bg), var(--c-dp7))", border: "2px solid " + m.color + "66", borderRadius: 16, padding: "14px 18px 18px", transform: "translateX(" + drag + "px) rotate(" + rotation + "deg)", transition: snGs === "reveal" ? "transform 0.3s ease-out" : (dragStart.current ? "none" : "transform 0.2s ease-out"), boxShadow: "0 10px 30px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", gap: 12, cursor: snGs === "playing" ? "grab" : "default" }}>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+<span style={{ fontSize: 9, color: "var(--a-red0)", fontWeight: 700 }}>{"← " + m.left.label}</span>
+<span style={{ padding: "3px 10px", borderRadius: 999, background: m.color + "22", border: "1px solid " + m.color + "55", color: m.color, fontSize: 10, fontWeight: 800, whiteSpace: "nowrap" }}>{m.icon + " " + m.label}</span>
+<span style={{ fontSize: 9, color: "var(--a-grn2)", fontWeight: 700 }}>{m.right.label + " →"}</span>
 </div>
-)}
-{(snGs === "playing" || snGs === "reveal") && curCard && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "10px 14px", gap: 10 }}>
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "var(--c-mut)" }}>
-<span>{"🎯 "}{snScore}</span>
-<span>{snIdx + 1}/{snDeck.length}</span>
-<span>{snStreak > 1 ? "🔥 " + snStreak : ""}</span>
-</div>
-<div style={{ position: "relative", flex: 1, minHeight: 340, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none", userSelect: "none" }}
-onTouchStart={onPointerDown}
-onTouchMove={onPointerMove}
-onTouchEnd={onPointerUp}
-onMouseDown={onPointerDown}
-onMouseMove={onPointerMove}
-onMouseUp={onPointerUp}
-onMouseLeave={onPointerUp}
->
-<div style={{ position: "absolute", left: 4, top: 20, bottom: 20, width: 90, borderRadius: 12, background: "linear-gradient(90deg, #ef4444" + Math.round(leftGlow * 40).toString(16).padStart(2, "0") + ", transparent)", opacity: leftGlow, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-{leftGlow > 0.3 && <div style={{ fontSize: 28, opacity: leftGlow }}>{mode.leftEmoji}</div>}
-</div>
-<div style={{ position: "absolute", right: 4, top: 20, bottom: 20, width: 90, borderRadius: 12, background: "linear-gradient(-90deg, #22c55e" + Math.round(rightGlow * 40).toString(16).padStart(2, "0") + ", transparent)", opacity: rightGlow, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-{rightGlow > 0.3 && <div style={{ fontSize: 28, opacity: rightGlow }}>{mode.rightEmoji}</div>}
-</div>
-<div style={{
-width: "88%", maxWidth: 320, minHeight: 280, background: "linear-gradient(160deg, var(--c-bg), var(--c-dp7))",
-border: "2px solid " + mode.color + "55", borderRadius: 16, padding: 20,
-transform: "translateX(" + snDrag + "px) rotate(" + rotation + "deg)",
-transition: snGs === "reveal" ? "transform 0.3s ease-out" : (snDragStart.current ? "none" : "transform 0.2s ease-out"),
-boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-display: "flex", flexDirection: "column", gap: 12, cursor: snGs === "playing" ? "grab" : "default"
-}}>
-<div style={{ fontSize: 22, textAlign: "center" }}>{mode.icon}</div>
-<div style={{ fontSize: 12, color: "var(--c-tx)", lineHeight: 1.55, textAlign: "left" }}>{curCard.vignette}</div>
+<div style={{ fontSize: 12.5, color: "var(--c-tx)", lineHeight: 1.55 }}>{card.v}</div>
 {snGs === "reveal" && (
-<div style={{ marginTop: "auto", background: snPick === curCard.answer ? "#22c55e15" : "#ef444415", border: "1px solid " + (snPick === curCard.answer ? "#22c55e60" : "#ef444460"), borderRadius: 10, padding: "10px 12px" }}>
-<div style={{ fontSize: 11, fontWeight: 800, color: snPick === curCard.answer ? "var(--a-grn2)" : "var(--a-red)", marginBottom: 4 }}>{snPick === curCard.answer ? "✓ Correct" : "✗ " + (curCard.answer === "or" ? mode.rightLabel : mode.leftLabel) + " was the call"}</div>
-<div style={{ fontSize: 11, color: "var(--c-mut)", lineHeight: 1.5 }}>{curCard.explanation}</div>
+<div style={{ marginTop: "auto", background: pick === card.a ? "#22c55e15" : "#ef444415", border: "1px solid " + (pick === card.a ? "#22c55e60" : "#ef444460"), borderRadius: 10, padding: "10px 12px" }}>
+<div style={{ fontSize: 11, fontWeight: 800, color: pick === card.a ? "var(--a-grn2)" : "var(--a-red)", marginBottom: 4 }}>{pick === card.a ? "✓ Correct" + (r.streak >= 3 ? " · " + r.streak + " in a row" : "") : (pick === "" ? "⏱ Time's up — " : "✗ ") + snapSide(m, card.a).label + " was the call"}</div>
+<div style={{ fontSize: 11, color: "var(--c-mut)", lineHeight: 1.5 }}>{card.why}</div>
 </div>
 )}
 </div>
 </div>
-{snGs === "playing" && (
-<div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
-<button onClick={function() { commitSwipe("bench"); }} style={{ flex: 1, padding: "14px 8px", background: "#ef444415", border: "2px solid #ef444460", borderRadius: 12, color: "var(--a-red)", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-<div style={{ fontSize: 20 }}>{mode.leftEmoji}</div>
-<div>{"← " + mode.leftLabel}</div>
-<div style={{ fontSize: 8, color: "var(--c-mut)", fontWeight: 500 }}>{mode.leftHint}</div>
+<div style={{ padding: "0 14px" }}>
+{snGs === "playing" ? (
+<div style={{ display: "flex", gap: 10 }}>
+<button onClick={function() { commit(m.left.key); }} style={{ flex: 1, padding: "12px 8px", background: "#ef444415", border: "2px solid #ef444460", borderRadius: 12, color: "var(--a-red)", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 64 }}>
+<div style={{ fontSize: 20 }}>{m.left.emoji}</div><div>{"← " + m.left.label}</div><div style={{ fontSize: 8, color: "var(--c-mut)", fontWeight: 500 }}>{m.left.hint}</div>
 </button>
-<button onClick={function() { commitSwipe("or"); }} style={{ flex: 1, padding: "14px 8px", background: "#22c55e15", border: "2px solid #22c55e60", borderRadius: 12, color: "var(--a-grn2)", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-<div style={{ fontSize: 20 }}>{mode.rightEmoji}</div>
-<div>{mode.rightLabel + " →"}</div>
-<div style={{ fontSize: 8, color: "var(--c-mut)", fontWeight: 500 }}>{mode.rightHint}</div>
+<button onClick={function() { commit(m.right.key); }} style={{ flex: 1, padding: "12px 8px", background: "#22c55e15", border: "2px solid #22c55e60", borderRadius: 12, color: "var(--a-grn2)", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minHeight: 64 }}>
+<div style={{ fontSize: 20 }}>{m.right.emoji}</div><div>{m.right.label + " →"}</div><div style={{ fontSize: 8, color: "var(--c-mut)", fontWeight: 500 }}>{m.right.hint}</div>
 </button>
 </div>
-)}
-{snGs === "reveal" && (
-<button onClick={nextCard} style={{ padding: "14px 20px", background: "linear-gradient(135deg," + mode.color + ",var(--a-am2))", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-{snIdx + 1 >= snDeck.length ? "See Results" : "Next Case →"}
-</button>
-)}
-</div>
-)}
-{snGs === "over" && snRwd && (
-<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: "30px 16px" }}>
-<div style={{ fontSize: 36 }}>{snRwd.correct === snRwd.total ? "🏆" : snRwd.correct >= snRwd.total * 0.7 ? "🎉" : "🧠"}</div>
-<div style={{ fontSize: 22, fontWeight: 900, color: mode.color }}>Round Complete</div>
-<div style={{ fontSize: 32, fontWeight: 900, color: "var(--a-am)" }}>{snRwd.score} pts</div>
-<div style={{ fontSize: 11, color: "var(--c-mut)" }}>{snRwd.correct}/{snRwd.total} correct</div>
-<div style={{ display: "flex", gap: 20, marginTop: 6 }}>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: "var(--a-am)" }}>{"🪙 "}{snRwd.coins}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>Coins</div>
-</div>
-<div style={{ textAlign: "center" }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: mode.color }}>{"⚡ "}{snRwd.xp}</div>
-<div style={{ fontSize: 10, color: "var(--c-mut)" }}>XP</div>
-</div>
-</div>
-<div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-<button onClick={function() { setSnGs("ready"); setSnRwd(null); }} style={{ padding: "10px 22px", background: "var(--c-bg)", border: "1px solid " + mode.color + "55", borderRadius: 10, color: mode.color, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Play Again</button>
-<button onClick={function() { gameReward(snRwd.coins, snRwd.xp); }} style={{ padding: "10px 22px", background: "linear-gradient(135deg," + mode.color + ",var(--a-am2))", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Claim</button>
-</div>
-</div>
+) : (
+<button onClick={next} style={Object.assign(bigBtn(m.color), { width: "100%" })}>{r.idx + 1 >= r.deck.length ? "See results ▸" : "Next case ▸"}</button>
 )}
 </div>
 </div>
+)}
+{snGs === "over" && r && (
+<OverCard color={m.color} score={r.score} best={best.get()} newBest={r.newBest} correct={r.correct} total={r.deck.length} bestStreak={r.bestStreak}
+rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed}
+sub={m.icon + " " + m.label + (r.src === "ai" ? " · fresh AI deck" : "")}
+onClaim={function() { var rw = cardRewards(r.score); gameReward(rw.coins, rw.xp, true); setClaimed(true); }}
+onAgain={function() { setSnGs("ready"); }} againLabel="New round" />
+)}
+</GameFrame>
 );
 }
 var gameOverlay = useMemo(function() {
 if (showGame === "select") return React.createElement(GameSelectScreen, null);
-if (showGame === "blaster") return React.createElement(StoneCrusherGame, null);
 if (showGame === "rush") return React.createElement(UroRush, null);
 if (showGame === "preop") return React.createElement(PreOpPlease, null);
 if (showGame === "squadron") return React.createElement(StoneSquadron, null);
 if (showGame === "drugmatch") return React.createElement(DrugMatch, null);
 if (showGame === "buzzer") return React.createElement(BoardBuzzer, null);
 if (showGame === "staging") return React.createElement(StagingSorter, null);
-if (showGame === "imgrec") return React.createElement(VisualDxGame, null);
 if (showGame === "snap") return React.createElement(SnapDecisionGame, null);
 return null;
 }, [showGame, showGame === "select" ? gameTab : null, showGame === "select" ? s : null]);
