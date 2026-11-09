@@ -7,6 +7,8 @@
 // Also the HIFU / Urethrotome / CO₂ / da Vinci console additions and the Condyloma Cluster, and (block J) the weapon
 // upgrade paths: the MODS table, every mod's in-game effect for the five starting weapons, the aspects, Instrument Rep
 // doors + screen + reroll, the shop sample, the HUD pips/detail card and the giveMod / ?mods= / ?aspects= hooks.
+// Block K: the Antibiotic Dropper. Block L: antibiotic stewardship (the two-drug cap, resistance meters, collateral C. diff /
+// Candida, resistant strains, Culture & Sensitivity + De-escalation). Block M: the reps cast, patron altars, Fournier.
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -32,7 +34,8 @@ function check(name, ok, detail) {
   else { nFail++; failures.push(name + (detail ? ' — ' + detail : '')); console.log('FAIL ' + name + (detail ? ' — ' + detail : '')); }
   return !!ok;
 }
-async function block(name, fn) { try { await fn(); } catch (e) { check(name + ' (step threw)', false, String(e && e.message ? e.message : e).split('\n')[0]); } }
+const ONLY = process.env.BLOCKS ? process.env.BLOCKS.split(',') : null;   // BLOCKS=K,M runs only those blocks (by their letter)
+async function block(name, fn) { if (ONLY && ONLY.indexOf(name.split('.')[0]) < 0) return; try { await fn(); } catch (e) { check(name + ' (step threw)', false, String(e && e.message ? e.message : e).split('\n')[0]); } }
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 async function open(q, w = 1280, h = 720, touch = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch, isMobile: touch, deviceScaleFactor: 1 });
@@ -206,7 +209,9 @@ await block('F. autoplay', async () => {
         if (G.overlay === 'weapon') { const c = document.querySelector('#weapCards .card'); if (c) c.click(); else document.getElementById('btnWeapLeave').click(); }
         for (const r of G.rewards) { if (r.used) continue; const P = UroCrawl.player(); P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3);
           if (G.overlay === 'boon') { out.boons++; const c = document.querySelector('#boonCards .card'); if (c) c.click(); else document.getElementById('btnBoonSkip').click(); }
-          else if (G.overlay === 'mod') { out.reps = (out.reps || 0) + 1; const c = document.querySelector('#modCards .card'); if (c) c.click(); else document.getElementById('btnModSkip').click(); }
+          else if (G.overlay === 'mod') { out.reps = (out.reps || 0) + 1; document.getElementById('btnSkipPitch').click(); const c = document.querySelector('#modCards .card'); if (c) c.click(); else document.getElementById('btnModSkip').click(); }
+          if (G.overlay === 'steward') { out.stewards = (out.stewards || 0) + 1; const s = document.querySelector('#stewardChoices .btn'); if (s) s.click(); }
+          if (G.overlay === 'grade') { out.grades = (out.grades || 0) + 1; const g = document.querySelector('#gradeCards .card'); if (g) g.click(); else document.getElementById('btnGradeSkip').click(); }
           else if (G.overlay === 'weapon') { out.crates++; const slot = document.querySelector('#slotPick .btn'), c = document.querySelector('#weapCards .card'); if (slot) slot.click(); else if (c) c.click(); if (G.overlay) document.getElementById('btnWeapLeave').click(); }
           else if (G.overlay === 'shop') { const b = document.querySelector('#shopItems .btn:not(:disabled)'); if (b) b.click(); document.getElementById('btnShopLeave').click(); } }
         if (G.overlay) UroCrawl.hideScreens();
@@ -215,7 +220,7 @@ await block('F. autoplay', async () => {
       }
       out.weapons = G.weapons.length; out.boonsHeld = G.boons.length; out.mods = G.weapons.reduce((n, w) => n + w.modIds.length + (w.capstone ? 1 : 0), 0); return out;
     });
-    check('seed ' + seed + ' plays 9 rooms to the win screen', log.rooms.length === 9 && log.won, 'kinds ' + log.kinds.join(',') + ' · altars ' + log.boons + ' · crates ' + log.crates + ' · reps ' + (log.reps || 0) + ' · held ' + log.weapons + 'w/' + log.boonsHeld + 'b/' + log.mods + 'm');
+    check('seed ' + seed + ' plays 9 rooms to the win screen', log.rooms.length === 9 && log.won, 'kinds ' + log.kinds.join(',') + ' · altars ' + log.boons + ' · crates ' + log.crates + ' · reps ' + (log.reps || 0) + ' · stewards ' + (log.stewards || 0) + ' · held ' + log.weapons + 'w/' + log.boonsHeld + 'b/' + log.mods + 'm');
     errCheck('F seed ' + seed, errs);
   }
 });
@@ -579,9 +584,10 @@ await block('J8. instrument rep', async () => {
   check('the rep door plaque is painted in the weapon\'s class colour (Scalpel = CUT red, under the vignette)', b.px[0] > 110 && b.px[0] > b.px[1] * 2.2 && b.px[2] < b.px[0] * 0.6, 'rgb ' + b.px.join(','));
   check('through a rep door: a combat room whose reward is the Instrument Rep for that weapon', b.kind === 'combat' && b.reward === 'rep' && b.repWeapon === 'scalpel' && b.rep && b.repFor === 'scalpel');
   b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), rep = G.rewards.filter(r => r.kind === 'rep')[0]; G.rvu = 100; P.x = rep.x + 80; P.y = rep.y; UroCrawl.step(3); P.x = rep.x; P.y = rep.y; UroCrawl.step(3);
-    const o = G.overlay, cards = document.querySelectorAll('#modCards .card').length, title = document.getElementById('modTitle').textContent, ids = rep.offer.slice(), btn = document.getElementById('btnModReroll');
+    document.getElementById('btnSkipPitch').click();   // the rep opens on a pitch now (block M covers it); skip to the cards
+    const o = G.overlay, cards = document.querySelectorAll('#modCards .card:not(.sample)').length, title = document.getElementById('modTitle').textContent, ids = rep.offer.slice(), btn = document.getElementById('btnModReroll');
     const canReroll = !btn.disabled, label = btn.textContent, rvu0 = G.rvu; btn.click(); const spent = rvu0 - G.rvu, w2 = rep.weapon, ids2 = rep.offer.slice(), disabled = btn.disabled, label2 = btn.textContent, title2 = document.getElementById('modTitle').textContent;
-    document.querySelector('#modCards .card').click(); const closed = G.overlay, used = rep.used, holm = G.weapons[0].modIds.length;
+    document.querySelector('#modCards .card:not(.sample)').click(); const closed = G.overlay, used = rep.used, holm = G.weapons[0].modIds.length;
     return { o, cards, title, ids, canReroll, label, spent, w2, ids2, disabled, label2, title2, closed, used, holm }; });
   check('the rep offers 3 of this weapon\'s available mods (a fresh Scalpel: its three tier-I mods)', b.o === 'mod' && b.cards === 3 && /Scalpel/.test(b.title) && b.ids.length === 3 && b.ids.every(id => /^scalpel_/.test(id)), b.ids.join());
   check('one reroll per rep costs 20 RVU; with no new Scalpel samples it opens another instrument\'s case (Holmium: its 2 remaining mods)', b.canReroll && /ANOTHER INSTRUMENT/.test(b.label) && b.spent === 20 && b.w2 === 'holmium' && /Holmium/.test(b.title2) && b.ids2.length === 2 && b.ids2.every(id => /^holmium_/.test(id)) && b.disabled && b.label2 === 'REROLLED', JSON.stringify({ w2: b.w2, ids2: b.ids2, label: b.label }));
@@ -610,6 +616,173 @@ await block('J9. HUD detail + unmodded baseline', async () => {
   check('weapon-detail card: hovering a slot picks it (mouse), a slot tap shows it for 3 s (touch)', b.hover0 === 0 && b.hover1 === 1 && b.none === -1 && b.tap === 1 && b.expired === -1, JSON.stringify(b));
   await p.waitForTimeout(300); await shot(p, 'j-hud-detail');
   errCheck('J9 (detail card rendered over live frames)', errs);
+});
+
+// ───────── K. the Antibiotic Dropper ─────────
+await block('K. dropper', async () => {
+  const { p, errs } = await openJ('?seed=41&god=1&room=3&weapons=dropper,scalpel');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), W = UroCrawl.tables.WEAPONS, w = G.weapons[0];
+    const def = W.dropper, order = UroCrawl.tables.WEAPONS && Object.keys(W);
+    const far = __pin('pseudomonas', P.x + 120, P.y); __aim(P.x + 120, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(30); UroCrawl.input.mouseFire = false; const tooFar = G.texts.some(t => /TOO FAR/.test(t.text)), farDmg = far.maxHp - far.hp, drops0 = w.drops; G.texts.length = 0; __kill(far); UroCrawl.step(1);
+    return { id: w.id, cls: def.cls, fam: def.famMult, unlock: def.unlock, inOrder: order.indexOf('dropper') >= 0, label: def.slotLabel(w), tooFar, farDmg, drops0, slot: G.weapons.length }; });
+  check('?weapons=dropper loads the Antibiotic Dropper (FLUID, ×3 MICROBE / ×0.3 others, unlock PGY-2) into a slot; generic vial loaded', b.id === 'dropper' && b.cls === 'FLUID' && b.fam.MICROBE === 3 && b.fam.STONE === 0.3 && b.unlock === 2 && b.inOrder && b.label.text === 'GENERIC' && b.slot === 2, JSON.stringify(b.label));
+  check('no enemy within ~50 px: the primary does nothing but show the TOO FAR hint', b.tooFar && b.farDmg === 0 && b.drops0 === 6);
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('pseudomonas', P.x + 55, P.y); t.hp = t.maxHp = 2000; __aim(P.x + 55, P.y); UroCrawl.step(20); // shielded microbe, kept alive to read the numbers; let the hint cooldown lapse
+    UroCrawl.input.keys.KeyD = true; UroCrawl.input.mouseFire = true; let squeeze = 0, sx = null, moved = false, hit = null, started = null; for (let i = 0; i < 40; i++) { UroCrawl.step(1); if (w.squeeze) { squeeze++; if (started === null) started = i + 1; if (sx === null) sx = Math.round(P.x); else if (Math.round(P.x) !== sx) moved = true; } if (hit === null && t.hp < t.maxHp) hit = i + 1; } UroCrawl.input.mouseFire = false; UroCrawl.input.keys.KeyD = false;
+    const dmgText = G.texts.filter(x => x.sub === 'GENERIC').map(x => x.text);
+    return { squeeze, stationary: !moved, hit, started, dmg: t.maxHp - t.hp, shield: t.shield, poison: !!t.st.poison, drops: w.drops, dmgText, res: G.dropRes.pseudomonas }; });
+  check('fire = a ~0.3 s squeeze (stationary even with a movement key held), then one heavy drop', b.squeeze >= 17 && b.squeeze <= 20 && b.stationary && b.hit - b.started >= 16 && b.hit - b.started <= 20, JSON.stringify({ squeeze: b.squeeze, started: b.started, hit: b.hit }));
+  check('the drop: 30 × 1.5 (generic vial vs MICROBE) × 3 = 135, strips the biofilm shield, poisons, costs one of 6 drops, teaches 10% resistance', b.dmgText[0] === '135' && b.shield === 0 && b.poison && b.drops === 5 && Math.abs(b.res - 0.1) < 1e-9, JSON.stringify({ text: b.dmgText, shield: b.shield, drops: b.drops, res: b.res }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0]; const t = G.enemies.filter(e => e.id === 'pseudomonas' && !e.dead)[0]; G.texts.length = 0;
+    const hits = [], tags = []; for (let k = 0; k < 2; k++) { G.texts.length = 0; UroCrawl.step(25); UroCrawl.input.mouseFire = true; for (let i = 0; i < 40 && !G.texts.some(x => /^RESISTANT/.test(x.sub || '')); i++) UroCrawl.step(1); UroCrawl.input.mouseFire = false; const tx = G.texts.filter(x => /^RESISTANT/.test(x.sub || ''))[0]; hits.push(tx ? +tx.text : -1); tags.push(tx ? tx.sub : null); }
+    __kill(t); UroCrawl.step(1); const ec = __pin('ecoli', P.x + 40, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(40); UroCrawl.input.mouseFire = false; const ecDead = ec.dead, drops = w.drops;
+    const st = __pin('com', P.x + 50, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(st, 40); UroCrawl.input.mouseFire = false;
+    return { hits, res: G.dropRes.pseudomonas, tags, ecDead, drops, stone: h.dmg }; });
+  // the generic vial also wears on the per-run meter (2% per drop): 30 × (1 + 0.5 × (1 − 0.5 × 0.02k)) × (1 − 0.1k) × 3 → 121 then 107
+  check('per-room resistance: the 2nd and 3rd drops on the same microbe type land for 90% (121) and 80% (107), shown as RESISTANT tags; max 60%', b.hits[0] === 121 && b.hits[1] === 107 && Math.abs(b.res - 0.3) < 1e-9 && b.tags.join() === 'RESISTANT 10%,RESISTANT 20%', JSON.stringify({ hits: b.hits, res: b.res, tags: b.tags }));
+  check('a swarm cell dies outright (one drop); a stone takes ×0.3 (30 × 0.6 × 0.3 = 5.4)', b.ecDead && b.drops === 2 && Math.abs(b.stone - 5.4) < 0.01, 'stone ' + b.stone + ', drops left ' + b.drops);
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0]; G.enemies.forEach(__kill); UroCrawl.step(1); G.texts.length = 0;
+    const ec = __pin('ecoli', P.x + 40, P.y); w.drops = 0; UroCrawl.input.mouseFire = true; UroCrawl.step(30); UroCrawl.input.mouseFire = false; const empty = G.texts.some(t => /EMPTY/.test(t.text)), alive = !ec.dead;
+    G.pickups.push({ kind: 'vial', x: P.x, y: P.y, vx: 0, vy: 0, z: 0, vz: 0, t: 1, value: 1, magnet: false, bob: 0 }); UroCrawl.step(2); const afterVial = w.drops;
+    w.drops = 2; G.cleared = false; __kill(ec); UroCrawl.step(2); const afterClear = w.drops, cleared = G.cleared, resKept = Object.keys(G.dropRes).length;
+    return { empty, alive, afterVial, afterClear, cleared, resKept }; });
+  check('empty: EMPTY hint and no drop; a vial pickup refills 3; the room clear refills to 6 (learned resistance stays until the next room)', b.empty && b.alive && b.afterVial === 3 && b.cleared && b.afterClear === 6 && b.resKept >= 1, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0], W = UroCrawl.tables.WEAPONS;
+    UroCrawl.giveBoon('ceftriaxone'); const l1 = W.dropper.slotLabel(w), m1 = W.dropper.meter(w); const ec = UroCrawl.spawn('ecoli', 700, 150, { instant: true }), ps = UroCrawl.spawn('pseudomonas', 700, 250, { instant: true }), co = UroCrawl.spawn('com', 700, 350, { instant: true });
+    const v = UroCrawl.dropperVial(w), mEc = v.mult(ec), mPs = v.mult(ps), mCo = v.mult(co);
+    UroCrawl.giveBoon('vanco'); const auto = UroCrawl.dropperVial(w).id; UroCrawl.input.edges.alt = true; UroCrawl.step(1); const cycled = UroCrawl.dropperVial(w).id, l2 = W.dropper.slotLabel(w);
+    UroCrawl.dropBoon('vanco'); UroCrawl.dropBoon('ceftriaxone'); const back = UroCrawl.dropperVial(w).id;
+    return { l1, m1, mEc, mPs, mCo, auto, cycled, l2, back }; });
+  check('the vial is the best held antibiotic, shown on the slot: Ceftriaxone ×1.35 vs E. coli, ×0.9 vs Pseudomonas, ×1 vs a stone', b.l1.text === 'CEFTRIAX' && b.l1.color === '#6fd3ff' && b.m1.color === '#6fd3ff' && Math.abs(b.mEc - 1.35) < 1e-9 && Math.abs(b.mPs - 0.9) < 1e-9 && b.mCo === 1, JSON.stringify({ mEc: b.mEc, mPs: b.mPs, mCo: b.mCo }));
+  check('alt cycles the loaded vial between held antibiotics; dropping them falls back to the generic vial', b.auto === 'ceftriaxone' && b.cycled === 'vanco' && b.l2.text === 'VANCO' && b.back === 'generic', JSON.stringify({ auto: b.auto, cycled: b.cycled, back: b.back }));
+  await p.waitForTimeout(250); await shot(p, 'k-dropper');
+  errCheck('K', errs);
+});
+
+// ───────── L. antibiotic stewardship ─────────
+await block('L. antibiotics', async () => {
+  const { p, errs } = await openJ('?seed=42&god=1&room=4&weapons=scalpel,bovie');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, B = UroCrawl.tables.BOONS;
+    const a = UroCrawl.giveBoon('ceftriaxone'), c = UroCrawl.giveBoon('vanco'), third = UroCrawl.giveBoon('piptazo'), blocked = UroCrawl.abxCapBlocks ? null : null;
+    const cultures = UroCrawl.giveBoon('antibiogram'), fosfo = UroCrawl.giveBoon('fosfomycin'), forced = UroCrawl.giveBoon('piptazo', true), active = UroCrawl.activeAbx();
+    UroCrawl.dropBoon('piptazo'); UroCrawl.dropBoon('antibiogram'); UroCrawl.dropBoon('fosfomycin');
+    return { a, c, third, cultures, fosfo, forced, active, rates: [B.ceftriaxone.resRate, B.vanco.resRate, B.cipro.resRate, B.piptazo.resRate, B.meropenem.resRate], spectra: [B.ceftriaxone.spectrum, B.piptazo.spectrum] }; });
+  check('two active antibiotics max: a third is refused (cultures / Fosfomycin are not capped; force bypasses); broad ones breed resistance twice as fast', b.a && b.c && b.third === false && b.cultures && b.fosfo && b.forced && b.active.length === 3 && b.rates.join() === '1,1,1.5,2,2' && b.spectra.join() === 'narrow,broad', JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.rewards.push({ kind: 'altar', x: 600, y: 300, patron: 'fleming', offer: ['piptazo', 'cipro'], rerolled: false }); const r = G.rewards[G.rewards.length - 1];
+    P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3); const o1 = G.overlay; document.querySelector('#boonCards .card').click(); const o2 = G.overlay, nBtn = document.querySelectorAll('#stewardChoices .btn').length, txt = document.getElementById('stewardSub').textContent;
+    document.querySelectorAll('#stewardChoices .btn')[nBtn - 1].click(); const o3 = G.overlay, stillTwo = UroCrawl.activeAbx().join(); // SKIP → back to the altar
+    document.querySelector('#boonCards .card').click(); document.querySelector('#stewardChoices .btn').click(); const o4 = G.overlay, after = UroCrawl.activeAbx(), used = r.used;
+    return { o1, o2, nBtn, txt, o3, stillTwo, o4, after, used }; });
+  check('taking a third antibiotic at an altar opens the stewardship prompt: STOP one of two, or SKIP (back to the altar)', b.o1 === 'boon' && b.o2 === 'steward' && b.nBtn === 3 && /Two antibiotics/.test(b.txt) && b.o3 === 'boon' && b.stillTwo === 'ceftriaxone,vanco', JSON.stringify({ o2: b.o2, nBtn: b.nBtn, o3: b.o3 }));
+  check('STOP Ceftriaxone → start Pip-Tazo: still two active, altar used', b.o4 === null && b.after.join() === 'vanco,piptazo' && b.used, b.after.join());
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); UroCrawl.dropBoon('piptazo'); UroCrawl.dropBoon('vanco'); UroCrawl.giveBoon('ceftriaxone'); G.abxRes = {};
+    const ec0 = UroCrawl.spawn('ecoli', 700, 150, { instant: true }); const bonus0 = UroCrawl.abxBonus('ceftriaxone', ec0), d0 = UroCrawl.dealDamage(ec0, 10, 'CUT', {});
+    for (let i = 0; i < 10; i++) { const e = UroCrawl.spawn('ecoli', 700, 150 + i, { instant: true }); e.hp = 1; UroCrawl.dealDamage(e, 50, 'CUT', {}); } const res10 = UroCrawl.abxRes('ceftriaxone'), bonus10 = UroCrawl.abxBonus('ceftriaxone', ec0);
+    UroCrawl.step(1); G.abxRes.ceftriaxone = 1; const ecF = UroCrawl.spawn('ecoli', 700, 170, { instant: true }); const bonusFull = UroCrawl.abxBonus('ceftriaxone', ecF), dFull = UroCrawl.dealDamage(ecF, 10, 'CUT', {});
+    G.abxRes = {}; UroCrawl.dropBoon('ceftriaxone'); UroCrawl.giveBoon('piptazo'); for (let i = 0; i < 10; i++) { const e = UroCrawl.spawn('ecoli', 700, 200 + i, { instant: true }); e.hp = 1; UroCrawl.dealDamage(e, 50, 'CUT', {}); } const resBroad = UroCrawl.abxRes('piptazo'); UroCrawl.dropBoon('piptazo'); G.abxRes = {};
+    return { bonus0, d0, res10, bonus10, bonusFull, dFull, resBroad }; });
+  check('per-run resistance: 10 covered kills = 20% (Ceftriaxone), bonus 1.35 → 1.315; at 100% the bonus is halved (1.175, so 10 × 0.8 × 1.175 = 9.4)', Math.abs(b.bonus0 - 1.35) < 1e-9 && Math.abs(b.d0 - 10.8) < 0.01 && Math.abs(b.res10 - 0.2) < 1e-9 && Math.abs(b.bonus10 - 1.315) < 1e-9 && Math.abs(b.bonusFull - 1.175) < 1e-9 && Math.abs(b.dFull - 9.4) < 0.01, JSON.stringify(b));
+  check('broad-spectrum Pip-Tazo breeds resistance twice as fast: 10 kills = 40%', Math.abs(b.resBroad - 0.4) < 1e-9, String(b.resBroad));
+  b = await p.evaluate(() => { const G = UroCrawl.state, E = UroCrawl.tables.ENEMIES, order = UroCrawl.tables.ENEMIES && Object.keys(E);
+    const mk = id => UroCrawl.spawn(id, 600 + Math.random() * 100, 200 + Math.random() * 100, { instant: true });
+    const esbl = mk('esbl'), vre = mk('vre'), cre = mk('cre'), ec = mk('ecoli'), kleb = mk('klebsiella');
+    const out = { defs: ['esbl', 'vre', 'cre', 'cdiff'].map(id => !!E[id]), rooms: [E.esbl.minRoom, E.vre.minRoom, E.cre.minRoom], costs: [E.esbl.cost, E.vre.cost, E.cre.cost, E.cdiff.cost], facts: [/ESBL/.test(E.esbl.fact), /VRE|vancomycin/i.test(E.vre.fact), /Carbapenem/i.test(E.cre.fact), /stewardship/i.test(E.cdiff.fact), /ESBL/.test(E.klebsiella.fact)],
+      cef: [UroCrawl.abxBonus('ceftriaxone', esbl), UroCrawl.abxBonus('ceftriaxone', ec)], van: UroCrawl.abxBonus('vanco', vre), mero: [UroCrawl.abxBonus('meropenem', cre), UroCrawl.abxBonus('meropenem', kleb)], pip: UroCrawl.abxBonus('piptazo', cre), hp: [esbl.maxHp, ec.maxHp], badge: typeof E.esbl.draw === 'function' };
+    return out; });
+  check('resistant strains exist for late rooms (5+) with facts; Klebsiella is in the bestiary: ESBL ignores Ceftriaxone (1.0 vs 1.35), VRE ignores Vancomycin, CRE ignores Meropenem (1.0 vs 1.45) and halves Pip-Tazo (1.125)', b.defs.every(Boolean) && b.rooms.join() === '5,5,5' && b.costs.join() === '8,7,7,0' && b.facts.every(Boolean) && b.cef[0] === 1 && Math.abs(b.cef[1] - 1.35) < 1e-9 && b.van === 1 && b.mero[0] === 1 && Math.abs(b.mero[1] - 1.45) < 1e-9 && Math.abs(b.pip - 1.125) < 1e-9 && b.hp[0] > b.hp[1], JSON.stringify(b));
+  await p.waitForTimeout(250); await shot(p, 'l-strains');
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.enemies.forEach(__kill); UroCrawl.step(1); UroCrawl.giveBoon('piptazo'); UroCrawl.skipRoom(); UroCrawl.step(5);
+    G.collateral = 'cdiff'; const d = G.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); const pods = G.enemies.filter(e => e.id === 'cdiff').length, banner = G.banner && G.banner.text;
+    UroCrawl.step(60); const pod = G.enemies.filter(e => e.id === 'cdiff')[0]; pod.hp = 1; UroCrawl.dealDamage(pod, 10, 'ENERGY', {}); UroCrawl.step(1); const toxin = G.hazards.filter(h => h.kind === 'toxin').length;
+    G.enemies.forEach(__kill); UroCrawl.step(1); UroCrawl.skipRoom(); UroCrawl.step(5); G.collateral = 'candida'; const d2 = G.doors[0]; P.x = d2.x - 20; P.y = d2.y + d2.h / 2; UroCrawl.step(80);   // force the Candida variant after the clear (the clear itself rolls the 35%)
+    const cand = G.enemies.filter(e => e.id === 'candida').length, buds = G.enemies.filter(e => e.id === 'bud').length;
+    UroCrawl.dropBoon('piptazo'); UroCrawl.giveBoon('ceftriaxone'); G.enemies.forEach(__kill); UroCrawl.step(1); let rolled = 0; for (let k = 0; k < 3; k++) { G.cleared = false; G.collateral = null; UroCrawl.skipRoom(); if (G.collateral) rolled++; }
+    return { pods, banner, toxin, cand, buds, stat: G.stats.collateral, rolled }; });
+  check('collateral: the room after a Pip-Tazo/Meropenem run grows 3 C. difficile pods (toxin cloud on death) or a Candida colony, with a banner; narrow antibiotics never roll it', b.pods === 3 && b.banner === 'COLLATERAL DAMAGE' && b.toxin >= 1 && b.cand === 1 && b.buds === 2 && b.stat === 2 && b.rolled === 0, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); const plan = UroCrawl.state.room; let hits = 0; for (let i = 0; i < 400; i++) { if (UroCrawl.genDoorOptions({ index: 3 }).indexOf('culture') >= 0) hits++; } const door = !!UroCrawl.tables.DOOR_TYPES.culture;
+    G.enemies.forEach(__kill); UroCrawl.step(1); G.pickups.length = 0; G.pickups.push({ kind: 'culture', x: P.x, y: P.y, vx: 0, vy: 0, z: 0, vz: 0, t: 1, value: 1, magnet: false, bob: 0 }); UroCrawl.step(2); const pending = !!(G.culture && G.culture.pending);
+    UroCrawl.skipRoom(); UroCrawl.step(5); const d = G.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); const room = G.roomIndex, cul = G.culture, banner = G.banner && G.banner.text, sub = G.banner && G.banner.sub;
+    UroCrawl.step(100); const revealed = G.enemies.filter(e => e.family === 'MICROBE' && !e.dead).every(e => !!e.st.reveal), nMic = G.enemies.filter(e => e.family === 'MICROBE' && !e.dead).length;
+    return { hits, door, pending, room, cul, banner, sub, revealed, nMic }; });
+  check('Culture & Sensitivity: a rare door reward (room 3–6, once) whose pickup reveals the next room\'s microbes and their resistances', b.hits > 0 && b.hits < 120 && b.door && b.pending && b.cul && !b.cul.pending && b.cul.room === b.room && (b.cul.microbes.length ? (b.banner === 'CULTURE RESULT' && /×/.test(b.sub) && (b.nMic === 0 || b.revealed)) : b.banner === 'CULTURE: NO GROWTH'), JSON.stringify({ hits: b.hits, banner: b.banner, sub: b.sub, revealed: b.revealed, nMic: b.nMic }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.enemies.forEach(__kill); UroCrawl.step(1);
+    const setup = () => { G.cleared = false; G.culture = { pending: false, room: G.roomIndex, microbes: ['ecoli', 'pseudomonas'] }; G.pickups.length = 0; };
+    setup(); UroCrawl.skipRoom(); const coinsNarrow = G.pickups.filter(x => x.kind === 'coin').length, bannerN = G.banner && G.banner.text, de1 = G.stats.deesc || 0;   // Ceftriaxone (narrow, covers E. coli) only
+    UroCrawl.giveBoon('piptazo', true); setup(); UroCrawl.skipRoom(); const coinsBroad = G.pickups.filter(x => x.kind === 'coin').length, de2 = G.stats.deesc || 0; UroCrawl.dropBoon('piptazo');
+    UroCrawl.dropBoon('ceftriaxone'); UroCrawl.giveBoon('vanco'); setup(); UroCrawl.skipRoom(); const coinsMismatch = G.pickups.filter(x => x.kind === 'coin').length, de3 = G.stats.deesc || 0;
+    return { coinsNarrow, bannerN, de1, coinsBroad, de2, coinsMismatch, de3, base: 3 + G.roomIndex }; });
+  check('De-escalation: clearing the cultured room on a matching narrow antibiotic (no broad one running) pays +15 coins; broad-spectrum or a non-matching narrow one does not', b.coinsNarrow === b.base + 15 && b.bannerN === 'DE-ESCALATION' && b.de1 === 1 && b.coinsBroad === b.base && b.de2 === 1 && b.coinsMismatch === b.base && b.de3 === 1, JSON.stringify(b));
+  errCheck('L', errs);
+});
+
+// ───────── M. reps cast, patron altars, Fournier ─────────
+await block('M. reps + patrons', async () => {
+  const { p, errs } = await openJ('?seed=43&god=1&room=3&weapons=holmium,scalpel');
+  let b = await p.evaluate(() => { const R = UroCrawl.tables.REPS, PT = UroCrawl.tables.PATRONS, B = UroCrawl.tables.BOONS, order = Object.keys(PT);
+    const pooled = [], dup = []; order.forEach(k => PT[k].pool.forEach(id => { if (pooled.indexOf(id) >= 0) dup.push(id); pooled.push(id); if (!B[id]) dup.push('missing:' + id); }));
+    const missing = Object.keys(B).filter(id => pooled.indexOf(id) < 0);
+    return { reps: R.length, pitches: R.map(r => r.pitches.length), companies: R.map(r => r.company), repLooks: R.every(r => r.look && r.name && r.title), patrons: order, dup, missing, glyphs: order.map(k => PT[k].glyph), pools: { civ: PT.civiale.pool.length, young: PT.young.pool.length, bovie: PT.bovie.pool.length, foley: PT.foley.pool.length, hug: PT.huggins.pool.join(), gle: PT.gleason.pool.join(), nitze: PT.nitze.pool.join(), flem: PT.fleming.pool.join() }, guest: PT.fleming.guest === true, rare: PT.gleason.rare === true, newBoons: ['smokevac', 'bipolar', 'cbi', 'cystoscope', 'grading'].map(id => !!B[id]) }; });
+  check('REPS: a cast of 4 from invented companies, each with ≥ 6 pitches and a caricature spec', b.reps === 4 && b.pitches.every(n => n >= 6) && b.companies.join() === 'Lumenex Surgical,StoneWorks Medical,OmniCautery Systems,FluidLogic Devices' && b.repLooks, JSON.stringify(b.pitches));
+  check('PATRONS: Civiale / Young / Bovie / Foley / Huggins / Gleason / Nitze / Fleming (guest); every boon sits in exactly one pool; Gleason only has Grading', b.patrons.join() === 'civiale,young,bovie,foley,huggins,gleason,nitze,fleming' && b.dup.length === 0 && b.missing.length === 0 && b.pools.gle === 'grading' && /cisplatin/.test(b.pools.hug) && /bep/.test(b.pools.hug) && b.pools.flem.split(',').length === 7 && b.pools.nitze === 'coldlight,digiscope,cystoscope' && b.guest && b.rare && b.newBoons.every(Boolean) && b.glyphs.join() === 'diamond,tri,bolt,drop,medal,grade,eye,petri', JSON.stringify({ dup: b.dup, missing: b.missing }));
+  b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); const G = UroCrawl.state; __prep(); const doors = G.doors.map(d => d.type + (d.patron ? ':' + d.patron : '')), boonDoors = G.doors.filter(d => d.type === 'boon');
+    let gle = 0; for (let i = 0; i < 100; i++) if (UroCrawl.pickPatron() === 'gleason') gle++; UroCrawl.giveBoon('cisplatin'); const poolG = UroCrawl.patronPool('gleason'); let gle2 = 0; for (let i = 0; i < 300; i++) if (UroCrawl.pickPatron() === 'gleason') gle2++;
+    return { doors, allHave: boonDoors.every(d => !!d.patron && !!UroCrawl.tables.PATRONS[d.patron]), gle, poolG, gle2 }; });
+  check('boon doors are owned by a patron (plaque = patron glyph/colour); Gleason only appears once a boon can be graded, and rarely', b.allHave && b.gle === 0 && b.poolG.join() === 'grading' && b.gle2 > 0 && b.gle2 < 40, JSON.stringify({ doors: b.doors, gle: b.gle, gle2: b.gle2 }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.rewards.push({ kind: 'altar', x: 600, y: 300, patron: 'huggins' }); const r = G.rewards[G.rewards.length - 1]; G.favor = {};
+    P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3);
+    const o = G.overlay, head = document.getElementById('patronHead').style.display !== 'none', name = document.getElementById('patronName').textContent, title = document.getElementById('boonTitle').textContent, greet = document.getElementById('patronGreet').textContent, offer = r.offer.slice(), pool = UroCrawl.tables.PATRONS.huggins.pool;
+    document.querySelector('#boonCards .card').click(); const favor = G.favor.huggins, closed = G.overlay, got = G.boons.slice(-1)[0];
+    const share = f => { G.favor.huggins = f; let n = 0; for (let i = 0; i < 300; i++) { const id = UroCrawl.rollBoons(1, null, 'huggins')[0]; const rar = UroCrawl.tables.BOONS[id].rarity; if (rar === 'rare' || rar === 'epic') n++; } return n; }; UroCrawl.meta.xp = 5000; const s0 = share(0), s5 = share(5); G.favor.huggins = favor;
+    return { o, head, name, title, greet, offer, inPool: offer.every(id => pool.indexOf(id) >= 0), favor, closed, got, s0, s5 }; });
+  check('a patron altar: caricature header, greeting, boons only from that patron\'s pool; taking one earns favor', b.o === 'boon' && b.head && b.name === 'Huggins' && /Huggins/.test(b.title) && /“/.test(b.greet) && b.offer.length === 3 && b.inPool && b.favor === 1 && b.closed === null && b.offer.indexOf(b.got) >= 0, JSON.stringify({ offer: b.offer, got: b.got }));
+  check('patron favor upgrades that patron\'s next offers: rare/epic share rises with favor (0 → 5)', b.s5 > b.s0 * 1.6 && b.s0 > 10, b.s0 + ' → ' + b.s5 + ' of 300');
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.rewards.push({ kind: 'altar', x: 700, y: 300, patron: 'gleason' }); const r = G.rewards[G.rewards.length - 1]; G.boonTier = {};
+    P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3); const offer = r.offer.slice(); document.querySelector('#boonCards .card').click(); const o = G.overlay, cards = document.querySelectorAll('#gradeCards .card').length, gradeableN = G.boons.filter(id => UroCrawl.tables.BOONS[id].dmg || UroCrawl.tables.BOONS[id].strip).length;
+    const sem0 = UroCrawl.spawn('seminoma', 700, 150, { instant: true }); const d0 = UroCrawl.dealDamage(sem0, 10, 'CUT', {});
+    document.querySelector('#gradeCards .card').click(); const tier = G.boonTier.cisplatin, closed = G.overlay, held = G.boons.indexOf('grading') < 0, used = r.used;   // cisplatin was the first boon held → the first card
+    const sem1 = UroCrawl.spawn('seminoma', 700, 150, { instant: true }); const d1 = UroCrawl.dealDamage(sem1, 10, 'CUT', {});
+    const legacy = { kind: 'altar', x: 500, y: 400 }; G.rewards.push(legacy); P.x = 580; P.y = 400; UroCrawl.step(3); P.x = 500; P.y = 400; UroCrawl.step(3); const lo = G.overlay, lhead = document.getElementById('patronHead').style.display, loffer = legacy.offer.slice(); document.getElementById('btnBoonSkip').click();
+    return { offer, o, cards, gradeableN, d0, tier, closed, held, used, d1, lo, lhead, loffer }; });
+  check('Gleason offers Grading: a chooser of the held gradeable boons, Cisplatin → Grade 2 (×2 vs Seminoma becomes ×2.5: 30 → 37.5); Grading itself is not carried', b.offer.join() === 'grading' && b.o === 'grade' && b.cards === b.gradeableN && b.cards >= 1 && Math.abs(b.d0 - 30) < 0.01 && b.tier === 2 && b.closed === null && b.held && b.used && Math.abs(b.d1 - 37.5) < 0.01, JSON.stringify({ offer: b.offer, o: b.o, cards: b.cards, gradeableN: b.gradeableN, d0: b.d0, d1: b.d1, tier: b.tier, closed: b.closed, held: b.held, used: b.used }));
+  check('the old generic altar still works (no patron header, 3 boons from the whole pool, never Grading)', b.lo === 'boon' && b.lhead === 'none' && b.loffer.length === 3 && b.loffer.indexOf('grading') < 0, b.loffer.join());
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.enemies.forEach(__kill); UroCrawl.step(1); const clot = UroCrawl.spawn('clot', 700, 300, { instant: true }), bph = UroCrawl.spawn('bph', 700, 400, { instant: true });
+    const f0 = UroCrawl.dealDamage(clot, 10, 'FLUID', {}); UroCrawl.giveBoon('cbi'); const f1 = UroCrawl.dealDamage(clot, 10, 'FLUID', {});
+    UroCrawl.dealDamage(bph, 5, 'CUT', { status: { bleed: [3, 4] } }); const bleeding = !!bph.st.bleed; const hp0 = bph.hp; UroCrawl.giveBoon('bipolar'); UroCrawl.dealDamage(bph, 1, 'ENERGY', {}); const caut = !bph.st.bleed, bonus = hp0 - bph.hp - 1 * 1.5 * 1.15; // 1 × 1.5 (ENERGY×BENIGN) × 1.15 (bph tweak) then the cauterize bonus 12 × 1.5 × 1.5 = 27
+    G.hazards.push({ kind: 'burn', x: P.x, y: P.y, r: 60, t: Infinity, max: Infinity, ph: 0 }); P.burn = 0; UroCrawl.step(2); const burnNo = P.burn; UroCrawl.giveBoon('smokevac'); P.burn = 0; UroCrawl.step(2); const burnYes = P.burn; G.hazards.length = 0;
+    UroCrawl.giveBoon('cystoscope'); const e = UroCrawl.spawn('com', 700, 200, { instant: true }); const reveal = !!e.st.reveal;
+    return { f0, f1, bleeding, caut, bonus, burnNo, burnYes, reveal }; });
+  check('new patron boons work: CBI +15% FLUID, Bipolar cauterizes on any ENERGY hit with a ×1.5 bonus (27), Smoke Evacuator stops burn-zone damage, Cystoscopy reveals spawns', Math.abs(b.f0 - 17.5) < 0.01 && Math.abs(b.f1 - 20.125) < 0.01 && b.bleeding && b.caut && Math.abs(b.bonus - 27) < 0.05 && b.burnNo > 0 && b.burnYes === 0 && b.reveal, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.rewards.push({ kind: 'rep', x: 600, y: 420, weapon: 'holmium' }); const r = G.rewards[G.rewards.length - 1]; G.pens = 0;
+    P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3);
+    const o = G.overlay, hidden = document.getElementById('modChoice').style.display === 'none', pitchRow = document.getElementById('pitchRow').style.display !== 'none', talk = document.getElementById('modTalk').textContent, rep = r.rep, name = document.getElementById('repName').textContent, co = document.getElementById('repCo').textContent;
+    const repDef = UroCrawl.tables.REPS.filter(x => x.id === rep)[0];
+    return { o, hidden, pitchRow, talk, rep, name, co, pitchOk: repDef && repDef.pitches.some(pt => talk.indexOf(pt) === 0), closer: /I’ll just leave this with you\.$/.test(talk), nameOk: repDef && name === repDef.name && co.indexOf(repDef.company) === 0 }; });
+  check('the rep screen opens on the pitch: one of the cast, name + company, a 2–3 line pitch ending "I’ll just leave this with you.", cards hidden, SKIP PITCH visible', b.o === 'mod' && b.hidden && b.pitchRow && b.pitchOk && b.closer && b.nameOk, JSON.stringify({ rep: b.rep, name: b.name, talk: b.talk.slice(0, 60) }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), r = G.rewards[G.rewards.length - 1], w = G.weapons[0], sw = G.weapons[1];
+    const fresh = UroCrawl.rollModOffer(sw, 1, null, true); r.sample = { id: fresh[0], drawback: 'hp', taken: false }; // force a free sample (a Holmium with 3 mods left has no 4th, so the case falls back to the Scalpel's)
+    document.getElementById('btnSkipPitch').click(); const shown = document.getElementById('modChoice').style.display !== 'none', pitchGone = document.getElementById('pitchRow').style.display === 'none', cards = document.querySelectorAll('#modCards .card').length, sample = document.querySelectorAll('#modCards .card.sample').length;
+    document.getElementById('btnFreePen').click(); const pens = G.pens, penTxt = document.getElementById('btnFreePen').textContent, swag = document.getElementById('modTalk').textContent;
+    const hp0 = P.maxHp; document.querySelector('#modCards .card.sample').click(); const gotSample = sw.modIds.indexOf(r.sample.id) >= 0, hp1 = P.maxHp, sampleLeft = document.querySelectorAll('#modCards .card.sample').length, cardsLeft = document.querySelectorAll('#modCards .card').length, stillOpen = G.overlay;
+    document.querySelector('#modCards .card').click(); const closed = G.overlay, mods = w.modIds.length, used = r.used;
+    UroCrawl.skipRoom(); UroCrawl.step(5); const d = G.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); const hp2 = P.maxHp;
+    return { shown, pitchGone, cards, sample, pens, penTxt, swag, gotSample, hp0, hp1, sampleLeft, cardsLeft, stillOpen, closed, mods, used, hp2 }; });
+  check('SKIP PITCH jumps to the mod choice; the free pen does nothing but count; a free sample installs an extra mod (here for the Scalpel) for −10% max HP this room, restored next room', b.shown && b.pitchGone && b.cards === 4 && b.sample === 1 && b.pens === 1 && /FREE SWAG: 1/.test(b.penTxt) && /does nothing/.test(b.swag) && b.gotSample && b.hp1 === b.hp0 - Math.round(b.hp0 * 0.1) && b.sampleLeft === 0 && b.cardsLeft === 3 && b.stillOpen === 'mod' && b.closed === null && b.mods === 1 && b.used && b.hp2 === b.hp0, JSON.stringify({ cards: b.cards, hp: [b.hp0, b.hp1, b.hp2], mods: b.mods, got: b.gotSample }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.enemies.forEach(__kill); UroCrawl.step(1); G.rewards.push({ kind: 'rep', x: 600, y: 420, weapon: 'scalpel' }); const r = G.rewards[G.rewards.length - 1]; P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3); return { o: G.overlay, hidden: document.getElementById('modChoice').style.display === 'none', sampled: G.rewards.filter(x => x.kind === 'rep' && x.sample).length }; });
+  await p.waitForTimeout(4400);
+  const auto = await p.evaluate(() => ({ shown: document.getElementById('modChoice').style.display !== 'none', o: UroCrawl.state.overlay }));
+  check('an unskipped pitch advances to the mod choice by itself after ~4 s', b.o === 'mod' && b.hidden && auto.shown && auto.o === 'mod');
+  await shot(p, 'm-rep-screen');
+  await p.evaluate(() => document.getElementById('btnModSkip').click());
+  await p.waitForTimeout(200); await shot(p, 'm-altars');
+  const { p: pf, errs: errsF } = await open('?seed=44&god=1&boss=fournier&weapons=scalpel,roller');
+  b = await pf.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(5); const B = UroCrawl.state.boss, E = UroCrawl.tables.ENEMIES; return { name: B.name, sub: B.sub, fact: E.fournier.fact, defName: E.fournier.name }; });
+  check('the Fournier boss card reads FOURNIER; the bestiary names Jean Alfred Fournier (and says the boss is a cartoon of the disease)', b.name === 'FOURNIER' && /Fournier's gangrene/.test(b.sub) && /Jean Alfred Fournier/.test(b.fact) && /1883/.test(b.fact) && b.defName === 'Fournier', JSON.stringify({ name: b.name, sub: b.sub }));
+  await pf.waitForTimeout(300); await shot(pf, 'm-fournier');
+  await pf.evaluate(() => { UroCrawl.hideScreens(); UroCrawl.state.running = false; document.getElementById('btnBestiary').click(); });
+  const best = await pf.evaluate(() => { const E = UroCrawl.tables.ENEMIES; return { entries: document.querySelectorAll('#bgrid .bentry').length, visible: Object.keys(E).filter(id => !E[id].hidden).length, overlay: UroCrawl.state.overlay }; });
+  check('the bestiary renders every non-hidden enemy, the new strains and the C. difficile pod included', best.overlay === 'bestiary' && best.entries === best.visible && best.entries >= 33, best.entries + ' entries / ' + best.visible + ' visible defs');
+  errCheck('M', errs.concat(errsF));
 });
 
 await browser.close();
