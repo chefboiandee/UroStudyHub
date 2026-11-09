@@ -18,8 +18,8 @@
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), skipRoom(), step(n), startRun() }
 
-  Keys:  WASD / arrows move · mouse aims · LMB fire · RMB or Space alt · Shift roll · 1-5 slots · Q/E or wheel cycle · Esc/P pause
-  Touch: left thumb floating stick · FIRE (hold, auto-aim) · SWAP · ALT · ROLL · tap weapon slots
+  Keys:  WASD / arrows move · mouse aims · LMB fire · RMB or Space alt · Shift roll · 1-5 slots · Q/E or wheel cycle · R ultimate · Esc/P pause
+  Touch: left thumb floating stick · FIRE (hold, auto-aim) · SWAP · ALT · ROLL · ULT (once you hold the da Vinci console) · tap weapon slots
 -->
 <html lang="en">
 <head>
@@ -390,6 +390,7 @@ window.addEventListener('keydown', function (ev) {
   if (c === 'Digit1') edge('slot1'); if (c === 'Digit2') edge('slot2'); if (c === 'Digit3') edge('slot3'); if (c === 'Digit4') edge('slot4'); if (c === 'Digit5') edge('slot5');
   if (c === 'Digit6') edge('slot6'); if (c === 'Digit7') edge('slot7'); if (c === 'Digit8') edge('slot8'); if (c === 'Digit9') edge('slot9'); if (c === 'Digit0') edge('slot0');
   if (c === 'Backquote') edge('spawnerToggle');
+  if (c === 'KeyR') edge('ult');
   if (c === 'Enter') edge('enter');
 });
 window.addEventListener('keyup', function (ev) { Input.keys[ev.code || ev.key] = false; });
@@ -406,6 +407,7 @@ function touchLayout() {
     alt: { x: m(W - 196), y: H - 150, r: 32, label: 'ALT' },
     roll: { x: m(W - 196), y: H - 58, r: 34, label: 'ROLL' },
     swap: { x: m(W - 84), y: H - 186, r: 32, label: 'SWAP' },
+    ult: { x: m(W - 196), y: H - 242, r: 30, label: 'ULT' },
     stickZone: L ? { x: W * 0.5, y: 70, w: W * 0.5, h: H - 70 } : { x: 0, y: 70, w: W * 0.5, h: H - 70 },
     mirror: L
   };
@@ -425,6 +427,7 @@ function pointerDown(ev) {
     if (hitCircle(p.x, p.y, TL.alt)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'alt' }; Input.buttons.alt = ev.pointerId; edge('alt'); return; }
     if (hitCircle(p.x, p.y, TL.roll)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'roll' }; Input.buttons.roll = ev.pointerId; edge('roll'); return; }
     if (hitCircle(p.x, p.y, TL.swap)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'swap' }; Input.buttons.swap = ev.pointerId; edge('swapNext'); return; }
+    if (G.ult && G.ult.have && hitCircle(p.x, p.y, TL.ult)) { Input.pointers[ev.pointerId] = { kind: 'btn', name: 'ult' }; Input.buttons.ult = ev.pointerId; edge('ult'); return; }
     if (!Input.stick && p.x >= TL.stickZone.x && p.x <= TL.stickZone.x + TL.stickZone.w && p.y >= TL.stickZone.y) {
       var bx = clamp(p.x, 70, W - 70), by = clamp(p.y, 110, H - 70);
       Input.stick = { id: ev.pointerId, bx: bx, by: by, kx: bx, ky: by };
@@ -504,7 +507,7 @@ function pollGamepad() {
   if (now.lb && !padPrev.lb) edge('swapPrev');
   if (now.rb && !padPrev.rb) edge('swapNext');
   if (now.start && !padPrev.start) edge('pause');
-  if (now.y && !padPrev.y) edge('enter');
+  if (now.y && !padPrev.y) { edge('enter'); edge('ult'); }
   if (Input.padFire && !padPrev.fire) edge('fire');
   padPrev = now; padPrev.fire = Input.padFire;
 }
@@ -810,6 +813,16 @@ function mosesPellets(w, m, dmg) {
     var a = m.a + k * 0.16;
     spawnBullet({ kind: 'pellet', x: m.x, y: m.y, vx: Math.cos(a) * 620, vy: Math.sin(a) * 620, r: 5, dmg: dmg * 0.45, cls: 'LITHO', hostile: false, life: 0.45, wid: w.id, color: '#bff6ff', split: 'frag' });
   }
+}
+
+function aimPointAt(d) { return { x: clamp(P.x + Math.cos(P.aim) * d, ARENA.x + 10, ARENA.x + ARENA.w - 10), y: clamp(P.y + Math.sin(P.aim) * d, ARENA.y + 10, ARENA.y + ARENA.h - 10) }; }
+// CO₂ light is absorbed by water: standing in saline/water, a puddle within the first 60 px, or a FLUID jet/bolt crossing the beam
+function beamInWater() {
+  if (inHazard(P.x, P.y, 'saline') || inHazard(P.x, P.y, 'water')) return true;
+  var m = muzzle(); for (var d = 12; d <= 60; d += 12) { var px = m.x + Math.cos(m.a) * d, py = m.y + Math.sin(m.a) * d; if (inHazard(px, py, 'saline') || inHazard(px, py, 'water')) return true; }
+  var cx = Math.cos(m.a), sy = Math.sin(m.a), bs = G.bullets;
+  for (var i = 0; i < bs.length; i++) { var b = bs[i]; if (b.dead || !(b.cls === 'FLUID' || b.shape === 'goo')) continue; var dx = b.x - m.x, dy = b.y - m.y, t = dx * cx + dy * sy; if (t < 0 || t > 320) continue; if (Math.abs(dx * sy - dy * cx) <= b.r + 6) return true; }
+  return false;
 }
 
 var WEAPONS = {
@@ -1203,9 +1216,79 @@ var WEAPONS = {
     },
     altPress: function (w) { if (G.turrets.length) { G.turrets.length = 0; w.cd = Math.max(0, w.cd - 6); Snd.sfx('click'); } },
     meter: function (w) { return { v: 1 - clamp(w.cd / 12, 0, 1), color: '#5df07a', label: G.turrets.length ? 'deployed' : 'stent' }; }
-  }
+  },
+  /* ───────────── HIFU (focused ultrasound) ───────────── */
+  hifu: {
+    name: 'HIFU', cls: 'ENERGY', kind: 'charge', tier: 'should', unlock: 2, famMult: { MALIGNANT: 1.25 }, dmgMult: function (e) { return e.def.prostate ? 1.25 : 1; },
+    desc: 'Hold to focus (~1 s): a lens marks the focal zone at the aimed distance. Release for a thermal burst that ignores armor and biofilm. +25% vs MALIGNANT, prostate cancer another +25%. Useless against swarms.',
+    altDesc: 'Alt cycles the focal distance NEAR / MID / FAR (with a mouse the cursor sets it). You crawl at 50% while focusing.',
+    modes: ['NEAR', 'MID', 'FAR'],
+    focus: function (w) { var d = [90, 160, 240][w.mode] * wmod(w, 'range'); if (Input.mode === 'kb') d = clamp(dist(P.x, P.y, Input.mx, Input.my), 50, 300); return aimPointAt(d); },
+    fire: function (w, dt, held) {
+      if (w.cd > 0) { w.charge = 0; w.active = false; return; }
+      if (held) {
+        w.active = true; w.charge = Math.min(1, w.charge + dt / 1.0); var f = WEAPONS.hifu.focus(w), m = muzzle();
+        w.fx = { kind: 'lens', x: f.x, y: f.y, v: w.charge, t: 0.05, cls: 'ENERGY', mx: m.x, my: m.y, rad: 46 * wmod(w, 'range') };
+        if (w.charge >= 1 && !w.full) { w.full = true; Snd.sfx('pickup'); } else if (!w.full) Snd.sfx('charge', { v: w.charge });
+        return;
+      }
+      w.active = false;
+      if (w.charge > 0.08) WEAPONS.hifu.burst(w, Math.max(0.3, w.charge));
+      w.charge = 0; w.full = false;
+    },
+    burst: function (w, c) {
+      var f = WEAPONS.hifu.focus(w), rad = 46 * wmod(w, 'range'), hs = enemiesNear(f.x, f.y, rad);
+      for (var i = 0; i < hs.length; i++) dealDamage(hs[i], 55 * c * wmod(w, 'dmg'), 'ENERGY', { wid: 'hifu', knock: 60, ang: ang(f.x, f.y, hs[i].x, hs[i].y), pierceArmor: true, status: { burn: [2, 6] }, hx: f.x, hy: f.y });
+      G.fxRings.push({ x: f.x, y: f.y, r: 6, r1: rad + 10, t: 0.3, dur: 0.3, color: '#ffb630' }); burst(f.x, f.y, 18, { color: '#ffd8a8', speed: 160, life: 0.45, size: 4, kind: 'smoke' }); burst(f.x, f.y, 10, { color: '#ffb630', speed: 220, life: 0.3, size: 3 });
+      w.cd = 1.4 / wmod(w, 'rate'); shakeIt(5 * c); Snd.sfx('shock'); Snd.sfx('cauter');
+    },
+    altPress: function (w) { w.mode = (w.mode + 1) % 3; Snd.sfx('click'); },
+    meter: function (w) { return w.cd > 0 ? { v: 1 - w.cd / 1.4, color: '#8ea2b6', label: 'cooling' } : { v: w.charge, color: '#ffb630', label: w.full ? 'FOCUSED' : 'focus', pulse: w.full }; },
+    slowWhile: function (w) { return w.active ? 0.5 : 1; }
+  },
+  /* ───────────── Urethrotome (cold knife) ───────────── */
+  urethrotome: {
+    name: 'Urethrotome', cls: 'CUT', kind: 'melee', tier: 'should', famMult: { CLOT: 2.5 },
+    desc: 'Fast straight thrust (~140 px) that pierces everything in its line and makes it bleed. The only blade that cuts stricture bars (they regrow in ~20 s); it also breaks clot walls.',
+    altDesc: 'Alt: cold-knife sweep — a short wide arc (0.9 s cooldown).',
+    fire: function (w, dt, held) {
+      if (!held || w.cd > 0) return; w.cd = 0.28 / wmod(w, 'rate');
+      var m = muzzle(), len = raycast(m.x, m.y, m.a, 140 * wmod(w, 'range')), ex = m.x + Math.cos(m.a) * len, ey = m.y + Math.sin(m.a) * len;
+      var hits = enemiesInBeam(m.x, m.y, m.a, len, 10);
+      for (var i = 0; i < hits.length; i++) dealDamage(hits[i].e, 18 * wmod(w, 'dmg'), 'CUT', { wid: 'urethrotome', knock: 60, ang: m.a, status: { bleed: [3, 4] }, hx: hits[i].fx, hy: hits[i].fy });
+      cutStrictures(m.x, m.y, m.a, len + 18);
+      G.fxLines.push({ x0: m.x, y0: m.y, x1: ex, y1: ey, t: 0.12, dur: 0.12, color: '#ff4d6d', w: 6 }); burst(ex, ey, 3, { color: '#ff8fa3', speed: 120, life: 0.2, size: 2 }); Snd.sfx('slash'); if (hits.length) shakeIt(1.5);
+      P.x += Math.cos(m.a) * 4; P.y += Math.sin(m.a) * 4; resolveCircle(P, P.r);
+    },
+    altPress: function (w) { if (w.cd2 > 0) return; w.cd2 = 0.9; var hits = enemiesInArc(P.x, P.y, P.aim, 62, 1.4); for (var i = 0; i < hits.length; i++) dealDamage(hits[i], 14 * wmod(w, 'dmg'), 'CUT', { wid: 'urethrotome', knock: 90, ang: P.aim, status: { bleed: [3, 4] } }); w.fx = { kind: 'arc', x: P.x, y: P.y, a: P.aim, rad: 62, half: 1.4, t: 0.14, dur: 0.14, cls: 'CUT', dir: 1 }; Snd.sfx('swing'); },
+    meter: function (w) { return { v: 1 - clamp(w.cd2 / 0.9, 0, 1), color: '#ff4d6d', label: 'sweep' }; }
+  },
+  /* ───────────── CO₂ laser ───────────── */
+  co2: {
+    name: 'CO₂ Laser', cls: 'ENERGY', kind: 'beam', tier: 'should', unlock: 2, wpBonus: 1.5,
+    desc: 'Thin, long (~320 px) continuous beam: low damage, no pierce, no bleed, but weak points take +50% and it peels shallow shields and biofilm. Water absorbs it: in saline or water the range drops to ~60 px.',
+    altDesc: 'Alt toggles CONTINUOUS ↔ SUPERPULSED (slower, harder ticks).',
+    modes: ['CONTINUOUS', 'SUPERPULSED'],
+    fire: function (w, dt, held) {
+      if (w.locked > 0) { w.locked -= dt; w.heat = Math.max(0, w.heat - dt * 0.6); if (w.locked <= 0) w.heat = 0; return; }
+      if (!held) { w.heat = Math.max(0, w.heat - dt * 0.5); w.tick = 0; return; }
+      w.heat += dt / 5; if (w.heat >= 1) { w.heat = 1; w.locked = 1.5; addText(P.x, P.y - 34, 'OVERHEAT', { color: '#ff7a5c', size: 13 }); return; }
+      var wet = beamInWater(), pulse = w.mode === 1;
+      if (wet && (!w.wetT || G.time - w.wetT > 1.2)) { w.wetT = G.time; addText(P.x, P.y - 34, 'ABSORBED (water)', { color: '#8ea2b6', size: 11 }); }
+      beamFire(w, dt, { range: wet ? 60 : 320, hw: 3, interval: pulse ? 0.25 : 0.07, dmg: pulse ? 9.5 : 2.6, strip: pulse ? 0.3 : 0.12, sfx: 'beam', style: 'co2' });
+    },
+    altPress: function (w) { w.mode = 1 - w.mode; },
+    meter: function (w) { return { v: w.heat, color: w.locked > 0 ? '#ff5c5c' : '#ffb630', label: w.locked > 0 ? 'HOT!' : 'heat' }; }
+  },
+  /* ───────────── da Vinci console (ULTIMATE — not a slot) ───────────── */
+  davinci: {
+    name: 'da Vinci Console', cls: 'NEUTRAL', kind: 'ultimate', tier: 'should', unlock: 3, ultimate: true,
+    desc: 'ULTIMATE, not a slot: a meter beside your weapon bar fills from kills (25). Press R / ULT to dock for 12 s: four robot arms (scissors, bipolar, suction-irrigator, laser fiber) each auto-target what they hurt most, at ×0.7 damage. Roll to undock early.',
+    altDesc: '40 s lockout after a dock before the meter fills again. One per run.',
+    fire: function () {}, meter: function () { return null; }
+  },
 };
-var WEAPON_ORDER = ['holmium', 'scalpel', 'loop', 'bovie', 'trilogy', 'eswl', 'roller', 'irrigation', 'basket', 'thulium', 'cryo', 'button', 'biopsy', 'greenlight', 'brachy', 'aquablation', 'rezum', 'foley', 'stent'];
+var WEAPON_ORDER = ['holmium', 'scalpel', 'loop', 'bovie', 'trilogy', 'eswl', 'roller', 'irrigation', 'basket', 'thulium', 'cryo', 'button', 'biopsy', 'greenlight', 'brachy', 'aquablation', 'rezum', 'foley', 'stent', 'hifu', 'urethrotome', 'co2', 'davinci'];
 (function () { for (var id in WEAPONS) WEAPONS[id].id = id; })();
 // rarity: a stat tweak so a second copy is an upgrade
 var RARITY_MODS = {
@@ -1685,6 +1768,21 @@ var ENEMIES = {
     update: function (e, dt, d, a) { e.sway += dt * 2.5; e.vx = e.vy = 0; },
     draw: function (c, e) { var s = Math.sin(e.sway) * 3; c.strokeStyle = '#ff9fb3'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(0, 8); c.quadraticCurveTo(i * 8 + s, -4, i * 11 + s, -16); } c.stroke(); c.lineWidth = 2; c.strokeStyle = OUTLINE; c.beginPath(); for (var j = -1; j <= 1; j++) { c.moveTo(0, 8); c.quadraticCurveTo(j * 8 + s, -4, j * 11 + s, -16); } c.stroke(); for (var k = -1; k <= 1; k++) cyclops(c, k * 11 + s, -16, 3, e.look, k === 0 ? e.blink : 1); c.fillStyle = '#ff9fb3'; c.beginPath(); c.arc(0, 8, e.r * 0.7, 0, TAU); c.fill(); outline(c, 2.6); mouth(c, 0, 8, 4, 'o'); }
   },
+  condyloma: {
+    name: 'Condyloma Cluster', sub: 'HPV condylomata acuminata', family: 'BENIGN', hp: 60, r: 20, speed: 0, cost: 3, minRoom: 2, contact: 0, stationary: true, noPush: true, noGrab: true, tweaks: { ENERGY: 1.3 },
+    fact: 'Genital warts (condylomata acuminata) are HPV 6 and 11; they are burned, frozen or lasered off (or treated with imiquimod) and recur unless the root is destroyed.',
+    init: function (e) { e.seed = rr(1, 99); e.warts = 6; e.regrowT = 6; e.dormant = false; e.ph = rr(0, TAU); },
+    update: function (e, dt) {
+      e.ph += dt * 2; e.vx = e.vy = 0;
+      if (e.hp < e.maxHp || e.dormant) { e.regrowT -= dt; if (e.regrowT <= 0) { e.regrowT = 6; e.hp = Math.min(e.maxHp, e.hp + 10); e.warts = Math.min(8, e.warts + 1); e.sx = 1.2; e.sy = 0.85; burst(e.x, e.y, 4, { color: '#f5c6b8', speed: 60, life: 0.3, size: 2 }); if (e.dormant && e.hp >= 20) { e.dormant = false; e.noClear = false; e.noHit = false; addText(e.x, e.y - 30, "IT'S BACK", { color: '#ffc3a8', size: 12 }); } } }
+    },
+    draw: function (c, e) {
+      if (e.dormant) { c.fillStyle = 'rgba(150,70,90,0.6)'; blobPath(c, e.r * 0.55, e.ph, 4, 0.15); c.fill(); c.strokeStyle = 'rgba(80,20,40,0.8)'; c.lineWidth = 2; c.stroke(); c.__lidColor = '#7a2a46'; eyes(c, 0, 0, 5, 3.2, e.look, e.blink, 'sleepy'); return; }
+      var n = Math.max(1, e.warts);
+      for (var i = 0; i < n; i++) { var a = hsh(e.seed, i) * TAU, d = i === 0 ? 0 : e.r * (0.45 + hsh(e.seed, i + 8) * 0.45), wr = e.r * (i === 0 ? 0.5 : 0.28 + hsh(e.seed, i + 16) * 0.14), wx = Math.cos(a) * d, wy = Math.sin(a) * d; c.fillStyle = i % 3 === 0 ? '#d98a9a' : '#c9788a'; c.save(); c.translate(wx, wy); blobPath(c, wr * (1 + 0.05 * Math.sin(e.ph + i)), i, 5, 0.18); c.fill(); outline(c, 2.6); c.fillStyle = 'rgba(255,255,255,0.3)'; c.beginPath(); c.arc(-wr * 0.3, -wr * 0.3, wr * 0.25, 0, TAU); c.fill(); if (i % 2 === 1) cyclops(c, 0, 0, wr * 0.35, e.look, i === 1 ? e.blink : 1); c.restore(); }
+      eyes(c, 0, -2, 6, 4.2, e.look, e.blink, null, { pupil: 0.5, asym: 0.75 }); mouth(c, 0, 6, 4, 'o');
+    }
+  },
   /* ─── CLOT (destructible obstacle; not needed for room clear) ─── */
   clot: {
     name: 'Blood Clot', sub: 'Organized clot', family: 'CLOT', hp: 80, r: 22, speed: 0, cost: 0, minRoom: 99, contact: 0, stationary: true, noPush: true, noGrab: true, noClear: true, blocks: true,
@@ -1717,7 +1815,7 @@ var ENEMIES = {
     fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 6; }, draw: function (c, e) { drawStump(c, e); }
   }
 };
-var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
+var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
 (function () { for (var id in ENEMIES) ENEMIES[id].id = id; })();
 // pips: the class an enemy is weakest to / resists most (class-level tweaks included)
 function enemyWeakness(def) {
@@ -1792,6 +1890,7 @@ var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ff
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 function R(x, y, w, h) { return { type: 'rect', x: x, y: y, w: w, h: h }; }
 function C(x, y, r) { return { type: 'circle', x: x, y: y, r: r }; }
+function S(x, y) { return { type: 'circle', x: x, y: y, r: 9, stricture: true }; }   // stricture bar: only the Urethrotome cuts it
 var ROOM_TEMPLATES = {
   open:     { name: 'Open arena',     minRoom: 1, build: function () { return { obstacles: [], hazards: [] }; } },
   pillars:  { name: 'Four pillars',   minRoom: 1, build: function () { return { obstacles: [C(300, 160, 28), C(300, 380, 28), C(640, 160, 28), C(640, 380, 28)], hazards: [] }; } },
@@ -1801,7 +1900,7 @@ var ROOM_TEMPLATES = {
   saline:   { name: 'Saline pools',   minRoom: 3, build: function () { return { obstacles: [C(330, 270, 24), C(630, 270, 24)], hazards: [{ kind: 'saline', x: 480, y: 150, r: 85 }, { kind: 'saline', x: 480, y: 395, r: 85 }, { kind: 'saline', x: 760, y: 270, r: 70 }] }; } },
   clotwall: { name: 'Clot-walled',    minRoom: 3, build: function () { return { obstacles: [], hazards: [{ kind: 'blood', x: 520, y: 270, r: 60 }], clots: [[520, 120], [520, 170], [520, 370], [520, 420], [880, 232], [880, 308]] }; } },
   zigzag:   { name: 'Zig-zag',        minRoom: 3, build: function () { return { obstacles: [R(250, 26, 26, 290), R(480, 224, 26, 290), R(710, 26, 26, 290)], hazards: [] }; } },
-  stricture:{ name: 'Stricture hall', minRoom: 4, build: function () { return { obstacles: [R(330, 26, 300, 170), R(330, 344, 300, 170), C(480, 228, 8), C(480, 312, 8), C(400, 270, 8), C(560, 270, 8)], hazards: [] }; } },
+  stricture:{ name: 'Stricture hall', minRoom: 4, build: function () { return { obstacles: [R(330, 26, 300, 170), R(330, 344, 300, 170), S(480, 228), S(480, 312), S(400, 270), S(560, 270)], hazards: [] }; } },
   biofilm:  { name: 'Biofilm slick',  minRoom: 4, build: function () { return { obstacles: [C(480, 270, 34)], hazards: [{ kind: 'biofilm', x: 330, y: 200, r: 75 }, { kind: 'biofilm', x: 640, y: 340, r: 75 }, { kind: 'biofilm', x: 480, y: 460, r: 55 }] }; } },
   boss:     { name: 'Renal pelvis',   minRoom: 99, build: function () { return { obstacles: [], hazards: [] }; } },
   rest:     { name: 'Call room',      minRoom: 99, build: function () { return { obstacles: [], hazards: [] }; } },
@@ -1842,7 +1941,7 @@ var G = {
   rvu: 0, boons: [], weapons: [], wIndex: 0, maxWeapons: 4, swapT: 0, swapBonusT: 0,
   roomIndex: 0, room: null, cleared: false, waves: null, banner: null, tutorial: null, aimTarget: null,
   stats: null, over: false, won: false, fosfo: false, fosfoRoom: -1, killChain: [], wolfT: 0, lowHpT: 0, fps: 0, frames: 0, fpsT: 0,
-  spawner: false, endT: 0, visited: []
+  spawner: false, endT: 0, visited: [], ult: null
 };
 var P = null;
 var vignette = null;
@@ -1866,6 +1965,7 @@ function makeWeapon(id, rarity) {
 var RARITY_NEXT = { common: 'uncommon', uncommon: 'rare', rare: 'rare' };
 function giveWeapon(id, rarity) {
   if (!WEAPONS[id]) return false;
+  if (WEAPONS[id].ultimate) { if (!G.ult) G.ult = newUlt(); var fresh = !G.ult.have; G.ult.have = true; recordSeen('w:' + id); if (P) addText(P.x, P.y - 44, fresh ? 'da VINCI CONSOLE ACQUIRED' : 'CONSOLE CHARGED', { color: '#38e8ff', size: 14 }); if (!fresh) G.ult.charge = G.ult.need; Snd.sfx('buy'); return true; }
   for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === id) {
     var w = G.weapons[i], nr = RARITY_NEXT[w.rarity]; if (nr === w.rarity) { w.mods.dmg *= 1.1; } else { w.rarity = nr; w.mods = RARITY_MODS[nr](); }
     addText(P.x, P.y - 44, w.def.name + ' UPGRADED', { color: '#ffd166', size: 14 }); Snd.sfx('buy'); return true;
@@ -1918,7 +2018,7 @@ function boonsOnKill(e) { for (var i = 0; i < G.boons.length; i++) { var b = BOO
 
 /* ── damage pipeline: base × class-vs-family × tweaks × boons × statuses → shield → hp ── */
 var DOT_CLASS = { bleed: 'CUT', burn: 'ENERGY', poison: 'NEUTRAL' };
-function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (tw.all) m *= tw.all; if (tw[cls]) m *= tw[cls]; if (wid && tw[wid]) m *= tw[wid]; } var wd = wid && WEAPONS[wid]; if (wd && wd.famMult && wd.famMult[e.family]) m *= wd.famMult[e.family]; if (e.def.dmgTaken) m *= e.def.dmgTaken; return m; }
+function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (tw.all) m *= tw.all; if (tw[cls]) m *= tw[cls]; if (wid && tw[wid]) m *= tw[wid]; } var wd = wid && WEAPONS[wid]; if (wd && wd.famMult && wd.famMult[e.family]) m *= wd.famMult[e.family]; if (wd && wd.dmgMult) m *= wd.dmgMult(e); if (e.def.dmgTaken) m *= e.def.dmgTaken; return m; }
 function dealDamage(e, base, cls, o) {
   o = o || {};
   if (!e || e.dead || e.spawnT > 0) return 0;
@@ -1929,17 +2029,17 @@ function dealDamage(e, base, cls, o) {
   var wpCrit = false, wp = e.wp;
   if (wp) {
     var hx = o.hx, hy = o.hy; if (hx === undefined || hx === null) { var da = ang(P.x, P.y, e.x, e.y); hx = e.x - Math.cos(da) * e.r * 0.7; hy = e.y - Math.sin(da) * e.r * 0.7; }
-    if (dist(hx, hy, e.x + wp.ox, e.y + wp.oy) <= wp.r + 6) { if (wp.critCls && cls === wp.critCls) { m *= wp.critMult; wpCrit = true; } else if (wp.onOther) wp.onOther(e, cls, o); }
+    if (dist(hx, hy, e.x + wp.ox, e.y + wp.oy) <= wp.r + 6) { var wpb = o.wid && WEAPONS[o.wid] && WEAPONS[o.wid].wpBonus; if (wpb) m *= wpb; if (wp.critCls && cls === wp.critCls) { m *= wp.critMult; wpCrit = true; } else if (wp.onOther) wp.onOther(e, cls, o); }
     else { m *= wp.bodyMult; if (wp.hint && (!e.hintT || G.time - e.hintT > 2.5)) { e.hintT = G.time; addText(e.x, e.y - e.r - 28, wp.hint, { color: '#ffd166', size: 11 }); } }
   }
-  if (e.necro > 0) {
+  if (e.necro > 0 && !o.pierceArmor) {
     if (cls === 'CUT') { e.necro = Math.max(0, e.necro - (o.debride || 0.34)); m *= 0.6; if (e.necro <= 0) { addText(e.x, e.y - e.r - 28, 'DEBRIDED!', { color: '#ff4d6d', size: 15 }); burst(e.x, e.y, 14, { color: '#1f3522', speed: 160, life: 0.5, size: 4, kind: 'goo', g: 300 }); Snd.sfx('slash'); } else if (!e.necT || G.time - e.necT > 1) { e.necT = G.time; addText(e.x, e.y - e.r - 28, 'DEBRIDING…', { color: '#9fb6c9', size: 11 }); } }
     else { m *= 0.15; if (!e.necT || G.time - e.necT > 1.2) { e.necT = G.time; addText(e.x, e.y - e.r - 28, 'NECROTIC — CUT IT AWAY', { color: '#9fb6c9', size: 11 }); } }
   }
   if (e.st.frozen && (fam === 'STONE' || fam === 'MALIGNANT')) m *= 1.5;
   if (e.st.mark) m *= 1.1;
   if (e.coreExposed) m *= 1.5;
-  if (e.elite) { if (!e.armorCls && cls !== 'NEUTRAL') { e.armorCls = cls; addText(e.x, e.y - e.r - 16, 'ARMORED vs ' + CLASSES[cls].name.toUpperCase(), { color: '#ffd166', size: 11 }); } else if (cls === e.armorCls) m *= 0.2; }
+  if (e.elite) { if (!e.armorCls && cls !== 'NEUTRAL') { e.armorCls = cls; addText(e.x, e.y - e.r - 16, 'ARMORED vs ' + CLASSES[cls].name.toUpperCase(), { color: '#ffd166', size: 11 }); } else if (cls === e.armorCls && !o.pierceArmor) m *= 0.2; }
   var rightTool = false;
   if (G.swapBonusT > 0 && mBase >= 1.5 && cls !== 'NEUTRAL') { m *= hasBoon('perfectswap') ? 1.5 : 1.25; G.swapBonusT = 0; rightTool = true; }
   var critChance = (o.crit || 0) + (hasBoon('digiscope') ? 0.1 : 0), crit = critChance > 0 && rnd() < critChance;
@@ -1947,7 +2047,7 @@ function dealDamage(e, base, cls, o) {
   if (o.split) e.lastSplit = o.split;
   e.lastHitT = G.time; e.lastHit = G.time;
   // shield
-  if (e.shield > 0) {
+  if (e.shield > 0 && !o.pierceArmor) {
     var strip = (o.strip || 0) + (cls === 'FLUID' ? 0.05 : 0) + boonStrip() * (o.strip || cls === 'FLUID' || o.wid === 'bovie' ? 1 : 0.15);
     if (hasBoon('debride') && rnd() < 0.15) strip = 1;
     e.shield = Math.max(0, e.shield - strip);
@@ -2025,7 +2125,11 @@ function spawnEnemy(id, x, y, opts) {
 }
 var FAMILY_PART = { STONE: '#d8c7a4', MICROBE: '#c98cff', MALIGNANT: '#ff6b8a', BENIGN: '#ffc3a8', CLOT: '#e04a4a' };
 function killEnemy(e, cls, wid) {
-  if (e.dead) return; e.dead = true; e.hp = 0; if (e.obs) e.obs.dead = true;
+  if (e.dead) return;
+  // condylomas only die to heat: anything else leaves a dormant root that regrows a wart every 6 s
+  if (e.def.id === 'condyloma' && !e.silent && cls !== 'ENERGY' && !e.dormant) { e.hp = 1; e.dormant = true; e.noClear = true; e.noHit = true; e.warts = 0; e.regrowT = 6; e.atk = null; addText(e.x, e.y - 30, 'ROOT LEFT — BURN IT', { color: '#ffc3a8', size: 12 }); burst(e.x, e.y, 12, { color: '#d98a9a', speed: 140, life: 0.4, size: 3, kind: 'goo', g: 300 }); Snd.sfx('pop'); return; }
+  if (e.def.id === 'condyloma' && cls === 'ENERGY' && !e.silent) addText(e.x, e.y - 30, 'BURNED OFF', { color: '#ffb630', size: 13 });
+  e.dead = true; e.hp = 0; if (e.obs) e.obs.dead = true;
   var def = e.def, fam = e.family;
   if (!e.silent) {
     var pc = def.boss ? 40 : def.miniBoss ? 24 : Math.min(16, 6 + Math.round(e.r / 3));
@@ -2067,7 +2171,7 @@ function killEnemy(e, cls, wid) {
   if (wid === 'roller' && (fam === 'BENIGN' || fam === 'CLOT')) healPlayer(3);
   // kill chain → Wolf in Scrubs
   if (!e.silent && !def.hidden) { G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
-  if (!e.silent && !def.hidden) { G.stats.kills++; recordBestiary(def.id, true); }
+  if (!e.silent && !def.hidden) { G.stats.kills++; recordBestiary(def.id, true); ultKill(); }
   if (e.isArm || e.boss || e.def.isLobe || e.def.isStump) bossPartDied(e);
 }
 function updateEnemy(e, dt) {
@@ -2132,6 +2236,7 @@ function hurtPlayer(dmg, src, a, ignoreInv) {
 function healPlayer(n) { if (!P || G.over) return; var before = P.hp; P.hp = Math.min(P.maxHp, P.hp + n); var got = P.hp - before; if (got > 0.5) { addText(P.x, P.y - 28, '+' + Math.round(got), { color: '#5df07a', size: 15 }); burst(P.x, P.y, 6, { color: '#5df07a', speed: 60, life: 0.5, size: 3, g: -120 }); } }
 function addRVU(n, x, y) { G.rvu += n; G.stats.rvu += n; if (x !== undefined && n >= 2) addText(x, y - 10, '+' + n + ' RVU', { color: '#ffd166', size: 11, vy: -40 }); }
 function startRoll(mv) {
+  if (G.ult && G.ult.active) endUlt(true);
   var a = mv.mag > 0.2 ? Math.atan2(mv.y, mv.x) : P.aim, sp = 520 * (hasBoon('hydrophilic') ? 1.3 : 1);
   P.roll = 0.35; P.rollCd = 0.8 * (hasBoon('hydrophilic') ? 0.8 : 1); P.rollDx = Math.cos(a) * sp; P.rollDy = Math.sin(a) * sp; P.inv = Math.max(P.inv, 0.25); P.rollT = 0;
   G.stats.rolls++; Snd.sfx('roll'); burst(P.x, P.y, 5, { color: '#9fb6c9', speed: 80, life: 0.3, size: 3, kind: 'smoke' });
@@ -2177,7 +2282,7 @@ function updatePlayer(dt) {
   if (P.roll > 0) {
     P.roll -= dt; P.x += P.rollDx * dt; P.y += P.rollDy * dt; P.rollT = (P.rollT || 0) + dt;
     if (P.rollT > 0.04) { P.rollT = 0; P.after.push({ x: P.x, y: P.y, t: 0.25, a: P.aim }); }
-  } else if (G.introT <= 0) { P.x += mv.x * sp * dt; P.y += mv.y * sp * dt; }
+  } else if (G.introT <= 0 && !P.docked) { P.x += mv.x * sp * dt; P.y += mv.y * sp * dt; }
   for (var i = P.after.length - 1; i >= 0; i--) { P.after[i].t -= dt; if (P.after[i].t <= 0) P.after.splice(i, 1); }
   P.rollCd -= dt;
   if (takeEdge('roll') && P.rollCd <= 0 && P.roll <= 0 && !G.over) startRoll(mv);
@@ -2268,6 +2373,7 @@ function updateHazards(dt) {
   for (var k = G.teles.length - 1; k >= 0; k--) { var t = G.teles[k]; t.t -= dt; if (t.e && !t.e.dead) { t.x = t.e.x; t.y = t.e.y; } if (t.t <= 0 || (t.e && t.e.dead)) G.teles.splice(k, 1); }
   for (var l = G.fxLines.length - 1; l >= 0; l--) { G.fxLines[l].t -= dt; if (G.fxLines[l].t <= 0) G.fxLines.splice(l, 1); }
   for (var r = G.fxRings.length - 1; r >= 0; r--) { G.fxRings[r].t -= dt; if (G.fxRings[r].t <= 0) G.fxRings.splice(r, 1); }
+  for (var ob = 0; ob < G.obstacles.length; ob++) { var so = G.obstacles[ob]; if (so.stricture && so.dead && so.regrowT > 0) { so.regrowT -= dt; if (so.regrowT <= 0) { so.regrowT = 0; so.dead = false; resolveCircle(P, P.r); burst(so.x, so.y, 6, { color: '#9fb6c9', speed: 60, life: 0.3, size: 2 }); addText(so.x, so.y - 20, 'STRICTURE RECURS', { color: '#9fb6c9', size: 10 }); } } }
 }
 /* ── seeds and turrets ── */
 function updateSeeds(dt) {
@@ -2282,6 +2388,126 @@ function updateSeeds(dt) {
     if (t.tick <= 0 && tgt) { t.tick = 0.25; spawnBullet({ kind: 'bolt', x: t.x, y: t.y, vx: Math.cos(t.ang) * 420, vy: Math.sin(t.ang) * 420, r: 5, dmg: 5.5 * t.dmgMul, cls: 'FLUID', hostile: false, life: 0.8, wid: 'stent', color: '#9fffb8' }); Snd.sfx('beam'); }
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §13b THE da VINCI CONSOLE (ultimate) — meter fills from kills; dock for 12 s while four articulated
+   arms (CUT scissors, ENERGY bipolar, FLUID suction-irrigator, LITHO fiber) each pick the enemy they
+   hurt most. Rolling undocks early. 40 s lockout.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var ARM_DEFS = [{ cls: 'CUT', name: 'scissors', base: -2.2, tool: 'scalpel' }, { cls: 'ENERGY', name: 'bipolar', base: -0.9, tool: 'bovie' }, { cls: 'FLUID', name: 'suction', base: 0.9, tool: 'irrigation' }, { cls: 'LITHO', name: 'fiber', base: 2.2, tool: 'holmium' }];
+var ULT_DUR = 12, ULT_LOCK = 40, ULT_REACH = 280;
+function newUlt() { return { have: false, charge: 0, need: 25, active: false, t: 0, lockout: 0, arms: [] }; }
+function ultKill() { var U = G.ult; if (!U || !U.have || U.active || U.lockout > 0) return; if (U.charge < U.need) { U.charge++; if (U.charge >= U.need) { addText(P.x, P.y - 48, 'CONSOLE READY — ' + (Input.mode === 'kb' ? 'R' : 'ULT'), { color: '#38e8ff', size: 15 }); Snd.sfx('jingle'); } } }
+function startUlt() {
+  var U = G.ult; U.active = true; U.t = ULT_DUR; P.docked = true; U.arms = [];
+  for (var i = 0; i < ARM_DEFS.length; i++) { var d = ARM_DEFS[i]; U.arms.push({ def: d, cls: d.cls, i: i, sx: P.x, sy: P.y, tx: P.x + Math.cos(d.base) * 30, ty: P.y + Math.sin(d.base) * 30, target: null, retarget: 0, tick: 0, fxT: 0, ext: 0, idle: rr(0, TAU) }); }
+  setBanner('CONSOLE DOCKED', 'four arms · roll to undock', 1.4); Snd.sfx('buy'); Snd.sfx('swap'); shakeIt(4); burst(P.x, P.y, 20, { color: '#38e8ff', speed: 160, life: 0.5, size: 3 });
+  G.stats.weaponsUsed.davinci = true;
+}
+function endUlt(early) { var U = G.ult; if (!U.active) return; U.active = false; P.docked = false; U.charge = 0; U.lockout = ULT_LOCK; U.arms = []; addText(P.x, P.y - 44, early ? 'UNDOCKED' : 'CONSOLE SPENT', { color: '#9fb6c9', size: 13 }); Snd.sfx('click'); }
+function pickArmTarget(arm, sx, sy) {
+  var best = null, bs = -1e9, es = G.enemies;
+  for (var i = 0; i < es.length; i++) {
+    var e = es[i]; if (!enemyTargetable(e) || e.def.flat || e.id === 'dust') continue; var d = dist(sx, sy, e.x, e.y); if (d > ULT_REACH + e.r) continue;
+    var score;
+    if (e.def.isStump) score = arm.cls === 'ENERGY' ? 5 : -1e9; else score = MATRIX[arm.cls][e.family] * enemyTweak(e, arm.cls, 'davinci') - d / 600 + (e.boss ? 0.4 : 0);
+    if (e.inv) score -= 100;
+    if (score > bs) { bs = score; best = e; }
+  }
+  return best;
+}
+function updateUlt(dt) {
+  var U = G.ult; if (!U) return;
+  if (U.lockout > 0) U.lockout = Math.max(0, U.lockout - dt);
+  if (takeEdge('ult') && U.have && !G.over) {
+    if (!U.active && U.lockout <= 0 && U.charge >= U.need) startUlt();
+    else { Snd.sfx('tink'); addText(P.x, P.y - 44, U.active ? 'ALREADY DOCKED' : U.lockout > 0 ? 'CONSOLE REBOOTING ' + Math.ceil(U.lockout) + 's' : 'CONSOLE ' + U.charge + ' / ' + U.need, { color: '#9fb6c9', size: 12 }); }
+  }
+  if (!U.active) return;
+  U.t -= dt; if (U.t <= 0) { endUlt(false); return; }
+  for (var a = 0; a < U.arms.length; a++) {
+    var arm = U.arms[a], d = arm.def; arm.ext = Math.min(1, arm.ext + dt * 3); arm.fxT = Math.max(0, arm.fxT - dt); arm.idle += dt;
+    arm.sx = P.x + Math.cos(d.base) * 20; arm.sy = P.y + Math.sin(d.base) * 20;
+    arm.retarget -= dt;
+    if (arm.retarget <= 0 || !arm.target || !enemyTargetable(arm.target) || dist(arm.sx, arm.sy, arm.target.x, arm.target.y) > ULT_REACH + arm.target.r + 10) { arm.retarget = 0.3; arm.target = pickArmTarget(arm, arm.sx, arm.sy); }
+    var gx, gy, T = arm.target;
+    if (T) { var dT = dist(arm.sx, arm.sy, T.x, T.y), want = Math.max(10, Math.min(ULT_REACH - 6, dT - T.r * 0.5)), k = want / Math.max(1, dT); gx = arm.sx + (T.x - arm.sx) * k; gy = arm.sy + (T.y - arm.sy) * k; }
+    else { var ia = d.base + Math.sin(arm.idle * 1.5) * 0.25; gx = arm.sx + Math.cos(ia) * 110; gy = arm.sy + Math.sin(ia) * 110; }
+    gx = arm.sx + (gx - arm.sx) * arm.ext; gy = arm.sy + (gy - arm.sy) * arm.ext;
+    var lk = Math.min(1, dt * 9); arm.tx += (gx - arm.tx) * lk; arm.ty += (gy - arm.ty) * lk;
+    if (T && arm.ext >= 1 && dist(arm.tx, arm.ty, T.x, T.y) <= T.r + 34) {
+      arm.tick -= dt;
+      if (arm.tick <= 0) {
+        var aa = ang(arm.tx, arm.ty, T.x, T.y);
+        if (arm.cls === 'CUT') { arm.tick = 0.3; dealDamage(T, 16 * 0.7, 'CUT', { wid: 'davinci', knock: 60, ang: aa, status: { bleed: [3, 4] }, hx: arm.tx, hy: arm.ty }); Snd.sfx('slash'); }
+        else if (arm.cls === 'ENERGY') { arm.tick = 0.15; dealDamage(T, 7 * 0.7, 'ENERGY', { wid: 'davinci', knock: 20, ang: aa, cauterize: true, stun: 0.25, strip: 0.35, hx: arm.tx, hy: arm.ty }); Snd.sfx('arc'); }
+        else if (arm.cls === 'FLUID') { arm.tick = 0.08; dealDamage(T, 2.6 * 0.7, 'FLUID', { wid: 'davinci', knock: 120, ang: aa, strip: 0.09, hx: arm.tx, hy: arm.ty }); Snd.sfx('jet'); }
+        else { arm.tick = 0.08; dealDamage(T, 3.4 * 0.7, 'LITHO', { wid: 'davinci', ang: aa, split: 'dust', hx: arm.tx, hy: arm.ty }); Snd.sfx('beam'); }
+        arm.fxT = 0.12; burst(T.x - Math.cos(aa) * T.r * 0.6, T.y - Math.sin(aa) * T.r * 0.6, 1, { color: CLASSES[arm.cls].color, speed: 80, life: 0.25, size: 2 });
+      }
+    }
+  }
+}
+function drawUltArms(c) {
+  var U = G.ult; if (!U || !U.active) return;
+  // console base under the surgeon
+  c.fillStyle = 'rgba(20,40,52,0.9)'; roundRect(c, P.x - 26, P.y + 10, 52, 14, 6); c.fill(); outline(c, 2.5); c.fillStyle = '#38e8ff'; c.fillRect(P.x - 18, P.y + 14, 8, 3); c.fillRect(P.x - 6, P.y + 14, 8, 3); c.fillRect(P.x + 6, P.y + 14, 8, 3);
+  c.strokeStyle = 'rgba(56,232,255,' + (0.25 + 0.2 * Math.sin(G.realTime * 6)) + ')'; c.lineWidth = 2; c.setLineDash([6, 8]); c.beginPath(); c.arc(P.x, P.y, ULT_REACH + 20, 0, TAU); c.stroke(); c.setLineDash([]);
+  for (var a = 0; a < U.arms.length; a++) {
+    var arm = U.arms[a], col = CLASSES[arm.cls].color, L1 = 130, L2 = 160, dx = arm.tx - arm.sx, dy = arm.ty - arm.sy, dd = clamp(Math.sqrt(dx * dx + dy * dy), 30, L1 + L2 - 2), a0 = Math.atan2(dy, dx);
+    var cosA = clamp((L1 * L1 + dd * dd - L2 * L2) / (2 * L1 * dd), -1, 1), side = (a % 2 === 0) ? -1 : 1, ea = a0 + side * Math.acos(cosA), ex = arm.sx + Math.cos(ea) * L1, ey = arm.sy + Math.sin(ea) * L1;
+    var tipx = arm.sx + Math.cos(a0) * dd, tipy = arm.sy + Math.sin(a0) * dd;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = OUTLINE; c.lineWidth = 15; c.beginPath(); c.moveTo(arm.sx, arm.sy); c.lineTo(ex, ey); c.stroke(); c.lineWidth = 12; c.beginPath(); c.moveTo(ex, ey); c.lineTo(tipx, tipy); c.stroke();
+    c.strokeStyle = '#cfd8e3'; c.lineWidth = 10; c.beginPath(); c.moveTo(arm.sx, arm.sy); c.lineTo(ex, ey); c.stroke(); c.lineWidth = 7; c.beginPath(); c.moveTo(ex, ey); c.lineTo(tipx, tipy); c.stroke();
+    c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 2; c.beginPath(); c.moveTo(arm.sx, arm.sy); c.lineTo(ex, ey); c.moveTo(ex, ey); c.lineTo(tipx, tipy); c.stroke();
+    // joints: shoulder, elbow, wrist
+    c.fillStyle = '#44546a'; c.beginPath(); c.arc(arm.sx, arm.sy, 8, 0, TAU); c.fill(); outline(c, 2.5); c.beginPath(); c.arc(ex, ey, 7, 0, TAU); c.fill(); outline(c, 2.5); c.fillStyle = col; c.beginPath(); c.arc(tipx, tipy, 5.5, 0, TAU); c.fill(); outline(c, 2.2);
+    // instrument at the wrist, pointing at the target
+    var ta = arm.target ? ang(tipx, tipy, arm.target.x, arm.target.y) : a0;
+    c.save(); c.translate(tipx, tipy); c.rotate(ta); drawTool(c, arm.def.tool, 15, col); c.restore();
+    drawGlyph(c, arm.cls, ex, ey - 14, 5, false);
+    // firing fx
+    if (arm.fxT > 0 && arm.target) {
+      var T = arm.target; c.save(); c.globalAlpha = Math.min(1, arm.fxT / 0.06);
+      if (arm.cls === 'CUT') { c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.arc(T.x, T.y, T.r + 4, ta - 0.9, ta + 0.9); c.stroke(); }
+      else if (arm.cls === 'ENERGY') { c.strokeStyle = '#fff7d6'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(tipx, tipy); for (var q = 1; q <= 4; q++) { var kq = q / 4; c.lineTo(lerp(tipx, T.x, kq) + vrr(-5, 5), lerp(tipy, T.y, kq) + vrr(-5, 5)); } c.stroke(); c.strokeStyle = hexA(col, 0.6); c.lineWidth = 5; c.stroke(); }
+      else if (arm.cls === 'FLUID') { c.strokeStyle = hexA(col, 0.45); c.lineWidth = 9; c.beginPath(); c.moveTo(tipx, tipy); c.lineTo(T.x, T.y); c.stroke(); c.strokeStyle = '#bfffd0'; c.lineWidth = 3; c.stroke(); }
+      else { c.strokeStyle = hexA(col, 0.5); c.lineWidth = 6; c.beginPath(); c.moveTo(tipx, tipy); c.lineTo(T.x, T.y); c.stroke(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); }
+      c.restore();
+    }
+  }
+}
+function drawUltMeter(c, rs) {
+  var U = G.ult; if (!U || !U.have) return;
+  var x = (rs.length ? rs[0].x : W / 2) - 46, y = HUD.slotY + 28, r = 20;
+  c.fillStyle = 'rgba(10,22,30,0.9)'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 2; c.stroke();
+  var frac, col, label;
+  if (U.active) { frac = U.t / ULT_DUR; col = '#38e8ff'; label = Math.ceil(U.t) + 's'; }
+  else if (U.lockout > 0) { frac = 1 - U.lockout / ULT_LOCK; col = '#6b7f8f'; label = Math.ceil(U.lockout) + 's'; }
+  else { frac = U.charge / U.need; col = frac >= 1 ? (Math.floor(G.realTime * 6) % 2 ? '#fff' : '#ffd166') : '#ffd166'; label = frac >= 1 ? (Input.mode === 'kb' ? 'R' : 'ULT') : U.charge + '/' + U.need; }
+  c.strokeStyle = col; c.lineWidth = 4; c.beginPath(); c.arc(x, y, r - 3, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(frac, 0, 1)); c.stroke();
+  c.save(); c.translate(x, y - 3); drawTool(c, 'davinci', 13, '#cfd8e3'); c.restore();
+  text(c, label, x, y + r + 9, 9, col, 'center', 900, false);
+  if (!U.active && U.lockout <= 0 && frac >= 1) { c.strokeStyle = 'rgba(255,209,102,' + (0.3 + 0.3 * Math.sin(G.realTime * 8)) + ')'; c.lineWidth = 3; c.beginPath(); c.arc(x, y, r + 4 + Math.sin(G.realTime * 8) * 2, 0, TAU); c.stroke(); }
+}
+/* ── strictures: indestructible bars the Urethrotome can cut (they regrow) ── */
+function cutStrictures(x, y, a, len) {
+  var cx = Math.cos(a), sy = Math.sin(a), obs = G.obstacles, cut = 0;
+  for (var i = 0; i < obs.length; i++) {
+    var o = obs[i]; if (!o.stricture || o.dead) continue;
+    var dx = o.x - x, dy = o.y - y, t = clamp(dx * cx + dy * sy, 0, len), px = x + cx * t, py = y + sy * t;
+    if (dist(px, py, o.x, o.y) <= o.r + 14) { o.dead = true; o.regrowT = 20; cut++; burst(o.x, o.y, 12, { color: '#9fb6c9', speed: 160, life: 0.4, size: 3, kind: 'frag', g: 300 }); addText(o.x, o.y - 22, 'STRICTURE CUT', { color: '#ff4d6d', size: 12 }); Snd.sfx('shatter'); }
+  }
+  return cut;
+}
+function drawStricture(c, o) {
+  c.save(); c.translate(o.x, o.y);
+  if (o.dead) { var k = 1 - clamp(o.regrowT / 20, 0, 1); c.globalAlpha = 0.5; c.fillStyle = '#213a4b'; c.beginPath(); c.arc(-7, -3, o.r * 0.55, 0, TAU); c.fill(); outline(c, 2); c.beginPath(); c.arc(7, 4, o.r * 0.5, 0, TAU); c.fill(); outline(c, 2); c.globalAlpha = 0.8; c.strokeStyle = '#9fb6c9'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, o.r + 5, -Math.PI / 2, -Math.PI / 2 + TAU * k); c.stroke(); }
+  else { c.fillStyle = '#213a4b'; c.beginPath(); c.arc(0, 0, o.r, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#7f98ab'; c.fillRect(-2.5, -o.r + 2, 5, o.r * 2 - 4); c.fillStyle = 'rgba(255,255,255,0.3)'; c.beginPath(); c.arc(-3, -3, 3, 0, TAU); c.fill(); }
+  c.restore();
+}
+
 /* ── pickups ── */
 function spawnPickup(kind, x, y, o) {
   o = o || {}; var a = rr(0, TAU), sp = rr(60, 220);
@@ -2321,7 +2547,7 @@ function startRun() {
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
   G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = [];
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
-  G.plan = { boons: 0, weapons: 0, shops: 0 };
+  G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
   G.bossId = Q.boss === 'fournier' ? 'fournier' : Q.boss === 'staghorn' ? 'staghorn' : (mulberry32(SEED ^ 0x51ab)() < 0.5 ? 'staghorn' : 'fournier');
   var ws = Q.weapons ? Q.weapons.split(',') : ['holmium', 'scalpel'];
@@ -2375,7 +2601,7 @@ function enterRoom(plan) {
   for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.bal = null; w.swing = null; w.lunge = 0; w.fx = null; w.fx2 = null; w.charge = 0; }
   P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0;
   var t = ROOM_TEMPLATES[plan.template].build();
-  for (var o = 0; o < t.obstacles.length; o++) { var ob = t.obstacles[o]; G.obstacles.push({ type: ob.type, x: ob.x, y: ob.y, w: ob.w, h: ob.h, r: ob.r }); }
+  for (var o = 0; o < t.obstacles.length; o++) { var ob = t.obstacles[o]; G.obstacles.push({ type: ob.type, x: ob.x, y: ob.y, w: ob.w, h: ob.h, r: ob.r, stricture: !!ob.stricture, regrowT: 0 }); }
   for (var h = 0; h < t.hazards.length; h++) addHazard({ kind: t.hazards[h].kind, x: t.hazards[h].x, y: t.hazards[h].y, r: t.hazards[h].r });
   if (t.clots) for (var c = 0; c < t.clots.length; c++) spawnEnemy('clot', t.clots[c][0], t.clots[c][1], { instant: true });
   if (plan.reward === 'boon' || plan.reward === 'elite') G.plan.boons++;
@@ -2503,7 +2729,7 @@ function setBanner(text, sub, dur) { G.banner = { text: text, sub: sub, t: 0, du
 function rollWeaponDrop() {
   var pool = [], idx = G.roomIndex;
   for (var i = 0; i < WEAPON_ORDER.length; i++) {
-    var id = WEAPON_ORDER[i]; if (!weaponUnlocked(id)) continue; var wgt = WEAPONS[id].tier === 'core' ? 1 : 0.8;
+    var id = WEAPON_ORDER[i]; if (!weaponUnlocked(id)) continue; if (WEAPONS[id].ultimate && G.ult && G.ult.have) continue; var wgt = WEAPONS[id].tier === 'core' ? 1 : 0.8;
     if ((id === 'bovie' || id === 'loop' || id === 'irrigation') && idx <= 4) wgt = 2.2;
     var owned = null; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === id) owned = G.weapons[k];
     if (owned) wgt *= owned.rarity === 'rare' ? 0.15 : 0.45;
@@ -2886,6 +3112,10 @@ function drawTool(c, id, s, col) {
     case 'brachy': rod(s * 0.3, s * 0.3, '#44546a'); c.fillStyle = col; for (var q = 0; q < 3; q++) { c.beginPath(); c.arc(s * (0.45 + q * 0.2), 0, s * 0.07, 0, TAU); c.fill(); } break;
     case 'foley': rod(s * 0.55, s * 0.16, '#f0c050'); c.fillStyle = hexA(col, 0.6); c.beginPath(); c.arc(s * 0.78, 0, s * 0.26, 0, TAU); c.fill(); outline(c, s * 0.06); break;
     case 'stent': c.strokeStyle = col; c.lineWidth = s * 0.14; c.beginPath(); c.moveTo(-s * 0.3, -s * 0.2); c.quadraticCurveTo(-s * 0.4, s * 0.2, 0, s * 0.1); c.lineTo(s * 0.6, -s * 0.1); c.quadraticCurveTo(s * 1.0, -s * 0.2, s * 0.9, s * 0.2); c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = s * 0.05; c.stroke(); break;
+    case 'hifu': rod(s * 0.45, s * 0.22, '#aab7c6'); c.strokeStyle = '#cfd8e3'; c.lineWidth = s * 0.12; c.beginPath(); c.arc(s * 0.95, 0, s * 0.42, Math.PI * 0.62, Math.PI * 1.38); c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = s * 0.05; c.stroke(); c.strokeStyle = hexA(col, 0.8); c.lineWidth = s * 0.05; c.beginPath(); c.moveTo(s * 0.6, -s * 0.3); c.lineTo(s * 1.05, 0); c.lineTo(s * 0.6, s * 0.3); c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(s * 1.05, 0, s * 0.09, 0, TAU); c.fill(); grip(); break;
+    case 'urethrotome': rod(s * 0.75, s * 0.14, '#aab7c6'); c.fillStyle = '#e8eef5'; c.beginPath(); c.moveTo(s * 0.75, -s * 0.07); c.lineTo(s * 1.0, -s * 0.22); c.lineTo(s * 1.05, -s * 0.02); c.lineTo(s * 0.78, s * 0.08); c.closePath(); c.fill(); outline(c, s * 0.06); c.fillStyle = col; c.fillRect(s * 0.8, -s * 0.03, s * 0.2, s * 0.04); grip(); break;
+    case 'co2': rod(s * 0.5, s * 0.2, '#aab7c6'); c.fillStyle = '#44546a'; c.beginPath(); c.arc(s * 0.55, 0, s * 0.14, 0, TAU); c.fill(); outline(c, s * 0.06); rod(s * 0.9, s * 0.12, '#cfd8e3'); c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(s * 1.02, 0, s * 0.08, 0, TAU); c.fill(); c.strokeStyle = hexA(col, 0.9); c.lineWidth = s * 0.05; c.beginPath(); c.moveTo(s * 0.9, 0); c.lineTo(s * 1.15, 0); c.stroke(); grip(); break;
+    case 'davinci': c.fillStyle = '#44546a'; c.beginPath(); c.arc(0, 0, s * 0.22, 0, TAU); c.fill(); outline(c, s * 0.07); for (var ai = 0; ai < 4; ai++) { var aa0 = -2.2 + ai * 1.45, ex0 = Math.cos(aa0) * s * 0.55, ey0 = Math.sin(aa0) * s * 0.55, tx0 = Math.cos(aa0 + 0.6) * s * 0.95, ty0 = Math.sin(aa0 + 0.6) * s * 0.95; c.strokeStyle = OUTLINE; c.lineWidth = s * 0.16; c.beginPath(); c.moveTo(0, 0); c.lineTo(ex0, ey0); c.lineTo(tx0, ty0); c.stroke(); c.strokeStyle = '#cfd8e3'; c.lineWidth = s * 0.09; c.stroke(); c.fillStyle = [CLASSES.CUT.color, CLASSES.ENERGY.color, CLASSES.FLUID.color, CLASSES.LITHO.color][ai]; c.beginPath(); c.arc(tx0, ty0, s * 0.09, 0, TAU); c.fill(); } break;
     default: rod(s * 0.7, s * 0.2); grip();
   }
   c.restore();
@@ -2936,7 +3166,7 @@ function drawDoors(c) {
 function drawObstacles(c) {
   var obs = G.obstacles;
   for (var i = 0; i < obs.length; i++) {
-    var o = obs[i]; if (o.dead || o.clot) continue;
+    var o = obs[i]; if (o.clot) continue; if (o.stricture) { drawStricture(c, o); continue; } if (o.dead) continue;
     c.fillStyle = '#213a4b';
     if (o.type === 'rect') { roundRect(c, o.x, o.y, o.w, o.h, 8); c.fill(); outline(c, 3); c.fillStyle = 'rgba(255,255,255,0.08)'; roundRect(c, o.x + 4, o.y + 4, o.w - 8, Math.min(10, o.h - 8), 4); c.fill(); }
     else { c.beginPath(); c.arc(o.x, o.y, o.r, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = 'rgba(255,255,255,0.08)'; c.beginPath(); c.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.35, 0, TAU); c.fill(); if (o.r < 12) { c.fillStyle = '#5a7a90'; c.beginPath(); c.arc(o.x, o.y, o.r * 0.5, 0, TAU); c.fill(); } }
@@ -3107,6 +3337,7 @@ function drawFx(c, fx, w) {
     if (fx.kind === 'probe') { var ph = fx.phase || 0; c.strokeStyle = '#aab7c6'; c.lineWidth = 10; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = 2; c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(fx.x1 + Math.cos(fx.a) * (Math.sin(ph) * 4), fx.y1 + Math.sin(fx.a) * (Math.sin(ph) * 4), 7, 0, TAU); c.fill(); outline(c, 2); c.restore(); return; }
     var alpha = Math.min(1, fx.t / 0.05); c.globalAlpha = alpha;
     if (fx.style === 'jet') { c.strokeStyle = hexA(col, 0.35); c.lineWidth = hw * 2.2; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = '#bfffd0'; c.lineWidth = hw * 0.9; c.beginPath(); var n = 8; for (var i = 0; i <= n; i++) { var k = i / n, x = lerp(fx.x0, fx.x1, k) + Math.cos(fx.a + Math.PI / 2) * Math.sin(k * 14 + G.realTime * 40) * 3, y = lerp(fx.y0, fx.y1, k) + Math.sin(fx.a + Math.PI / 2) * Math.sin(k * 14 + G.realTime * 40) * 3; if (i === 0) c.moveTo(x, y); else c.lineTo(x, y); } c.stroke(); c.fillStyle = '#eafff0'; for (var d = 0; d < 4; d++) { c.beginPath(); c.arc(fx.x1 + vrr(-8, 8), fx.y1 + vrr(-8, 8), 2.5, 0, TAU); c.fill(); } }
+    else if (fx.style === 'co2') { var gl = raycast(fx.x0, fx.y0, fx.a, 320); c.strokeStyle = 'rgba(255,70,70,0.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x0 + Math.cos(fx.a) * gl, fx.y0 + Math.sin(fx.a) * gl); c.stroke(); c.fillStyle = '#ff4d4d'; c.beginPath(); c.arc(fx.x0 + Math.cos(fx.a) * gl, fx.y0 + Math.sin(fx.a) * gl, 2.5, 0, TAU); c.fill(); c.strokeStyle = hexA(col, 0.35); c.lineWidth = 5; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = '#fff7e0'; c.lineWidth = 1.8; c.stroke(); }
     else if (fx.style === 'stream') { c.strokeStyle = hexA(col, 0.25); c.lineWidth = hw * 2; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.fillStyle = col; var len = dist(fx.x0, fx.y0, fx.x1, fx.y1), off = (G.realTime * 900) % 18; for (var s = off; s < len; s += 18) { c.beginPath(); c.arc(fx.x0 + Math.cos(fx.a) * s, fx.y0 + Math.sin(fx.a) * s, hw * 0.9, 0, TAU); c.fill(); } }
     else { var wobble = fx.style === 'pulse' ? (Math.floor(G.realTime * 30) % 2 ? 1.6 : 1) : 1; c.strokeStyle = hexA(col, 0.35); c.lineWidth = hw * 2.4 * wobble; c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1, fx.y1); c.stroke(); c.strokeStyle = col; c.lineWidth = hw * 1.1 * wobble; c.stroke(); c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, hw * 0.4); c.beginPath(); c.moveTo(fx.x0, fx.y0); c.lineTo(fx.x1 + vrr(-jit, jit), fx.y1 + vrr(-jit, jit)); c.stroke(); }
     c.fillStyle = '#fff'; c.beginPath(); c.arc(fx.x1, fx.y1, hw * 0.8 + 2, 0, TAU); c.fill(); c.fillStyle = col; c.beginPath(); c.arc(fx.x0, fx.y0, 5, 0, TAU); c.fill();
@@ -3126,6 +3357,11 @@ function drawFx(c, fx, w) {
   } else if (fx.kind === 'suction') {
     c.globalAlpha = 0.6; c.strokeStyle = '#9fb6c9'; c.lineWidth = 2; c.setLineDash([6, 8]); c.lineDashOffset = -G.realTime * 120; c.beginPath(); c.moveTo(P.x, P.y); c.arc(P.x, P.y, fx.rad, fx.a - 0.7, fx.a + 0.7); c.closePath(); c.stroke(); c.setLineDash([]);
     for (var u = 0; u < 3; u++) { var ua = fx.a + vrr(-0.6, 0.6), ud = ((G.realTime * 300 + u * 70) % fx.rad); c.fillStyle = 'rgba(159,182,201,0.5)'; c.beginPath(); c.arc(P.x + Math.cos(ua) * (fx.rad - ud), P.y + Math.sin(ua) * (fx.rad - ud), 3, 0, TAU); c.fill(); }
+  } else if (fx.kind === 'lens') {
+    var pl = 0.5 + 0.5 * Math.sin(G.realTime * 10), lw = fx.rad * (0.55 + 0.45 * fx.v);
+    c.globalAlpha = 0.35; c.strokeStyle = col; c.lineWidth = 1.5; c.setLineDash([4, 6]); c.beginPath(); c.moveTo(fx.mx, fx.my); c.lineTo(fx.x, fx.y - lw * 0.5); c.moveTo(fx.mx, fx.my); c.lineTo(fx.x, fx.y + lw * 0.5); c.stroke(); c.setLineDash([]);
+    c.globalAlpha = 0.25 + 0.35 * fx.v; c.fillStyle = col; c.beginPath(); c.ellipse(fx.x, fx.y, lw, lw * 0.55, 0, 0, TAU); c.fill();
+    c.globalAlpha = 0.9; c.strokeStyle = fx.v >= 1 ? (pl > 0.5 ? '#fff' : col) : col; c.lineWidth = 2.5; c.beginPath(); c.ellipse(fx.x, fx.y, fx.rad, fx.rad * 0.55, 0, 0, TAU); c.stroke(); c.beginPath(); c.moveTo(fx.x - 6, fx.y); c.lineTo(fx.x + 6, fx.y); c.moveTo(fx.x, fx.y - 6); c.lineTo(fx.x, fx.y + 6); c.stroke();
   } else if (fx.kind === 'charge') {
     c.strokeStyle = col; c.lineWidth = 3; c.globalAlpha = 0.9; c.beginPath(); c.arc(fx.x, fx.y, 6 + 26 * (1 - fx.v), 0, TAU); c.stroke(); c.fillStyle = hexA(col, 0.4 + 0.5 * fx.v); c.beginPath(); c.arc(fx.x, fx.y, 4 + 10 * fx.v, 0, TAU); c.fill();
   }
@@ -3244,6 +3480,7 @@ function drawHUD(c) {
     if (active) text(c, w.def.name.toUpperCase() + (mt && mt.label ? ' · ' + mt.label.toUpperCase() : ''), W / 2, HUD.slotY - 14, 10, col, 'center', 900);
   }
   if (G.swapBonusT > 0 && G.swapT <= 0) text(c, 'RIGHT TOOL window', W / 2, HUD.slotY - 28, 9, '#ffd166', 'center', 800);
+  drawUltMeter(c, rs);
   // boss bar
   if (G.boss && !G.boss.dead && G.introT <= 0) {
     var B = G.boss, bw = 420, bx2 = W / 2 - bw / 2, by2 = 72, bf = clamp(B.body.hp / B.body.maxHp, 0, 1);
@@ -3280,6 +3517,7 @@ function drawTouch(c) {
   var cur = curWeapon();
   btn(TL.fire, Input.buttons.fire !== undefined); if (cur) drawGlyph(c, wcls(cur), TL.fire.x, TL.fire.y - 26, 7, false);
   btn(TL.alt, Input.buttons.alt !== undefined); btn(TL.roll, Input.buttons.roll !== undefined, P.rollCd > 0 ? 1 - P.rollCd / 0.8 : 1); btn(TL.swap, Input.buttons.swap !== undefined);
+  if (G.ult && G.ult.have) btn(TL.ult, Input.buttons.ult !== undefined, G.ult.active ? G.ult.t / ULT_DUR : G.ult.lockout > 0 ? 1 - G.ult.lockout / ULT_LOCK : G.ult.charge / G.ult.need);
   if (Input.stick) { var s = Input.stick; c.fillStyle = 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(s.bx, s.by, 52, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 2; c.stroke(); c.fillStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.arc(s.kx, s.ky, 24, 0, TAU); c.fill(); }
   else if (!P.moving && G.time < 20) { var hx = TL.mirror ? W - 120 : 120, hy = H - 110; c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 2; c.setLineDash([6, 6]); c.beginPath(); c.arc(hx, hy, 48, 0, TAU); c.stroke(); c.setLineDash([]); text(c, 'MOVE', hx, hy, 12, 'rgba(255,255,255,0.4)', 'center', 900, false); }
 }
@@ -3313,7 +3551,7 @@ function render(dtReal) {
   for (i = 0; i < es.length; i++) if (!es[i].def.flat && !es[i].boss && !es[i].def.isLobe && !es[i].def.isStump) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].boss) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].def.isLobe || es[i].def.isStump) drawEnemy(c, es[i]);
-  drawPlayer(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
+  drawPlayer(c); drawUltArms(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
   if (DEBUG) { c.strokeStyle = 'rgba(0,255,0,0.6)'; c.lineWidth = 1; for (i = 0; i < es.length; i++) { c.beginPath(); c.arc(es[i].x, es[i].y, es[i].r, 0, TAU); c.stroke(); } c.strokeStyle = 'rgba(255,0,0,0.6)'; for (i = 0; i < G.bullets.length; i++) { c.beginPath(); c.arc(G.bullets[i].x, G.bullets[i].y, G.bullets[i].r, 0, TAU); c.stroke(); } }
   c.restore();
   drawVignette(c); drawHUD(c); drawTouch(c);
@@ -3424,9 +3662,9 @@ function weaponCard(item, mode, onPick) {
   var cv = document.createElement('canvas'); cv.width = 128; cv.height = 128; var c = cv.getContext('2d'); c.scale(2, 2); c.translate(30, 34); c.rotate(-0.5); drawTool(c, item.id, 40, CLASSES[d.cls].color); card.appendChild(cv);
   card.appendChild(el('h4', '', esc(d.name)));
   var owned = null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === item.id) owned = G.weapons[i];
-  card.appendChild(el('div', '', '<span class="tag ' + d.cls + '">' + CLASSES[d.cls].name + (d.modeCls ? ' / Energy' : '') + '</span> <span class="tag ' + (item.rarity || 'common') + '">' + (item.rarity || 'common') + '</span>' + (owned ? ' <span class="tag">owned · ' + owned.rarity + '</span>' : '')));
+  card.appendChild(el('div', '', (d.ultimate ? '<span class="tag epic">ULTIMATE</span>' : '<span class="tag ' + d.cls + '">' + CLASSES[d.cls].name + (d.modeCls ? ' / Energy' : '') + '</span>') + ' <span class="tag ' + (item.rarity || 'common') + '">' + (item.rarity || 'common') + '</span>' + (owned ? ' <span class="tag">owned · ' + owned.rarity + '</span>' : '')));
   card.appendChild(el('div', 'desc', esc(d.desc) + '<br><span style="color:#9fb6c9">' + esc(d.altDesc) + '</span>'));
-  card.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (mode === 'starter' ? 'TAKE THIS' : owned ? (owned.rarity === 'rare' ? 'UPGRADE (+10% dmg)' : 'UPGRADE → ' + RARITY_NEXT[owned.rarity]) : 'TAKE') + '</span>'));
+  card.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (mode === 'starter' ? 'TAKE THIS' : d.ultimate ? (G.ult && G.ult.have ? 'RECHARGE CONSOLE' : 'DOCK IT') : owned ? (owned.rarity === 'rare' ? 'UPGRADE (+10% dmg)' : 'UPGRADE → ' + RARITY_NEXT[owned.rarity]) : 'TAKE') + '</span>'));
   card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); onPick(item); });
   return card;
 }
@@ -3441,11 +3679,11 @@ function openWeaponScreen(o) {
   var item = o.item || (o.crate && o.crate.item); if (!item) { hideScreens(); return; }
   $('weapTitle').textContent = o.paid ? 'Your purchase' : 'Weapon crate'; $('btnWeapLeave').style.display = ''; $('btnWeapLeave').textContent = o.paid ? 'DISCARD' : 'LEAVE IT';
   var owned = null; for (var i = 0; i < G.weapons.length; i++) if (G.weapons[i].id === item.id) owned = G.weapons[i];
-  var full = !owned && G.weapons.length >= G.maxWeapons;
+  var ult = !!WEAPONS[item.id].ultimate, full = !ult && !owned && G.weapons.length >= G.maxWeapons;
   $('weapSub').textContent = full ? 'Your hands are full (' + G.maxWeapons + ' slots). Replace one, or leave it.' : owned ? 'You already carry this — taking it upgrades it.' : 'Take it, or leave it for later.';
   wrap.appendChild(weaponCard(item, 'crate', function (it) {
     if (full) { Snd.sfx('tink'); return; }
-    giveWeapon(it.id, it.rarity); if (!owned) selectWeapon(G.weapons.length - 1); if (crateRef) crateRef.used = true; hideScreens();
+    giveWeapon(it.id, it.rarity); if (!owned && !ult) selectWeapon(G.weapons.length - 1); if (crateRef) crateRef.used = true; hideScreens();
   }));
   if (full) for (var s = 0; s < G.weapons.length; s++) (function (slot) { var w = G.weapons[slot], b = el('button', 'btn small', 'Replace <b style="color:' + CLASSES[wcls(w)].color + '">' + esc(w.def.name) + '</b>'); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); replaceWeapon(slot, item.id, item.rarity); selectWeapon(slot); if (crateRef) crateRef.used = true; hideScreens(); Snd.sfx('buy'); }); sp.appendChild(b); })(s);
 }
@@ -3465,7 +3703,7 @@ function renderShop() {
     var b = el('button', 'btn small' + (it.sold || G.rvu < it.price ? '' : ' primary'), it.sold ? '—' : 'BUY'); b.type = 'button'; b.disabled = it.sold || G.rvu < it.price;
     b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (it.sold || G.rvu < it.price) return; G.rvu -= it.price; it.sold = true; Snd.sfx('buy');
       if (it.kind === 'boon') giveBoon(it.id); else if (it.kind === 'iv') healPlayer(25); else if (it.kind === 'heart') { P.maxHp += 10; healPlayer(10); }
-      else if (it.kind === 'weapon') { var owned = false; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === it.item.id) owned = true; if (owned || G.weapons.length < G.maxWeapons) { giveWeapon(it.item.id, it.item.rarity); } else { openWeaponScreen({ item: it.item, paid: true }); return; } }
+      else if (it.kind === 'weapon') { var owned = false; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === it.item.id) owned = true; if (owned || WEAPONS[it.item.id].ultimate || G.weapons.length < G.maxWeapons) { giveWeapon(it.item.id, it.item.rarity); } else { openWeaponScreen({ item: it.item, paid: true }); return; } }
       renderShop(); });
     line.appendChild(b); list.appendChild(line);
   })(shopRef.stock[i]);
@@ -3495,7 +3733,7 @@ function update(dt) {
   G.introT = Math.max(0, G.introT - dt);
   if (G.banner) { G.banner.t += dt; if (G.banner.t >= G.banner.dur) G.banner = null; }
   if (DEBUG) { if (takeEdge('spawnerToggle')) G.spawner = !G.spawner; if (G.spawner) for (var sk = 0; sk < 10; sk++) if (takeEdge('slot' + ((sk + 1) % 10))) spawnEnemy(SPAWN_KEYS[sk], Input.mode === 'kb' ? Input.mx : rr(300, 800), Input.mode === 'kb' ? Input.my : rr(100, 440), {}); }
-  updatePlayer(dt); updateWeapons(dt);
+  updatePlayer(dt); updateWeapons(dt); updateUlt(dt);
   var es = G.enemies; for (var i = 0; i < es.length; i++) if (!es[i].dead) updateEnemy(es[i], dt);
   for (var j = es.length - 1; j >= 0; j--) if (es[j].dead) es.splice(j, 1);
   updateBoss(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);

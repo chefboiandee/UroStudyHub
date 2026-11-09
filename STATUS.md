@@ -3,6 +3,36 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 7) — 🗡️ Uro Crawl: HIFU, Urethrotome, CO₂ laser, da Vinci ultimate, Condyloma Cluster
+
+Andrew (via the brief): four more instruments on the existing weapon framework plus one benign enemy. Nothing else changed.
+
+**Done (`games/uro-crawl.html`, ~3.8k lines; `tools/uro-crawl.drive.mjs` 92 checks):**
+- **HIFU** (ENERGY, charge): hold ~1 s while a lens marks the focal zone (mouse distance, or alt cycles NEAR/MID/FAR
+  on touch); release = thermal burst (r 46) that ignores biofilm, necrotic and elite armor (`o.pierceArmor`); +25% vs
+  MALIGNANT, prostate another +25% (new per-weapon `dmgMult(e)` hook); 50% move speed while focusing.
+- **Urethrotome** (CUT, thrust): fast 140 px piercing stab + bleed; the only thing that cuts **stricture bars** (the
+  stricture-hall posts are now `stricture: true` obstacles that regrow 20 s after a cut, drawn open with a timer ring);
+  ×2.5 vs clot walls. Alt: cold-knife sweep.
+- **CO₂ laser** (ENERGY, beam): thin 320 px beam, no pierce/bleed, +50% on any weak point (`wpBonus`), strips shields
+  fast; water absorbs it — standing in saline/water, a puddle within 60 px, or a FLUID bolt/goo crossing the line cuts
+  the range to 60 px (`beamInWater`). Red HeNe aiming dot at the end of the guide line. Alt: superpulsed.
+- **da Vinci Console** (ultimate, `WEAPONS.davinci.ultimate`, not a slot): meter beside the weapon bar fills from
+  kills (25); R / ULT button (touch button appears once owned; gamepad Y) docks the surgeon for 12 s while four
+  2-link IK arms (scissors CUT, bipolar ENERGY — can coag stumps —, suction FLUID, fiber LITHO) each pick the enemy
+  they hurt most within 280 px at ×0.7 damage. Rolling undocks early. 40 s lockout. Drops once per run; shop too;
+  `giveWeapon('davinci')` grants it (and tops the meter up if already held).
+- **Condyloma Cluster** (BENIGN, 60 HP, room 2+): cluster of wart-blobs with eyes; dies only to ENERGY — any other kill
+  leaves a dormant root (doesn't block the room) that regrows a wart every 6 s and wakes up. Bestiary entry with the
+  HPV 6/11 fact. All four weapons in `WEAPON_ORDER`, drop pools, cards and unlock levels (hifu 2, co2 2, davinci 3).
+
+**Verified:** headless Chromium, zero console errors; every earlier weapon still passes its damage check; new checks for
+each mechanic above. `?weapons=hifu,urethrotome,co2` and `giveWeapon('davinci')` exercised.
+**Next steps:** Andrew to feel the console on the phone (is the ULT button reachable above ALT?) and whether 25 kills
+is too slow a charge in early rooms. Knobs: `ULT_DUR 12`, `ULT_LOCK 40`, `need: 25`, arm damage ×0.7, HIFU burst 55.
+**Open questions:** should the da Vinci arms respect the Right Tool bonus? Should strictures regrow while you stand in
+the gap (currently they push you out)?
+
 ## 2026-11-09 (later 6) — 🗡️ Uro Crawl: Isaac art direction, Abscess Sac weak point, Fournier's gangrene boss
 
 Andrew (via the brief): shift the look to Binding of Isaac, add a weak-point enemy, add a second "Hydra" boss. Payout
