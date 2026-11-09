@@ -6318,7 +6318,7 @@ var GAMES = [
 { id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
 { id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
 { id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
-{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Type the correct TNM stage to destroy tumors!", color: "#10b981", unlockCost: 350, reqs: { keyboard: true } }
+{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Tap T, N, M and the stage group for each case. AJCC 8th edition, five cancers.", color: "#10b981", unlockCost: 350, reqs: { touch: true } }
 ];
 var deviceNow = getEffectiveDevice(s.devicePref);
 var showAllGames = s.gamesShowAll === true;
@@ -6880,347 +6880,6 @@ var BUZZER_QS = [
 { q: "Cyclophosphamide causes bladder cancer and hemorrhagic cystitis through…", opts: ["Its metabolite acrolein", "Direct alkylation of urothelial DNA", "Immunosuppression", "Radiation sensitization"], why: "Mesna binds acrolein in the urine; hydrate and give mesna with high-dose cyclophosphamide." },
 { q: "Most durable repair for a short (under 2 cm) first-time bulbar stricture?", opts: ["Excision and primary anastomosis", "Repeated dilation", "A second internal urethrotomy", "Perineal urethrostomy"], why: "One urethrotomy is reasonable for a short first-time bulbar stricture; recurrences should go to urethroplasty, not repeat DVIU." }
 ];
-var STAGING_CANCERS = [
-{ name: "Renal Cell Carcinoma", short: "RCC", col: "#ef4444",
-tOpts: ["T1a","T1b","T2a","T2b","T3a","T3b","T3c","T4"],
-nOpts: ["N0","N1"], mOpts: ["M0","M1"],
-stageOpts: ["I","II","III","IV"],
-cases: [
-{ desc: "3.5cm mass, confined to kidney", t: "T1a", n: "N0", m: "M0", stg: "I" },
-{ desc: "5cm mass, confined to kidney", t: "T1b", n: "N0", m: "M0", stg: "I" },
-{ desc: "8cm mass, confined to kidney", t: "T2a", n: "N0", m: "M0", stg: "II" },
-{ desc: "12cm mass, confined to kidney", t: "T2b", n: "N0", m: "M0", stg: "II" },
-{ desc: "Tumor invades perinephric fat, not beyond Gerota's", t: "T3a", n: "N0", m: "M0", stg: "III" },
-{ desc: "Tumor thrombus in renal vein", t: "T3a", n: "N0", m: "M0", stg: "III" },
-{ desc: "Tumor thrombus in IVC below diaphragm", t: "T3b", n: "N0", m: "M0", stg: "III" },
-{ desc: "Tumor thrombus in IVC above diaphragm", t: "T3c", n: "N0", m: "M0", stg: "III" },
-{ desc: "Tumor invades beyond Gerota's fascia", t: "T4", n: "N0", m: "M0", stg: "IV" },
-{ desc: "4cm mass, single hilar lymph node positive", t: "T1a", n: "N1", m: "M0", stg: "III" },
-{ desc: "6cm mass with lung metastasis", t: "T1b", n: "N0", m: "M1", stg: "IV" },
-{ desc: "9cm mass, IVC thrombus, positive nodes", t: "T3b", n: "N1", m: "M0", stg: "III" },
-{ desc: "Tumor invades ipsilateral adrenal (contiguous)", t: "T4", n: "N0", m: "M0", stg: "IV" },
-{ desc: "3cm mass with bone mets", t: "T1a", n: "N0", m: "M1", stg: "IV" },
-]
-},
-{ name: "Bladder Cancer", short: "BCa", col: "#f59e0b",
-tOpts: ["Ta","Tis","T1","T2a","T2b","T3a","T3b","T4a","T4b"],
-nOpts: ["N0","N1","N2","N3"], mOpts: ["M0","M1"],
-stageOpts: ["0a","0is","I","II","IIIA","IIIB","IVA","IVB"],
-cases: [
-{ desc: "Noninvasive papillary carcinoma", t: "Ta", n: "N0", m: "M0", stg: "0a" },
-{ desc: "Carcinoma in situ (flat)", t: "Tis", n: "N0", m: "M0", stg: "0is" },
-{ desc: "Invades lamina propria", t: "T1", n: "N0", m: "M0", stg: "I" },
-{ desc: "Invades inner half of muscularis propria", t: "T2a", n: "N0", m: "M0", stg: "II" },
-{ desc: "Invades outer half of muscularis propria", t: "T2b", n: "N0", m: "M0", stg: "II" },
-{ desc: "Microscopic perivesical tissue invasion", t: "T3a", n: "N0", m: "M0", stg: "IIIA" },
-{ desc: "Macroscopic perivesical mass", t: "T3b", n: "N0", m: "M0", stg: "IIIA" },
-{ desc: "Invades prostate stroma", t: "T4a", n: "N0", m: "M0", stg: "IIIA" },
-{ desc: "Invades pelvic or abdominal wall", t: "T4b", n: "N0", m: "M0", stg: "IIIB" },
-{ desc: "Lamina propria invasion, single pelvic node <2cm", t: "T1", n: "N1", m: "M0", stg: "IIIA" },
-{ desc: "Muscle invasive with pelvic node 2-5cm", t: "T2a", n: "N2", m: "M0", stg: "IIIA" },
-{ desc: "Perivesical invasion, common iliac node positive", t: "T3a", n: "N3", m: "M0", stg: "IIIB" },
-{ desc: "Muscle invasive with distant mets", t: "T2b", n: "N0", m: "M1", stg: "IVB" },
-{ desc: "CIS with single perivesical node", t: "Tis", n: "N1", m: "M0", stg: "IIIA" },
-]
-},
-{ name: "Prostate Cancer", short: "PCa", col: "#3b82f6",
-tOpts: ["T1a","T1b","T1c","T2a","T2b","T2c","T3a","T3b","T4"],
-nOpts: ["N0","N1"], mOpts: ["M0","M1a","M1b"],
-stageOpts: ["I","II","III","IVA","IVB"],
-cases: [
-{ desc: "Incidental, ≤5% of TURP chips, GG1", t: "T1a", n: "N0", m: "M0", stg: "I" },
-{ desc: "Incidental, >5% of TURP chips", t: "T1b", n: "N0", m: "M0", stg: "II" },
-{ desc: "Needle biopsy (elevated PSA), GG2", t: "T1c", n: "N0", m: "M0", stg: "II" },
-{ desc: "Involves ≤half of one lobe on DRE", t: "T2a", n: "N0", m: "M0", stg: "II" },
-{ desc: "Involves >half of one lobe on DRE", t: "T2b", n: "N0", m: "M0", stg: "II" },
-{ desc: "Palpable both lobes on DRE", t: "T2c", n: "N0", m: "M0", stg: "II" },
-{ desc: "Extracapsular extension on MRI", t: "T3a", n: "N0", m: "M0", stg: "III" },
-{ desc: "Seminal vesicle invasion", t: "T3b", n: "N0", m: "M0", stg: "III" },
-{ desc: "Tumor fixed, invades bladder neck", t: "T4", n: "N0", m: "M0", stg: "III" },
-{ desc: "Needle biopsy, GG1, positive obturator node", t: "T1c", n: "N1", m: "M0", stg: "IVA" },
-{ desc: "Both lobes on DRE, bone mets", t: "T2c", n: "N0", m: "M1b", stg: "IVB" },
-{ desc: "ECE with distant lymph node mets", t: "T3a", n: "N0", m: "M1a", stg: "IVB" },
-{ desc: "SVI with positive pelvic nodes", t: "T3b", n: "N1", m: "M0", stg: "IVA" },
-{ desc: "Invades rectum, no nodes, no mets", t: "T4", n: "N0", m: "M0", stg: "III" },
-]
-},
-{ name: "Testicular Cancer", short: "Testis", col: "#8b5cf6",
-tOpts: ["T1","T2","T3","T4"],
-nOpts: ["N0","N1","N2","N3"], mOpts: ["M0","M1a","M1b"],
-stageOpts: ["IA","IB","IS","IIA","IIB","IIC","IIIA","IIIB","IIIC"],
-cases: [
-{ desc: "Confined to testis, no LVI, markers normal post-orchiectomy", t: "T1", n: "N0", m: "M0", stg: "IA" },
-{ desc: "Confined to testis with LVI, markers normal", t: "T2", n: "N0", m: "M0", stg: "IB" },
-{ desc: "Invades spermatic cord, markers normal", t: "T3", n: "N0", m: "M0", stg: "IB" },
-{ desc: "Invades scrotum", t: "T4", n: "N0", m: "M0", stg: "IB" },
-{ desc: "Confined to testis, retroperitoneal nodes <2cm", t: "T1", n: "N1", m: "M0", stg: "IIA" },
-{ desc: "LVI present, retroperitoneal node mass 2-5cm", t: "T2", n: "N2", m: "M0", stg: "IIB" },
-{ desc: "Cord invasion, retroperitoneal mass >5cm", t: "T3", n: "N3", m: "M0", stg: "IIC" },
-{ desc: "Confined to testis, pulmonary mets, normal markers", t: "T1", n: "N0", m: "M1a", stg: "IIIA" },
-{ desc: "Cord invasion, non-pulmonary visceral mets", t: "T3", n: "N0", m: "M1b", stg: "IIIC" },
-{ desc: "Confined to testis, elevated markers post-orchiectomy, no nodes", t: "T1", n: "N0", m: "M0", stg: "IS" },
-{ desc: "LVI, retroperitoneal nodes <2cm, pulmonary mets", t: "T2", n: "N1", m: "M1a", stg: "IIIA" },
-{ desc: "Scrotal invasion, bulky retroperitoneal nodes >5cm", t: "T4", n: "N3", m: "M0", stg: "IIC" },
-]
-},
-{ name: "Upper Tract Urothelial", short: "UTUC", col: "#10b981",
-tOpts: ["Ta","Tis","T1","T2","T3","T4"],
-nOpts: ["N0","N1","N2"], mOpts: ["M0","M1"],
-stageOpts: ["0a","0is","I","II","III","IV"],
-cases: [
-{ desc: "Papillary, noninvasive, renal pelvis", t: "Ta", n: "N0", m: "M0", stg: "0a" },
-{ desc: "CIS of the ureter", t: "Tis", n: "N0", m: "M0", stg: "0is" },
-{ desc: "Invades subepithelial connective tissue", t: "T1", n: "N0", m: "M0", stg: "I" },
-{ desc: "Invades muscularis of renal pelvis", t: "T2", n: "N0", m: "M0", stg: "II" },
-{ desc: "Invades beyond muscularis into peripelvic fat", t: "T3", n: "N0", m: "M0", stg: "III" },
-{ desc: "Invades renal parenchyma or through into perinephric fat", t: "T3", n: "N0", m: "M0", stg: "III" },
-{ desc: "Invades adjacent organs", t: "T4", n: "N0", m: "M0", stg: "IV" },
-{ desc: "Ureteral mass, invades muscle, single regional node <2cm", t: "T2", n: "N1", m: "M0", stg: "III" },
-{ desc: "Beyond muscularis, multiple nodes", t: "T3", n: "N2", m: "M0", stg: "IV" },
-{ desc: "Papillary noninvasive with liver mets", t: "Ta", n: "N0", m: "M1", stg: "IV" },
-{ desc: "Invades subepithelial tissue, single node", t: "T1", n: "N1", m: "M0", stg: "III" },
-{ desc: "Renal pelvis, invades adjacent organs, no nodes", t: "T4", n: "N0", m: "M0", stg: "IV" },
-]
-},
-];
-var STAGE_Q_TYPES = [
-{ key: "t", label: "T stage", col: "#ef4444" },
-{ key: "n", label: "N stage", col: "#38bdf8" },
-{ key: "m", label: "M stage", col: "#a78bfa" },
-{ key: "stg", label: "Overall stage", col: "#fbbf24" },
-];
-function buildStagingQueue(cancer) {
-var qs = [];
-for (var ci = 0; ci < cancer.cases.length; ci++) {
-var c = cancer.cases[ci];
-var types = ["t", "stg"];
-if (Math.random() < 0.5) types.push("n");
-if (Math.random() < 0.5) types.push("m");
-for (var ti = 0; ti < types.length; ti++) {
-var tk = types[ti];
-var qt = null;
-for (var qi = 0; qi < STAGE_Q_TYPES.length; qi++) { if (STAGE_Q_TYPES[qi].key === tk) qt = STAGE_Q_TYPES[qi]; }
-var ans = tk === "t" ? c.t : tk === "n" ? c.n : tk === "m" ? c.m : c.stg;
-qs.push({ desc: c.desc, qType: qt, answer: ans, cancer: cancer.short });
-}
-}
-for (var i = qs.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = qs[i]; qs[i] = qs[j]; qs[j] = tmp; }
-return qs.slice(0, 20); // 20 questions per round
-}
-function StagingSorter() {
-var W = 420, H = 400, FIELD_H = 280;
-var TCOLOR = "#10b981";
-var FALL_BASE = 0.35, FALL_INC = 0.012;
-var SPAWN_BASE = 160, SPAWN_MIN = 70;
-var [sgs, setSgs] = useState("ready");
-var [sScore, setSScore] = useState(0);
-var [sLives, setSLives] = useState(3);
-var [sRwd, setSRwd] = useState(null);
-var [sCancer, setSCancer] = useState(null);
-var [sInput, setSInput] = useState("");
-var [sRenderT, setSRenderT] = useState(0);
-var sLoopRef = useRef(null);
-var sInputRef = useRef(null);
-var SG = useRef({
-enemies: [], // { id, desc, qType, answer, cancer, x, y, speed, targeted }
-queue: [], dispensed: 0, score: 0, lives: 3, streak: 0,
-spawnCD: 0, feedbacks: [], cancer: null, enemyId: 0, killed: 0, targetId: -1,
-inputVal: ""
-});
-function startStaging() {
-var cancer = STAGING_CANCERS[Math.floor(Math.random() * STAGING_CANCERS.length)];
-var q = buildStagingQueue(cancer);
-SG.current = {
-enemies: [], queue: q, dispensed: 0, score: 0, lives: 3, streak: 0,
-spawnCD: 40, feedbacks: [], cancer: cancer, enemyId: 0, killed: 0, targetId: -1,
-inputVal: ""
-};
-setSCancer(cancer); setSScore(0); setSLives(3); setSRwd(null); setSInput("");
-setSgs("playing");
-}
-function endStaging() {
-if (sLoopRef.current) clearInterval(sLoopRef.current);
-sLoopRef.current = null;
-setSgs("over");
-var g = SG.current;
-setSRwd({ coins: Math.ceil(g.score * 0.15), xp: Math.ceil(g.score * 0.08), score: g.score });
-}
-useEffect(function() {
-if (sgs === "playing" && sInputRef.current) sInputRef.current.focus();
-}, [sgs]);
-function handleSubmit(e) {
-if (e) e.preventDefault();
-var g = SG.current;
-var val = g.inputVal.trim().toUpperCase();
-if (!val) return;
-var target = null;
-var bestY = -1;
-for (var i = 0; i < g.enemies.length; i++) {
-if (g.enemies[i].y > bestY) { bestY = g.enemies[i].y; target = g.enemies[i]; }
-}
-if (!target) { g.inputVal = ""; setSInput(""); return; }
-var correct = target.answer.toUpperCase();
-var isCorrect = val === correct || val === correct.replace(/^T/i, "") || ("T" + val) === correct || ("N" + val) === correct || ("M" + val) === correct;
-if (!isCorrect && target.qType.key === "stg") {
-isCorrect = val === correct || "STAGE " + val === "STAGE " + correct;
-}
-if (isCorrect) {
-g.score += 20 + g.streak * 5;
-g.streak++;
-g.killed++;
-g.feedbacks.push({ text: "✓ " + correct + " +" + (20 + (g.streak - 1) * 5), color: "#4ade80", life: 45, x: target.x, y: target.y });
-for (var ri = 0; ri < g.enemies.length; ri++) {
-if (g.enemies[ri].id === target.id) { g.enemies.splice(ri, 1); break; }
-}
-} else {
-g.streak = 0;
-g.feedbacks.push({ text: "✗ " + val + " — try again!", color: "#ef4444", life: 40, x: target.x, y: target.y });
-}
-g.inputVal = "";
-setSInput("");
-setSScore(g.score);
-if (sInputRef.current) sInputRef.current.focus();
-}
-useEffect(function() {
-if (sgs !== "playing") return;
-sLoopRef.current = setInterval(function() {
-var g = SG.current;
-g.spawnCD--;
-if (g.spawnCD <= 0 && g.queue.length > 0 && g.enemies.length < 5) {
-var next = g.queue.shift();
-var laneX = 50 + Math.random() * (W - 100);
-for (var ck = 0; ck < g.enemies.length; ck++) {
-if (Math.abs(g.enemies[ck].x - laneX) < 60 && g.enemies[ck].y < 60) {
-laneX = 50 + Math.random() * (W - 100);
-}
-}
-g.enemies.push({
-id: g.enemyId++, desc: next.desc, qType: next.qType, answer: next.answer,
-cancer: next.cancer, x: laneX, y: -10,
-speed: FALL_BASE + g.dispensed * FALL_INC
-});
-g.dispensed++;
-g.spawnCD = Math.max(SPAWN_MIN, SPAWN_BASE - g.dispensed * 5);
-}
-var toRemove = [];
-for (var i = 0; i < g.enemies.length; i++) {
-g.enemies[i].y += g.enemies[i].speed;
-if (g.enemies[i].y > FIELD_H + 10) {
-g.lives--;
-g.streak = 0;
-g.feedbacks.push({ text: "MISSED! Answer: " + g.enemies[i].answer, color: "#ef4444", life: 55, x: g.enemies[i].x, y: FIELD_H - 20 });
-toRemove.push(i);
-}
-}
-for (var r = toRemove.length - 1; r >= 0; r--) { g.enemies.splice(toRemove[r], 1); }
-for (var fi = g.feedbacks.length - 1; fi >= 0; fi--) {
-g.feedbacks[fi].life--;
-if (g.feedbacks[fi].life <= 0) g.feedbacks.splice(fi, 1);
-}
-if (g.lives <= 0) { endStaging(); return; }
-if (g.queue.length === 0 && g.enemies.length === 0) {
-g.score += 50; // completion bonus
-endStaging(); return;
-}
-setSScore(g.score);
-setSLives(g.lives);
-setSRenderT(function(t) { return t + 1; });
-}, 33);
-return function() { if (sLoopRef.current) clearInterval(sLoopRef.current); };
-}, [sgs]);
-var g = SG.current;
-if (sgs === "ready") {
-return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.95)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
-<div style={{ textAlign: "center", maxWidth: 360, padding: 24 }}>
-<div style={{ fontSize: 48, marginBottom: 8 }}>{"🎯"}</div>
-<div style={{ fontSize: 22, fontWeight: 800, color: TCOLOR, marginBottom: 8 }}>Staging Attack</div>
-<div style={{ fontSize: 13, color: "var(--c-mut)", marginBottom: 16, lineHeight: 1.5 }}>
-Tumors fall from above — each asks for a <span style={{ color: "var(--a-red)" }}>T</span>, <span style={{ color: "var(--a-sky)" }}>N</span>, <span style={{ color: "var(--a-vio)" }}>M</span>, or <span style={{ color: "var(--a-am)" }}>Stage</span>.
-<br />Type the answer and press <b>Enter</b> to destroy them!
-<br />Targets the lowest tumor automatically.
-<br />Don't let them reach the bottom!
-</div>
-<button onClick={startStaging} style={{ padding: "10px 32px", background: TCOLOR, color: "#000", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Start Round</button>
-<div style={{ marginTop: 12 }}>
-<button onClick={function() { setSgs(""); setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13 }}>{"← Back"}</button>
-</div>
-</div>
-</div>
-);
-}
-if (sgs === "over") {
-return (
-<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.95)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
-<div style={{ textAlign: "center", maxWidth: 340, padding: 24 }}>
-<div style={{ fontSize: 36, marginBottom: 8 }}>{"🎯"}</div>
-<div style={{ fontSize: 20, fontWeight: 800, color: TCOLOR, marginBottom: 4 }}>Round Over!</div>
-{sCancer && <div style={{ fontSize: 12, color: sCancer.col, marginBottom: 8 }}>{sCancer.name}</div>}
-<div style={{ fontSize: 28, fontWeight: 900, color: "var(--c-tx)", marginBottom: 4 }}>{sScore} pts</div>
-<div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>{"Tumors destroyed: " + g.killed}</div>
-{sRwd && (
-<div style={{ fontSize: 13, color: "var(--c-mut)", marginBottom: 16 }}>
-{"+" + sRwd.coins + " coins  +" + sRwd.xp + " XP"}
-</div>
-)}
-<div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-<button onClick={startStaging} style={{ padding: "8px 20px", background: TCOLOR, color: "#000", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}>Again</button>
-<button onClick={function() { setSgs(""); setShowGame("select"); }} style={{ padding: "8px 20px", background: "var(--c-cd)", color: "var(--c-tx)", border: "1px solid var(--c-br)", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}>Back</button>
-</div>
-</div>
-</div>
-);
-}
-var targetEnemy = null; var bestY2 = -1;
-for (var te = 0; te < g.enemies.length; te++) {
-if (g.enemies[te].y > bestY2) { bestY2 = g.enemies[te].y; targetEnemy = g.enemies[te]; }
-}
-return (
-<div style={{ position: "fixed", inset: 0, background: "var(--c-dp)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
-<div style={{ width: W, position: "relative" }}>
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", marginBottom: 4 }}>
-<span style={{ fontSize: 12, color: sCancer ? sCancer.col : "var(--c-tx)", fontWeight: 700 }}>{sCancer ? sCancer.short + " Staging" : "Staging"}</span>
-<span style={{ fontSize: 12, color: "var(--c-tx)" }}>{"Score: " + sScore + "  Streak: " + g.streak}</span>
-<span style={{ fontSize: 12, color: sLives <= 1 ? "var(--a-red)" : "var(--c-tx)" }}>{"❤️".repeat(Math.max(0, sLives))}</span>
-<button onClick={function() { if (sLoopRef.current) clearInterval(sLoopRef.current); setSgs(""); setShowGame("select"); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14 }}>{"✕"}</button>
-</div>
-<div style={{ position: "relative", width: W, height: FIELD_H, background: "var(--c-dp2)", borderRadius: "8px 8px 0 0", overflow: "hidden", border: "1px solid var(--c-cd)", borderBottom: "3px solid var(--a-red)" }}>
-<div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 40, background: "linear-gradient(transparent, rgba(239,68,68,0.15))", pointerEvents: "none" }} />
-{g.enemies.map(function(en) {
-var isTarget = targetEnemy && en.id === targetEnemy.id;
-var cardW = 140, cardH = 64;
-var ex = Math.max(4, Math.min(en.x - cardW / 2, W - cardW - 4));
-return (
-<div key={en.id} style={{ position: "absolute", left: ex, top: en.y, width: cardW, background: isTarget ? "var(--c-cd)" : "var(--c-bg)", border: "2px solid " + (isTarget ? en.qType.col : "var(--c-br)"), borderRadius: 8, padding: "5px 8px", boxShadow: isTarget ? "0 0 12px " + en.qType.col + "44" : "none", transition: "border-color 0.15s" }}>
-{isTarget && <div style={{ position: "absolute", top: -10, left: cardW / 2 - 6, fontSize: 10, color: en.qType.col }}>{"▼ TARGET"}</div>}
-<div style={{ fontSize: 8, color: "#64748b", marginBottom: 2 }}>{en.cancer}</div>
-<div style={{ fontSize: 10, color: "var(--c-tx)", lineHeight: 1.3, marginBottom: 3, maxHeight: 24, overflow: "hidden" }}>{en.desc}</div>
-<div style={{ fontSize: 11, fontWeight: 700, color: en.qType.col }}>{en.qType.label + " = ?"}</div>
-</div>
-);
-})}
-{g.feedbacks.map(function(fb, fi) {
-return (
-<div key={fi} style={{ position: "absolute", left: Math.max(10, Math.min(fb.x - 50, W - 110)), top: fb.y - (45 - fb.life) * 0.6, width: 100, textAlign: "center", fontSize: 11, fontWeight: 700, color: fb.color, opacity: Math.min(1, fb.life / 15), pointerEvents: "none" }}>
-{fb.text}
-</div>
-);
-})}
-<div style={{ position: "absolute", top: 4, right: 8, fontSize: 10, color: "var(--c-br2)" }}>
-{"Incoming: " + g.queue.length}
-</div>
-</div>
-<form onSubmit={handleSubmit} style={{ display: "flex", gap: 6, padding: "8px 0", marginTop: 0 }}>
-<input ref={sInputRef} type="text" value={sInput} onChange={function(e) { var v = e.target.value; setSInput(v); SG.current.inputVal = v; }} placeholder={targetEnemy ? "Type " + targetEnemy.qType.label + "..." : "Waiting for targets..."} autoComplete="off" autoCorrect="off" spellCheck="false" style={{ flex: 1, padding: "8px 12px", background: "var(--c-bg)", color: "var(--c-tx)", border: "2px solid " + (targetEnemy ? targetEnemy.qType.col + "88" : "var(--c-br)"), borderRadius: 8, fontSize: 15, fontWeight: 600, outline: "none", fontFamily: "monospace" }} />
-<button type="submit" style={{ padding: "8px 16px", background: TCOLOR, color: "#000", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{"Fire"}</button>
-</form>
-<div style={{ textAlign: "center", fontSize: 10, color: "var(--c-br2)", marginTop: 2 }}>
-{"Type staging values like T3a, N1, M0, III, IVB — Enter to fire"}
-</div>
-</div>
-</div>
-);
-}
 var CARD_COIN_CAP = 150, CARD_XP_CAP = 80;
 function cardRewards(score) {
 var sc = Math.max(0, score || 0);
@@ -7517,6 +7176,286 @@ rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed}
 sub={r.src === "ai" ? "Fresh AI questions" : "Built-in bank"} cutShort={r.lives <= 0 && r.answered < r.qs.length ? "Out of lives" : ""}
 onClaim={function() { var rw = cardRewards(r.score); gameReward(rw.coins, rw.xp, true); setClaimed(true); }}
 onAgain={function() { setBgs("ready"); }} />
+)}
+</GameFrame>
+);
+}
+var STAGING_CANCERS = [
+{ name: "Renal Cell Carcinoma", short: "RCC", col: "#ef4444",
+tOpts: ["T1a", "T1b", "T2a", "T2b", "T3a", "T3b", "T3c", "T4"], nOpts: ["N0", "N1"], mOpts: ["M0", "M1"], stageOpts: ["I", "II", "III", "IV"],
+rules: {
+t: "T1 ≤7 cm (a ≤4, b 4–7) and T2 >7 cm (a 7–10, b >10), confined to the kidney. T3a = perinephric or sinus fat, renal vein or its segmental branches, or the pelvicalyceal system. T3b = IVC below the diaphragm. T3c = IVC above the diaphragm or invading the IVC wall. T4 = beyond Gerota's fascia, including the contiguous adrenal.",
+n: "N1 = any regional node.",
+m: "M1 = any distant site, including a non-contiguous or contralateral adrenal.",
+stg: "I = T1 N0 · II = T2 N0 · III = T3 N0, or T1–3 with N1 · IV = T4 or M1." },
+cases: [
+{ desc: "3.5 cm mass confined to the kidney", t: "T1a", n: "N0", m: "M0", stg: "I" },
+{ desc: "5 cm mass confined to the kidney", t: "T1b", n: "N0", m: "M0", stg: "I" },
+{ desc: "8 cm mass confined to the kidney", t: "T2a", n: "N0", m: "M0", stg: "II" },
+{ desc: "12 cm mass confined to the kidney", t: "T2b", n: "N0", m: "M0", stg: "II" },
+{ desc: "Tumor invades perinephric fat but not beyond Gerota's fascia", t: "T3a", n: "N0", m: "M0", stg: "III" },
+{ desc: "Tumor thrombus in the main renal vein", t: "T3a", n: "N0", m: "M0", stg: "III" },
+{ desc: "5 cm mass invading the pelvicalyceal system", t: "T3a", n: "N0", m: "M0", stg: "III" },
+{ desc: "Tumor thrombus in the IVC below the diaphragm", t: "T3b", n: "N0", m: "M0", stg: "III" },
+{ desc: "Tumor thrombus in the IVC above the diaphragm", t: "T3c", n: "N0", m: "M0", stg: "III" },
+{ desc: "Tumor invades beyond Gerota's fascia", t: "T4", n: "N0", m: "M0", stg: "IV" },
+{ desc: "Tumor invades the ipsilateral adrenal by direct extension", t: "T4", n: "N0", m: "M0", stg: "IV" },
+{ desc: "4 cm mass, one hilar node positive", t: "T1a", n: "N1", m: "M0", stg: "III" },
+{ desc: "6 cm mass with a lung metastasis", t: "T1b", n: "N0", m: "M1", stg: "IV" },
+{ desc: "9 cm mass, IVC thrombus below the diaphragm, positive hilar nodes", t: "T3b", n: "N1", m: "M0", stg: "III" },
+{ desc: "3 cm mass with a bone metastasis", t: "T1a", n: "N0", m: "M1", stg: "IV" },
+{ desc: "6.5 cm mass with a separate 2 cm deposit in the ipsilateral adrenal (not contiguous)", t: "T1b", n: "N0", m: "M1", stg: "IV" }
+] },
+{ name: "Bladder Cancer", short: "Bladder", col: "#f59e0b",
+tOpts: ["Ta", "Tis", "T1", "T2a", "T2b", "T3a", "T3b", "T4a", "T4b"], nOpts: ["N0", "N1", "N2", "N3"], mOpts: ["M0", "M1a", "M1b"], stageOpts: ["0a", "0is", "I", "II", "IIIA", "IIIB", "IVA", "IVB"],
+rules: {
+t: "Ta papillary non-invasive · Tis flat CIS · T1 lamina propria · T2a inner / T2b outer half of the muscularis propria · T3a microscopic / T3b macroscopic perivesical fat · T4a prostatic stroma, seminal vesicles, uterus or vagina · T4b pelvic or abdominal wall.",
+n: "Regional = true pelvis (perivesical, obturator, internal/external iliac, presacral) plus common iliac. N1 = one true-pelvis node · N2 = several · N3 = any common iliac node. Count, not size.",
+m: "M1a = nodes beyond the common iliacs · M1b = any non-nodal distant site.",
+stg: "0a Ta · 0is Tis · I T1 N0 · II T2 N0 · IIIA T3–T4a N0, or T1–T4a with N1 · IIIB T1–T4a with N2–3 · IVA T4b, or M1a · IVB M1b." },
+cases: [
+{ desc: "Non-invasive papillary carcinoma", t: "Ta", n: "N0", m: "M0", stg: "0a" },
+{ desc: "Flat carcinoma in situ only", t: "Tis", n: "N0", m: "M0", stg: "0is" },
+{ desc: "Invades the lamina propria", t: "T1", n: "N0", m: "M0", stg: "I" },
+{ desc: "Invades the inner half of the muscularis propria", t: "T2a", n: "N0", m: "M0", stg: "II" },
+{ desc: "Invades the outer half of the muscularis propria", t: "T2b", n: "N0", m: "M0", stg: "II" },
+{ desc: "Microscopic invasion of perivesical fat", t: "T3a", n: "N0", m: "M0", stg: "IIIA" },
+{ desc: "Macroscopic extravesical mass", t: "T3b", n: "N0", m: "M0", stg: "IIIA" },
+{ desc: "Invades the prostatic stroma", t: "T4a", n: "N0", m: "M0", stg: "IIIA" },
+{ desc: "Invades the pelvic side wall", t: "T4b", n: "N0", m: "M0", stg: "IVA" },
+{ desc: "Lamina propria invasion with one obturator node", t: "T1", n: "N1", m: "M0", stg: "IIIA" },
+{ desc: "Inner-half muscle invasion with three internal iliac nodes", t: "T2a", n: "N2", m: "M0", stg: "IIIB" },
+{ desc: "Microscopic perivesical invasion with a positive common iliac node", t: "T3a", n: "N3", m: "M0", stg: "IIIB" },
+{ desc: "Outer-half muscle invasion with bone metastases", t: "T2b", n: "N0", m: "M1b", stg: "IVB" },
+{ desc: "CIS with one positive perivesical node", t: "Tis", n: "N1", m: "M0", stg: "IIIA" },
+{ desc: "Inner-half muscle invasion with a para-aortic node, nothing else", t: "T2a", n: "N0", m: "M1a", stg: "IVA" },
+{ desc: "Invades the vagina, no nodes, no metastases", t: "T4a", n: "N0", m: "M0", stg: "IIIA" }
+] },
+{ name: "Prostate Cancer", short: "Prostate", col: "#3b82f6",
+tOpts: ["T1a", "T1b", "T1c", "T2a", "T2b", "T2c", "T3a", "T3b", "T4"], nOpts: ["N0", "N1"], mOpts: ["M0", "M1a", "M1b", "M1c"], stageOpts: ["I", "IIA", "IIB", "IIC", "IIIA", "IIIB", "IIIC", "IVA", "IVB"],
+rules: {
+t: "cT1 = not palpable (a ≤5% of TURP chips, b >5%, c needle biopsy for a PSA) · cT2 = palpable and confined (a ≤half of one lobe, b >half of one lobe, c both lobes) · T3a extracapsular · T3b seminal vesicle · T4 fixed, or invading bladder neck, external sphincter, rectum, levator or pelvic wall.",
+n: "N1 = regional (pelvic) nodes.",
+m: "M1a non-regional nodes · M1b bone · M1c other sites.",
+stg: "Needs PSA and grade group (GG). I: T1–2a, PSA <10, GG1 · IIA: T1–2a PSA 10–20 GG1, or T2b–c PSA <20 GG1 · IIB: T1–2 PSA <20 GG2 · IIC: T1–2 PSA <20 GG3–4 · IIIA: T1–2 PSA ≥20 GG1–4 · IIIB: T3–4 GG1–4 · IIIC: GG5, any T · IVA: N1 · IVB: M1." },
+cases: [
+{ desc: "Incidental, 3% of TURP chips, GG1, PSA 4", t: "T1a", n: "N0", m: "M0", stg: "I" },
+{ desc: "Incidental, 20% of TURP chips, GG2, PSA 6", t: "T1b", n: "N0", m: "M0", stg: "IIB" },
+{ desc: "Not palpable; needle biopsy for PSA 7 shows GG2", t: "T1c", n: "N0", m: "M0", stg: "IIB" },
+{ desc: "Nodule in less than half of one lobe on DRE, GG1, PSA 12", t: "T2a", n: "N0", m: "M0", stg: "IIA" },
+{ desc: "More than half of one lobe on DRE, GG1, PSA 8", t: "T2b", n: "N0", m: "M0", stg: "IIA" },
+{ desc: "Both lobes palpable, GG4, PSA 15", t: "T2c", n: "N0", m: "M0", stg: "IIC" },
+{ desc: "Extracapsular extension on MRI and biopsy, GG3, PSA 9", t: "T3a", n: "N0", m: "M0", stg: "IIIB" },
+{ desc: "Seminal vesicle invasion, GG2, PSA 18", t: "T3b", n: "N0", m: "M0", stg: "IIIB" },
+{ desc: "Fixed gland invading the bladder neck, GG4, PSA 30", t: "T4", n: "N0", m: "M0", stg: "IIIB" },
+{ desc: "Not palpable; biopsy for PSA 5 shows GG1; one positive obturator node on PSMA PET", t: "T1c", n: "N1", m: "M0", stg: "IVA" },
+{ desc: "Both lobes palpable, GG4, PSA 40, three bone metastases", t: "T2c", n: "N0", m: "M1b", stg: "IVB" },
+{ desc: "Extracapsular extension, GG3, retroperitoneal (non-regional) nodes only", t: "T3a", n: "N0", m: "M1a", stg: "IVB" },
+{ desc: "Seminal vesicle invasion with positive pelvic nodes, GG4", t: "T3b", n: "N1", m: "M0", stg: "IVA" },
+{ desc: "Invades the rectum, GG5, PSA 22, no nodes, no metastases", t: "T4", n: "N0", m: "M0", stg: "IIIC" },
+{ desc: "Not palpable; biopsy for PSA 6 shows GG5 in two cores", t: "T1c", n: "N0", m: "M0", stg: "IIIC" },
+{ desc: "Nodule in less than half of one lobe, GG1, PSA 25", t: "T2a", n: "N0", m: "M0", stg: "IIIA" },
+{ desc: "Both lobes palpable, GG2, PSA 9, a single liver metastasis", t: "T2c", n: "N0", m: "M1c", stg: "IVB" }
+] },
+{ name: "Testicular Cancer", short: "Testis", col: "#8b5cf6",
+tOpts: ["T1", "T2", "T3", "T4"], nOpts: ["N0", "N1", "N2", "N3"], mOpts: ["M0", "M1a", "M1b"], stageOpts: ["IA", "IB", "IS", "IIA", "IIB", "IIC", "IIIA", "IIIB", "IIIC"],
+rules: {
+t: "pT1 confined to testis/epididymis without LVI (seminoma: a <3 cm, b ≥3 cm) · pT2 LVI, or hilar soft tissue / epididymal invasion, or through the visceral tunica · pT3 spermatic cord · pT4 scrotum.",
+n: "N1 nodes ≤2 cm (≤5 nodes) · N2 2–5 cm or >5 nodes · N3 >5 cm.",
+m: "M1a non-regional nodes or lung · M1b other visceral sites.",
+stg: "Needs S from post-orchiectomy markers (S1: LDH <1.5×, hCG <5,000, AFP <1,000 · S2: LDH 1.5–10×, hCG 5,000–50,000, AFP 1,000–10,000 · S3 above that). IA pT1 N0 S0 · IB pT2–4 N0 S0 · IS N0 M0 with persistently raised markers · IIA/IIB/IIC = N1/N2/N3 with S0–1 · IIIA = M1a with S0–1 · IIIB = S2 (N+ or M1a) · IIIC = S3, or any M1b." },
+cases: [
+{ desc: "Confined to the testis, no LVI; markers normal after orchiectomy", t: "T1", n: "N0", m: "M0", stg: "IA" },
+{ desc: "Confined to the testis with LVI; markers normal", t: "T2", n: "N0", m: "M0", stg: "IB" },
+{ desc: "Invades the spermatic cord; markers normal", t: "T3", n: "N0", m: "M0", stg: "IB" },
+{ desc: "Invades the scrotal wall; markers normal", t: "T4", n: "N0", m: "M0", stg: "IB" },
+{ desc: "No LVI; retroperitoneal nodes 1.5 cm; markers normal", t: "T1", n: "N1", m: "M0", stg: "IIA" },
+{ desc: "LVI; retroperitoneal nodal mass 4 cm; hCG 800, LDH 1.4× normal", t: "T2", n: "N2", m: "M0", stg: "IIB" },
+{ desc: "Cord invasion; retroperitoneal mass 7 cm; markers normal", t: "T3", n: "N3", m: "M0", stg: "IIC" },
+{ desc: "Confined to the testis, no LVI; two lung metastases; markers normal", t: "T1", n: "N0", m: "M1a", stg: "IIIA" },
+{ desc: "Cord invasion; liver metastases; AFP 500", t: "T3", n: "N0", m: "M1b", stg: "IIIC" },
+{ desc: "Confined to the testis; no nodes on CT; AFP still rising 6 weeks after orchiectomy", t: "T1", n: "N0", m: "M0", stg: "IS" },
+{ desc: "LVI; retroperitoneal nodes 1 cm; lung metastases; hCG 2,000", t: "T2", n: "N1", m: "M1a", stg: "IIIA" },
+{ desc: "Scrotal invasion; bulky retroperitoneal nodes 8 cm; markers normal", t: "T4", n: "N3", m: "M0", stg: "IIC" },
+{ desc: "LVI; retroperitoneal nodal mass 3 cm; hCG 20,000, LDH 4× normal", t: "T2", n: "N2", m: "M0", stg: "IIIB" },
+{ desc: "No LVI; retroperitoneal nodes 1.8 cm; AFP 15,000", t: "T1", n: "N1", m: "M0", stg: "IIIC" }
+] },
+{ name: "Upper Tract Urothelial", short: "UTUC", col: "#10b981",
+tOpts: ["Ta", "Tis", "T1", "T2", "T3", "T4"], nOpts: ["N0", "N1", "N2"], mOpts: ["M0", "M1"], stageOpts: ["0a", "0is", "I", "II", "III", "IV"],
+rules: {
+t: "Ta papillary non-invasive · Tis CIS · T1 subepithelial connective tissue · T2 muscularis · T3 = (pelvis) peripelvic fat or renal parenchyma, (ureter) periureteric fat · T4 adjacent organs, or through the kidney into perinephric fat.",
+n: "N1 = one node ≤2 cm · N2 = one node >2 cm, or several nodes.",
+m: "M1 = distant metastasis.",
+stg: "0a Ta · 0is Tis · I T1 N0 · II T2 N0 · III T3 N0 · IV = T4, any node-positive, or M1." },
+cases: [
+{ desc: "Papillary non-invasive tumor of the renal pelvis", t: "Ta", n: "N0", m: "M0", stg: "0a" },
+{ desc: "Carcinoma in situ of the ureter", t: "Tis", n: "N0", m: "M0", stg: "0is" },
+{ desc: "Invades the subepithelial connective tissue", t: "T1", n: "N0", m: "M0", stg: "I" },
+{ desc: "Invades the muscularis of the renal pelvis", t: "T2", n: "N0", m: "M0", stg: "II" },
+{ desc: "Beyond the muscularis into peripelvic fat", t: "T3", n: "N0", m: "M0", stg: "III" },
+{ desc: "Renal pelvis tumor invading the renal parenchyma", t: "T3", n: "N0", m: "M0", stg: "III" },
+{ desc: "Renal pelvis tumor through the kidney into perinephric fat", t: "T4", n: "N0", m: "M0", stg: "IV" },
+{ desc: "Invades the adjacent psoas muscle", t: "T4", n: "N0", m: "M0", stg: "IV" },
+{ desc: "Ureteral tumor invading muscle, one regional node 1.5 cm", t: "T2", n: "N1", m: "M0", stg: "IV" },
+{ desc: "Beyond the muscularis with multiple regional nodes", t: "T3", n: "N2", m: "M0", stg: "IV" },
+{ desc: "Papillary non-invasive tumor with liver metastases", t: "Ta", n: "N0", m: "M1", stg: "IV" },
+{ desc: "Subepithelial invasion with one 3 cm regional node", t: "T1", n: "N2", m: "M0", stg: "IV" },
+{ desc: "Ureteral tumor into periureteric fat, no nodes, no metastases", t: "T3", n: "N0", m: "M0", stg: "III" }
+] }
+];
+var STAGING_ROWS = [
+{ key: "t", label: "T", opts: "tOpts", col: "#ef4444" },
+{ key: "n", label: "N", opts: "nOpts", col: "#38bdf8" },
+{ key: "m", label: "M", opts: "mOpts", col: "#a78bfa" },
+{ key: "stg", label: "Stage", opts: "stageOpts", col: "#fbbf24" }
+];
+function stagingLine(c) { return c.t + " " + c.n + " " + c.m + " · Stage " + c.stg; }
+function StagingAttack() {
+var CASES_PER_ROUND = 8, TIME_PER_CASE = 45, TCOL = "#10b981";
+var best = useGameBest("staging");
+var [sgs, setSgs] = useState("ready"); // ready | playing | reveal | over
+var [pin, setPin] = useState("random"); // "random" or a cancer short name
+var [picks, setPicks] = useState({}); // { t, n, m, stg }
+var [claimed, setClaimed] = useState(false);
+var [tick, setTick] = useState(0);
+var R = useRef(null); // the run: { cancer, deck, idx, score, streak, bestStreak, full, parts, misses, newBest }
+var lastCancer = useRef("");
+var gsRef = useRef(sgs); gsRef.current = sgs;
+var picksRef = useRef(picks); picksRef.current = picks;
+function pickCancer() {
+if (pin !== "random") { for (var i = 0; i < STAGING_CANCERS.length; i++) if (STAGING_CANCERS[i].short === pin) return STAGING_CANCERS[i]; }
+var pool = STAGING_CANCERS.filter(function(c) { return c.short !== lastCancer.current; });
+return pool[Math.floor(Math.random() * pool.length)];
+}
+function begin() {
+primeGameAudio();
+var cancer = pickCancer(); lastCancer.current = cancer.short;
+R.current = { cancer: cancer, deck: shuffleArr(cancer.cases).slice(0, CASES_PER_ROUND), idx: 0, score: 0, streak: 0, bestStreak: 0, full: 0, parts: 0, misses: [], newBest: false };
+setPicks({}); setClaimed(false);
+gsRef.current = "playing"; setSgs("playing"); gameSfx.flip();
+}
+function grade(timeLeft) { // called by Stage it ▸ and by the clock
+var r = R.current; if (!r || gsRef.current !== "playing") return;
+var c = r.deck[r.idx], p = picksRef.current, wrong = [], right = 0;
+STAGING_ROWS.forEach(function(row) { if (p[row.key] === c[row.key]) right++; else wrong.push(row); });
+r.parts += right;
+var pts = right * 5;
+if (wrong.length === 0) {
+r.full++; r.streak++; if (r.streak > r.bestStreak) r.bestStreak = r.streak;
+pts += 10 + Math.min(5, Math.floor(timeLeft / 9)) + Math.min(10, (r.streak - 1) * 2);
+gameSfx.ok(r.streak);
+} else {
+r.streak = 0;
+var you = STAGING_ROWS.map(function(row) { return p[row.key] || "—"; });
+r.misses.push({
+prompt: r.cancer.short + ": " + c.desc,
+you: Object.keys(p).length ? you[0] + " " + you[1] + " " + you[2] + " · Stage " + you[3] : null,
+answer: stagingLine(c),
+why: wrong.map(function(row) { return row.label + ": " + r.cancer.rules[row.key]; }).join(" ")
+});
+gameSfx.bad();
+}
+r.score += pts;
+r.lastWrong = wrong; r.lastPts = pts;
+gsRef.current = "reveal"; setSgs("reveal");
+}
+function next() {
+var r = R.current; if (!r || gsRef.current !== "reveal") return;
+setPicks({});
+if (r.idx + 1 >= r.deck.length) {
+r.newBest = best.record(r.score);
+gsRef.current = "over"; setSgs("over");
+if (r.full === r.deck.length) gameSfx.fanfare(); else gameSfx.over();
+return;
+}
+r.idx++; gsRef.current = "playing"; setSgs("playing"); gameSfx.flip();
+}
+var time = useRoundTimer(sgs === "playing", TIME_PER_CASE, R.current ? R.current.idx : 0, function() { grade(0); });
+var timeRef = useRef(time); timeRef.current = time;
+useEffect(function() { // Enter = Stage it / next case
+if (sgs !== "playing" && sgs !== "reveal") return;
+function kd(e) {
+if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+if (e.key !== "Enter") return;
+e.preventDefault();
+if (gsRef.current === "reveal") next();
+else if (Object.keys(picksRef.current).length === 4) grade(timeRef.current);
+}
+window.addEventListener("keydown", kd);
+return function() { window.removeEventListener("keydown", kd); };
+}, [sgs]);
+var r = R.current, cancer = r && r.cancer, cur = r && r.deck[r.idx];
+var allPicked = Object.keys(picks).length === 4;
+var how = [
+"One case at a time. Tap a T, an N, an M and the stage group, then Stage it ▸ (or Enter).",
+CASES_PER_ROUND + " cases a round from one cancer, " + TIME_PER_CASE + " s each. 5 points per component, a bonus for the full house, speed and streaks.",
+"AJCC 8th edition. Wrong components show the rule on the spot, and misses come back in the debrief."
+];
+var chipCancers = [{ short: "random", icon: "🎲", name: "Random cancer", col: TCOL }].concat(STAGING_CANCERS.map(function(c) { return { short: c.short, icon: "", name: c.name, col: c.col }; }));
+return (
+<GameFrame title="Staging Attack" icon="🎯" color={cancer ? cancer.col : TCOL} width={420}>
+{sgs === "ready" && (
+<ReadyCard icon="🎯" title="Staging Attack" color={TCOL} sub="Stage the case: T, N, M and the group." how={how} best={best.get()}>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center" }}>
+{chipCancers.map(function(c) {
+var on = pin === c.short;
+return <button key={c.short} onClick={function() { setPin(c.short); }} style={{ padding: "5px 9px", borderRadius: 999, border: "1px solid " + (on ? c.col : "var(--c-br)"), background: on ? c.col + "22" : "var(--c-bg)", color: on ? c.col : "var(--c-mut)", fontSize: 10, fontWeight: 700, cursor: "pointer", minHeight: 30 }}>{(c.icon ? c.icon + " " : "") + c.name}</button>;
+})}
+</div>
+<div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 280 }}>
+<button onClick={begin} style={bigBtn(TCOL)}>Start round ▸</button>
+<div style={{ fontSize: 9, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>{STAGING_CANCERS.reduce(function(n, c) { return n + c.cases.length; }, 0) + " cases across " + STAGING_CANCERS.length + " cancers. Prostate cases carry PSA and grade group, testis cases carry markers: you need them for the group."}</div>
+</div>
+</ReadyCard>
+)}
+{(sgs === "playing" || sgs === "reveal") && cur && (
+<div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 14 }}>
+<RunHud color={cancer.col} score={r.score} idx={r.idx} total={r.deck.length} streak={r.streak} time={time} timeMax={TIME_PER_CASE} />
+<div style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+<div data-stg-case={cur.desc} style={{ background: "var(--c-bg)", borderRadius: 10, padding: "10px 14px", border: "1px solid " + cancer.col + "55" }}>
+<div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, color: cancer.col, marginBottom: 3 }}>{cancer.name.toUpperCase()}</div>
+<div style={{ fontSize: 13, fontWeight: 700, color: "var(--c-tx)", lineHeight: 1.45 }}>{cur.desc}</div>
+</div>
+{STAGING_ROWS.map(function(row) {
+var opts = cancer[row.opts], mine = picks[row.key], reveal = sgs === "reveal", ans = cur[row.key];
+return (
+<div key={row.key} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+<div style={{ width: 38, flexShrink: 0, fontSize: 11, fontWeight: 800, color: row.col, paddingTop: 7 }}>{row.label}</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
+{opts.map(function(o) {
+var on = mine === o, isAns = reveal && o === ans, isBad = reveal && on && o !== ans;
+var bd = isAns ? "#4ade80" : isBad ? "#ef4444" : on ? row.col : "var(--c-br)";
+var bg = isAns ? "#4ade8022" : isBad ? "#ef444422" : on ? row.col + "26" : "var(--c-bg)";
+var col = isAns ? "var(--a-grn)" : isBad ? "var(--a-red)" : on ? row.col : "var(--c-mut)";
+return <button key={o} data-stg-chip={row.key + ":" + o} data-ok={isAns ? "1" : undefined} disabled={reveal} onClick={function() { var np = Object.assign({}, picksRef.current); np[row.key] = o; setPicks(np); gameSfx.tick(); }} style={{ padding: "6px 9px", minWidth: 36, minHeight: 32, borderRadius: 8, border: (on || isAns ? "2px" : "1px") + " solid " + bd, background: bg, color: col, fontSize: 11, fontWeight: 800, cursor: reveal ? "default" : "pointer", fontFamily: "monospace" }}>{o}</button>;
+})}
+</div>
+</div>
+);
+})}
+{sgs === "reveal" ? (
+<div style={{ padding: "8px 12px", borderRadius: 8, background: r.lastWrong.length ? "#ef444412" : "#4ade8012", border: "1px solid " + (r.lastWrong.length ? "#ef444440" : "#4ade8040"), fontSize: 11, lineHeight: 1.5 }}>
+<div style={{ fontWeight: 800, color: r.lastWrong.length ? "var(--a-red)" : "var(--a-grn)", marginBottom: r.lastWrong.length ? 4 : 0 }}>
+{r.lastWrong.length ? "✗ " + stagingLine(cur) + "  (+" + r.lastPts + ")" : "✓ Full house: " + stagingLine(cur) + "  (+" + r.lastPts + (r.streak >= 2 ? " · " + r.streak + " in a row" : "") + ")"}
+</div>
+{r.lastWrong.map(function(row) { return <div key={row.key} style={{ color: "var(--c-mut)", marginTop: 3 }}><b style={{ color: row.col }}>{row.label + ": "}</b>{cancer.rules[row.key]}</div>; })}
+{r.lastWrong.length === 0 && <div style={{ color: "var(--c-mut)", marginTop: 3 }}>{cancer.rules.stg}</div>}
+</div>
+) : null}
+{sgs === "playing" ? (
+<button onClick={function() { grade(timeRef.current); }} disabled={!allPicked} style={Object.assign(bigBtn(cancer.col), { width: "100%", opacity: allPicked ? 1 : 0.45, cursor: allPicked ? "pointer" : "default" })}>{allPicked ? "Stage it ▸" : "Pick T, N, M and the stage"}</button>
+) : (
+<button onClick={next} style={Object.assign(bigBtn(cancer.col), { width: "100%" })}>{r.idx + 1 >= r.deck.length ? "See results ▸" : "Next case ▸"}</button>
+)}
+</div>
+</div>
+)}
+{sgs === "over" && r && (
+<OverCard color={cancer.col} score={r.score} best={best.get()} newBest={r.newBest} correct={r.full} total={r.deck.length} bestStreak={r.bestStreak}
+rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed}
+sub={cancer.name + " · " + r.parts + "/" + (r.deck.length * 4) + " components right"}
+onClaim={function() { var rw = cardRewards(r.score); gameReward(rw.coins, rw.xp, true); setClaimed(true); }}
+onAgain={function() { setSgs("ready"); }} againLabel="New round" />
 )}
 </GameFrame>
 );
@@ -7886,7 +7825,7 @@ if (showGame === "preop") return React.createElement(PreOpPlease, null);
 if (showGame === "squadron") return React.createElement(StoneSquadron, null);
 if (showGame === "drugmatch") return React.createElement(DrugMatch, null);
 if (showGame === "buzzer") return React.createElement(BoardBuzzer, null);
-if (showGame === "staging") return React.createElement(StagingSorter, null);
+if (showGame === "staging") return React.createElement(StagingAttack, null);
 if (showGame === "snap") return React.createElement(SnapDecisionGame, null);
 return null;
 }, [showGame, showGame === "select" ? gameTab : null, showGame === "select" ? s : null]);
