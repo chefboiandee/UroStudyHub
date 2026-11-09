@@ -242,20 +242,20 @@ await block('C. buzzer', async () => {
   check('Drug Match opens', await p.getByText('Start Sorting').count() === 1);
   await btn(p, /< Games/).click();
   await btn(p, /Staging Attack/).first().click();
-  check('Staging Attack opens', await p.getByText(/Stage the case/).count() === 1);
+  check('Staging Attack opens', await p.getByText(/Survive the waves/).count() === 1);
   errCheck('C end', errs);
   await ctx.close();
 });
 
-// ───────── D. Staging Attack (tap-to-stage) ─────────
+// ───────── D. Staging Attack (survival shooter) ─────────
 await block('D. staging', async () => {
   // the case data, read from the served page so the oracle matches what runs there
   const html = await (await fetch(PAGE_URL)).text();
   const m = html.match(/var STAGING_CANCERS = (\[[\s\S]*?\n\s*\]);\s*var STAGING_ROWS/);
   check('staging data found in page', !!m);
   const DATA = new Function('return ' + m[1] + ';')();
+  const ROWOPTS = { t: 'tOpts', n: 'nOpts', m: 'mOpts', stg: 'stageOpts' };
   const byDesc = {}; DATA.forEach((c) => c.cases.forEach((k) => { byDesc[k.desc] = k; }));
-  // every case's stage group must be one of the cancer's options, and T/N/M in theirs
   let bad = [];
   DATA.forEach((c) => c.cases.forEach((k) => { if (c.tOpts.indexOf(k.t) < 0 || c.nOpts.indexOf(k.n) < 0 || c.mOpts.indexOf(k.m) < 0 || c.stageOpts.indexOf(k.stg) < 0) bad.push(c.short + ': ' + k.desc); }));
   check('every case answerable from the chip rows', bad.length === 0, bad.join('; '));
@@ -264,42 +264,57 @@ await block('D. staging', async () => {
   const { ctx, p, errs } = await open({ uroStudyHub_mode: 'light', uroStudyHub_admin: 'true', uroStudyHub_progress: JSON.stringify({ role: 'resident', coins: 0, xp: 0 }), uroStudyHub_activePlan: 'aua' });
   await openArcade(p);
   await btn(p, /Staging Attack/).first().click();
-  await btn(p, /Prostate Cancer/).click();
-  await btn(p, /^Start round/).click();
-  await p.locator('[data-stg-case]').first().waitFor();
-  check('Stage it disabled until four picks', await btn(p, /Pick T, N, M/).isDisabled());
-  let full = 0, missed = 0, expectedScoreMin = 0;
-  for (let i = 0; i < 8; i++) {
-    const desc = await p.locator('[data-stg-case]').getAttribute('data-stg-case');
-    const k = byDesc[desc];
-    check('case ' + (i + 1) + ' is in the data', !!k, desc);
-    const wrongOne = i === 2; // one deliberate miss on the stage group
-    for (const [key, val] of [['t', k.t], ['n', k.n], ['m', k.m], ['stg', k.stg]]) {
-      let v = val;
-      if (wrongOne && key === 'stg') { const opts = DATA.find((c) => c.name === 'Prostate Cancer').stageOpts; v = opts.find((o) => o !== val); }
-      await p.locator('[data-stg-chip="' + key + ':' + v + '"]').click();
-    }
-    if (i === 0) await p.keyboard.press('Enter'); else await btn(p, /Stage it/).click();
-    const fb = p.getByText(/Full house|✗ /).first();
-    await fb.waitFor({ timeout: 3000 });
-    const txt = await fb.innerText();
-    if (wrongOne) { missed++; check('deliberate miss shows the stage rule', /✗/.test(txt) && (await p.getByText(/Needs PSA and grade group/).count()) >= 1); }
-    else { full++; check('full house ' + (i + 1), /Full house/.test(txt), txt); }
-    check('correct chips marked on reveal', (await p.locator('[data-ok="1"]').count()) === 4);
-    await (i < 7 ? btn(p, /Next case/) : btn(p, /See results/)).click();
+  await btn(p, /Random, mixed from wave 3/).click();
+  await btn(p, /^Start ▸/).click();
+  const tgtEl = p.locator('[data-stg-target-q]');
+  async function waitTarget() {
+    await p.waitForFunction(() => { const el = document.querySelector('[data-stg-target-q]'); return !!(el && el.getAttribute('data-stg-target-q')); }, null, { timeout: 10000 });
+    return { q: await tgtEl.getAttribute('data-stg-target-q'), desc: await tgtEl.getAttribute('data-stg-target-case'), ca: await tgtEl.getAttribute('data-stg-target-cancer') };
   }
-  await p.getByText(/Round complete|Perfect round/).waitFor();
+  const seen = new Set(); let unknown = 0, popped = 0;
+  for (let i = 0; i < 26; i++) {
+    const t = await waitTarget(); const k = byDesc[t.desc];
+    if (!k) { unknown++; break; }
+    seen.add(t.ca);
+    const ans = k[t.q];
+    if (i === 0) { await p.keyboard.type(ans.toLowerCase()); await p.keyboard.press('Enter'); }
+    else if (i === 1) {
+      const wrong = DATA.find((c) => c.short === t.ca)[ROWOPTS[t.q]].find((o) => o !== ans);
+      await p.locator('[data-stg-chip="' + t.q + ':' + wrong + '"]').click();
+      await p.waitForTimeout(150);
+      check('wrong chip keeps the case on the field', (await tgtEl.getAttribute('data-stg-target-case')) === t.desc);
+      await p.locator('[data-stg-chip="' + t.q + ':' + ans + '"]').click();
+    } else if (i === 5) {
+      await btn(p, /^⏸$/).click();
+      check('pause overlay', (await p.getByText(/⏸ Paused/).count()) === 1);
+      await p.waitForTimeout(800);
+      await btn(p, /Resume/).click();
+      check('resumed', (await p.getByText(/⏸ Paused/).count()) === 0);
+      await p.locator('[data-stg-chip="' + t.q + ':' + ans + '"]').click();
+    } else {
+      await p.locator('[data-stg-chip="' + t.q + ':' + ans + '"]').click();
+    }
+    popped++;
+    await p.waitForFunction((d) => { const el = document.querySelector('[data-stg-target-q]'); return !el || el.getAttribute('data-stg-target-case') !== d; }, t.desc, { timeout: 3000 }).catch(() => {});
+  }
+  check('all 26 targets were known cases', unknown === 0 && popped === 26, popped + ' popped');
+  const hud = await p.locator('body').innerText();
+  check('wave 3 reached', /Wave 3/.test(hud));
+  check('mixed cancers from wave 3', seen.size >= 2, [...seen].join(','));
+  check('all lives still there', (await p.locator('[data-stg-lives]').getAttribute('data-stg-lives')) === '3');
+  // now stop answering and let it overwhelm us
+  await p.getByText(/Overwhelmed on wave/).waitFor({ timeout: 90000 });
   const over = await p.locator('body').innerText();
-  check('debrief: 7/8 full houses', /✓ 7\/8/.test(over) && /31\/32 components right/.test(over), over.match(/✓ \d+\/\d+[^\n]*\n[^\n]*/) && over.match(/components right/)[0]);
-  check('debrief: the miss with the rule', /REVIEW · 1 MISSED/.test(over) && /Needs PSA and grade group/.test(over));
+  check('debrief: 3 misses, 26 popped', /✓ 26\/29/.test(over) && /REVIEW · 3 MISSED/.test(over) && /Ran out of time/.test(over), (over.match(/✓ \d+\/\d+/) || [''])[0]);
+  check('debrief: rule lines on the misses', (over.match(/T1 ≤7 cm|Ta papillary|cT1 = not palpable|pT1 confined|Regional = true pelvis|N1 = |N1 nodes|M1 = |M1a |Needs PSA|Needs S|0a Ta|I = T1 N0/g) || []).length >= 3);
+  const score = +((over.match(/\n(\d+)\n/) || [0, 0])[1]);
+  check('score counted', score > 400, 'score=' + score);
   await btn(p, /^Claim/).click();
   await p.waitForTimeout(300);
   const pr = await getProg(p);
-  check('staging best persisted', pr.gameBest && pr.gameBest.staging > 100, JSON.stringify(pr.gameBest));
-  // random cancer round starts and the HUD counts
-  await btn(p, /New round/).click(); await btn(p, /Random cancer/).click(); await btn(p, /^Start round/).click();
-  await p.locator('[data-stg-case]').first().waitFor();
-  check('random round dealt', (await p.locator('text=/^1\\/8$/').count()) === 1);
+  check('staging best persisted', pr.gameBest && pr.gameBest.staging === score, JSON.stringify(pr.gameBest));
+  await btn(p, /Play again/).click();
+  check('back to the ready card', (await p.getByText(/Survive the waves/).count()) === 1);
   errCheck('D end', errs);
   await ctx.close();
 });
