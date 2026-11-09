@@ -6318,7 +6318,8 @@ var GAMES = [
 { id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
 { id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
 { id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
-{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } }
+{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } },
+{ id: "crawl", name: "Uro Crawl", icon: "🗡️", desc: "Dungeon crawler through a diseased urinary tract. No quiz: lasers break stones, loops cut tumours, water flushes clots. Touch or mouse.", color: "#38e8ff", unlockCost: 250, reqs: {} }
 ];
 var deviceNow = getEffectiveDevice(s.devicePref);
 var showAllGames = s.gamesShowAll === true;
@@ -6525,6 +6526,27 @@ return function() { window.removeEventListener("message", onMsg); };
 return (
 <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#0a1118", paddingTop: "env(safe-area-inset-top)" }}>
 <iframe ref={frameRef} src="games/uro-rush.html?embed=1" title="Uro Rush" allow="autoplay" style={{ border: 0, width: "100%", height: "100%", display: "block" }} />
+</div>
+);
+}
+function UroCrawl() {
+var frameRef = useRef(null);
+useEffect(function() {
+function onMsg(e) {
+if (e.origin !== window.location.origin || !frameRef.current || e.source !== frameRef.current.contentWindow) return;
+var d = e.data || {};
+if (d.type === "crawl:result") {
+var rooms = Math.max(0, Math.min(9, d.rooms | 0)), kills = Math.max(0, Math.min(400, d.kills | 0));
+var coins = Math.min(150, rooms * 8 + Math.floor(kills / 4) + (d.won ? 50 : 0)), xp = Math.min(80, rooms * 5 + (d.won ? 35 : 0));
+if (coins > 0 || xp > 0) gameReward(coins, xp, true); // the game shows its own summary; stay open
+} else if (d.type === "crawl:exit") setShowGame("");
+}
+window.addEventListener("message", onMsg);
+return function() { window.removeEventListener("message", onMsg); };
+}, []);
+return (
+<div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#07111a", paddingTop: "env(safe-area-inset-top)" }}>
+<iframe ref={frameRef} src="games/uro-crawl.html?embed=1" title="Uro Crawl" allow="autoplay; gamepad" style={{ border: 0, width: "100%", height: "100%", display: "block" }} />
 </div>
 );
 }
@@ -7971,6 +7993,7 @@ if (showGame === "squadron") return React.createElement(StoneSquadron, null);
 if (showGame === "drugmatch") return React.createElement(DrugMatch, null);
 if (showGame === "buzzer") return React.createElement(BoardBuzzer, null);
 if (showGame === "staging") return React.createElement(StagingAttack, null);
+if (showGame === "crawl") return React.createElement(UroCrawl, null);
 if (showGame === "snap") return React.createElement(SnapDecisionGame, null);
 return null;
 }, [showGame, showGame === "select" ? gameTab : null, showGame === "select" ? s : null]);

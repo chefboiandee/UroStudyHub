@@ -3,6 +3,46 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 5) — 🗡️ Uro Crawl: a dungeon-crawler roguelike (new arcade game, own page)
+
+Brief: a Hades / Gungeon-style top-down roguelike set inside a diseased urinary tract. Not a quiz: the learning is
+osmosis (lasers break stones, loops cut tumours, heat burns bugs and lobes, water flushes clots and strips biofilm)
+plus one-line bestiary facts.
+
+**Done (`games/uro-crawl.html`, ~3.3k lines, one file, no deps, old-engine safe — no `?.`/`??`/`.at`/`#private`):**
+- Core: 960×540 canvas letterboxed, fixed 1/60 step with accumulator, hit-stop, slow-mo, auto-pause when hidden,
+  object pools with swap-removal, particle quality setting. Keyboard+mouse, multi-touch (floating left stick, FIRE
+  with auto-aim that prefers the enemy your weapon is best against, SWAP/ALT/ROLL, tappable slots), gamepad.
+- Rock–paper–scissors: 4 classes (LITHO ◆ cyan, CUT ▲ red, ENERGY ⚡ amber, FLUID 💧 green) × 5 families via `MATRIX`;
+  weakness/resistance pips over every health bar, class-coloured numbers, SUPER EFFECTIVE / RESISTED flair, 0.25 s
+  swap delay and the +25% Right Tool bonus. Statuses: bleed→cauterize, burn, chill→frozen→shatter, stun, poison,
+  biofilm shield (90% block until stripped), immune mark, reveal.
+- 19 weapons (`WEAPONS` table, each primary + alt): Holmium (dust/fragment, heat), Scalpel (lunge), Loop (with Button
+  and Roller attachments), Bovie (cut/coag, chain, fizzles in saline), Trilogy (suction alt), ESWL (charged ring),
+  Roller Ball, Irrigation (overpressure), Basket (grab + hurl), Thulium, Button, Greenlight, Aquablation, Rezum, Cryo,
+  Biopsy gun, Brachy seeds, Foley balloon, Stent turret. Rarities upgrade duplicates.
+- 26 enemies (`ENEMIES`): 8 stones, 5 microbes, 6 malignant (RCC mini-boss), 5 benign, clot walls, boss parts; each
+  with a telegraphed attack, cartoon art, a real fact. 36 boons (`BOONS`: chemo/antibiotic/medical/gear, two duo
+  boons). 10 room templates, Hades-style door icons (combat/boon/heal/shop/elite/mystery/rest/boss), 9-room run with
+  guaranteed ≥2 altars and ≥2 crates by room 6, pre-boss call room, shop with doctor-bro patter.
+- Boss: the Staghorn (Shell → Infection → Core), forces a swap in phase 2 (biofilm + swarm), fragmentation bursts you
+  can suck up with the Trilogy. Death/win summaries, Residency XP + unlocks + scrub colours, bestiary, settings.
+- Hooks for tests: `?seed ?god ?room ?boss ?weapons ?boons ?embed ?debug`, `window.UroCrawl.{state,spawn,giveWeapon,
+  giveBoon,skipRoom,step}`.
+- App: `UroCrawl` frame component + arcade tile (`id: "crawl"`, 250 coins, fits every device); payout on
+  `crawl:result` (rooms×8 + kills/4 + 50 for a win, capped 150 coins / 80 XP), stays open for the game's own summary.
+- Harness `tools/uro-crawl.drive.mjs`: 59/59 (every weapon, matrix, statuses, boss phases, death, persistence, touch,
+  rotate overlay, embed contract, 3 seeds autoplayed through all 9 rooms).
+
+**Verified:** headless Chromium (desktop + 900×420 / 800×360 touch viewports, portrait 360×640), zero console errors.
+The built app itself could not be booted in this sandbox (cdnjs blocked), so the tile/frame JSX is verified by build
++ inspection only; it mirrors the Stone Squadron frame line for line.
+**Next steps:** Andrew to play on the live site (phone landscape first). Balance knobs are at the top of each table:
+`MATRIX`, per-weapon `dmg/interval/range`, enemy `hp/speed/cost/minRoom`, `buildWaves` budget (10 + 5·room),
+boss `hp 1500` / phase thresholds 0.66 / 0.33, `PARTICLE_CAP`.
+**Open questions:** should Uro Crawl pay coins per room as you go (so a death still pays) or only at run end as now?
+Is the tutorial room's 4-step prompt enough, or should room 1 force the swap before the doors open?
+
 ## 2026-11-09 (later 4) — 🎯 Staging Attack: survival shooter (bubbles, waves, overwhelm)
 
 Andrew: tap-to-stage alone is "just another multiple-choice quiz". He wants the typing-blaster feel back — short case
