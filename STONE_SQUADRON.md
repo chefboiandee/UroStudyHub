@@ -49,6 +49,36 @@ intel you read should change what the right play is.
   ureteroscope ($3,500), toggled per run, renal cases only. Both lower IRP and clear dust; the
   sheath pulls in fragments < 3 mm drifting back along the scope, the scope aspirates < 2.5 mm at
   its tip (both count as specimens). Flow under 25% with suction collapses the pelvis.
+- **Experience and wrinkles** (Andrew, 2026-10-31: "like a junior building their skills/confidence in the OR").
+  - Each case type keeps a record (`XP`, localStorage `sq3d_xp`): `n` finished runs, `sk` skill (+0.5 bronze, +1 silver,
+    +1.5 gold/S; −1 after a perforation or a false passage), `w` wrinkles wired past.
+  - A type's first run is always plain. From the second on, each patient rolls for a **wrinkle** (`rollWrinkles`, seeded
+    with the run): 20% after one finished run, +6% per run, capped at 50% (`wireChance`). Most runs stay plain stone cases.
+  - Severity follows `sk` (`sevOf`: 0 → 1 over ~6 good runs). Rarely (high skill) two wrinkles in one case.
+  - The first wrinkle you meet on a case is always in the chart. Later ones can be a surprise (35% × severity): no note,
+    and its marker on the progress bar shows up only once you're on it.
+  - The attending coaches less once you've finished 3 of a type (shorter opening line, no aiming/painting reminders) and is
+    terse at wrinkles once you've wired 2.
+- **Wire work** (roadmap #6, first pass). A wrinkle is lumen geometry (`OBS`, `lumC`/`obsRad`), not a gate object:
+  - **Kink** (redundant ureter): the lumen jogs sideways by `mag` and back, so a fold hangs across the scope's path.
+    **Tight segment**: a short narrowing to `rho`, its opening a little off-centre. Sites per case in `WIRE_SITES`
+    (ureter only, above the sheath tip, away from the pinch rings); stones are kept clear of it (`genLayout` `excl`).
+  - The rails park before it (`OBS_PARK`); ADVANCE stops at its mouth, and holding it there is pushing against resistance
+    (damage, attending yells). The basket button becomes **WIRE** (E or G).
+  - The wire goes up the fiber's channel (5 o'clock), so you aim with the green spot. `obsClear` = room the line has all
+    the way through, minus 0.06 per unit of distance (a long free run wanders: get close). ≥0.06 → through (coils in the
+    kidney on fluoro), ≥−0.3 → buckles, below → **flap** (−100, PULS 2, bleeding, that side narrows). Third flap = false
+    passage, the case ends (`access`).
+  - A ring marks the open line; on easier wrinkles (sev < 0.5) it's green/amber/red for through/buckle/flap.
+  - Riding the wire: the scope follows it through, centred, at `RIDE_V`; the kink straightens (30% left), the narrowing
+    opens (`relax`, `retube` reshapes the tube). Then the wire comes out and the fiber goes back in (`FIBER_BACK_T`).
+    No laser while the wire is in the channel. Clean first pass +150.
+  - Debrief: a WIRE WORK card per wrinkle; run report line.
+- **Safety wire** (pre-op order on every case, next to the antibiotic; scrub-in needs both). Placing it costs 3 OR min,
+  shows along the wall (outside the sheath) and on fluoro. Graded by `safetyVerdict` against the chart: a wrinkle in the
+  chart and no safety wire = wrong (fails the prep objective); a surprise wrinkle without one = defensible; otherwise
+  either is fine, with a note (sheath cases: many keep one outside the sheath). It changes the ending of a perforation or a
+  false passage: a stent over the safety wire instead of a nephrostomy.
 - **Slower approach** to each stone (`APPROACH_D`, `APPROACH_V`).
 - **Mission prep** (`showPrep`):
   - A scrollable, procedurally generated non-contrast CT (`games/squadron-ct.js`) built from the
@@ -82,8 +112,10 @@ intel you read should change what the right play is.
 4. **Harder CT reading.** More stones across the stack, decoys (phleboliths, vascular
    calcification), and decisions such as whether to also treat kidney stones in a ureteral case.
 5. **Semirigid cases.** A semirigid scope in the distal ureter: different handling, no deflection.
-6. **Wires.** Pass a guidewire (and safety wire) through tight segments, impacted stones and a
-   narrow UVJ before the scope can follow.
+6. **Wires.** First pass done (see above): kinks and tight segments as random wrinkles, WIRE + ride, flaps, safety-wire
+   order. Still to do: a choice of wire in the loadout (hydrophilic tip slips past but raises flaps more easily; stiff
+   wire straightens kinks), impacted stones (wire past the stone before lasing), a tight UVJ / intramural ureter, a narrow
+   infundibulum into a calyx, and "stent and come back" as a legitimate call when a segment won't take the scope.
 7. **Retrograde pyelogram mid-case.** Inject contrast on fluoro and identify filling defects.
 8. **Fiber handling.** (Aiming already runs along the fiber at 5 o'clock — `FIB_X/FIB_Y`.)
    - Advance and retract the fiber. Firing with the tip still inside the channel damages the
