@@ -6318,7 +6318,7 @@ var GAMES = [
 { id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
 { id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
 { id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
-{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Tap T, N, M and the stage group for each case. AJCC 8th edition, five cancers.", color: "#10b981", unlockCost: 350, reqs: { touch: true } }
+{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } }
 ];
 var deviceNow = getEffectiveDevice(s.devicePref);
 var showAllGames = s.gamesShowAll === true;
@@ -7309,93 +7309,244 @@ var STAGING_ROWS = [
 { key: "m", label: "M", opts: "mOpts", col: "#a78bfa" },
 { key: "stg", label: "Stage", opts: "stageOpts", col: "#fbbf24" }
 ];
-function stagingLine(c) { return c.t + " " + c.n + " " + c.m + " · Stage " + c.stg; }
+function stagingWaveOf(asked) { return Math.floor(Math.max(0, asked - 1) / 10) + 1; }
+function stagingPace(wave) {
+return { speed: 14 + (wave - 1) * 5, gap: Math.max(1.4, 4.6 - (wave - 1) * 0.45), maxOn: Math.min(5, 2 + Math.ceil(wave / 2)) };
+}
+function stagingCssVar(name, fallback) {
+try { var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fallback; } catch (e) { return fallback; }
+}
+function stagingRow(key) { for (var i = 0; i < STAGING_ROWS.length; i++) if (STAGING_ROWS[i].key === key) return STAGING_ROWS[i]; return STAGING_ROWS[0]; }
 function StagingAttack() {
-var CASES_PER_ROUND = 8, TIME_PER_CASE = 45, TCOL = "#10b981";
+var W = 392, H = 300, BW = 186, LIVES = 3, TCOL = "#10b981";
 var best = useGameBest("staging");
-var [sgs, setSgs] = useState("ready"); // ready | playing | reveal | over
+var [sgs, setSgs] = useState("ready"); // ready | playing | paused | over
 var [pin, setPin] = useState("random"); // "random" or a cancer short name
-var [picks, setPicks] = useState({}); // { t, n, m, stg }
-var [claimed, setClaimed] = useState(false);
 var [tick, setTick] = useState(0);
-var R = useRef(null); // the run: { cancer, deck, idx, score, streak, bestStreak, full, parts, misses, newBest }
-var lastCancer = useRef("");
+var [typed, setTyped] = useState("");
+var [claimed, setClaimed] = useState(false);
+var R = useRef(null); // the run, see begin()
+var cvs = useRef(null), raf = useRef(0), lastT = useRef(0);
 var gsRef = useRef(sgs); gsRef.current = sgs;
-var picksRef = useRef(picks); picksRef.current = picks;
-function pickCancer() {
-if (pin !== "random") { for (var i = 0; i < STAGING_CANCERS.length; i++) if (STAGING_CANCERS[i].short === pin) return STAGING_CANCERS[i]; }
-var pool = STAGING_CANCERS.filter(function(c) { return c.short !== lastCancer.current; });
-return pool[Math.floor(Math.random() * pool.length)];
+var typedRef = useRef(typed); typedRef.current = typed;
+var lastCancer = useRef("");
+function rerender() { setTick(function(t) { return t + 1; }); }
+function questionsFor(cancer) {
+var qs = [];
+cancer.cases.forEach(function(c) {
+var keys = ["t", "stg"]; if (Math.random() < 0.5) keys.push("n"); if (Math.random() < 0.5) keys.push("m");
+keys.forEach(function(k) { qs.push({ cancer: cancer, desc: c.desc, key: k, answer: c[k] }); });
+});
+return shuffleArr(qs);
+}
+function nextQuestion(r) {
+var wave = stagingWaveOf(r.asked + 1);
+var cancers = (r.pinned || wave < 3) ? [r.cancer] : STAGING_CANCERS;
+var cancer = cancers[Math.floor(Math.random() * cancers.length)];
+var pool = r.pools[cancer.short];
+if (!pool || !pool.length) { pool = r.pools[cancer.short] = questionsFor(cancer); }
+var q = pool.shift();
+if (r.lastDesc && q.desc === r.lastDesc && pool.length) { pool.push(q); q = pool.shift(); }
+r.lastDesc = q.desc;
+return q;
 }
 function begin() {
 primeGameAudio();
-var cancer = pickCancer(); lastCancer.current = cancer.short;
-R.current = { cancer: cancer, deck: shuffleArr(cancer.cases).slice(0, CASES_PER_ROUND), idx: 0, score: 0, streak: 0, bestStreak: 0, full: 0, parts: 0, misses: [], newBest: false };
-setPicks({}); setClaimed(false);
+var cancer = null;
+if (pin !== "random") { for (var i = 0; i < STAGING_CANCERS.length; i++) if (STAGING_CANCERS[i].short === pin) cancer = STAGING_CANCERS[i]; }
+if (!cancer) { var pool = STAGING_CANCERS.filter(function(c) { return c.short !== lastCancer.current; }); cancer = pool[Math.floor(Math.random() * pool.length)]; }
+lastCancer.current = cancer.short;
+R.current = {
+cancer: cancer, pinned: pin !== "random", pools: {}, lastDesc: "",
+bubbles: [], parts: [], floats: [], nextId: 1, targetId: 0, targetPinned: false,
+asked: 0, popped: 0, misses: [], score: 0, lives: LIVES, streak: 0, bestStreak: 0, wave: 1, waveShown: 1,
+spawnIn: 0.4, newBest: false,
+theme: { field: stagingCssVar("--c-dp2", "#0a0f1a"), card: stagingCssVar("--c-bg", "#0f172a"), line: stagingCssVar("--c-cd", "#1e293b"), text: stagingCssVar("--c-tx", "#e2e8f0"), mut: stagingCssVar("--c-mut", "#94a3b8") }
+};
+setTyped(""); setClaimed(false);
 gsRef.current = "playing"; setSgs("playing"); gameSfx.flip();
 }
-function grade(timeLeft) { // called by Stage it ▸ and by the clock
-var r = R.current; if (!r || gsRef.current !== "playing") return;
-var c = r.deck[r.idx], p = picksRef.current, wrong = [], right = 0;
-STAGING_ROWS.forEach(function(row) { if (p[row.key] === c[row.key]) right++; else wrong.push(row); });
-r.parts += right;
-var pts = right * 5;
-if (wrong.length === 0) {
-r.full++; r.streak++; if (r.streak > r.bestStreak) r.bestStreak = r.streak;
-pts += 10 + Math.min(5, Math.floor(timeLeft / 9)) + Math.min(10, (r.streak - 1) * 2);
-gameSfx.ok(r.streak);
-} else {
-r.streak = 0;
-var you = STAGING_ROWS.map(function(row) { return p[row.key] || "—"; });
-r.misses.push({
-prompt: r.cancer.short + ": " + c.desc,
-you: Object.keys(p).length ? you[0] + " " + you[1] + " " + you[2] + " · Stage " + you[3] : null,
-answer: stagingLine(c),
-why: wrong.map(function(row) { return row.label + ": " + r.cancer.rules[row.key]; }).join(" ")
-});
+function wrapLines(ctx, text, maxW) {
+var words = String(text).split(" "), lines = [], cur = "";
+for (var i = 0; i < words.length; i++) {
+var t = cur ? cur + " " + words[i] : words[i];
+if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = words[i]; } else cur = t;
+}
+if (cur) lines.push(cur);
+return lines;
+}
+function spawn(r) {
+var c = cvs.current, ctx = c && c.getContext("2d"); if (!ctx) return;
+var q = nextQuestion(r); r.asked++;
+var wave = stagingWaveOf(r.asked), pace = stagingPace(wave);
+if (wave !== r.wave) { r.wave = wave; }
+ctx.font = "600 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+var lines = wrapLines(ctx, q.desc, BW - 22).slice(0, 4);
+var h = 24 + lines.length * 14 + 8;
+var x = 8 + Math.random() * (W - BW - 16);
+for (var i = 0; i < r.bubbles.length; i++) { var o = r.bubbles[i]; if (o.y < 80 && Math.abs(o.x - x) < BW * 0.8) { x = o.x + BW / 2 < W / 2 ? W - BW - 8 : 8; break; } }
+r.bubbles.push({ id: r.nextId++, q: q, lines: lines, x: x, y: -h, w: BW, h: h, speed: pace.speed * (0.92 + Math.random() * 0.16), flash: 0, wrong: 0 });
+r.spawnIn = pace.gap;
+rerender();
+}
+function targetOf(r) {
+var b = null, low = -1e9;
+for (var i = 0; i < r.bubbles.length; i++) {
+if (r.targetPinned && r.bubbles[i].id === r.targetId) return r.bubbles[i];
+if (r.bubbles[i].y + r.bubbles[i].h > low) { low = r.bubbles[i].y + r.bubbles[i].h; b = r.bubbles[i]; }
+}
+return b;
+}
+function burst(r, x, y, col, n, spd) {
+for (var i = 0; i < n; i++) { var a = Math.random() * Math.PI * 2, v = (0.4 + Math.random()) * spd; r.parts.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5 + Math.random() * 0.4, col: col, sz: 2 + Math.random() * 3 }); }
+}
+function miss(r, b) {
+var row = stagingRow(b.q.key);
+r.lives--; r.streak = 0; r.targetPinned = false;
+r.misses.push({ prompt: b.q.cancer.short + ": " + b.q.desc + " — " + row.label + "?", you: null, answer: row.label + " = " + b.q.answer, why: b.q.cancer.rules[b.q.key] });
+r.floats.push({ x: b.x + b.w / 2, y: H - 30, text: "✗ " + row.label + " = " + b.q.answer, col: "#ef4444", life: 1.6 });
+burst(r, b.x + b.w / 2, H - 10, "#ef4444", 14, 90);
 gameSfx.bad();
 }
-r.score += pts;
-r.lastWrong = wrong; r.lastPts = pts;
-gsRef.current = "reveal"; setSgs("reveal");
-}
-function next() {
-var r = R.current; if (!r || gsRef.current !== "reveal") return;
-setPicks({});
-if (r.idx + 1 >= r.deck.length) {
+function finish(r) {
+if (raf.current) cancelAnimationFrame(raf.current); raf.current = 0;
 r.newBest = best.record(r.score);
-gsRef.current = "over"; setSgs("over");
-if (r.full === r.deck.length) gameSfx.fanfare(); else gameSfx.over();
-return;
+gsRef.current = "over"; setSgs("over"); gameSfx.over();
 }
-r.idx++; gsRef.current = "playing"; setSgs("playing"); gameSfx.flip();
+function step(r, dt) {
+var pace = stagingPace(stagingWaveOf(r.asked + 1)), changed = false;
+if (r.bubbles.length < pace.maxOn) { r.spawnIn -= dt * (r.bubbles.length === 0 ? 4 : 1); if (r.spawnIn <= 0) { spawn(r); changed = true; } }
+var before = targetOf(r), beforeId = before ? before.id : 0;
+for (var i = r.bubbles.length - 1; i >= 0; i--) {
+var b = r.bubbles[i]; b.y += b.speed * dt; if (b.flash > 0) b.flash -= dt;
+if (b.y + b.h >= H - 6) { r.bubbles.splice(i, 1); miss(r, b); changed = true; if (r.lives <= 0) break; }
 }
-var time = useRoundTimer(sgs === "playing", TIME_PER_CASE, R.current ? R.current.idx : 0, function() { grade(0); });
-var timeRef = useRef(time); timeRef.current = time;
-useEffect(function() { // Enter = Stage it / next case
-if (sgs !== "playing" && sgs !== "reveal") return;
+for (var p = r.parts.length - 1; p >= 0; p--) { var pt = r.parts[p]; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 120 * dt; pt.life -= dt; if (pt.life <= 0) r.parts.splice(p, 1); }
+for (var f = r.floats.length - 1; f >= 0; f--) { var fl = r.floats[f]; fl.y -= 22 * dt; fl.life -= dt; if (fl.life <= 0) r.floats.splice(f, 1); }
+if (r.wave !== r.waveShown) { r.waveShown = r.wave; r.floats.push({ x: W / 2, y: H / 2, text: "WAVE " + r.wave + (!r.pinned && r.wave === 3 ? " · all cancers" : ""), col: "#fbbf24", life: 1.8, big: true }); gameSfx.fanfare(); changed = true; }
+var after = targetOf(r);
+if ((after ? after.id : 0) !== beforeId) changed = true;
+if (after && !r.targetPinned) r.targetId = after.id;
+if (changed) rerender();
+if (r.lives <= 0) finish(r);
+}
+function draw(r) {
+var c = cvs.current; if (!c) return;
+var dpr = Math.min(2, window.devicePixelRatio || 1);
+if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+var ctx = c.getContext("2d"), th = r.theme;
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+ctx.fillStyle = th.field; ctx.fillRect(0, 0, W, H);
+ctx.strokeStyle = th.line; ctx.lineWidth = 1; ctx.globalAlpha = 0.35;
+for (var gy = 40; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+ctx.globalAlpha = 1;
+var grd = ctx.createLinearGradient(0, H - 48, 0, H); grd.addColorStop(0, "rgba(239,68,68,0)"); grd.addColorStop(1, "rgba(239,68,68,0.22)");
+ctx.fillStyle = grd; ctx.fillRect(0, H - 48, W, 48);
+ctx.fillStyle = "#ef4444"; ctx.fillRect(0, H - 3, W, 3);
+var tgt = targetOf(r);
+for (var i = 0; i < r.bubbles.length; i++) {
+var b = r.bubbles[i], row = stagingRow(b.q.key), isT = tgt && tgt.id === b.id;
+ctx.save();
+if (isT) { ctx.shadowColor = row.col; ctx.shadowBlur = 14; }
+ctx.fillStyle = b.flash > 0 ? "rgba(239,68,68,0.35)" : th.card;
+ctx.strokeStyle = isT ? row.col : th.line; ctx.lineWidth = isT ? 2 : 1;
+roundRect(ctx, b.x, b.y, b.w, b.h, 9); ctx.fill(); ctx.stroke();
+ctx.restore();
+ctx.textBaseline = "alphabetic";
+ctx.font = "800 10px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+ctx.fillStyle = row.col; ctx.textAlign = "left"; ctx.fillText(row.label.toUpperCase() + " = ?", b.x + 10, b.y + 15);
+ctx.fillStyle = th.mut; ctx.textAlign = "right"; ctx.font = "700 9px system-ui, -apple-system, Segoe UI, Roboto, sans-serif"; ctx.fillText(b.q.cancer.short, b.x + b.w - 10, b.y + 15);
+ctx.fillStyle = th.text; ctx.textAlign = "left"; ctx.font = "600 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+for (var l = 0; l < b.lines.length; l++) ctx.fillText(b.lines[l], b.x + 11, b.y + 30 + l * 14);
+if (isT) { ctx.fillStyle = row.col; ctx.font = "800 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillText("▼", b.x + b.w / 2, b.y - 4); }
+}
+for (var p = 0; p < r.parts.length; p++) { var pt = r.parts[p]; ctx.globalAlpha = Math.max(0, Math.min(1, pt.life * 2)); ctx.fillStyle = pt.col; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.sz, 0, Math.PI * 2); ctx.fill(); }
+ctx.globalAlpha = 1;
+for (var f = 0; f < r.floats.length; f++) {
+var fl = r.floats[f]; ctx.globalAlpha = Math.max(0, Math.min(1, fl.life * 1.5)); ctx.fillStyle = fl.col; ctx.textAlign = "center";
+ctx.font = (fl.big ? "900 22px" : "800 12px") + " system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+ctx.fillText(fl.text, Math.max(60, Math.min(W - 60, fl.x)), fl.y);
+}
+ctx.globalAlpha = 1;
+ctx.fillStyle = th.mut; ctx.font = "700 9px system-ui, sans-serif"; ctx.textAlign = "right"; ctx.fillText("WAVE " + r.wave, W - 8, 12);
+}
+function roundRect(ctx, x, y, w, h, rad) {
+ctx.beginPath(); ctx.moveTo(x + rad, y); ctx.lineTo(x + w - rad, y); ctx.quadraticCurveTo(x + w, y, x + w, y + rad); ctx.lineTo(x + w, y + h - rad);
+ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h); ctx.lineTo(x + rad, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - rad); ctx.lineTo(x, y + rad); ctx.quadraticCurveTo(x, y, x + rad, y); ctx.closePath();
+}
+function frame(ts) {
+var r = R.current; if (!r || gsRef.current !== "playing") { raf.current = 0; return; }
+var dt = lastT.current ? Math.min(0.1, (ts - lastT.current) / 1000) : 0; lastT.current = ts;
+step(r, dt);
+if (gsRef.current === "playing") { draw(r); raf.current = requestAnimationFrame(frame); } else raf.current = 0;
+}
+useEffect(function() {
+if (sgs !== "playing") return;
+lastT.current = 0; raf.current = requestAnimationFrame(frame);
+function vis() { if (document.visibilityState === "hidden" && gsRef.current === "playing") pause(); }
+document.addEventListener("visibilitychange", vis);
+return function() { document.removeEventListener("visibilitychange", vis); if (raf.current) cancelAnimationFrame(raf.current); raf.current = 0; };
+}, [sgs]);
+function pause() { if (gsRef.current !== "playing") return; gsRef.current = "paused"; setSgs("paused"); }
+function resume() { if (gsRef.current !== "paused") return; gsRef.current = "playing"; setSgs("playing"); }
+function answer(val) {
+var r = R.current; if (!r || gsRef.current !== "playing") return;
+var b = targetOf(r); if (!b) return;
+var row = stagingRow(b.q.key);
+if (val === b.q.answer) {
+r.streak++; r.popped++; if (r.streak > r.bestStreak) r.bestStreak = r.streak;
+var pts = Math.round((20 + (r.streak - 1) * 5) * (1 + 0.1 * (r.wave - 1))); r.score += pts;
+r.floats.push({ x: b.x + b.w / 2, y: b.y + 10, text: "✓ " + val + "  +" + pts, col: "#4ade80", life: 1.1 });
+burst(r, b.x + b.w / 2, b.y + b.h / 2, row.col, 16, 110);
+r.bubbles = r.bubbles.filter(function(o) { return o.id !== b.id; }); r.targetPinned = false;
+gameSfx.ok(r.streak);
+} else {
+r.streak = 0; b.flash = 0.45; b.wrong++; b.y += 26; // a wrong call lets it lunge closer
+r.floats.push({ x: b.x + b.w / 2, y: b.y - 2, text: "✗ " + val, col: "#ef4444", life: 0.8 });
+gameSfx.bad();
+}
+setTyped(""); rerender();
+}
+function tapField(e) {
+var r = R.current, c = cvs.current; if (!r || !c || gsRef.current !== "playing") return;
+var rect = c.getBoundingClientRect(), pt = e.touches ? e.touches[0] : e;
+var x = (pt.clientX - rect.left) * (W / rect.width), y = (pt.clientY - rect.top) * (H / rect.height);
+for (var i = r.bubbles.length - 1; i >= 0; i--) { var b = r.bubbles[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { r.targetId = b.id; r.targetPinned = true; gameSfx.flip(); rerender(); return; } }
+}
+function submitTyped() {
+var r = R.current, t = typedRef.current.trim().toUpperCase(); if (!r || !t) return;
+var b = targetOf(r); if (!b) return;
+var opts = b.q.cancer[stagingRow(b.q.key).opts], hit = null;
+for (var i = 0; i < opts.length; i++) { var o = opts[i].toUpperCase(); if (o === t || o === b.q.key.toUpperCase()[0] + t || (b.q.key !== "stg" && o.slice(1) === t)) { hit = opts[i]; break; } }
+if (hit) answer(hit); else { setTyped(""); gameSfx.bad(); }
+}
+useEffect(function() { // keyboard: type the value + Enter, Backspace, Esc clears, P pauses
+if (sgs !== "playing" && sgs !== "paused") return;
 function kd(e) {
 if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-if (e.key !== "Enter") return;
-e.preventDefault();
-if (gsRef.current === "reveal") next();
-else if (Object.keys(picksRef.current).length === 4) grade(timeRef.current);
+var k = e.key || "";
+if (sgs === "paused") { if (k === "Enter" || k === " " || k.toLowerCase() === "p") { e.preventDefault(); resume(); } return; }
+if (k === "Enter") { e.preventDefault(); submitTyped(); }
+else if (k === "Backspace") { e.preventDefault(); setTyped(function(t) { return t.slice(0, -1); }); }
+else if (k === "Escape") { setTyped(""); }
+else if (k.length === 1 && /[a-z0-9]/i.test(k)) { e.preventDefault(); setTyped(function(t) { return (t + k).slice(0, 6); }); }
 }
 window.addEventListener("keydown", kd);
 return function() { window.removeEventListener("keydown", kd); };
 }, [sgs]);
-var r = R.current, cancer = r && r.cancer, cur = r && r.deck[r.idx];
-var allPicked = Object.keys(picks).length === 4;
+var r = R.current, tgt = r && sgs !== "over" ? targetOf(r) : null, row = tgt ? stagingRow(tgt.q.key) : null;
 var how = [
-"One case at a time. Tap a T, an N, an M and the stage group, then Stage it ▸ (or Enter).",
-CASES_PER_ROUND + " cases a round from one cancer, " + TIME_PER_CASE + " s each. 5 points per component, a bonus for the full house, speed and streaks.",
-"AJCC 8th edition. Wrong components show the rule on the spot, and misses come back in the debrief."
+"Short cases drift down the field, each asking for one thing: T, N, M or the stage group. The lowest one is targeted (tap another to switch).",
+"Tap the right chip to pop it, or type it and press Enter. A wrong call costs the streak and the case lunges closer.",
+"A case that reaches the bottom costs a life (" + LIVES + ") and shows the answer. Waves of 10 get faster and busier; random mode mixes all five cancers from wave 3. It does not end until it beats you.",
+"AJCC 8th edition. Every miss comes back in the debrief with the rule."
 ];
-var chipCancers = [{ short: "random", icon: "🎲", name: "Random cancer", col: TCOL }].concat(STAGING_CANCERS.map(function(c) { return { short: c.short, icon: "", name: c.name, col: c.col }; }));
+var chipCancers = [{ short: "random", icon: "🎲", name: "Random, mixed from wave 3", col: TCOL }].concat(STAGING_CANCERS.map(function(c) { return { short: c.short, icon: "", name: c.name, col: c.col }; }));
+var accent = r ? r.cancer.col : TCOL;
 return (
-<GameFrame title="Staging Attack" icon="🎯" color={cancer ? cancer.col : TCOL} width={420}>
+<GameFrame title="Staging Attack" icon="🎯" color={accent} width={420} onLeave={function() { if (raf.current) cancelAnimationFrame(raf.current); raf.current = 0; }}>
 {sgs === "ready" && (
-<ReadyCard icon="🎯" title="Staging Attack" color={TCOL} sub="Stage the case: T, N, M and the group." how={how} best={best.get()}>
+<ReadyCard icon="🎯" title="Staging Attack" color={TCOL} sub="Pop the cases before they reach the bottom. Survive the waves." how={how} best={best.get()}>
 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center" }}>
 {chipCancers.map(function(c) {
 var on = pin === c.short;
@@ -7403,59 +7554,53 @@ return <button key={c.short} onClick={function() { setPin(c.short); }} style={{ 
 })}
 </div>
 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 280 }}>
-<button onClick={begin} style={bigBtn(TCOL)}>Start round ▸</button>
+<button onClick={begin} style={bigBtn(TCOL)}>Start ▸</button>
 <div style={{ fontSize: 9, color: "#64748b", textAlign: "center", lineHeight: 1.5 }}>{STAGING_CANCERS.reduce(function(n, c) { return n + c.cases.length; }, 0) + " cases across " + STAGING_CANCERS.length + " cancers. Prostate cases carry PSA and grade group, testis cases carry markers: you need them for the group."}</div>
 </div>
 </ReadyCard>
 )}
-{(sgs === "playing" || sgs === "reveal") && cur && (
-<div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 14 }}>
-<RunHud color={cancer.col} score={r.score} idx={r.idx} total={r.deck.length} streak={r.streak} time={time} timeMax={TIME_PER_CASE} />
-<div style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-<div data-stg-case={cur.desc} style={{ background: "var(--c-bg)", borderRadius: 10, padding: "10px 14px", border: "1px solid " + cancer.col + "55" }}>
-<div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, color: cancer.col, marginBottom: 3 }}>{cancer.name.toUpperCase()}</div>
-<div style={{ fontSize: 13, fontWeight: 700, color: "var(--c-tx)", lineHeight: 1.45 }}>{cur.desc}</div>
+{(sgs === "playing" || sgs === "paused") && r && (
+<div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 12 }}>
+<div style={{ padding: "8px 14px 0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 700, color: "var(--c-tx)", gap: 8 }}>
+<span>{"🎯 " + r.score}</span>
+<span style={{ color: accent }}>{"Wave " + r.wave}</span>
+<span style={{ color: "var(--a-or2)", minWidth: 28, textAlign: "center" }}>{r.streak >= 2 ? "🔥 " + r.streak : ""}</span>
+<span data-stg-lives={r.lives}>{Array(Math.max(0, r.lives)).fill("❤️").join("") || "💔"}</span>
+<button onClick={sgs === "paused" ? resume : pause} style={{ background: "none", border: "1px solid var(--c-br)", borderRadius: 6, color: "var(--c-mut)", fontSize: 11, cursor: "pointer", padding: "2px 7px", minHeight: 26 }}>{sgs === "paused" ? "▶" : "⏸"}</button>
 </div>
-{STAGING_ROWS.map(function(row) {
-var opts = cancer[row.opts], mine = picks[row.key], reveal = sgs === "reveal", ans = cur[row.key];
-return (
-<div key={row.key} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
-<div style={{ width: 38, flexShrink: 0, fontSize: 11, fontWeight: 800, color: row.col, paddingTop: 7 }}>{row.label}</div>
-<div style={{ display: "flex", flexWrap: "wrap", gap: 4, flex: 1 }}>
-{opts.map(function(o) {
-var on = mine === o, isAns = reveal && o === ans, isBad = reveal && on && o !== ans;
-var bd = isAns ? "#4ade80" : isBad ? "#ef4444" : on ? row.col : "var(--c-br)";
-var bg = isAns ? "#4ade8022" : isBad ? "#ef444422" : on ? row.col + "26" : "var(--c-bg)";
-var col = isAns ? "var(--a-grn)" : isBad ? "var(--a-red)" : on ? row.col : "var(--c-mut)";
-return <button key={o} data-stg-chip={row.key + ":" + o} data-ok={isAns ? "1" : undefined} disabled={reveal} onClick={function() { var np = Object.assign({}, picksRef.current); np[row.key] = o; setPicks(np); gameSfx.tick(); }} style={{ padding: "6px 9px", minWidth: 36, minHeight: 32, borderRadius: 8, border: (on || isAns ? "2px" : "1px") + " solid " + bd, background: bg, color: col, fontSize: 11, fontWeight: 800, cursor: reveal ? "default" : "pointer", fontFamily: "monospace" }}>{o}</button>;
-})}
+<div style={{ padding: "0 14px", position: "relative" }}>
+<canvas ref={cvs} onMouseDown={tapField} onTouchStart={tapField} style={{ display: "block", width: "100%", maxWidth: W, height: "auto", aspectRatio: W + " / " + H, borderRadius: 10, border: "1px solid var(--c-cd)", touchAction: "manipulation", userSelect: "none" }} />
+{sgs === "paused" && (
+<div style={{ position: "absolute", inset: "0 14px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "rgba(0,0,0,.6)", borderRadius: 10 }}>
+<div style={{ fontSize: 18, fontWeight: 900, color: "#fff" }}>⏸ Paused</div>
+<div style={{ fontSize: 11, color: "#cbd5e1" }}>{r.cancer.name + " · wave " + r.wave + " · " + r.score + " pts"}</div>
+<button onClick={resume} style={bigBtn(accent)}>Resume ▸</button>
 </div>
-</div>
-);
-})}
-{sgs === "reveal" ? (
-<div style={{ padding: "8px 12px", borderRadius: 8, background: r.lastWrong.length ? "#ef444412" : "#4ade8012", border: "1px solid " + (r.lastWrong.length ? "#ef444440" : "#4ade8040"), fontSize: 11, lineHeight: 1.5 }}>
-<div style={{ fontWeight: 800, color: r.lastWrong.length ? "var(--a-red)" : "var(--a-grn)", marginBottom: r.lastWrong.length ? 4 : 0 }}>
-{r.lastWrong.length ? "✗ " + stagingLine(cur) + "  (+" + r.lastPts + ")" : "✓ Full house: " + stagingLine(cur) + "  (+" + r.lastPts + (r.streak >= 2 ? " · " + r.streak + " in a row" : "") + ")"}
-</div>
-{r.lastWrong.map(function(row) { return <div key={row.key} style={{ color: "var(--c-mut)", marginTop: 3 }}><b style={{ color: row.col }}>{row.label + ": "}</b>{cancer.rules[row.key]}</div>; })}
-{r.lastWrong.length === 0 && <div style={{ color: "var(--c-mut)", marginTop: 3 }}>{cancer.rules.stg}</div>}
-</div>
-) : null}
-{sgs === "playing" ? (
-<button onClick={function() { grade(timeRef.current); }} disabled={!allPicked} style={Object.assign(bigBtn(cancer.col), { width: "100%", opacity: allPicked ? 1 : 0.45, cursor: allPicked ? "pointer" : "default" })}>{allPicked ? "Stage it ▸" : "Pick T, N, M and the stage"}</button>
-) : (
-<button onClick={next} style={Object.assign(bigBtn(cancer.col), { width: "100%" })}>{r.idx + 1 >= r.deck.length ? "See results ▸" : "Next case ▸"}</button>
 )}
+</div>
+<div style={{ padding: "0 14px" }} data-stg-target-q={tgt ? tgt.q.key : ""} data-stg-target-case={tgt ? tgt.q.desc : ""} data-stg-target-cancer={tgt ? tgt.q.cancer.short : ""}>
+{tgt ? (
+<div>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, fontSize: 10, color: "var(--c-mut)" }}>
+<span><b style={{ color: row.col, fontSize: 12 }}>{row.label}</b>{" for the highlighted " + tgt.q.cancer.short + " case"}</span>
+{typed ? <span style={{ fontFamily: "monospace", fontWeight: 800, color: row.col, border: "1px solid " + row.col + "66", borderRadius: 6, padding: "1px 6px" }}>{typed.toUpperCase() + "_"}</span> : <span style={{ fontSize: 9 }}>tap a chip, or type + Enter</span>}
+</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+{tgt.q.cancer[row.opts].map(function(o) {
+return <button key={o} data-stg-chip={tgt.q.key + ":" + o} onClick={function() { answer(o); }} disabled={sgs === "paused"} style={{ padding: "8px 11px", minWidth: 44, minHeight: 38, borderRadius: 9, border: "1px solid " + row.col + "66", background: row.col + "14", color: row.col, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "monospace" }}>{o}</button>;
+})}
+</div>
+</div>
+) : <div style={{ fontSize: 10, color: "var(--c-mut)", padding: "10px 0", textAlign: "center" }}>Incoming…</div>}
 </div>
 </div>
 )}
 {sgs === "over" && r && (
-<OverCard color={cancer.col} score={r.score} best={best.get()} newBest={r.newBest} correct={r.full} total={r.deck.length} bestStreak={r.bestStreak}
-rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed}
-sub={cancer.name + " · " + r.parts + "/" + (r.deck.length * 4) + " components right"}
+<OverCard color={accent} score={r.score} best={best.get()} newBest={r.newBest} correct={r.popped} total={r.popped + r.misses.length} bestStreak={r.bestStreak}
+rewards={cardRewards(r.score)} misses={r.misses} claimed={claimed} cutShort={"Overwhelmed on wave " + r.wave}
+sub={(r.pinned ? r.cancer.name : "Random · started on " + r.cancer.short) + " · " + r.popped + " popped"}
 onClaim={function() { var rw = cardRewards(r.score); gameReward(rw.coins, rw.xp, true); setClaimed(true); }}
-onAgain={function() { setSgs("ready"); }} againLabel="New round" />
+onAgain={function() { setSgs("ready"); }} againLabel="Play again" />
 )}
 </GameFrame>
 );

@@ -3,6 +3,34 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 4) — 🎯 Staging Attack: survival shooter (bubbles, waves, overwhelm)
+
+Andrew: tap-to-stage alone is "just another multiple-choice quiz". He wants the typing-blaster feel back — short case
+bubbles moving toward you, tap the right stage to pop them — with several on the field at once, escalating until it
+overwhelms you.
+
+**Done (`UroStudyHub.html`, built, 74/74 in `tools/arcade-cards.drive.mjs`):**
+- `StagingAttack` is now a canvas field (392×300, rAF loop on ref state; React only draws the HUD, the chip row and
+  overlays). Case bubbles spawn at the top, each asking for one component (T, N, M or stage), and drift down. The
+  lowest bubble is the target (glow + ▼); tap another bubble to switch. Pop it with the right chip from the row under
+  the field, or type the value and press Enter (desktop). A wrong call resets the streak and the bubble lunges 26 px
+  closer. A bubble that reaches the red line costs a life (3) and prints the answer; its rule line goes to the debrief.
+- **Waves of 10**: speed 14 px/s + 5 per wave, spawn gap 4.6 s shrinking to 1.4 s, 3 → 4 → 5 bubbles allowed on the
+  field. Random mode starts on one cancer and mixes all five from wave 3 (the chip row changes under you); a pinned
+  cancer stays pure but still ramps. No fixed end: it runs until lives hit 0. Points = (20 + 5 per streak step) ×
+  (1 + 0.1 per wave). Wave banner + fanfare; ⏸ button, Enter/Space/P to resume, auto-pause when the tab hides.
+- Debrief: "💔 Overwhelmed on wave N", popped / resolved, best streak, every miss with the rule, best score persisted.
+  Keeps the AJCC 8 data + `rules` from (later 3). Tile copy updated.
+- Harness scenario D: reads the case data from the served page, plays 26 bubbles (typed answer, deliberate wrong chip,
+  pause/resume), checks wave 3 + mixed cancers, then stops answering and asserts the overwhelm: 3 misses, 26/29, rule
+  lines, claim, best.
+
+**Verified:** headless Chrome + phone-viewport screenshots. Not on a real device. Pace is a first guess: wave 1 takes
+~21 s per bubble to cross, wave 5 ~9 s with five on screen.
+**Next steps:** Andrew to play on the live site and say whether wave 1 is too slow / wave 4+ too fast. Then Drug Match
+→ tap-sort on its own canvas page.
+**Open questions:** should a wrong chip cost a life at higher waves? Mixed cancers from wave 3 even when pinned?
+
 ## 2026-11-09 (later 3) — 🎯 Staging Attack rebuilt as tap-to-stage on the card-game shell
 
 Andrew: do Staging Attack as tap-to-stage next.
