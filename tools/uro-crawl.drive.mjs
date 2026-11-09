@@ -4,7 +4,9 @@
 // →shatter, biofilm strip, AML hemorrhage), the Right Tool bonus, the Staghorn's three phases, death and win screens,
 // persistence, touch controls (floating stick + FIRE with a second finger, slot taps, pause button), the rotate
 // overlay, the ?embed=1 postMessage contract, and autoplays several seeds through all nine rooms.
-// Also the HIFU / Urethrotome / CO₂ / da Vinci console additions and the Condyloma Cluster.
+// Also the HIFU / Urethrotome / CO₂ / da Vinci console additions and the Condyloma Cluster, and (block J) the weapon
+// upgrade paths: the MODS table, every mod's in-game effect for the five starting weapons, the aspects, Instrument Rep
+// doors + screen + reroll, the shop sample, the HUD pips/detail card and the giveMod / ?mods= / ?aspects= hooks.
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -204,15 +206,16 @@ await block('F. autoplay', async () => {
         if (G.overlay === 'weapon') { const c = document.querySelector('#weapCards .card'); if (c) c.click(); else document.getElementById('btnWeapLeave').click(); }
         for (const r of G.rewards) { if (r.used) continue; const P = UroCrawl.player(); P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3);
           if (G.overlay === 'boon') { out.boons++; const c = document.querySelector('#boonCards .card'); if (c) c.click(); else document.getElementById('btnBoonSkip').click(); }
+          else if (G.overlay === 'mod') { out.reps = (out.reps || 0) + 1; const c = document.querySelector('#modCards .card'); if (c) c.click(); else document.getElementById('btnModSkip').click(); }
           else if (G.overlay === 'weapon') { out.crates++; const slot = document.querySelector('#slotPick .btn'), c = document.querySelector('#weapCards .card'); if (slot) slot.click(); else if (c) c.click(); if (G.overlay) document.getElementById('btnWeapLeave').click(); }
           else if (G.overlay === 'shop') { const b = document.querySelector('#shopItems .btn:not(:disabled)'); if (b) b.click(); document.getElementById('btnShopLeave').click(); } }
         if (G.overlay) UroCrawl.hideScreens();
         if (plan.kind === 'boss') { UroCrawl.step(200); UroCrawl.skipRoom(); UroCrawl.step(300); out.won = G.won; break; }
         if (!pickDoor()) { UroCrawl.step(60); if (!pickDoor()) break; } UroCrawl.step(60);
       }
-      out.weapons = G.weapons.length; out.boonsHeld = G.boons.length; return out;
+      out.weapons = G.weapons.length; out.boonsHeld = G.boons.length; out.mods = G.weapons.reduce((n, w) => n + w.modIds.length + (w.capstone ? 1 : 0), 0); return out;
     });
-    check('seed ' + seed + ' plays 9 rooms to the win screen', log.rooms.length === 9 && log.won, 'kinds ' + log.kinds.join(',') + ' · altars ' + log.boons + ' · crates ' + log.crates + ' · held ' + log.weapons + 'w/' + log.boonsHeld + 'b');
+    check('seed ' + seed + ' plays 9 rooms to the win screen', log.rooms.length === 9 && log.won, 'kinds ' + log.kinds.join(',') + ' · altars ' + log.boons + ' · crates ' + log.crates + ' · reps ' + (log.reps || 0) + ' · held ' + log.weapons + 'w/' + log.boonsHeld + 'b/' + log.mods + 'm');
     errCheck('F seed ' + seed, errs);
   }
 });
@@ -338,6 +341,275 @@ await block('I. new weapons', async () => {
   check('Condyloma Cluster: BENIGN 60 HP from room 2, a non-ENERGY kill leaves a regrowing root, ENERGY burns it off', b.fam === 'BENIGN' && b.hp === 60 && b.minRoom === 2 && b.dormant && b.regrew && b.awake && b.dead && b.fact, JSON.stringify(b));
   await shot(p, 'i-new-weapons');
   errCheck('I', errs);
+});
+
+// ───────── J. weapon mods, aspects, Instrument Rep doors ─────────
+// helpers injected into the page: clear the room, pin an enemy in place (optionally with a fake velocity), first-hit damage
+const PREP = `
+  window.__kill = function (e) { e.silent = true; e.inhaled = true; e.hp = 0; };   // inhaled: no stone splits littering the arena
+  window.__prep = function () { const G = UroCrawl.state; G.enemies.forEach(__kill); UroCrawl.step(1); if (G.waves) G.waves.next = 99; G.obstacles.length = 0; G.bullets.length = 0; G.hazards.length = 0; G.fields.length = 0; G.texts.length = 0; G.pickups.length = 0; const P = UroCrawl.player(); P.x = 300; P.y = 270; UroCrawl.input.mode = 'kb'; UroCrawl.input.mouseFire = false; UroCrawl.input.mouseAlt = false; UroCrawl.input.keys = {}; };
+  window.__pin = function (id, x, y, vx, vy, extra) { const e = UroCrawl.spawn(id, x, y, { instant: true }); e.def = Object.assign({}, e.def, { update: function (q) { q.vx = vx || 0; q.vy = vy || 0; q.x = x; q.y = y; } }, extra || {}); return e; };
+  window.__firstHit = function (e, maxSteps) { const hp0 = e.hp; for (let i = 0; i < (maxSteps || 60); i++) { UroCrawl.step(1); if (e.hp !== hp0 || e.dead) return { dmg: hp0 - e.hp, steps: i + 1, dead: e.dead }; } return { dmg: 0, steps: maxSteps || 60 }; };
+  window.__aim = function (x, y) { UroCrawl.input.mx = x; UroCrawl.input.my = y; };
+`;
+async function openJ(q) { const o = await open(q); await o.p.evaluate(PREP); return o; }
+
+await block('J1. tables', async () => {
+  const { p, errs } = await openJ('?seed=20');
+  const t = await p.evaluate(() => {
+    const M = UroCrawl.tables.MODS, A = UroCrawl.tables.ASPECTS, W = UroCrawl.tables.WEAPONS, ids = Object.keys(M), bad = [], per = {};
+    ids.forEach(id => { const m = M[id]; per[m.weapon] = per[m.weapon] || { mods: 0, caps: 0 }; if (m.capstone) per[m.weapon].caps++; else per[m.weapon].mods++;
+      if (m.id !== id) bad.push(id + ': id'); if (!W[m.weapon]) bad.push(id + ': weapon ' + m.weapon);
+      const req = !m.requires ? [] : typeof m.requires === 'string' ? [m.requires] : m.requires;
+      req.forEach(r => { if (!M[r]) bad.push(id + ' requires missing ' + r); else if (M[r].weapon !== m.weapon) bad.push(id + ' cross-weapon prerequisite'); else if (!m.capstone && M[r].branch !== m.branch) bad.push(id + ' cross-branch prerequisite'); });
+      if (['POWER', 'CONTROL', 'SPECIAL'].indexOf(m.branch) < 0) bad.push(id + ': branch'); if (!(m.tier >= 1 && m.tier <= 3)) bad.push(id + ': tier'); if (!m.stats && !m.flag) bad.push(id + ': no stats or flag'); if (!m.rarity || !m.desc || !m.name) bad.push(id + ': missing text'); if (m.capstone && !req.length) bad.push(id + ': capstone without prerequisites'); });
+    return { n: ids.length, per, bad, aspects: Object.keys(A).map(k => k + ':' + A[k].length), door: !!UroCrawl.tables.DOOR_TYPES.rep };
+  });
+  check('MODS: 30 rows = 5 weapons × (5 mods + 1 capstone); every prerequisite resolves inside its weapon and branch', t.n === 30 && t.bad.length === 0 && ['holmium', 'scalpel', 'loop', 'bovie', 'trilogy'].every(w => t.per[w] && t.per[w].mods === 5 && t.per[w].caps === 1), (t.bad.join('; ') || 'ok') + ' ' + JSON.stringify(t.per));
+  check('ASPECTS: 3 variants each for Holmium, Scalpel, Loop, Trilogy; rep door type exists', t.aspects.join() === 'holmium:3,scalpel:3,loop:3,trilogy:3' && t.door, t.aspects.join());
+  errCheck('J1', errs);
+});
+
+await block('J2. holmium mods', async () => {
+  const { p, errs } = await openJ('?seed=21&god=1&room=2&weapons=holmium&mods=holmium_joules,holmium_narrow');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const ref = __pin('com', 700, 150); const unit = UroCrawl.dealDamage(ref, 3.4, 'LITHO', { wid: 'holmium' });
+    const t = __pin('com', P.x + 150, P.y); __aim(P.x + 150, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 20); const len = Math.round(w.fx.x1 - w.fx.x0); UroCrawl.input.mouseFire = false; UroCrawl.step(30);
+    return { mods: w.modIds.slice(), ms: w.ms, unit, hit: h.dmg, len }; });
+  check('?mods= installs Higher Joules + Narrow Fiber at run start; stats fold into w.ms', b.mods.join() === 'holmium_joules,holmium_narrow' && Math.abs(b.ms.dmg - 1.25) < 1e-9 && Math.abs(b.ms.range - 1.3) < 1e-9 && Math.abs(b.ms.hw - 0.7) < 1e-9, JSON.stringify(b.ms));
+  check('Higher Joules: a DUST tick lands for ×1.25 of the unmodded tick (3.4 × 1.75 × 1.25 = 7.4375)', Math.abs(b.hit - 7.4375) < 0.01 && Math.abs(b.unit - 5.95) < 0.01, b.hit + ' vs ' + b.unit);
+  check('Narrow Fiber: the beam reaches ~299 px (230 × 1.3)', b.len >= 295 && b.len <= 302, b.len + ' px');
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okMoses = UroCrawl.giveMod('holmium_moses'); UroCrawl.input.edges.alt = true; UroCrawl.step(1); const mode = w.mode;
+    const t = __pin('com', P.x + 150, P.y); __aim(P.x + 150, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 40); const pellets = G.bullets.filter(x => x.kind === 'pellet').length; UroCrawl.input.mouseFire = false; UroCrawl.step(40);
+    const okPop = UroCrawl.giveMod('holmium_popcorn'); G.bullets.length = 0; UroCrawl.input.mouseFire = true; const h2 = __firstHit(t, 40); const orbits = G.bullets.filter(x => x.kind === 'orbit'); const o0 = orbits.map(x => [x.x, x.y]); UroCrawl.step(10); const moved = orbits.length ? Math.hypot(orbits[0].x - o0[0][0], orbits[0].y - o0[0][1]) : 0; UroCrawl.input.mouseFire = false; UroCrawl.step(60);
+    return { okMoses, mode, pulse: h.dmg, pellets, okPop, orbits: orbits.length, moved, gone: G.bullets.filter(x => x.kind === 'orbit').length }; });
+  check('Moses Effect mod: a FRAGMENT pulse (24 × 1.25 × 1.75 = 52.5) splits two pellets off the impact', b.okMoses && b.mode === 1 && Math.abs(b.pulse - 52.5) < 0.01 && b.pellets === 2, 'pulse ' + b.pulse + ', pellets ' + b.pellets);
+  check('Popcorn: a landed pulse throws three orbiting fragments that move and expire after ~0.9 s', b.okPop && b.orbits === 3 && b.moved > 5 && b.gone === 0, JSON.stringify({ orbits: b.orbits, moved: Math.round(b.moved), left: b.gone }));
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const availBefore = UroCrawl.availableMods(w).map(m => m.id); const offer = UroCrawl.rollModOffer(w, 3); const okCap = UroCrawl.giveMod('holmium_whirlpool');
+    const hw = 5 * 0.7, t = __pin('com', P.x + 150, P.y), side = __pin('com', P.x + 150, P.y + hw + 26 + 14); // outside the beam (hw + r), inside the whirlpool corridor (hw + 30 + r)
+    __aim(P.x + 150, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(30); const whirl = !!(w.fx && w.fx.whirl); UroCrawl.input.mouseFire = false; UroCrawl.step(10);
+    const again = UroCrawl.giveMod('holmium_whirlpool'), availAfter = UroCrawl.availableMods(w).length;
+    return { availBefore, offer, okCap, cap: w.capstone, sideHit: side.hp < side.maxHp, mainHit: t.hp < t.maxHp, whirl, again, availAfter, n: w.modIds.length }; });
+  check('capstone gating: Whirlpool is offered (first) only once Moses + Popcorn are held; installs into the capstone slot', b.availBefore.indexOf('holmium_whirlpool') >= 0 && b.offer[0] === 'holmium_whirlpool' && b.okCap && b.cap === 'holmium_whirlpool' && !b.again, JSON.stringify({ avail: b.availBefore, offer: b.offer }));
+  check('Whirlpool: an enemy beside the beam (outside its width) is hit by the shard vortex', b.sideHit && b.mainHit && b.whirl);
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0]; UroCrawl.input.edges.alt = true; UroCrawl.step(1); // back to DUST
+    const ok = UroCrawl.giveMod('holmium_pulse'); w.heat = 0; UroCrawl.step(20); __aim(P.x + 150, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(204); const heat = w.heat, locked = w.locked; UroCrawl.input.mouseFire = false; UroCrawl.step(5);
+    return { ok, heat, locked, mode: w.mode, n: w.modIds.length, avail: UroCrawl.availableMods(w).length }; });
+  check('Longer Pulse: 3.4 s of continuous DUST beam no longer overheats (heat ≈ 0.67)', b.ok && b.mode === 0 && b.locked === 0 && b.heat > 0.6 && b.heat < 0.75, 'heat ' + b.heat.toFixed(2));
+  check('a fully built Holmium (5 mods + capstone) has nothing left to offer', b.n === 5 && b.avail === 0);
+  await shot(p, 'j-holmium');
+  errCheck('J2', errs);
+});
+
+await block('J3. scalpel mods', async () => {
+  const { p, errs } = await openJ('?seed=22&god=1&room=2&weapons=scalpel&mods=scalpel_sharp,scalpel_quick');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('papillary', P.x + 50, P.y, 0, 0, { bleedMul: 0 }); __aim(P.x + 50, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 10); const cd = w.cd; UroCrawl.input.mouseFire = false; UroCrawl.step(30);
+    const okB = UroCrawl.giveMod('scalpel_backstab'); const t2 = __pin('papillary', P.x + 50, P.y, 120, 0, { bleedMul: 0 }); __kill(t); UroCrawl.step(1); UroCrawl.input.mouseFire = true; const h2 = __firstHit(t2, 10); UroCrawl.input.mouseFire = false; const tag = G.texts.some(x => x.sub === 'BACKSTAB!'); UroCrawl.step(30);
+    const t3 = __pin('papillary', P.x + 50, P.y, -120, 0, { bleedMul: 0 }); __kill(t2); UroCrawl.step(1); UroCrawl.input.mouseFire = true; const h3 = __firstHit(t3, 10); UroCrawl.input.mouseFire = false; UroCrawl.step(30);
+    return { hit: h.dmg, cd, okB, behind: h2.dmg, tag, front: h3.dmg }; });
+  check('Sharpened + Quick Hands: slash lands 16 × 1.25 × 1.5 = 30 and the attack time is 0.225 s', Math.abs(b.hit - 30) < 0.01 && Math.abs(b.cd - 0.225) < 0.002, b.hit + ' / cd ' + b.cd);
+  check('Backstab: ×2 (60) on an enemy moving away, normal (30) when it faces you', b.okB && Math.abs(b.behind - 60) < 0.01 && b.tag && Math.abs(b.front - 30) < 0.01, b.behind + ' / ' + b.front);
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okL = UroCrawl.giveMod('scalpel_lungereset'); const t = __pin('papillary', P.x + 50, P.y, 0, 0, { bleedMul: 0 }); t.hp = 1; w.cd2 = 1.0; __aim(P.x + 50, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(2); UroCrawl.input.mouseFire = false; const reset = w.cd2 === 0 && t.dead, txt = G.texts.some(x => x.text === 'LUNGE RESET'); UroCrawl.step(20);
+    const okS = UroCrawl.giveMod('scalpel_bleed'); const t2 = __pin('papillary', P.x + 50, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(1); const s1 = t2.st.bleed && t2.st.bleed.stacks, d1 = t2.st.bleed && t2.st.bleed.dps; UroCrawl.step(16); const s2 = t2.st.bleed && t2.st.bleed.stacks, d2 = t2.st.bleed && t2.st.bleed.dps, base = t2.st.bleed && t2.st.bleed.base; UroCrawl.input.mouseFire = false; UroCrawl.step(10);
+    return { okL, reset, txt, okS, s1, d1, s2, d2, base }; });
+  check('Lunge Reset: a scalpel kill zeroes the lunge cooldown', b.okL && b.reset && b.txt);
+  check('Bleed Stacking: the second slash adds a stack and the bleed grows to ×1.5 of its base', b.okS && b.s1 === 1 && b.s2 === 2 && Math.abs(b.d2 - b.base * 1.5) < 0.01 && b.d2 > b.d1, JSON.stringify({ s1: b.s1, s2: b.s2, d1: b.d1, d2: b.d2 }));
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okC = UroCrawl.giveMod('scalpel_id'); UroCrawl.step(20);
+    const a = __pin('abscess', P.x + 60, P.y, 0, 0, { bleedMul: 0 }); a.wp.ox = -a.r * 0.55; a.wp.oy = 0; a.wp.t = 99; a.wp.next = null; // bulb facing the surgeon
+    __aim(P.x + 60, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(a, 10); UroCrawl.input.mouseFire = false; UroCrawl.step(2);
+    const crit = G.texts.filter(x => x.sub === 'DRAINED!').map(x => x.text), pus = G.hazards.filter(x => x.kind === 'pus').length; G.hazards.length = 0; UroCrawl.step(20);
+    const t = __pin('papillary', P.x + 50, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; UroCrawl.step(10); const bleeding = !!t.st.bleed; t.hp = 1; UroCrawl.input.mouseFire = true; UroCrawl.step(16); UroCrawl.input.mouseFire = false; const pus2 = G.hazards.filter(x => x.kind === 'pus').length;
+    return { okC, cap: w.capstone, collapsed: h.dead, crit, pus, bleeding, dead: t.dead, pus2 }; });
+  check('Incision and Drainage: a weak-point slash crits ×6 (16 × 1.25 × 0.8 × 6 = 96 shown as DRAINED!), the sac collapses, pus puddle', b.okC && b.cap === 'scalpel_id' && b.crit.length === 1 && b.crit[0] === '96' && b.collapsed && b.pus >= 1, 'crit ' + b.crit.join('/') + ', pus ' + b.pus);
+  check('Incision and Drainage: a scalpel kill on a bleeding enemy drains a pus puddle', b.bleeding && b.dead && b.pus2 >= 1, 'pus ' + b.pus2);
+  await shot(p, 'j-scalpel');
+  errCheck('J3', errs);
+});
+
+await block('J4. loop mods', async () => {
+  const { p, errs } = await openJ('?seed=23&god=1&room=2&weapons=loop&mods=loop_big,loop_heavy');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('papillary', P.x + 100, P.y, 0, 0, { bleedMul: 0 }); __aim(P.x + 100, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 30); const rad = w.fx && w.fx.rad, kx = t.kx; UroCrawl.input.mouseFire = false; UroCrawl.step(60);
+    const okF = UroCrawl.giveMod('loop_fast'); const t2 = __pin('papillary', P.x + 100, P.y, 0, 0, { bleedMul: 0 }); __kill(t); UroCrawl.step(1); UroCrawl.input.mouseFire = true; const h2 = __firstHit(t2, 30); UroCrawl.input.mouseFire = false; UroCrawl.step(18); const still = !!w.swing; UroCrawl.step(30); const done = !w.swing;
+    return { hit: h.dmg, steps: h.steps, rad, kx, okF, steps2: h2.steps, still, done, slow: UroCrawl.tables.WEAPONS.loop.slowWhile(Object.assign({}, w, { swing: {} })) }; });
+  check('Bigger Loop + Heavy Sweep: radius 137.5, the cut lands 45 × 1.3 × 1.5 = 87.75 with ×1.5 knockback', Math.abs(b.rad - 137.5) < 0.01 && Math.abs(b.hit - 87.75) < 0.01 && b.kx > 190, 'rad ' + b.rad + ' dmg ' + b.hit + ' kx ' + Math.round(b.kx));
+  check('Fast Return: the cut lands at ~0.18 s instead of 0.25 and the whole swing is over by 0.65 s', b.okF && b.steps >= 15 && b.steps2 <= 12 && b.still && b.done && b.slow === 0.75, 'steps ' + b.steps + ' → ' + b.steps2);
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okB = UroCrawl.giveMod('loop_blend'); const t = __pin('papillary', P.x + 100, P.y); __aim(P.x + 100, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 30); UroCrawl.input.mouseFire = false; const noBleed = !t.st.bleed, caut = G.texts.some(x => /^CAUTERIZED \+/.test(x.text)); UroCrawl.step(45);
+    const okW = UroCrawl.giveMod('loop_whip'); __kill(t); UroCrawl.step(1); UroCrawl.input.mouseFire = true; UroCrawl.step(13); UroCrawl.input.mouseFire = false; const field = G.fields.length === 1 && G.fields[0].kind === 'wire', rad = G.fields.length ? G.fields[0].rad : 0;
+    const t2 = __pin('papillary', P.x + rad, P.y); UroCrawl.step(25); const onWire = t2.hp < t2.maxHp, bled = !!t2.st.bleed; UroCrawl.step(80); const gone = G.fields.length === 0;
+    return { okB, noBleed, caut, okW, field, onWire, bled, gone }; });
+  check('Blend Current: the cut cauterizes on the spot — nothing left bleeding, CAUTERIZED bonus shown', b.okB && b.noBleed && b.caut);
+  check('Wire Whip: the sweep leaves a wire arc that cuts an enemy standing on it (bleed) and fades after 1.5 s', b.okW && b.field && b.onWire && b.bled && b.gone, JSON.stringify(b));
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const offer = UroCrawl.rollModOffer(w, 3); const okT = UroCrawl.giveMod('loop_turp');
+    const t = __pin('bph', P.x + 110, P.y); __aim(P.x + 110, P.y); const e0 = G.stats.dmg.ENERGY; UroCrawl.input.mouseFire = true; UroCrawl.step(32); UroCrawl.input.mouseFire = false; const energy = G.stats.dmg.ENERGY - e0, turp = G.texts.some(x => x.sub === 'TURP'), gold = !!(w.fx && w.fx.gold); UroCrawl.step(30);
+    P.hp = 50; t.hp = 1; UroCrawl.input.mouseFire = true; UroCrawl.step(20); UroCrawl.input.mouseFire = false;
+    return { offer, okT, cap: w.capstone, energy, turp, gold, hp: P.hp, dead: t.dead }; });
+  check('TURP Special: offered once Blend + Heavy are held; the return sweep deals ENERGY and shows TURP', b.offer[0] === 'loop_turp' && b.okT && b.cap === 'loop_turp' && b.energy > 0 && b.turp, 'energy ' + Math.round(b.energy));
+  check('TURP Special: a BENIGN kill with the loop heals 4 HP', b.dead && b.hp === 54, 'hp ' + b.hp);
+  await shot(p, 'j-loop');
+  errCheck('J4', errs);
+});
+
+await block('J5. bovie mods', async () => {
+  const { p, errs } = await openJ('?seed=24&god=1&room=2&weapons=bovie&mods=bovie_watt');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const line = []; for (let i = 0; i < 6; i++) line.push(__pin('cod', P.x + 100 + i * 60, P.y)); __aim(P.x + 100, P.y);
+    UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const hit3 = line.filter(e => e.hp < e.maxHp).length;
+    const okC = UroCrawl.giveMod('bovie_chain'); line.forEach(e => { e.hp = e.maxHp; }); w.tick = 0; UroCrawl.step(12); UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const hit4 = line.filter(e => e.hp < e.maxHp).length;
+    return { ms: w.ms, hit3, okC, hit4 }; });
+  check('High Wattage + Chain +1: ×1.25 damage, the arc jumps 3 → 4 targets', Math.abs(b.ms.dmg - 1.25) < 1e-9 && b.hit3 === 3 && b.okC && b.ms.chain === 1 && b.hit4 === 4, b.hit3 + ' → ' + b.hit4);
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('cod', P.x + 100, P.y); __aim(P.x + 100, P.y); G.hazards.push({ kind: 'saline', x: P.x, y: P.y, r: 60, t: Infinity, max: Infinity, ph: 0 });
+    const fizzles = function (steps) { let n = 0; UroCrawl.input.mouseFire = true; for (let i = 0; i < steps; i++) { UroCrawl.step(1); if (w.fx && w.fx.fizzle && w.fx.t > 0.07) n++; } UroCrawl.input.mouseFire = false; return n; }; // count fizzle flashes on the tick they happen
+    const fizzBefore = fizzles(120); UroCrawl.step(60);
+    const okG = UroCrawl.giveMod('bovie_ground'); w.power = 1; const fizzAfter = fizzles(120); G.hazards.length = 0; UroCrawl.step(60);
+    __kill(t); UroCrawl.step(1); const side = __pin('cod', P.x + 20 + Math.cos(1.0) * 80, P.y + Math.sin(1.0) * 80); __aim(P.x + 200, P.y); w.power = 1; UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const sideBefore = side.hp < side.maxHp;   // 57° off the muzzle's aim line
+    const okS = UroCrawl.giveMod('bovie_spray'); w.tick = 0; UroCrawl.step(12); UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const sideAfter = side.hp < side.maxHp;
+    return { fizzBefore, okG, fizzAfter, sideBefore, okS, sideAfter }; });
+  check('Ground Pad: the Bovie fizzled in saline before the mod and never after it', b.fizzBefore > 0 && b.okG && b.fizzAfter === 0, b.fizzBefore + ' → ' + b.fizzAfter);
+  check('Spray Mode: an enemy 57° off the aim line is out of the normal cone but inside the 140° spray', !b.sideBefore && b.okS && b.sideAfter);
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okF = UroCrawl.giveMod('bovie_fulg'); const t = __pin('cod', P.x + 100, P.y); __aim(P.x + 100, P.y); w.power = 1; w.mode = 0; UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const stunned = !!t.st.stun, stunT = t.st.stun && t.st.stun.t; UroCrawl.step(60);
+    const offer = UroCrawl.rollModOffer(w, 3), okR = UroCrawl.giveMod('bovie_reaction'); __kill(t); UroCrawl.step(1);
+    const cl = []; for (let i = 0; i < 6; i++) cl.push(__pin('cod', P.x + 110 + (i % 3) * 50, P.y - 50 + Math.floor(i / 3) * 55)); w.power = 1; w.tick = 0; UroCrawl.step(12); UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false;
+    const fx = w.fx, ends = fx && fx.branches ? fx.branches.map(s => Math.round(s[1].x) + ',' + Math.round(s[1].y)) : [], dup = ends.length !== new Set(ends).size, hit = cl.filter(e => e.hp < e.maxHp).length;
+    return { okF, stunned, stunT, offer, okR, cap: w.capstone, tree: !!(fx && fx.tree), branches: ends.length, dup, hit }; });
+  check('Fulguration: every arc hit stuns (0.35 s in CUT mode)', b.okF && b.stunned && Math.abs(b.stunT - 0.35) < 0.02, 'stun ' + b.stunT);
+  check('Chain Reaction: offered once Chain +1 + Fulguration are held; the arc becomes a forking tree that reaches all six and then re-hits', b.offer[0] === 'bovie_reaction' && b.okR && b.cap === 'bovie_reaction' && b.tree && b.branches >= 8 && b.dup && b.hit === 6, JSON.stringify({ branches: b.branches, dup: b.dup, hit: b.hit }));
+  await shot(p, 'j-bovie');
+  errCheck('J5', errs);
+});
+
+await block('J6. trilogy mods', async () => {
+  const { p, errs } = await openJ('?seed=25&god=1&room=2&weapons=trilogy&mods=trilogy_probe,trilogy_dual');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('com', P.x + 60, P.y); __aim(P.x + 60, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 10); const hp1 = t.hp; UroCrawl.step(60); const ticks = (hp1 - t.hp) / h.dmg; UroCrawl.input.mouseFire = false; UroCrawl.step(5);
+    const okR = UroCrawl.giveMod('trilogy_reach'); __kill(t); UroCrawl.step(1); UroCrawl.input.mouseFire = true; UroCrawl.step(3); const len = Math.hypot(w.fx.x1 - w.fx.x0, w.fx.y1 - w.fx.y0); UroCrawl.input.mouseFire = false; UroCrawl.step(5);
+    return { ms: w.ms, hit: h.dmg, ticks, okR, len }; });
+  check('Bigger Probe + Dual-Frequency: a tick lands 4.2 × 1.25 × 1.75 = 9.1875 and ~17 ticks land per second (0.056 s)', Math.abs(b.hit - 9.1875) < 0.01 && Math.abs(b.ms.hw - 1.35) < 1e-9 && b.ticks >= 16 && b.ticks <= 19, 'hit ' + b.hit + ', ticks/s ' + b.ticks.toFixed(1));
+  check('Probe Reach: the probe reaches 135 px', b.okR && Math.abs(b.len - 135) < 1, b.len.toFixed(1));
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const okH = UroCrawl.giveMod('trilogy_handsfree'); G.pickups.push({ kind: 'coin', x: P.x + 120, y: P.y, vx: 0, vy: 0, z: 0, vz: 0, t: 1, value: 1, magnet: false, bob: 0 }); __aim(P.x + 120, P.y);
+    UroCrawl.input.mouseFire = true; UroCrawl.step(2); const suck = w.suck, fx2 = w.fx2 && w.fx2.kind, magnet = G.pickups[0] && G.pickups[0].magnet; UroCrawl.input.mouseFire = false; UroCrawl.step(2); const off = !w.suck; G.pickups.length = 0;
+    const okV = UroCrawl.giveMod('trilogy_vortex'); const far = __pin('cod', P.x + 150, P.y); far.def = Object.assign({}, far.def, { update: function (q) { q.vx = q.vy = 0; } }); const near = __pin('cod', P.x + 50, P.y); near.def = far.def;
+    const d0 = far.x - P.x; UroCrawl.input.mouseAlt = true; UroCrawl.step(30); UroCrawl.input.mouseAlt = false; const d1 = far.x - P.x, nearHit = near.hp < near.maxHp, vfx = !!(w.fx2 && w.fx2.vortex);
+    return { okH, suck, fx2, magnet, off, okV, d0, d1, nearHit, vfx }; });
+  check('Hands-Free Suction: suction runs while firing (loot magnetised) and stops with the trigger', b.okH && b.suck && b.fx2 === 'suction' && b.magnet && b.off);
+  check('Vortex Pull: the suction drags a far enemy toward you and grinds the near one', b.okV && b.d1 < b.d0 - 30 && b.nearHit && b.vfx, Math.round(b.d0) + ' → ' + Math.round(b.d1));
+  b = await p.evaluate(() => { __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const offer = UroCrawl.rollModOffer(w, 3), okM = UroCrawl.giveMod('trilogy_maelstrom');
+    const cx = P.x + 120, cy = P.y, still = function (q) { q.vx = q.vy = 0; }; const eye = __pin('com', cx, cy); eye.def = Object.assign({}, eye.def, { update: still }); const rim = __pin('cod', cx + 80, cy); rim.def = Object.assign({}, rim.def, { update: still });
+    const r0 = Math.hypot(rim.x - cx, rim.y - cy); __aim(cx, cy); UroCrawl.input.mouseAlt = true; UroCrawl.step(30); const kind = w.fx2 && w.fx2.kind; UroCrawl.input.mouseAlt = false; const r1 = Math.hypot(rim.x - cx, rim.y - cy);
+    return { offer, okM, cap: w.capstone, kind, eyeHit: eye.hp < eye.maxHp, r0, r1 }; });
+  check('Maelstrom: offered once Vortex + Hands-Free are held; a vortex ahead of the probe grinds the eye and drags the rim in', b.offer[0] === 'trilogy_maelstrom' && b.okM && b.cap === 'trilogy_maelstrom' && b.kind === 'maelstrom' && b.eyeHit && b.r1 < b.r0 - 30, Math.round(b.r0) + ' → ' + Math.round(b.r1));
+  await shot(p, 'j-trilogy');
+  errCheck('J6', errs);
+});
+
+await block('J7. aspects', async () => {
+  const { p, errs } = await openJ('?seed=26&god=1&room=2&weapons=holmium,scalpel,loop,trilogy&aspects=holmium:fragmenting,scalpel:bleeder,loop:buttonatt,trilogy:pneumatic');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), W = UroCrawl.tables.WEAPONS;
+    const asp = G.weapons.map(w => w.aspect), h = G.weapons[0];
+    const t = __pin('com', P.x + 150, P.y); __aim(P.x + 150, P.y); UroCrawl.input.edges.alt = true; UroCrawl.step(1); const mode = h.mode, cd2 = h.cd2, sup = G.texts.some(x => x.sub === 'SUPERPULSE'), supDmg = t.maxHp - t.hp;
+    h.heat = 0; UroCrawl.input.mouseFire = true; UroCrawl.step(60); UroCrawl.input.mouseFire = false; const heat = h.heat; UroCrawl.step(30);
+    UroCrawl.selectWeapon(1); G.swapT = 0; G.swapBonusT = 0; const s = G.weapons[1]; UroCrawl.input.edges.alt = true; UroCrawl.step(1); const blade = G.bullets.some(x => x.kind === 'blade'); UroCrawl.step(40);
+    const t2 = __pin('papillary', P.x + 50, P.y, 0, 0, { bleedMul: 0 }); __aim(P.x + 50, P.y); UroCrawl.input.mouseFire = true; const sh = __firstHit(t2, 10); UroCrawl.input.mouseFire = false; UroCrawl.step(30);
+    UroCrawl.selectWeapon(2); G.swapT = 0; G.swapBonusT = 0; const l = G.weapons[2]; const e0 = G.stats.dmg.ENERGY; __kill(t2); UroCrawl.step(1); const t3 = __pin('papillary', P.x + 60, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(20); UroCrawl.input.mouseFire = false; const cone = G.stats.dmg.ENERGY - e0, noSwing = !l.swing; UroCrawl.input.edges.alt = true; UroCrawl.step(1); const swing = !!l.swing, lcd = l.cd2; UroCrawl.step(60);
+    UroCrawl.selectWeapon(3); G.swapT = 0; G.swapBonusT = 0; const tr = G.weapons[3]; __kill(t3); UroCrawl.step(1); const t4 = __pin('com', P.x + 60, P.y); __aim(P.x + 60, P.y); UroCrawl.input.mouseFire = true; const th = __firstHit(t4, 20); const slow = W.trilogy.slowWhile(tr); UroCrawl.input.mouseFire = false;
+    return { asp, mode, cd2, sup, supDmg, heat, blade, slash: sh.dmg, cone, noSwing, swing, lcd, lmode: l.mode, piston: th.dmg, slow }; });
+  check('?aspects= pins Fragmenting / Bleeder / Button / Pneumatic on the four instruments', b.asp.join() === 'fragmenting,bleeder,buttonatt,pneumatic', b.asp.join());
+  check('Fragmenting: FRAGMENT only, alt is a SUPERPULSE (65 × 1.75 = 113.75, 1.8 s cooldown), heat builds per pulse (~0.4 after 1 s)', b.mode === 1 && Math.abs(b.cd2 - 1.8) < 0.02 && b.sup && Math.abs(b.supDmg - 113.75) < 0.01 && b.heat > 0.25 && b.heat < 0.5, JSON.stringify({ mode: b.mode, cd2: b.cd2, sup: b.supDmg, heat: b.heat }));
+  check('Bleeder: alt throws a spinning blade; slashes hit for 12.8 × 1.5 = 19.2', b.blade && Math.abs(b.slash - 19.2) < 0.01, 'slash ' + b.slash);
+  check('Button attachment: the cone is the primary (ENERGY, no swing) and alt swings the loop on a 1.2 s cooldown', b.lmode === 1 && b.cone > 0 && b.noSwing && b.swing && Math.abs(b.lcd - 1.2) < 0.02, JSON.stringify({ cone: Math.round(b.cone), lcd: b.lcd }));
+  check('Pneumatic: a piston strike lands 14.7 × 1.75 = 25.725 and you keep 85% speed', Math.abs(b.piston - 25.725) < 0.01 && b.slow === 0.85, 'piston ' + b.piston + ' slow ' + b.slow);
+  await shot(p, 'j-aspects-2');
+  const { p: p3, errs: errs3 } = await openJ('?seed=27&god=1&room=2&weapons=holmium,scalpel,loop,trilogy&aspects=holmium:popcorning,scalpel:lunger,loop:rolleratt,trilogy:combined');
+  b = await p3.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player();
+    const asp = G.weapons.map(w => w.aspect), h = G.weapons[0];
+    const t = __pin('com', P.x + 150, P.y), side = __pin('com', P.x + 250, P.y + 36); __aim(P.x + 150, P.y); let boil = false; UroCrawl.input.mouseFire = true; for (let i = 0; i < 30; i++) { UroCrawl.step(1); if (h.fx && h.fx.boil) boil = true; } UroCrawl.input.mouseFire = false; const sideHit = side.hp < side.maxHp;   // 36 px off the beam line: outside hw + r (31), inside the 38 px boil
+    UroCrawl.input.keys.KeyA = true; UroCrawl.step(2); let movingBoil = false; UroCrawl.input.mouseFire = true; for (let i = 0; i < 30; i++) { UroCrawl.step(1); if (h.fx && h.fx.boil) movingBoil = true; } UroCrawl.input.mouseFire = false; UroCrawl.input.keys.KeyA = false; P.x = 300; P.y = 270; UroCrawl.step(30);   // walking (away from the target) switches the boil off
+    UroCrawl.selectWeapon(1); G.swapT = 0; const s = G.weapons[1]; UroCrawl.input.edges.alt = true; UroCrawl.step(1); const lcd = s.cd2, lunge = s.lunge; UroCrawl.step(60); P.x = 300; P.y = 270; __aim(P.x + 50, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(1); UroCrawl.input.mouseFire = false; const scd = s.cd; UroCrawl.step(40);
+    UroCrawl.selectWeapon(2); G.swapT = 0; const l = G.weapons[2]; G.enemies.forEach(__kill); UroCrawl.step(1); const pol = __pin('polyp', P.x + 50, P.y); pol.hp = 1; P.hp = 50; __aim(P.x + 50, P.y); UroCrawl.input.mouseFire = true; UroCrawl.step(10); UroCrawl.input.mouseFire = false; const healed = P.hp, polDead = pol.dead; UroCrawl.step(20);
+    UroCrawl.selectWeapon(3); G.swapT = 0; const tr = G.weapons[3]; UroCrawl.input.mouseAlt = true; UroCrawl.step(2); const rad = tr.fx2 && tr.fx2.rad; UroCrawl.input.mouseAlt = false; const t5 = __pin('com', P.x + 60, P.y); __aim(P.x + 60, P.y); let maxDelta = 0, hp = t5.hp; UroCrawl.input.mouseFire = true; for (let i = 0; i < 60; i++) { UroCrawl.step(1); maxDelta = Math.max(maxDelta, hp - t5.hp); hp = t5.hp; } UroCrawl.input.mouseFire = false;
+    return { asp, boil, sideHit, movingBoil, lcd, lunge, scd, lmode: l.mode, healed, polDead, rad, maxDelta, ticks: tr.ticks }; });
+  check('?aspects= pins Popcorning / Lunger / Roller Ball / Combined', b.asp.join() === 'popcorning,lunger,rolleratt,combined', b.asp.join());
+  check('Popcorning: standing still, the beam tip boils and hits an enemy beside the tip; moving, it does not', b.boil && b.sideHit && !b.movingBoil);
+  check('Lunger: lunge cooldown 0.5 s and a 0.22 s dash; slashes take 0.4 s', Math.abs(b.lcd - 0.5) < 0.02 && Math.abs(b.lunge - 0.22) < 0.02 && Math.abs(b.scd - 0.4) < 0.002, JSON.stringify({ lcd: b.lcd, lunge: b.lunge, scd: b.scd }));
+  check('Roller Ball attachment: coag cone primary (mode pinned to ROLLER) heals 2 HP per BENIGN kill', b.lmode === 2 && b.polDead && b.healed === 52, 'hp ' + b.healed);
+  check('Combined: 240 px suction cone and a piston strike (12 × 1.75 = 21) every fifth tick', b.rad === 240 && Math.abs(b.maxDelta - 21) < 0.01 && b.ticks >= 5, 'rad ' + b.rad + ' max tick ' + b.maxDelta);
+  await shot(p3, 'j-aspects-3');
+  // persistence + level gating + the title-screen picker
+  const { p: p4, errs: errs4 } = await open('?seed=28');
+  b = await p4.evaluate(() => { const a0 = UroCrawl.chosenAspect('scalpel'); UroCrawl.setAspect('scalpel', 'lunger'); const locked = UroCrawl.chosenAspect('scalpel'); UroCrawl.meta.xp = 5000; const unlocked = UroCrawl.chosenAspect('scalpel'); UroCrawl.setAspect('scalpel', 'lunger'); return { a0, locked, unlocked }; });
+  check('aspect picks persist in META and stay locked below the level (Lunger needs PGY-4)', b.a0 === 'backstab' && b.locked === 'backstab' && b.unlocked === 'lunger');
+  await p4.reload(); await p4.waitForFunction(() => !!window.UroCrawl);
+  b = await p4.evaluate(() => ({ chosen: UroCrawl.chosenAspect('scalpel'), line: document.getElementById('aspectLine').textContent }));
+  check('the title screen shows the chosen aspects after a reload', b.chosen === 'lunger' && /Scalpel · Lunger/.test(b.line) && /Holmium · Dusting/.test(b.line), b.line);
+  await p4.click('#btnAspects'); await p4.waitForTimeout(100);
+  b = await p4.evaluate(() => { const o = UroCrawl.state.overlay, cards = document.querySelectorAll('#aspectList .card.asp').length, sel = document.querySelectorAll('#aspectList .card.asp.sel').length, locked = document.querySelectorAll('#aspectList .card.asp.locked').length; UroCrawl.meta.xp = 0; document.getElementById('btnAspects').click(); const locked0 = document.querySelectorAll('#aspectList .card.asp.locked').length; return { o, cards, sel, locked, locked0 }; });
+  check('ASPECTS screen: 12 cards, one equipped per instrument; 8 locked at PGY-1, none at PGY-12', b.o === 'aspects' && b.cards === 12 && b.sel === 4 && b.locked === 0 && b.locked0 === 8, JSON.stringify(b));
+  await shot(p4, 'j-aspects-screen');
+  errCheck('J7', errs.concat(errs3, errs4));
+});
+
+await block('J8. instrument rep', async () => {
+  const { p, errs } = await openJ('?seed=29&god=1&room=3&weapons=holmium,scalpel');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player();
+    let reps = 0, only = 0, sizes = []; for (let i = 0; i < 60; i++) { const o = UroCrawl.genDoorOptions({ index: 3 }); sizes.push(o.length); if (o.indexOf('rep') >= 0) reps++; if (o.length === 1 && o[0] === 'rep') only++; }
+    UroCrawl.giveMod('holmium_joules'); UroCrawl.giveMod('holmium_narrow'); let h = 0; for (let i = 0; i < 300; i++) if (UroCrawl.pickRepWeapon().id === 'holmium') h++;
+    return { reps, only, h }; });
+  check('rep doors appear in the door roll (room 3+), never as the only door', b.reps > 0 && b.only === 0, b.reps + ' of 60 rolls');
+  check('build momentum: a weapon with 2 mods is picked ~64% of the time, the fresh one still ~36%', b.h > 150 && b.h < 240, b.h + ' / 300 picked Holmium');
+  await p.evaluate(() => { const G = UroCrawl.state; UroCrawl.skipRoom(); UroCrawl.step(5); const d = G.doors[0]; d.type = 'rep'; d.weapon = 'scalpel'; d.open = true; d.anim = 1; UroCrawl.step(40); });
+  await p.waitForTimeout(250); // let a frame render the repainted plaque
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), d = G.doors[0];
+    const box = document.getElementById('game').getBoundingClientRect(), s = box.width / 960, ctx = document.getElementById('game').getContext('2d');
+    const ix = d.x - 34, iy = d.y + d.h / 2, px = [[ix - 24, iy], [ix, iy - 24], [ix, iy + 24]].map(q => Array.from(ctx.getImageData(Math.round(q[0] * s), Math.round(q[1] * s), 1, 1).data).slice(0, 3)); // three points on the ring
+    const best = px.reduce((a, c) => (c[0] > a[0] ? c : a), [0, 0, 0]);
+    P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); const plan = G.room;
+    UroCrawl.skipRoom(); UroCrawl.step(5); const rep = G.rewards.filter(r => r.kind === 'rep')[0];
+    return { px: best, reward: plan.reward, repWeapon: plan.repWeapon, kind: plan.kind, rep: !!rep, repFor: rep && rep.weapon }; });
+  check('the rep door plaque is painted in the weapon\'s class colour (Scalpel = CUT red, under the vignette)', b.px[0] > 110 && b.px[0] > b.px[1] * 2.2 && b.px[2] < b.px[0] * 0.6, 'rgb ' + b.px.join(','));
+  check('through a rep door: a combat room whose reward is the Instrument Rep for that weapon', b.kind === 'combat' && b.reward === 'rep' && b.repWeapon === 'scalpel' && b.rep && b.repFor === 'scalpel');
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), rep = G.rewards.filter(r => r.kind === 'rep')[0]; G.rvu = 100; P.x = rep.x + 80; P.y = rep.y; UroCrawl.step(3); P.x = rep.x; P.y = rep.y; UroCrawl.step(3);
+    const o = G.overlay, cards = document.querySelectorAll('#modCards .card').length, title = document.getElementById('modTitle').textContent, ids = rep.offer.slice(), btn = document.getElementById('btnModReroll');
+    const canReroll = !btn.disabled, label = btn.textContent, rvu0 = G.rvu; btn.click(); const spent = rvu0 - G.rvu, w2 = rep.weapon, ids2 = rep.offer.slice(), disabled = btn.disabled, label2 = btn.textContent, title2 = document.getElementById('modTitle').textContent;
+    document.querySelector('#modCards .card').click(); const closed = G.overlay, used = rep.used, holm = G.weapons[0].modIds.length;
+    return { o, cards, title, ids, canReroll, label, spent, w2, ids2, disabled, label2, title2, closed, used, holm }; });
+  check('the rep offers 3 of this weapon\'s available mods (a fresh Scalpel: its three tier-I mods)', b.o === 'mod' && b.cards === 3 && /Scalpel/.test(b.title) && b.ids.length === 3 && b.ids.every(id => /^scalpel_/.test(id)), b.ids.join());
+  check('one reroll per rep costs 20 RVU; with no new Scalpel samples it opens another instrument\'s case (Holmium: its 2 remaining mods)', b.canReroll && /ANOTHER INSTRUMENT/.test(b.label) && b.spent === 20 && b.w2 === 'holmium' && /Holmium/.test(b.title2) && b.ids2.length === 2 && b.ids2.every(id => /^holmium_/.test(id)) && b.disabled && b.label2 === 'REROLLED', JSON.stringify({ w2: b.w2, ids2: b.ids2, label: b.label }));
+  check('picking a card installs the mod and closes the screen', b.closed === null && b.used && b.holm === 3);
+  await shot(p, 'j-rep');
+  // shop sample + rest-room rep + debug hook refusal
+  const { p: p2, errs: errs2 } = await openJ('?seed=30&god=1&room=8&weapons=holmium,scalpel');
+  b = await p2.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(5); const G = UroCrawl.state, P = UroCrawl.player(); const rep = G.rewards.filter(r => r.kind === 'rep').length, shop = G.rewards.filter(r => r.kind === 'shop')[0];
+    P.x = shop.x + 80; P.y = shop.y; UroCrawl.step(3); P.x = shop.x; P.y = shop.y; UroCrawl.step(3); const item = shop.stock.filter(it => it.kind === 'mod')[0]; G.rvu = 500; document.getElementById('btnShopLeave').click(); P.x = shop.x + 80; UroCrawl.step(3); P.x = shop.x; UroCrawl.step(3);
+    const btns = Array.from(document.querySelectorAll('#shopItems .shopline')); const line = btns.filter(l => /Rep sample/.test(l.textContent))[0]; if (line) line.querySelector('button').click();
+    const mods = G.weapons.reduce((n, w) => n + w.modIds.length, 0), before = UroCrawl.giveMod('bovie_watt'); UroCrawl.giveWeapon('bovie'); const after = UroCrawl.giveMod('bovie_watt'), bad = UroCrawl.giveMod('nope');
+    return { rep, item: item && item.name, mods, before, after, bad }; });
+  check('the call room hosts a rep, and the shop sells a rep sample that installs on purchase', b.rep === 1 && /^Rep sample: /.test(b.item || '') && b.mods === 1, JSON.stringify({ rep: b.rep, item: b.item, mods: b.mods }));
+  check('giveMod refuses a mod for a weapon you do not carry (and unknown ids); works once the weapon is held', b.before === false && b.after === true && b.bad === false);
+  errCheck('J8', errs.concat(errs2));
+});
+
+await block('J9. HUD detail + unmodded baseline', async () => {
+  const { p, errs } = await openJ('?seed=31&god=1&room=2&weapons=holmium,scalpel');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); const G = UroCrawl.state, P = UroCrawl.player(), w = G.weapons[0];
+    const t = __pin('com', P.x + 150, P.y); __aim(P.x + 150, P.y); UroCrawl.input.mouseFire = true; const h = __firstHit(t, 20); UroCrawl.input.mouseFire = false;
+    const n = G.weapons.length, tot = n * 56 + (n - 1) * 8, x0 = 480 - tot / 2; __aim(x0 + 28, 540 - 66 + 28); const hover0 = UroCrawl.detailSlot(); __aim(x0 + 56 + 8 + 28, 540 - 66 + 28); const hover1 = UroCrawl.detailSlot(); __aim(480, 200); const none = UroCrawl.detailSlot();
+    UroCrawl.input.mode = 'touch'; G.detailSlot = 1; G.detailT = 3; const tap = UroCrawl.detailSlot(); UroCrawl.step(200); const expired = UroCrawl.detailSlot(); UroCrawl.input.mode = 'kb'; __aim(x0 + 28, 540 - 66 + 28);
+    return { ms: Object.keys(w.ms).length, flags: Object.keys(w.flags).length, aspect: w.aspect, hit: h.dmg, hover0, hover1, none, tap, expired }; });
+  check('an unmodded Holmium is unchanged: no stats, no flags, classic aspect, a DUST tick still lands 3.4 × 1.75 = 5.95', b.ms === 0 && b.flags === 0 && b.aspect === 'dusting' && Math.abs(b.hit - 5.95) < 0.01, 'hit ' + b.hit);
+  check('weapon-detail card: hovering a slot picks it (mouse), a slot tap shows it for 3 s (touch)', b.hover0 === 0 && b.hover1 === 1 && b.none === -1 && b.tap === 1 && b.expired === -1, JSON.stringify(b));
+  await p.waitForTimeout(300); await shot(p, 'j-hud-detail');
+  errCheck('J9 (detail card rendered over live frames)', errs);
 });
 
 await browser.close();

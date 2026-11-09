@@ -3,6 +3,52 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later 8) — 🔧 Uro Crawl: weapon upgrade paths (mods + capstones), aspects, Instrument Rep doors
+
+Andrew (via the brief): a Hades-style per-weapon upgrade system — Daedalus-hammer mods with branches and capstones, pre-run
+weapon aspects gated by residency level, and a new "Instrument Rep" door that sells mods for a weapon you carry. Existing
+systems untouched: unmodded weapons behave exactly as before (asserted in the harness).
+
+**Done (`games/uro-crawl.html`, ~4.4k lines, still one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 161 checks):**
+- **MODS table** (`§6b`): 30 rows = 5 weapons × (5 mods + 1 capstone). A row has id, name, weapon, branch (POWER / CONTROL /
+  SPECIAL), tier 1–3, `requires` (a same-branch mod id or null; capstones list a prerequisite pair), rarity, desc, and either
+  `stats` (multipliers on dmg / rate / range / hw, additive `pierce` / `chain`) or a `flag` the weapon code reads via
+  `wflag(w, flag)`. `wmod()` now = rarity × mod stats; `wadd()` for additive keys. ≤ 6 mods + 1 capstone per weapon per run;
+  a capstone is offered only once the pair is held (or 3 mods of its branch). Add mods to any weapon by adding rows.
+- **Content**: Holmium (Higher Joules, Longer Pulse, Narrow Fiber, Moses Effect, Popcorn → **Whirlpool**: shards circle the
+  beam and hit everything within ~35 px of it), Scalpel (Sharpened, Backstab +100% on enemies moving away / lunge hits, Quick
+  Hands, Lunge Reset, Bleed Stacking → **Incision and Drainage**: weak-point ×6, pus puddles), Loop (Bigger Loop, Heavy Sweep,
+  Fast Return, Blend Current = cut + auto-coag, Wire Whip arc → **TURP Special**: golden coag return sweep, +4 HP per BENIGN
+  kill), Bovie (High Wattage, Chain +1, Ground Pad, Spray Mode, Fulguration → **Chain Reaction**: a forking lightning tree,
+  fresh targets first then re-hits, 10 hits/pulse), Trilogy (Bigger Probe, Dual-Frequency, Hands-Free Suction, Probe Reach,
+  Vortex Pull → **Maelstrom**: a vortex 120 px ahead drags enemies into its eye and grinds stones ×1.5).
+- **Aspects** (`ASPECTS`): 3 per starting instrument, picked on the title screen (ASPECTS button → `ov-aspects`; persisted in
+  `META.aspects`; II unlocks at PGY-2, III at PGY-4). Each changes behaviour, not numbers: Holmium Dusting / Fragmenting
+  (pulse-only, SUPERPULSE alt) / Popcorning (stand still → the tip boils); Scalpel Backstab / Bleeder (thrown blade) / Lunger
+  (0.5 s lunge); Loop Loop / Button attachment (cone primary, sweep on alt) / Roller Ball attachment (coag primary, heals);
+  Trilogy Ultrasonic / Pneumatic (piston strikes) / Combined (piston every 5th tick, 240 px suction).
+- **Instrument Rep doors** (`DOOR_TYPES.rep`, room 3+): each door is for ONE carried weapon — the plaque shows that weapon's
+  silhouette + class glyph in its class colour, so you steer the build. Weighted toward weapons already upgraded (+0.4 per
+  mod), never exclusive, never the only door. The room's reward is a rep (suit, lanyard grin, sample case) who offers 3 mods;
+  one 20-RVU reroll per rep (fresh samples, or another instrument's case when the weapon has nothing new). Also: a rep in the
+  call room, and the shop sells a "Rep sample".
+- **UI**: branch-progress pip row under every HUD slot (dots per branch, a star for the capstone); a weapon-detail card
+  (aspect, mods taken, branch progress bars, capstone preview + prerequisites) on mouse hover or for 3 s after a slot tap;
+  the summary lists mods; replacing a modded weapon warns how many mods it loses.
+- **Debug**: `UroCrawl.giveMod(id)`, `UroCrawl.setAspect(weapon, aspect)`, `?mods=id1,id2` (grants the weapon if needed),
+  `?aspects=holmium:fragmenting,…` (unlocked for the session); `UroCrawl.tables.MODS / ASPECTS`.
+
+**Verified:** headless Chromium, all earlier blocks still pass; block J asserts each mod's observable effect (exact damage
+numbers, ranges, timings, stun/bleed/field/puddle side effects), the capstone gating and offer order, every aspect's
+behaviour, META persistence + level locks, rep-door rolls (never the only door), momentum weighting, the plaque colour (pixel
+read), the full door → rep → reroll → install flow, the shop sample, `giveMod` refusals, the HUD detail card, and that an
+unmodded Holmium still ticks for exactly 5.95.
+**Next steps:** Andrew to feel the numbers on the phone (reroll price 20 RVU? capstone pairs too hard to assemble in 7 rooms?
+rep door weight 2.4 vs combat 3?). Knobs: `MOD_CAP`, `MOD_REROLL_COST`, `MOD_RARITY_W`, the `+0.4` momentum weight in
+`pickRepWeapon`, aspect unlock levels in `ASPECTS`.
+**Open questions:** should other weapons get rows now (the framework is table-only)? Should the rep also appear in the
+mystery-door pool? Backstab currently keys off the enemy's own velocity (fleeing shooters, knocked targets don't count).
+
 ## 2026-11-09 (later 7) — 🗡️ Uro Crawl: HIFU, Urethrotome, CO₂ laser, da Vinci ultimate, Condyloma Cluster
 
 Andrew (via the brief): four more instruments on the existing weapon framework plus one benign enemy. Nothing else changed.
