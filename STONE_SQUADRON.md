@@ -42,6 +42,12 @@ intel you read should change what the right play is.
     material's centroid (`surfCenter`/`stoneCenter`), since chunks can leave it off-centre.
   - Measured with bots: painting (random strokes or raster) → 0 breaks; holding still → 2–6
     breaks and several times slower.
+- **Dusting realism** (2026-11-09):
+  - **Dust plume**: puffs of dust billow off the contact point, sink, settle on the wall and wash back past the scope
+    (faster with a sheath or suction). `G.dust` = the plume in front of the lens.
+  - **Near-contact**: `reachDust` is full only with the fiber nearly touching. ADVANCE gets to `ADV_STOP` 0.85.
+  - **Popcorning** in the kidney: fiber still, ≥15 Hz, fragments near the tip churn round and get ablated (best in a calyx).
+  - **Visuals**: cavitation jitter, vapour bubbles fizzing off the tip (a Moses bubble per frag pulse), sparkle on the stone.
 - **Retropulsion** (`RETRO_K`, `SETTLE_V`): per pulse ∝ type × (8 mm / size) × pulse push, and the
   stone settles back toward where it lodged between pulses. FRAG preset is 1.2 J × 12 Hz.
 - **Shop & loadout** (`KIT`, brief): a department budget (starts $500; each finished case pays
@@ -105,9 +111,13 @@ intel you read should change what the right play is.
    prep = all CT targets + right antibiotic, under par). Finish = bronze; stone-free + 3 = silver;
    stone-free + 5 = gold; all 6 = S rank. Best medal per case is shown on the case picker. Par
    times (`LV.par`) need tuning from real play.
-2. **Music and sound design.** First pass done: an original mellow lounge loop (`MUS`, Balatro-ish mood:
-   jazzy chords, walking bass, echoing arpeggio, tape wobble) from mission prep onward, MUSIC On/Off;
-   laser SFX −25%; terminal-style typing beeps on the briefing. Still to do: more tracks/variation, mixing.
+2. **Music and sound design.** Two original generative loops:
+   - The lounge loop (`MUS`, Balatro-ish mood: jazzy chords, walking bass, echoing arpeggio, tape wobble) plays for the
+     brief, prep and debrief.
+   - The mission loop (`MUSM`, 2026-11-09: 150 BPM D minor, battle-theme energy, galloping bass, brass stabs, a 16-bar
+     lead, drums with fills) plays in the OR. They crossfade (`musicTrack`). MUSIC On/Off covers both.
+   - Laser SFX −25%; terminal-style typing beeps on the briefing.
+   - Still to do: an intro sting, a cleanup/tension variation, a stone-free fanfare, mixing.
 3. ~~Radio chatter~~ — done (first pass). More lines per case type as cases are added.
 4. **Harder CT reading.** More stones across the stack, decoys (phleboliths, vascular
    calcification), and decisions such as whether to also treat kidney stones in a ureteral case.
