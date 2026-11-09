@@ -1,7 +1,48 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-02
+**Updated:** 2026-11-09
 **Tool:** Claude Code
+
+## 2026-11-09 — 🎮 Audit of the six in-app arcade games (no code changes)
+
+Andrew asked which arcade games have gone stale and how to bring them up to the polish of Uro Rush /
+Pre-Op, Please / Stone Squadron (Oct–Nov), tossing any that aren't worth saving.
+
+**Found:** every line of the six React games inside `UroStudyHub.html` (Stone Blaster, Drug Match, Board
+Buzzer, Staging Attack, Visual Dx, Snap Decision) dates from July; only the arcade shell got an October
+pass (device fit). Against the newer games they lack: a how-to title card, pause / auto-pause, persisted
+best score, synthesized sound + haptics, an end-of-run **miss review** with the right answer and a why,
+capped and consistent rewards (the in-app games each use their own uncapped `score × 0.12–0.15` formula;
+the framed games are capped at 150 💰 / 80 XP), and any harness. The action games drive React re-renders
+from a 33 ms `setInterval`, which is heavy on phones and hopeless on the Boox.
+
+**Verdicts proposed (Andrew to confirm):**
+- **Snap Decision — keep, extend.** Closest to the bar already. Add the extra modes the `SNAP_MODES` array
+  was built for (stent or not, admit or discharge, biopsy or surveil…), a 20+ card seed per mode, miss
+  review, best score, cached AI decks, and a tie-in to the ISE sprint's weak groups / miss log.
+- **Staging Attack — rebuild as tap-to-stage.** The TNM case data (5 cancers) is the best content of the
+  six; the falling-card typing mechanic hides it (cards clip the vignette at 2 lines, keyboard-only so it
+  never shows on phone/iPad). Show one case, tap T / N / M / Stage from the existing option lists, add a
+  why-line per case. Prostate and testis groupings need GG/PSA and S-marker modifiers to be stage-able.
+- **Drug Match — rebuild as a pure tap-sort.** Drop the run-under-the-chute step (on touch there is no
+  bucket control, only the A/D pad), keep the belt, tap one of four big bucket buttons, add a why-line on
+  misses, more sets (andrology, ADT classes, testis chemo, peds), mixed and side-effect modes. Candidate
+  for its own canvas page like Uro Rush.
+- **Board Buzzer — fold into one quick-fire card game with Snap.** 24 hardcoded questions, no
+  explanations, a few outdated (OAB first-line). Share one shell (title, timer, streak, best, miss review,
+  rewards) and re-source questions (bigger seed with a why, AI deck keyed to the ISE block of the day).
+- **Visual Dx — toss the drawings.** 16 hand-drawn SVGs; the caption gives the answer away, so it is
+  reading, not visual dx, and it cannot scale. Salvage the 16 vignettes as "read the report → dx + next
+  step" cards in the card game.
+- **Stone Blaster — toss.** Keyboard + mouse only (hidden on phone/iPad although it is the ★ free game),
+  no teaching content, and Stone Squadron covers stones far better. Retire the five Blaster-only Shop
+  upgrades with it (game_life, laser_power, time_ext, crit, magnet) and refund spent coins from `s.ups`.
+
+**Next steps:** Andrew picks the tosses; then build the shared card-game shell first, port Snap → Buzzer →
+Staging → report cards into it, and do Drug Match as its own page. Make the free default game a touch
+game that works on every device.
+**Open questions:** keep Blaster's upgrades as Stone Squadron perks instead of retiring them? Is a
+"read the report" mode worth keeping at all, or just drop Visual Dx?
 
 ## 2026-11-02 (later 10) — 🎯 In-Service Exam Sprint plan (Plans tab)
 
