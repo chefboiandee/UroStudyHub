@@ -3,6 +3,52 @@
 **Updated:** 2026-11-09
 **Tool:** Claude Code
 
+## 2026-11-09 (later) — 🛩️ Stone Squadron: more realistic dusting (plume, near-contact, popcorning, bubbles) + mission music
+
+Andrew: likes the dusting, make it even more realistic (picked all four: dust plume, near-contact dusting, popcorn technique,
+vapour bubbles + sparkle). Then: the lounge music is the pre-flight music; the missions need action music, something like
+Star Fox or the FF7 battle theme.
+**Done** (`games/stone-squadron.html`, BUILD 2026-11-09 12:00):
+- **Dust plume** (`PLUME`, `addDust`/`dustSrc`, `plumeTick`, `plumeDraw`):
+  - Dusting puts puffs of stone dust into the water at the contact point, tinted toward the stone's colour.
+  - They billow back off the stone, spread, sink to the dependent side and slowly settle out on the wall. The outflow carries
+    them back past the scope: slowly in a bare ureter, faster up a sheath, fastest on suction.
+  - `G.dust` is now how much of the plume hangs in front of the lens, so it blinds you locally. The global fog is lighter.
+  - Frag pulses kick up bursts; tumour lasing makes vapour/char.
+- **Near-contact dusting** (`reachDust`/`reachFrag`, `ADV_STOP` 1.05 → 0.85):
+  - Full effect only with the fiber nearly on the stone; it falls to ~6% from the rails' parking distance (was 35%).
+  - Frag pulses reach a bit further. The HUD says "fiber off the stone / too far to dust: hold ▶ ADVANCE".
+  - A stone washed up by high flow now has to be followed in.
+- **Popcorning** (`stirFrags`): in the kidney, fiber held still, ≥15 Hz. Fragments within ~2 units of the tip get churned
+  round it and slowly ablated without aiming (a calyx ~3× better than the open pelvis). Moving the fiber or low-frequency
+  FRAG doesn't popcorn. Firing near the wall still burns. Attending line; count in the run report.
+- **Cavitation**: fragments near where the beam lands jitter.
+- **Vapour bubbles and sparkle**: ring-shaped bubbles fizz off the fiber tip at the pulse rate (`bubPS`, carried off and
+  rising), a bigger Moses bubble each frag pulse, and sparks strobe on the stone where the pulses land. The beam visuals now
+  follow what the sim actually fired (no beam with the fiber out for a wire).
+- **Mission music** (`missionTick`, `musicTrack`): an original 150 BPM D-minor loop, battle-theme energy without quoting
+  any tune. Galloping octave bass, syncopated brass stabs, a pad, a 16-bar lead (A: the call, B: it climbs, with an
+  arpeggio), and drums with a tom fill every 8 bars. It crossfades in at scrub-in; the lounge loop plays for the brief, prep and debrief.
+  The MUSIC toggle and mute cover both.
+
+**Verified (headless Chromium, local three.js; numbers vs the previous build):**
+- Up close, a 9 mm COM stone dusts in 32.4 s (was 32.7). At 35% flow it still fogs out: dust 100, visibility 0.30, lock lost.
+- At 70% flow dust holds at ~35 (was 53). The view stays clearer, but the flow pushes the pressure over 40.
+- From the rails' parking spot, dust barely forms and the stone isn't dusted in 40 s (it used to be).
+- A bot that follows the stone in finishes whole cases in about the same time as before (66/65, 93/83, 51/49 s).
+- Popcorning, 6 uric acid fragments: calyx 4 s, open pelvis ~10 s. Nothing while moving, or on the 12 Hz FRAG pedal.
+- Music: both loops schedule and crossfade (lounge silent during the mission and the reverse). Mission RMS ≈ 1.25× lounge,
+  drum peaks ~0.2.
+- All cases, wire wrinkles and the tumour case play through; no page errors. Screenshots of the plume at 35% / 70% flow in
+  both camera views.
+
+**Not verified:** how the music sounds (no speakers here); plume fill-rate on the iPad (≤200 soft sprites); feel of the
+steeper reach with a thumb.
+**Next steps:** Andrew plays: is the plume too white near the light? Is near-contact too strict (`reachDust` 0.9 → 3.0)?
+Mission music: tempo/volume (`MUSM_VOL`, `S16`), more variations (an intro sting, a calmer cleanup section, a victory
+fanfare at stone-free).
+**Open questions:** settled dust being stirred back up by the scope; dust colour per stone (tinted now: maybe stronger).
+
 ## 2026-11-09 — 🛩️ Stone Squadron: wire work as a random wrinkle, experience counter, safety-wire order (built 2026-10-31, merged today)
 
 Andrew: advanced levels with a wire to get past tight or redundant areas — the scope stops like at a stone, you advance or
