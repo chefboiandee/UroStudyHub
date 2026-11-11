@@ -1,6 +1,6 @@
 # Path of Pathology (Uro Crawl) — roadmap for the next sessions
 
-`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~5.4k lines, ES2019, no dependencies) that
+`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~5.4k lines, no dependencies so far) that
 the Arcade hosts in a frame. Players see the name **Path of Pathology**; the file, `window.UroCrawl`, the `crawl:*`
 messages and the storage key keep the working name Uro Crawl on purpose. This file is the build plan. **How to use it:** the owner tells a session
 *"read UROCRAWL_ROADMAP.md and do Step N"* or *"…and do the next step"* (= the first unchecked box below).
@@ -17,10 +17,12 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 1. **Read first, never whole-read.** `games/uro-crawl.html` is huge. Read the newest `STATUS.md` entries ("Uro Crawl"),
    then `grep -n` for the tables you need (`WEAPONS`, `ENEMIES`, `BOONS`, `PATRONS`, `REPS`, `BOSSES`, `MODS`, `ASPECTS`,
    `META`, `showTitle`, `startRun`) and read slices. The file header comment documents the URL parameters and hooks.
-2. **Old-engine safe (the Boox, Chromium ≤ ~92).** ES2019 only. Do NOT use: optional chaining `?.`, nullish `??`, `??=`,
-   `replaceAll`, `Array.prototype.at`, `structuredClone`, top-level `await`, private `#fields`, `Object.hasOwn`, logical
-   assignment, CSS `inset`/`aspect-ratio`/`:has()`. One file, no libraries, no network, no asset files; everything is drawn
-   on canvas or in inline CSS and synthesised with Web Audio. `localStorage` only inside try/catch.
+2. **Engine target: modern browsers, phone-first.** `games/` pages do not need to run on the Boox (the owner uses it for AI
+   tutoring only, not games), so modern JS (`?.`, `??`, classes, ES modules), libraries and WebGL are allowed in `games/`.
+   Still required: the page loads straight from Pages with no build step, runs at 60 fps on a mid-range phone with touch
+   controls, and keeps `localStorage` inside try/catch. `UroStudyHub.html` itself, including the arcade tile and the frame
+   host, must stay Boox-safe: put nothing heavy there. The existing game code is plain ES2019 in one file; do not refactor it
+   into modules in the middle of a step: the module split is its own task after Step 3.
 3. **Public repo.** Nothing personal, clinical or secret in any file or commit message. All human characters are
    stylised cartoon caricatures of **historical** figures or invented people; never living real people, never real
    company brands. Art stays Binding-of-Isaac grotesque-cute and **never anatomically explicit**. New enemies and arenas follow the
