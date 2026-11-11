@@ -195,12 +195,25 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF
 
 ### Anki Cards (`page === "anki"`, toggleable)
+- **📖 Review tab (in-app reviewer, 2026-11-11; internal id `study`, default tab once you have cards)** — phone-first: due queue
+  (learning → reviews → new, `ankiNewPerDay` new/day, learn-ahead 20 min), tap to reveal, Again/Hard/Good/Easy with the next
+  interval on each button, Quick 10 / 25 / All sessions, undo, edit / suspend / delete on the card, tag filter, keyboard
+  (space, 1–4, Z). Scheduler is Anki-classic (SM-2 style: steps 1m/10m, grad 1d, easy 4d, ease 2.5, lapse → 10m relearn).
+  Cloze notes are one study unit per cloze number (like Anki's sub-cards), siblings buried until the next day.
+  Pure logic = the `ANKI-SCHED-BEGIN/END` block in `UroStudyHub.html` (`node tools/anki-sched.test.mjs`); UI = `renderAnkiStudy()`.
+  Per-card schedule lives on the card: `card.sc[unitKey] = { st, step, due, ivl, ease, reps, lapses, last, first }` (absent = new);
+  `card.susp` = suspended. Study days roll over at 4am local. **Rewards:** 2 XP per graded review (+1 coin per 10, capped at
+  100 reviews/day), a review keeps the streak (same rules as marking a topic done), the daily goal (`ankiReviewGoal`, counts
+  `ankiDays[studyDay]`, not lifetime) pays one token, clearing the queue pays a once-a-day bonus. Manual "+10" logging on the hub
+  still works (counts toward the goal, no XP). Deliberately NOT built yet: linking to real Anki (AnkiConnect read/answer),
+  cross-device sync (each device has its own deck state — see Phase 2 Cross-Device Sync), FSRS, import from Anki.
+- **📇 Cards tab** (was "Review"): the card browser — select, edit, delete, export; shows each card's study status and Resume for suspended ones
 - AI-generated cards from topics or lectures
 - Manual card creation (basic + cloze types)
 - Batch generation from uploaded content
 - Tag system for organization
 - Export to Anki-importable format (TSV with separate basic/cloze files)
-- AnkiConnect integration (partially implemented)
+- AnkiConnect integration (push cards only; reading reviews / answering from the app is not built)
 - Select, bulk delete (with confirmation), edit cards
 - **Anki toggle** — settings toggle hides all Anki UI (tab, hub tasks, lecture buttons) when disabled
 
@@ -439,7 +452,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - [x] Snap Decision — touch-first swipe game (Bench or OR?) with AI-generated deck + seed fallback
 - [ ] Responsive layout audit at 375px and 390px
 - [ ] PWA support (inline service worker + manifest)
-- [ ] Touch-friendly Anki review (swipe gestures)
+- [x] Touch-friendly Anki review (in-app Review tab, buttons + keyboard; swipe gestures not built)
 - [ ] 44px minimum tap targets across non-game UI
 
 ### Parked: 🌌 Trail — learning-constellation map (tracker sub-tab)

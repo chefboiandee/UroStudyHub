@@ -33,6 +33,9 @@ inside another workspace; nothing here depends on that one any more.)
   (headless E2E; set `CDN_DIR` to a node_modules with react/react-dom 18.2.0, @babel/standalone 7.23.9, katex 0.16.9 when offline).
   Arcade card games (Snap Decision, Board Buzzer, Staging Attack, the retired-games refund): `node tools/arcade-cards.drive.mjs` (same `CDN_DIR` trick).
   Uro Crawl: `node tools/uro-crawl.drive.mjs` (needs the `urostudyhub` server; no CDN: the game has no dependencies).
+  In-app Anki reviewer (Anki page > Review tab): `node tools/anki-sched.test.mjs` (pure Node; run it under `TZ=America/Chicago`, `UTC`
+  and `Pacific/Auckland`, the 4am study-day rollover is the part that bites) and `node tools/anki-study.drive.mjs` (headless E2E on a
+  phone viewport; needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir` saves screenshots).
 
 ## Run and verify
 

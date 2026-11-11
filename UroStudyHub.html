@@ -2803,7 +2803,11 @@ const INIT = {
   gameBest: {}, // best score per card game, { snap: n, buzzer: n }
   arcadeV: 0, arcadeRefund: 0, // migrateArcade stamps ARCADE_VERSION; a saved profile without the key must read as 0 after the INIT merge
   activityLog: [],
-  ankiReviews: 0, ankiReviewGoal: 50,
+  ankiReviews: 0, ankiReviewGoal: 50, // ankiReviews = lifetime total (analytics); the daily goal counts ankiDays[studyDay]
+  ankiDays: {},        // { "2026-11-11": reviews that study day }: graded in-app cards + manual "+10" logging
+  ankiNewPerDay: 10,   // new cards introduced per study day in the Review tab
+  ankiNewExtra: null,  // { day, n }: "learn 5 more new cards today" taps for that study day
+  ankiClearDay: "",    // the study day the "queue cleared" bonus was last paid
   pomodorosToday: 0, lastPomDate: null,
   gameTrialsToday: {}, lastTrialDate: null,
   // Spaced repetition: { "topicKey": { last: "2025-03-16", interval: 3, ease: 2.5 } }
@@ -2847,6 +2851,214 @@ var STREAK_MILESTONES = [
   { days: 30, coins: 300, msg: "Monthly Master! 👑" },
   { days: 60, coins: 500, msg: "Legendary Streak! 🏆" },
 ];
+
+// ═══ IN-APP CARD REVIEW (Review tab on the Anki page; its internal id is "study") ═══
+// A card is a note. A basic card is one study unit (key "0"); a cloze note is one unit per cloze number
+// (keys "1", "2", ...), like Anki's sub-cards. Each unit's schedule lives on the card as card.sc[key]
+// (absent = a new card): { st: "learn" | "relearn" | "rev", step, due, ivl, ease, reps, lapses, last, first }.
+// due is epoch ms while a unit is learning and a study-day number once it is a review.
+// Study days roll over at 4am local, like Anki. Plain ES5 + pure functions: tools/anki-sched.test.mjs runs this block.
+// ANKI-SCHED-BEGIN
+var ANKI_CFG = {
+  learn: [1, 10],     // minutes: steps for a new card
+  relearn: [10],      // minutes: step after a lapse
+  gradIvl: 1,         // days: Good on the last learning step
+  easyIvl: 4,         // days: Easy on a new card
+  startEase: 2.5, minEase: 1.3,
+  hardMult: 1.2, easyBonus: 1.3,
+  lapseMult: 0,       // interval after a lapse = old * this, at least 1 day (Anki's default)
+  maxIvl: 365,        // days
+  learnAhead: 20,     // minutes: with nothing else due, learning cards this close to due are shown now
+  rollover: 4         // the study day starts at 4am local
+};
+var ANKI_REWARD = { xp: 2, coinEvery: 10, cap: 100, clearXp: 25, clearCoins: 5 };
+
+function ankiStudyDay(ts) {
+  var t = ts - ANKI_CFG.rollover * 3600000;
+  return Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 86400000);
+}
+function ankiDayKey(ts) { return new Date(ankiStudyDay(ts) * 86400000).toISOString().slice(0, 10); }
+
+function ankiClozeNums(text) {
+  var re = /\{\{c(\d+)::/g, out = [], m, n;
+  text = text || "";
+  while ((m = re.exec(text)) !== null) { n = parseInt(m[1], 10); if (out.indexOf(n) === -1) out.push(n); }
+  return out.sort(function(a, b) { return a - b; });
+}
+function ankiUnits(card) {
+  if (card && card.type === "cloze") {
+    var ns = ankiClozeNums(card.text);
+    if (ns.length) return ns.map(String);
+  }
+  return ["0"];
+}
+// One cloze note, cloze n hidden ("[...]" or "[hint]") or revealed; the other clozes show as plain text.
+function ankiClozeParts(text, n, reveal) {
+  var re = /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g, out = [], last = 0, m;
+  text = text || "";
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ t: "text", v: text.slice(last, m.index) });
+    if (parseInt(m[1], 10) === n) out.push(reveal ? { t: "ans", v: m[2] } : { t: "hide", v: m[3] ? "[" + m[3] + "]" : "[...]" });
+    else out.push({ t: "text", v: m[2] });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push({ t: "text", v: text.slice(last) });
+  return out;
+}
+
+// sc = this unit's schedule (null for a new card), g = 1 Again, 2 Hard, 3 Good, 4 Easy. Returns the new schedule.
+function ankiGrade(sc, g, now) {
+  var C = ANKI_CFG, MIN = 60000, day = ankiStudyDay(now), k;
+  var n = { st: "learn", step: 0, due: now, ivl: 0, ease: C.startEase, reps: 0, lapses: 0, last: now, first: day };
+  if (sc) { for (k in sc) { if (Object.prototype.hasOwnProperty.call(sc, k)) n[k] = sc[k]; } }
+  n.last = now;
+  if (n.st === "rev") {
+    var ivl = n.ivl;
+    if (g === 1) {
+      n.lapses++; n.ease = Math.max(C.minEase, n.ease - 0.2);
+      n.st = "relearn"; n.step = 0; n.due = now + C.relearn[0] * MIN;
+      n.ivl = Math.max(1, Math.round(ivl * C.lapseMult));
+      return n;
+    }
+    var late = Math.max(0, day - n.due);
+    var i2 = Math.max(ivl + 1, Math.round((ivl + late / 4) * C.hardMult));
+    var i3 = Math.max(i2 + 1, Math.round((ivl + late / 2) * n.ease));
+    var i4 = Math.max(i3 + 1, Math.round((ivl + late) * n.ease * C.easyBonus));
+    n.ivl = Math.min(C.maxIvl, g === 2 ? i2 : g === 3 ? i3 : i4);
+    n.ease = Math.max(C.minEase, n.ease + (g === 2 ? -0.15 : g === 4 ? 0.15 : 0));
+    n.due = day + n.ivl; n.reps++;
+    return n;
+  }
+  var steps = n.st === "relearn" ? C.relearn : C.learn;
+  if (n.step >= steps.length) n.step = steps.length - 1;
+  var grad = false, easy = false;
+  if (g === 1) { n.step = 0; n.due = now + steps[0] * MIN; }
+  else if (g === 2) {
+    n.due = now + (n.step === 0 && steps.length > 1 ? Math.round((steps[0] + steps[1]) / 2) : steps[n.step]) * MIN;
+  } else if (g === 3) {
+    if (n.step + 1 < steps.length) { n.step++; n.due = now + steps[n.step] * MIN; } else grad = true;
+  } else { grad = true; easy = true; }
+  if (grad) {
+    if (n.st === "learn") n.ivl = easy ? C.easyIvl : C.gradIvl;
+    else if (easy) n.ivl = n.ivl + 1;
+    n.st = "rev"; n.step = 0; n.due = day + n.ivl; n.reps++;
+  }
+  return n;
+}
+
+function ankiFmt(ms) {
+  var m = Math.round(ms / 60000);
+  if (m < 1) return "<1m";
+  if (m < 60) return m + "m";
+  if (m < 1440) return Math.round(m / 60) + "h";
+  var d = Math.round(m / 1440);
+  if (d < 30) return d + "d";
+  if (d < 365) return (Math.round(d / 3) / 10) + "mo";
+  return (Math.round(d / 36.5) / 10) + "y";
+}
+// The four labels under the answer buttons: when the card comes back for Again / Hard / Good / Easy.
+function ankiPreview(sc, now) {
+  var out = [], g, n, day = ankiStudyDay(now);
+  for (g = 1; g <= 4; g++) {
+    n = ankiGrade(sc, g, now);
+    out.push(ankiFmt(n.st === "rev" ? (n.due - day) * 86400000 : n.due - now));
+  }
+  return out;
+}
+
+function ankiTagOk(card, tag) {
+  if (!tag) return true;
+  var ts = card.tags || [], i;
+  for (i = 0; i < ts.length; i++) { if (ts[i] === tag || ts[i].indexOf(tag + "::") === 0) return true; }
+  return false;
+}
+// What is due now. o = { tag, newPerDay }. Entries are { id, k, due }. learn = learning cards due now,
+// ahead = learning cards due within the learn-ahead window, rev = reviews due today, fresh = new cards still
+// allowed today. Siblings of a note graded today wait until tomorrow (Anki's "bury siblings").
+function ankiQueue(cards, now, o) {
+  o = o || {};
+  var C = ANKI_CFG, MIN = 60000, day = ankiStudyDay(now);
+  var learn = [], ahead = [], rev = [], fresh = [], newToday = 0, i, j, m, c, us, sc, k, k2, s1, e, buried, ix = 0;
+  for (i = 0; i < cards.length; i++) {
+    c = cards[i]; if (!c) continue;
+    us = ankiUnits(c); sc = c.sc || {};
+    for (j = 0; j < us.length; j++) { if (sc[us[j]] && sc[us[j]].first === day) newToday++; }
+  }
+  for (i = 0; i < cards.length; i++) {
+    c = cards[i];
+    if (!c || c.susp || !ankiTagOk(c, o.tag)) continue;
+    us = ankiUnits(c); sc = c.sc || {};
+    for (j = 0; j < us.length; j++) {
+      k = us[j]; s1 = sc[k]; e = { id: c.id, k: k, due: 0, ix: ix++ };
+      if (s1 && (s1.st === "learn" || s1.st === "relearn")) {
+        e.due = s1.due;
+        if (s1.due <= now) learn.push(e); else if (s1.due <= now + C.learnAhead * MIN) ahead.push(e);
+        continue;
+      }
+      buried = false;
+      for (m = 0; m < us.length; m++) {
+        k2 = us[m];
+        if (k2 !== k && sc[k2] && ankiStudyDay(sc[k2].last) === day) { buried = true; break; }
+      }
+      if (buried) continue;
+      if (!s1) fresh.push(e);
+      else if (s1.st === "rev" && s1.due <= day) { e.due = s1.due; rev.push(e); }
+    }
+  }
+  var byDue = function(a, b) { return a.due - b.due || a.ix - b.ix; };
+  learn.sort(byDue); ahead.sort(byDue); rev.sort(byDue);
+  var cap = o.newPerDay == null ? 10 : o.newPerDay;
+  var newLeft = Math.max(0, cap - newToday), newAvail = fresh.length;
+  fresh = fresh.slice(0, newLeft);
+  return { learn: learn, ahead: ahead, rev: rev, fresh: fresh, newToday: newToday, newLeft: newLeft, newAvail: newAvail,
+    counts: { learn: learn.length, rev: rev.length, fresh: fresh.length } };
+}
+function ankiNext(q) { return q.learn[0] || q.rev[0] || q.fresh[0] || q.ahead[0] || null; }
+
+// Same streak rules as marking a topic done (a review counts as studying that day).
+function ankiStreakNext(p, todayStr, milestones) {
+  var cur = p.streak || 0, out = { streak: cur, lastDay: p.lastDay || null, milestone: null }, ns, i, missed, shield;
+  if (p.lastDay === todayStr) return out;
+  if (!p.lastDay) ns = 1;
+  else {
+    missed = Math.floor((new Date(todayStr) - new Date(p.lastDay)) / 86400000) - 1;
+    shield = (p.ups || {}).streak_shield || 0;
+    ns = (missed <= 0 || (shield > 0 && missed <= shield)) ? cur + 1 : 1;
+  }
+  out.streak = ns; out.lastDay = todayStr;
+  for (i = 0; i < (milestones || []).length; i++) { if (ns === milestones[i].days && cur < milestones[i].days) out.milestone = milestones[i]; }
+  return out;
+}
+// Credit n reviews to the profile p. o = { rewards, token }. Manual "+10" logging (rewards off) only moves the
+// counters and the daily-goal token; graded in-app reviews also pay XP and coins (capped per day) and keep the streak.
+// Returns { patch, goalHit, xp, coins, milestone, key, before, after }; patch is merged into the profile.
+function ankiCredit(p, n, now, todayStr, o) {
+  o = o || {};
+  var key = ankiDayKey(now), days = Object.assign({}, p.ankiDays || {});
+  var before = days[key] || 0, after = before + n;
+  days[key] = after;
+  var goal = p.ankiReviewGoal || 50, goalHit = before < goal && after >= goal;
+  var patch = { ankiDays: days, ankiReviews: (p.ankiReviews || 0) + n };
+  var log = [], xp = 0, coins = 0, milestone = null;
+  if (o.rewards) {
+    var R = ANKI_REWARD, b = Math.min(before, R.cap), a = Math.min(after, R.cap);
+    xp = (a - b) * R.xp;
+    coins = Math.floor(a / R.coinEvery) - Math.floor(b / R.coinEvery);
+    var st = ankiStreakNext(p, todayStr, typeof STREAK_MILESTONES !== "undefined" ? STREAK_MILESTONES : []);
+    patch.streak = st.streak; patch.lastDay = st.lastDay;
+    if (st.milestone) { milestone = st.milestone; coins += milestone.coins; }
+    if (before === 0) log.push({ date: todayStr, type: "anki", tokens: 0, label: "Anki reviews", ts: now });
+    patch.xp = (p.xp || 0) + xp; patch.coins = (p.coins || 0) + coins;
+  }
+  if (goalHit) {
+    var tk = o.token || 0;
+    log.push({ date: todayStr, type: "anki", tokens: tk, label: "Anki goal reached (" + goal + " reviews)", ts: now });
+    patch.tokens = (p.tokens || 0) + tk; patch.tokensEarned = (p.tokensEarned || 0) + tk;
+  }
+  if (log.length) patch.activityLog = (p.activityLog || []).concat(log);
+  return { patch: patch, goalHit: goalHit, xp: xp, coins: coins, milestone: milestone, key: key, before: before, after: after };
+}
+// ANKI-SCHED-END
 
 // ═══ PERSISTENT SESSION STORE (IndexedDB) ═══
 // iPadOS kills suspended PWAs; anything living only in React state (the in-progress
@@ -4818,7 +5030,12 @@ export default function UroStudyHub() {
   function getFullDeck() { return ankiSubDeck ? ankiDeck + "::" + ankiSubDeck : ankiDeck; }
   var [ankiConnected, setAnkiConnected] = useState(false);
   var [showAnkiAdvanced, setShowAnkiAdvanced] = useState(false);
-  var [ankiTab, setAnkiTab] = useState("batch");
+  var [ankiTab, setAnkiTab] = useState(function() { return (s.ankiCards || []).length ? "study" : "batch"; });
+  var [ankiSess, setAnkiSess] = useState(null); // Review tab session: null = home, else { limit, done, again, hard, good, easy, cur: {id, k}, show, finished, ... }
+  var [ankiTagF, setAnkiTagF] = useState("");   // Review tab: only cards under this tag
+  var [studyEdit, setStudyEdit] = useState(null); // Review tab: { front, back, text } while editing the card on screen
+  var [studyCfg, setStudyCfg] = useState(false);  // Review tab: settings row open
+  var [studyDelArm, setStudyDelArm] = useState(false); // Review tab: delete needs a second tap
   var [chatView, setChatView] = useState("chat"); // "chat", "saved", or "skills"
   var [skillsCtx, setSkillsCtx] = useState(function() { try { var v = sessionStorage.getItem("uroStudyHub_skillsCtx"); return v ? JSON.parse(v) : null; } catch(e) { return null; } }); // active surgical-skills module session { id, mode }
   var [expandedSkill, setExpandedSkill] = useState({}); // which skills cards / cheat sheet are open
@@ -5246,23 +5463,13 @@ export default function UroStudyHub() {
     return true;
   }
 
+  // Manual "+10" logging (reviews done outside the app). Counts toward today's goal; graded in-app cards go through gradeAnki.
   function logAnkiReviews(count) {
-    setS(function(p) {
-      var newCount = (p.ankiReviews || 0) + count;
-      var goal = p.ankiReviewGoal || 50;
-      var earned = newCount >= goal && (p.ankiReviews || 0) < goal;
-      var log = p.activityLog || [];
-      if (earned) {
-        log = log.concat([{ date: today, type: "anki", tokens: TOKEN_REWARDS.anki, label: "Anki goal reached (" + goal + " reviews)", ts: Date.now() }]);
-      }
-      return Object.assign({}, p, {
-        ankiReviews: newCount,
-        tokens: earned ? (p.tokens || 0) + TOKEN_REWARDS.anki : (p.tokens || 0),
-        tokensEarned: earned ? (p.tokensEarned || 0) + TOKEN_REWARDS.anki : (p.tokensEarned || 0),
-        activityLog: log,
-      });
-    });
-    if ((s.ankiReviews || 0) + count >= (s.ankiReviewGoal || 50) && (s.ankiReviews || 0) < (s.ankiReviewGoal || 50)) {
+    var now = Date.now();
+    var opts = { token: TOKEN_REWARDS.anki };
+    var cr = ankiCredit(s, count, now, today, opts);
+    setS(function(p) { return Object.assign({}, p, ankiCredit(p, count, now, today, opts).patch); });
+    if (cr.goalHit) {
       setTokenToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!");
       setTimeout(function() { setTokenToast(""); }, 2500);
     }
@@ -6236,6 +6443,419 @@ export default function UroStudyHub() {
         setTimeout(function() { setAnkiProgress(""); }, 4000);
       });
   }
+
+  // ═══ REVIEW TAB (ankiTab "study"): review the in-app cards (scheduler + queue live in the ANKI-SCHED block up top) ═══
+  function ankiNewLimit() {
+    var base = s.ankiNewPerDay == null ? 10 : s.ankiNewPerDay;
+    var ex = s.ankiNewExtra && s.ankiNewExtra.day === ankiDayKey(Date.now()) ? s.ankiNewExtra.n : 0;
+    return base + ex;
+  }
+  function ankiQueueNow(cards, tag) { return ankiQueue(cards, Date.now(), { tag: tag, newPerDay: ankiNewLimit() }); }
+  function ankiCardById(id) {
+    for (var i = 0; i < ankiCards.length; i++) { if (ankiCards[i].id === id) return ankiCards[i]; }
+    return null;
+  }
+  function ankiSetSched(list, id, k, sc) {
+    return list.map(function(c2) {
+      if (c2.id !== id) return c2;
+      var m = Object.assign({}, c2.sc || {}), out = Object.assign({}, c2);
+      if (sc) m[k] = sc; else delete m[k];
+      if (Object.keys(m).length) out.sc = m; else delete out.sc; // a card with nothing studied has no sc at all
+      return out;
+    });
+  }
+  function ankiAllTags() {
+    var seen = {}, out = [];
+    ankiCards.forEach(function(c2) {
+      (c2.tags || []).forEach(function(t) {
+        var parts = String(t).split("::"), acc = "";
+        for (var i = 0; i < parts.length; i++) {
+          acc = acc ? acc + "::" + parts[i] : parts[i];
+          if (!seen[acc]) { seen[acc] = true; out.push(acc); }
+        }
+      });
+    });
+    return out.sort();
+  }
+  // One line for the Cards tab: where a card is in the study schedule.
+  function ankiCardStatus(card) {
+    if (card.susp) return "⏸ Suspended";
+    var us = ankiUnits(card), sc = card.sc || {}, day = ankiStudyDay(Date.now()), started = 0, learning = false, minDue = null;
+    us.forEach(function(k) {
+      var x = sc[k];
+      if (!x) return;
+      started++;
+      if (x.st === "rev") { var d = x.due - day; if (minDue === null || d < minDue) minDue = d; } else learning = true;
+    });
+    if (!started) return "New · not studied yet";
+    var more = started < us.length ? " · " + (us.length - started) + " new" : "";
+    if (learning) return "Learning" + more;
+    return (minDue <= 0 ? "Due today" : "Due in " + minDue + "d") + more;
+  }
+  function ankiStartSession(limit) {
+    var nx = ankiNext(ankiQueueNow(ankiCards, ankiTagF));
+    if (!nx) return;
+    setStudyEdit(null); setStudyDelArm(false);
+    setAnkiSess({ limit: limit, done: 0, again: 0, hard: 0, good: 0, easy: 0, xp: 0, coins: 0, cur: nx, show: false, finished: false, cleared: false, bonus: "", goalMsg: "", streakMsg: "", undo: null });
+  }
+  function ankiMore(n) {
+    var ss = ankiSess;
+    var nx = ss ? ankiNext(ankiQueueNow(ankiCards, ankiTagF)) : null;
+    if (!nx) return;
+    setStudyEdit(null); setStudyDelArm(false);
+    setAnkiSess(Object.assign({}, ss, { limit: ss.done + n, cur: nx, show: false, finished: false, cleared: false }));
+  }
+  function ankiMoreNew(n) {
+    var key = ankiDayKey(Date.now());
+    setS(function(p) {
+      var have = p.ankiNewExtra && p.ankiNewExtra.day === key ? p.ankiNewExtra.n : 0;
+      return Object.assign({}, p, { ankiNewExtra: { day: key, n: have + n } });
+    });
+  }
+  function ankiReveal() {
+    setAnkiSess(function(ss) { return ss && ss.cur && !ss.show ? Object.assign({}, ss, { show: true }) : ss; });
+  }
+  // Moves the session to the next card, or to the summary when the queue (or the session size) runs out.
+  function ankiAdvanceFrom(cards) {
+    var ss = ankiSess;
+    if (!ss) return;
+    var nx = ankiNext(ankiQueueNow(cards, ankiTagF));
+    setStudyEdit(null); setStudyDelArm(false);
+    if (!nx || ss.done >= ss.limit) setAnkiSess(Object.assign({}, ss, { cur: null, show: false, finished: true, cleared: !nx }));
+    else setAnkiSess(Object.assign({}, ss, { cur: nx, show: false }));
+  }
+  // g: 1 Again, 2 Hard, 3 Good, 4 Easy. One setS so the card, the counters, XP, coins and streak move together.
+  function gradeAnki(g) {
+    var ss = ankiSess;
+    if (!ss || !ss.cur || !ss.show || studyEdit) return;
+    var card = ankiCardById(ss.cur.id), k = ss.cur.k, now = Date.now();
+    if (!card) { ankiAdvanceFrom(ankiCards); return; }
+    var before = card.sc && card.sc[k] ? card.sc[k] : null;
+    var after = ankiGrade(before, g, now);
+    var opts = { rewards: true, token: TOKEN_REWARDS.anki };
+    var cr = ankiCredit(s, 1, now, today, opts);
+    var newCards = ankiSetSched(ankiCards, card.id, k, after);
+    setS(function(p) {
+      return Object.assign({}, p, ankiCredit(p, 1, now, today, opts).patch, { ankiCards: ankiSetSched(p.ankiCards || [], card.id, k, after) });
+    });
+    var key = g === 1 ? "again" : g === 2 ? "hard" : g === 3 ? "good" : "easy";
+    var nxt = Object.assign({}, ss, { done: ss.done + 1, xp: ss.xp + cr.xp, coins: ss.coins + cr.coins, undo: { id: card.id, k: k, before: before, g: key, xp: cr.xp, coins: cr.coins, day: cr.key } });
+    nxt[key] = ss[key] + 1;
+    if (cr.milestone) { nxt.streakMsg = cr.milestone.msg + " +" + cr.milestone.coins + " coins!"; setSaveFeedback(nxt.streakMsg); setTimeout(function() { setSaveFeedback(""); }, 3000); }
+    if (cr.goalHit) { nxt.goalMsg = "Daily goal reached! +" + TOKEN_REWARDS.anki + " 🪙"; setTokenToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!"); setTimeout(function() { setTokenToast(""); }, 2500); }
+    var nx = ankiNext(ankiQueueNow(newCards, ankiTagF));
+    var cleared = !nx;
+    if (cleared && !ankiNext(ankiQueueNow(newCards, "")) && s.ankiClearDay !== cr.key) {
+      nxt.bonus = "Queue cleared! +" + ANKI_REWARD.clearXp + " XP, +" + ANKI_REWARD.clearCoins + " coins";
+      setS(function(p) {
+        if (p.ankiClearDay === cr.key) return p;
+        return Object.assign({}, p, { xp: (p.xp || 0) + ANKI_REWARD.clearXp, coins: (p.coins || 0) + ANKI_REWARD.clearCoins, ankiClearDay: cr.key });
+      });
+    }
+    setStudyEdit(null); setStudyDelArm(false);
+    if (cleared || nxt.done >= nxt.limit) setAnkiSess(Object.assign(nxt, { cur: null, show: false, finished: true, cleared: cleared }));
+    else setAnkiSess(Object.assign(nxt, { cur: nx, show: false }));
+  }
+  // Undo the last grade: the card's schedule, today's count, XP and coins go back. (A daily-goal token already paid stays.)
+  function ankiUndo() {
+    var ss = ankiSess;
+    if (!ss || !ss.undo) return;
+    var u = ss.undo;
+    if (!ankiCardById(u.id)) { setAnkiSess(Object.assign({}, ss, { undo: null })); return; }
+    setS(function(p) {
+      var days = Object.assign({}, p.ankiDays || {});
+      days[u.day] = Math.max(0, (days[u.day] || 0) - 1);
+      return Object.assign({}, p, {
+        ankiCards: ankiSetSched(p.ankiCards || [], u.id, u.k, u.before),
+        ankiDays: days,
+        ankiReviews: Math.max(0, (p.ankiReviews || 0) - 1),
+        xp: Math.max(0, (p.xp || 0) - u.xp),
+        coins: Math.max(0, (p.coins || 0) - u.coins),
+      });
+    });
+    var back = Object.assign({}, ss, { done: Math.max(0, ss.done - 1), xp: Math.max(0, ss.xp - u.xp), coins: Math.max(0, ss.coins - u.coins), cur: { id: u.id, k: u.k }, show: true, finished: false, cleared: false, undo: null });
+    back[u.g] = Math.max(0, ss[u.g] - 1);
+    setStudyEdit(null);
+    setAnkiSess(back);
+  }
+  function ankiSuspendCur() {
+    var ss = ankiSess;
+    if (!ss || !ss.cur) return;
+    var id = ss.cur.id;
+    updateAnkiCard(id, { susp: true });
+    ankiAdvanceFrom(ankiCards.map(function(c2) { return c2.id === id ? Object.assign({}, c2, { susp: true }) : c2; }));
+  }
+  function ankiDeleteCur() {
+    var ss = ankiSess;
+    if (!ss || !ss.cur) return;
+    if (!studyDelArm) { setStudyDelArm(true); return; }
+    var id = ss.cur.id;
+    delAnkiCard(id);
+    ankiAdvanceFrom(ankiCards.filter(function(c2) { return c2.id !== id; }));
+  }
+  function ankiSaveEdit() {
+    var ss = ankiSess, card = ss && ss.cur ? ankiCardById(ss.cur.id) : null;
+    if (!card || !studyEdit) { setStudyEdit(null); return; }
+    if (card.type === "cloze") updateAnkiCard(card.id, { text: studyEdit.text });
+    else updateAnkiCard(card.id, { front: studyEdit.front, back: studyEdit.back });
+    setStudyEdit(null);
+  }
+
+  function renderAnkiStudy() {
+    var now = Date.now();
+    var goal = s.ankiReviewGoal || 50;
+    var todayN = (s.ankiDays || {})[ankiDayKey(now)] || 0;
+    var q = ankiQueueNow(ankiCards, ankiTagF);
+    var learningN = q.counts.learn + q.ahead.length;
+    var dueN = q.counts.rev + learningN + q.counts.fresh;
+    var ss = ankiSess;
+    var chip = function(on) { return { padding: "6px 13px", minHeight: 34, background: on ? c.a + "25" : "transparent", border: "1px solid " + (on ? c.a : "var(--c-br)"), borderRadius: 17, color: on ? c.a : "var(--c-mut)", fontSize: 11, fontWeight: on ? 700 : 500, cursor: "pointer" }; };
+    var card0 = { background: c.cd, borderRadius: 14, border: "1px solid var(--c-br)" };
+    var bigBtn = { width: "100%", minHeight: 58, background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", color: "#fff", border: "none", borderRadius: 14, fontSize: 16, fontWeight: 800, cursor: "pointer" };
+    var ghostBtn = { flex: 1, minHeight: 46, background: c.cd, border: "1px solid var(--c-br)", borderRadius: 12, color: "var(--c-tx)", fontSize: 13, fontWeight: 700, cursor: "pointer" };
+
+    // ── no cards at all ──
+    if (!ankiCards.length) {
+      return (
+        <div style={Object.assign({ padding: 20, textAlign: "center" }, card0)}>
+          <div style={{ fontSize: 30, marginBottom: 6 }}>{"📇"}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--c-tx)", marginBottom: 4 }}>{"No cards to review yet"}</div>
+          <div style={{ fontSize: 11, color: "var(--c-mut)", lineHeight: 1.5, marginBottom: 14 }}>{"Make some from a document or a topic, add one by hand, or save a hook from the tutor. They show up here, scheduled for you."}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={function() { setAnkiTab("batch"); }} style={ghostBtn}>{"📄 Generate"}</button>
+            <button onClick={function() { setAnkiTab("manual"); }} style={ghostBtn}>{"✏ Add by hand"}</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── summary ──
+    if (ss && ss.finished) {
+      var tot = ss.done || 0;
+      var okPct = tot ? Math.round(((ss.hard + ss.good + ss.easy) / tot) * 100) : 0;
+      return (
+        <div>
+          <div style={Object.assign({ padding: "22px 16px", textAlign: "center", marginBottom: 12 }, card0)}>
+            <div style={{ fontSize: 34 }}>{ss.cleared ? "🎉" : tot ? "✅" : "🙂"}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--c-tx)", margin: "4px 0 2px" }}>{!tot ? "Nothing to review" : ss.cleared ? "Queue cleared!" : "Nice session"}</div>
+            {tot > 0 && <div style={{ fontSize: 12, color: "var(--c-mut)", marginBottom: 12 }}>{tot + " card" + (tot === 1 ? "" : "s") + " · " + okPct + "% remembered"}</div>}
+            {tot > 0 && (
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12, flexWrap: "wrap" }}>
+                {[["Again", ss.again, "var(--a-red0)"], ["Hard", ss.hard, "var(--a-or)"], ["Good", ss.good, "var(--a-grn)"], ["Easy", ss.easy, "var(--a-blu)"]].map(function(r) {
+                  return <span key={r[0]} style={{ padding: "4px 10px", border: "1px solid " + r[2], borderRadius: 12, color: r[2], fontSize: 11, fontWeight: 700 }}>{r[0] + " " + r[1]}</span>;
+                })}
+              </div>
+            )}
+            {(ss.xp > 0 || ss.coins > 0) && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--a-am)", marginBottom: 4 }}>{"+" + ss.xp + " XP" + (ss.coins > 0 ? " · +" + ss.coins + " 🪙" : "")}</div>}
+            {ss.bonus && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--a-grn)", marginBottom: 4 }}>{ss.bonus}</div>}
+            {ss.goalMsg && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--a-grn)", marginBottom: 4 }}>{ss.goalMsg}</div>}
+            {ss.streakMsg && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--a-am)", marginBottom: 4 }}>{ss.streakMsg}</div>}
+            <div style={{ fontSize: 10, color: "var(--c-mut)" }}>{"Today: " + todayN + "/" + goal + " reviews" + ((s.streak || 0) > 0 ? " · " + s.streak + " day streak 🔥" : "")}</div>
+          </div>
+          {!ss.cleared && dueN > 0 && <button onClick={function() { ankiMore(10); }} style={Object.assign({}, bigBtn, { marginBottom: 8 })}>{"▶ Review " + Math.min(10, dueN) + " more"}</button>}
+          <div style={{ display: "flex", gap: 8 }}>
+            {ss.undo && <button onClick={ankiUndo} style={ghostBtn}>{"↩ Undo last"}</button>}
+            <button onClick={function() { setAnkiSess(null); }} style={ghostBtn}>{"Done"}</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── a card on screen ──
+    if (ss && ss.cur) {
+      var card = ankiCardById(ss.cur.id);
+      if (!card) {
+        return (
+          <div style={Object.assign({ padding: 20, textAlign: "center" }, card0)}>
+            <div style={{ fontSize: 12, color: "var(--c-mut)", marginBottom: 10 }}>{"That card was removed."}</div>
+            <button onClick={function() { ankiAdvanceFrom(ankiCards); }} style={bigBtn}>{"Next"}</button>
+          </div>
+        );
+      }
+      var k = ss.cur.k;
+      var sc = card.sc && card.sc[k] ? card.sc[k] : null;
+      var isClozeUnit = card.type === "cloze" && k !== "0";
+      var pv = ss.show ? ankiPreview(sc, now) : null;
+      var denom = Math.max(1, Math.min(ss.limit, ss.done + dueN));
+      var kind = !sc ? { l: "NEW", col: "var(--a-blu)" } : sc.st === "rev" ? { l: "REVIEW", col: "var(--a-grn)" } : { l: "LEARNING", col: "var(--a-or)" };
+      var body;
+      if (studyEdit) {
+        var ta = { width: "100%", boxSizing: "border-box", minHeight: 90, padding: 10, background: c.bg, border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: 14, fontFamily: "inherit", lineHeight: 1.5, resize: "vertical", outline: "none" };
+        body = (
+          <div style={{ padding: 14 }}>
+            {card.type === "cloze" ? (
+              <div>
+                <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 4 }}>{"Text (use {{c1::answer}} for blanks)"}</div>
+                <textarea value={studyEdit.text} onChange={function(e) { var v = e.target.value; setStudyEdit(function(x) { return Object.assign({}, x, { text: v }); }); }} style={ta} />
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 4 }}>{"Front"}</div>
+                <textarea value={studyEdit.front} onChange={function(e) { var v = e.target.value; setStudyEdit(function(x) { return Object.assign({}, x, { front: v }); }); }} style={ta} />
+                <div style={{ fontSize: 10, color: "var(--c-mut)", margin: "8px 0 4px" }}>{"Back"}</div>
+                <textarea value={studyEdit.back} onChange={function(e) { var v = e.target.value; setStudyEdit(function(x) { return Object.assign({}, x, { back: v }); }); }} style={ta} />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={function() { setStudyEdit(null); }} style={ghostBtn}>{"Cancel"}</button>
+              <button onClick={ankiSaveEdit} style={Object.assign({}, ghostBtn, { color: c.a, borderColor: c.a })}>{"Save"}</button>
+            </div>
+          </div>
+        );
+      } else {
+        var txt = { fontSize: 17, lineHeight: 1.55, color: "var(--c-tx)", whiteSpace: "pre-wrap", wordBreak: "break-word", textAlign: "left" };
+        var inner;
+        if (isClozeUnit) {
+          inner = (
+            <div style={txt}>
+              {ankiClozeParts(card.text, parseInt(k, 10), ss.show).map(function(p, i) {
+                if (p.t === "hide") return <span key={i} style={{ background: "var(--a-pur)", color: "#1e1b4b", borderRadius: 4, padding: "0 8px", fontWeight: 800 }}>{p.v}</span>;
+                if (p.t === "ans") return <span key={i} style={{ background: "#c084fc30", border: "1px solid var(--a-pur)", borderRadius: 4, padding: "0 5px", fontWeight: 800, color: "var(--a-pur)" }}>{p.v}</span>;
+                return <span key={i}>{p.v}</span>;
+              })}
+            </div>
+          );
+        } else {
+          inner = (
+            <div>
+              <div style={txt}>{card.front || card.text || ""}</div>
+              {ss.show && <div style={{ borderTop: "1px solid var(--c-br)", margin: "14px 0" }} />}
+              {ss.show && <div style={txt}>{card.back || ""}</div>}
+            </div>
+          );
+        }
+        body = (
+          <div onClick={function() { if (!ss.show) ankiReveal(); }} style={{ padding: "20px 16px", minHeight: 230, display: "flex", flexDirection: "column", justifyContent: "center", cursor: ss.show ? "default" : "pointer" }}>
+            {inner}
+            {card.topic && ss.show && <div style={{ marginTop: 14, fontSize: 9, color: "var(--c-mut)" }}>{card.topic}</div>}
+          </div>
+        );
+      }
+      return (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <button onClick={function() { setStudyEdit(null); setAnkiSess(Object.assign({}, ss, { cur: null, show: false, finished: true, cleared: false })); }} title="End session" style={{ minWidth: 40, minHeight: 36, background: "none", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: 15, cursor: "pointer" }}>{"✕"}</button>
+            <div style={{ flex: 1, height: 6, background: c.cd, borderRadius: 3, overflow: "hidden", border: "1px solid var(--c-br)" }}>
+              <div style={{ height: "100%", width: Math.round((ss.done / denom) * 100) + "%", background: c.a }} />
+            </div>
+            <span style={{ fontSize: 11, color: "var(--c-mut)", minWidth: 40, textAlign: "right" }}>{ss.done + "/" + denom}</span>
+            <span style={{ fontSize: 9, fontWeight: 800, color: kind.col, border: "1px solid " + kind.col, borderRadius: 8, padding: "2px 6px" }}>{kind.l}</span>
+          </div>
+          <div style={Object.assign({ marginBottom: 10, overflow: "hidden" }, card0)}>{body}</div>
+          {!studyEdit && !ss.show && <button onClick={ankiReveal} style={bigBtn}>{"Show answer"}</button>}
+          {!studyEdit && ss.show && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+              {[{ g: 1, l: "Again", col: "var(--a-red0)" }, { g: 2, l: "Hard", col: "var(--a-or)" }, { g: 3, l: "Good", col: "var(--a-grn)" }, { g: 4, l: "Easy", col: "var(--a-blu)" }].map(function(b, bi) {
+                return (
+                  <button key={b.g} onClick={function() { gradeAnki(b.g); }} style={{ minHeight: 62, background: c.cd, border: "2px solid " + b.col, borderRadius: 12, color: b.col, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: "4px 0" }}>
+                    <span style={{ fontSize: 14, fontWeight: 800 }}>{b.l}</span>
+                    <span style={{ fontSize: 10, color: "var(--c-mut)" }}>{pv[bi]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {!studyEdit && (
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, gap: 4 }}>
+              {[
+                ss.undo ? { l: "↩ Undo", f: ankiUndo, col: "var(--c-mut)" } : null,
+                { l: "✏ Edit", f: function() { setStudyEdit({ front: card.front || "", back: card.back || "", text: card.text || "" }); }, col: "var(--c-mut)" },
+                { l: "⏸ Suspend", f: ankiSuspendCur, col: "var(--c-mut)" },
+                { l: studyDelArm ? "Tap again to delete" : "🗑 Delete", f: ankiDeleteCur, col: studyDelArm ? "var(--a-red0)" : "var(--c-mut)" },
+              ].filter(Boolean).map(function(a) {
+                return <button key={a.l} onClick={a.f} style={{ flex: 1, minHeight: 38, background: "none", border: "none", color: a.col, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{a.l}</button>;
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── home ──
+    var tags = ankiAllTags();
+    var nSusp = ankiCards.filter(function(c2) { return c2.susp; }).length;
+    var moreNew = q.newAvail > q.counts.fresh && q.newLeft === 0;
+    return (
+      <div>
+        <div style={Object.assign({ padding: 14, marginBottom: 12 }, card0)}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: "var(--c-tx)" }}>{"Today"}</span>
+            <span style={{ fontSize: 10, color: "var(--c-mut)" }}>{todayN + "/" + goal + " reviews" + ((s.streak || 0) > 0 ? " · " + s.streak + " day streak 🔥" : "")}</span>
+          </div>
+          <div style={{ height: 8, background: c.bg, borderRadius: 4, overflow: "hidden", marginBottom: 12, border: "1px solid var(--c-br)" }}>
+            <div style={{ height: "100%", width: Math.min(100, Math.round((todayN / goal) * 100)) + "%", background: todayN >= goal ? "var(--a-grn)" : c.a }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {[{ n: q.counts.rev, l: "Review", col: "var(--a-grn)" }, { n: learningN, l: "Learning", col: "var(--a-or)" }, { n: q.counts.fresh, l: "New", col: "var(--a-blu)" }].map(function(x) {
+              return (
+                <div key={x.l} style={{ textAlign: "center", padding: "8px 0", background: c.bg, borderRadius: 10, border: "1px solid var(--c-br)" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: x.col }}>{x.n}</div>
+                  <div style={{ fontSize: 9, color: "var(--c-mut)" }}>{x.l}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {dueN > 0 ? (
+          <div>
+            <button onClick={function() { ankiStartSession(10); }} style={Object.assign({}, bigBtn, { marginBottom: 8 })}>{dueN > 10 ? "▶ Quick 10" : "▶ Review " + dueN + (dueN === 1 ? " card" : " cards")}</button>
+            {dueN > 10 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {dueN > 25 && <button onClick={function() { ankiStartSession(25); }} style={ghostBtn}>{"Review 25"}</button>}
+                <button onClick={function() { ankiStartSession(9999); }} style={ghostBtn}>{"All " + dueN}</button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={Object.assign({ padding: "22px 14px", textAlign: "center", marginBottom: 8 }, card0)}>
+            <div style={{ fontSize: 30 }}>{"🎉"}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--c-tx)", margin: "4px 0 2px" }}>{todayN > 0 ? "All done for today" : "Nothing due right now"}</div>
+            <div style={{ fontSize: 11, color: "var(--c-mut)" }}>{moreNew ? "You've reached today's new-card limit." : "Learning cards come back in a few minutes; the rest later. Add more cards any time."}</div>
+          </div>
+        )}
+        {moreNew && <button onClick={function() { ankiMoreNew(5); }} style={Object.assign({}, ghostBtn, { width: "100%", flex: "none", marginBottom: 8 })}>{"＋ Learn 5 more new cards today (" + q.newAvail + " waiting)"}</button>}
+        {tags.length > 0 && (
+          <select value={ankiTagF} onChange={function(e) { setAnkiTagF(e.target.value); }} style={{ width: "100%", minHeight: 40, marginTop: 6, padding: "0 10px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 12 }}>
+            <option value="">{"All cards"}</option>
+            {tags.map(function(t) { return <option key={t} value={t}>{t.replace(/::/g, " › ")}</option>; })}
+          </select>
+        )}
+        <button onClick={function() { setStudyCfg(!studyCfg); }} style={{ width: "100%", minHeight: 38, marginTop: 6, background: "none", border: "none", color: "var(--c-mut)", fontSize: 11, cursor: "pointer" }}>{"⚙ Limits" + (studyCfg ? " ▴" : " ▾")}</button>
+        {studyCfg && (
+          <div style={Object.assign({ padding: 12 }, card0)}>
+            <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 6 }}>{"New cards per day"}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {[0, 5, 10, 20, 50].map(function(n) { return <button key={n} onClick={function() { setS(function(p) { return Object.assign({}, p, { ankiNewPerDay: n }); }); }} style={chip((s.ankiNewPerDay == null ? 10 : s.ankiNewPerDay) === n)}>{n}</button>; })}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 6 }}>{"Daily review goal (earns a token)"}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[10, 20, 30, 50, 100].map(function(n) { return <button key={n} onClick={function() { setS(function(p) { return Object.assign({}, p, { ankiReviewGoal: n }); }); }} style={chip(goal === n)}>{n}</button>; })}
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: 9, color: "var(--c-br2)", textAlign: "center", marginTop: 10 }}>{ankiCards.length + " card" + (ankiCards.length === 1 ? "" : "s") + " in your deck" + (nSusp ? " · " + nSusp + " suspended" : "")}</div>
+      </div>
+    );
+  }
+
+  // Review tab keyboard on an iPad with a keyboard / desktop: space = show / Good, 1-4 = Again..Easy, Z = undo.
+  useEffect(function() {
+    function onKey(e) {
+      if (page !== "anki" || ankiTab !== "study" || !ankiSess || !ankiSess.cur || studyEdit) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target, tn = t && t.tagName;
+      if (tn === "INPUT" || tn === "TEXTAREA" || tn === "SELECT") return;
+      var used = true;
+      if (!ankiSess.show) { if (e.key === " " || e.key === "Enter") ankiReveal(); else used = false; }
+      else if (e.key >= "1" && e.key <= "4") gradeAnki(parseInt(e.key, 10));
+      else if (e.key === " " || e.key === "Enter") gradeAnki(3);
+      else if (e.key === "z" || e.key === "Z") ankiUndo();
+      else used = false;
+      if (used) { e.preventDefault(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return function() { window.removeEventListener("keydown", onKey); };
+  });
 
   // Check AnkiConnect on mount
   useEffect(function() { checkAnkiConnect(); }, []);
@@ -10156,7 +10776,10 @@ export default function UroStudyHub() {
             var dueData = getDueTopics();
             var weakList = getWeakAreas().slice(0, 3);
             var totalDue = dueData.due.length + dueData.overdue.length;
-            var ankiDone = (s.ankiReviews || 0) >= (s.ankiReviewGoal || 50);
+            var ankiTodayN = (s.ankiDays || {})[ankiDayKey(Date.now())] || 0;
+            var ankiDone = ankiTodayN >= (s.ankiReviewGoal || 50);
+            var ankiHubQ = ankiQueueNow(s.ankiCards || [], "");
+            var ankiHubDue = ankiHubQ.counts.rev + ankiHubQ.counts.learn + ankiHubQ.ahead.length + ankiHubQ.counts.fresh;
             var hours = new Date().getHours();
             var greeting = hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
             var tasks = [];
@@ -10164,7 +10787,10 @@ export default function UroStudyHub() {
             if (iseSum) tasks.push({ icon: "🎯", text: iseSum.hub, col: iseSum.state === "behind" ? "var(--a-red0)" : c.a, big: true, action: function() { if (iseSum.state === "behind") setIseAutoShuffle(true); setPage("tracker"); setTView("ise"); } });
             if (dueData.overdue.length > 0) tasks.push({ icon: "🔴", text: dueData.overdue.length + " overdue topic" + (dueData.overdue.length > 1 ? "s" : "") + " need review", col: "#ef4444" });
             if (dueData.due.length > 0) tasks.push({ icon: "🟡", text: dueData.due.length + " topic" + (dueData.due.length > 1 ? "s" : "") + " due for review", col: "#fbbf24" });
-            if (s.ankiEnabled !== false && !ankiDone) tasks.push({ icon: "📇", text: "Anki: " + (s.ankiReviews || 0) + "/" + (s.ankiReviewGoal || 50) + " reviews", col: "#fb923c" });
+            if (s.ankiEnabled !== false && (s.ankiCards || []).length > 0) {
+              // Cards in the app: the queue is the to-do (an empty queue means done, whatever the goal says)
+              if (ankiHubDue > 0) tasks.push({ icon: "📇", text: ankiHubDue + " card" + (ankiHubDue === 1 ? "" : "s") + " to review · " + ankiTodayN + "/" + (s.ankiReviewGoal || 50) + " today", col: "#fb923c", big: false, action: function() { setPage("anki"); setAnkiTab("study"); } });
+            } else if (s.ankiEnabled !== false && !ankiDone) tasks.push({ icon: "📇", text: "Anki: " + ankiTodayN + "/" + (s.ankiReviewGoal || 50) + " reviews", col: "#fb923c" });
             if (next) tasks.push({ icon: "📚", text: "Next new topic: " + next.t, col: c.a });
             if (weakList.length > 0) tasks.push({ icon: "⚠️", text: "Weakest: " + weakList[0].cat + " (" + weakList[0].pct + "%)", col: "#f97316" });
             var schedStatus = getScheduleStatus();
@@ -10253,12 +10879,12 @@ export default function UroStudyHub() {
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--a-am)" }}>{"🪙 Daily Check-in"}</div>
               {/* Anki review progress */}
               {s.ankiEnabled !== false && <div style={{ background: "var(--c-cd)", borderRadius: 6, padding: 6 }}>
-                <div style={{ fontSize: 8, color: "var(--c-mut)", marginBottom: 3 }}>Anki Reviews</div>
+                <div style={{ fontSize: 8, color: "var(--c-mut)", marginBottom: 3 }}>{"Anki Reviews today"}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <div style={{ flex: 1, height: 5, background: "var(--c-bg)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: Math.min(100, Math.round(((s.ankiReviews || 0) / (s.ankiReviewGoal || 50)) * 100)) + "%", background: (s.ankiReviews || 0) >= (s.ankiReviewGoal || 50) ? "var(--a-grn)" : "var(--a-am)", transition: "width 0.3s" }} />
+                    <div style={{ height: "100%", width: Math.min(100, Math.round((((s.ankiDays || {})[ankiDayKey(Date.now())] || 0) / (s.ankiReviewGoal || 50)) * 100)) + "%", background: ((s.ankiDays || {})[ankiDayKey(Date.now())] || 0) >= (s.ankiReviewGoal || 50) ? "var(--a-grn)" : "var(--a-am)", transition: "width 0.3s" }} />
                   </div>
-                  <span style={{ fontSize: 8, color: "var(--c-mut)", minWidth: 35 }}>{s.ankiReviews || 0}/{s.ankiReviewGoal || 50}</span>
+                  <span style={{ fontSize: 8, color: "var(--c-mut)", minWidth: 35 }}>{((s.ankiDays || {})[ankiDayKey(Date.now())] || 0)}/{s.ankiReviewGoal || 50}</span>
                 </div>
                 <div style={{ display: "flex", gap: 3, marginTop: 4 }}>
                   {[10, 25, 50].map(function(n) {
@@ -12262,10 +12888,10 @@ export default function UroStudyHub() {
       {page === "anki" && (
         <div style={{ padding: "0 0 80px" }}>
           {/* Anki sub-tabs */}
-          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid " + c.cd, background: c.bg, position: "sticky", top: 0, zIndex: 10 }}>
-            {[{ id: "batch", l: "📄 Generate" }, { id: "manual", l: "✏ Manual" }, { id: "review", l: "📇 Review (" + ankiCards.length + ")" }].map(function(v) {
+          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid " + c.cd, background: c.bg, position: "sticky", top: 0, zIndex: 10, overflowX: "auto" }}>
+            {[{ id: "study", l: "📖 Review" + (ankiCards.length ? " (" + (function() { var qq = ankiQueueNow(ankiCards, ""); return qq.counts.rev + qq.counts.learn + qq.ahead.length + qq.counts.fresh; })() + ")" : "") }, { id: "batch", l: "📄 Generate" }, { id: "manual", l: "✏ Manual" }, { id: "review", l: "📇 Cards (" + ankiCards.length + ")" }].map(function(v) {
               return (
-                <button key={v.id} onClick={function() { setAnkiTab(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: 9, cursor: "pointer", color: ankiTab === v.id ? c.a : "#64748b", borderBottom: ankiTab === v.id ? "2px solid " + c.a : "2px solid transparent", fontWeight: ankiTab === v.id ? 700 : 400, whiteSpace: "nowrap" }}>
+                <button key={v.id} onClick={function() { setAnkiTab(v.id); }} style={{ flex: 1, padding: "11px 8px", minHeight: 40, background: "none", border: "none", fontSize: 10, cursor: "pointer", color: ankiTab === v.id ? c.a : "#64748b", borderBottom: ankiTab === v.id ? "2px solid " + c.a : "2px solid transparent", fontWeight: ankiTab === v.id ? 700 : 400, whiteSpace: "nowrap" }}>
                   {v.l}
                 </button>
               );
@@ -12280,8 +12906,8 @@ export default function UroStudyHub() {
               </div>
             )}
 
-            {/* Tags section - always visible */}
-            <div style={{ background: c.cd, borderRadius: 10, padding: 12, marginBottom: 14, border: "1px solid var(--c-br)" }}>
+            {/* Tags section - everywhere except the Review tab */}
+            {ankiTab !== "study" && <div style={{ background: c.cd, borderRadius: 10, padding: 12, marginBottom: 14, border: "1px solid var(--c-br)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "var(--c-mut)" }}>Tags (applied to new cards)</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -12314,7 +12940,10 @@ export default function UroStudyHub() {
                   );
                 })}
               </div>
-            </div>
+            </div>}
+
+            {/* REVIEW TAB */}
+            {ankiTab === "study" && <div style={{ maxWidth: 640, margin: "0 auto" }}>{renderAnkiStudy()}</div>}
 
             {/* BATCH/GENERATE TAB */}
             {ankiTab === "batch" && (
@@ -12597,6 +13226,10 @@ export default function UroStudyHub() {
                                     return <span key={ti} style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: c.a + "15", color: c.a, border: "1px solid " + c.a + "30" }}>{tag}</span>;
                                   })}
                                   {card.topic && <span style={{ fontSize: 8, padding: "1px 6px", borderRadius: 4, background: "#fb923c15", color: "var(--a-or)", border: "1px solid #fb923c30" }}>{card.topic}</span>}
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                                  <span style={{ fontSize: 9, color: card.susp ? "var(--a-or)" : "var(--c-mut)" }}>{ankiCardStatus(card)}</span>
+                                  {card.susp && <button onClick={function() { updateAnkiCard(card.id, { susp: false }); }} style={{ padding: "2px 10px", minHeight: 24, background: "transparent", border: "1px solid var(--a-or)", borderRadius: 6, color: "var(--a-or)", fontSize: 9, cursor: "pointer" }}>Resume</button>}
                                 </div>
                               </div>
                             )}
