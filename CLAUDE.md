@@ -20,10 +20,11 @@ inside another workspace; nothing here depends on that one any more.)
   `python3 build.py` → `UroStudyHub.min.html`, which Pages serves (`index.html` redirects to it).
 - `games/` — arcade games that are their own page; the app hosts them in a frame
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
-  `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, pure canvas, no deps;
+  `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, shown to players as
+  **Path of Pathology** (the file, storage key and hooks keep the working name Uro Crawl), pure canvas, no deps;
   two bosses, `?boss=staghorn|fournier`; weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
-  Antibiotic Dropper weapon).
+  Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).

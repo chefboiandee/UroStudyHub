@@ -7085,7 +7085,7 @@ export default function UroStudyHub() {
       { id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
       { id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
       { id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } },
-      { id: "crawl", name: "Uro Crawl", icon: "🗡️", desc: "Dungeon crawler through a diseased urinary tract. No quiz: lasers break stones, loops cut tumours, water flushes clots. Touch or mouse.", color: "#38e8ff", unlockCost: 250, reqs: {} }
+      { id: "crawl", name: "Path of Pathology", icon: "🗡️", desc: "Dungeon crawler through a diseased urinary tract. No quiz: lasers break stones, loops cut tumours, water flushes clots. Touch or mouse.", color: "#38e8ff", unlockCost: 250, reqs: {} }
     ];
 
     var deviceNow = getEffectiveDevice(s.devicePref);
@@ -7321,7 +7321,7 @@ export default function UroStudyHub() {
     );
   }
 
-  // ═══ URO CRAWL — top-down roguelike, pure fun break ═══
+  // ═══ PATH OF PATHOLOGY (working name Uro Crawl) — dungeon-crawler roguelike, pure fun break ═══
   // Own page (games/uro-crawl.html, canvas + Web Audio, no deps). Frame + postMessage contract: {type:"crawl:claim"} on the
   // first input (no payout yet), {type:"crawl:result", won, rooms, kills, rvu, seconds} at run end (the payout), {type:"crawl:exit"}.
   function UroCrawl() {
@@ -7341,7 +7341,7 @@ export default function UroStudyHub() {
     }, []);
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#07111a", paddingTop: "env(safe-area-inset-top)" }}>
-        <iframe ref={frameRef} src="games/uro-crawl.html?embed=1" title="Uro Crawl" allow="autoplay; gamepad" style={{ border: 0, width: "100%", height: "100%", display: "block" }} />
+        <iframe ref={frameRef} src="games/uro-crawl.html?embed=1" title="Path of Pathology" allow="autoplay; gamepad" style={{ border: 0, width: "100%", height: "100%", display: "block" }} />
       </div>
     );
   }
