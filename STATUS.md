@@ -3,6 +3,45 @@
 **Updated:** 2026-11-11
 **Tool:** Claude Code
 
+## 2026-11-11 — 📖 Review tab: reviewing Anki cards inside the app (phone-first)
+
+Andrew's question: could reviewing live in UroStudyHub so it is a one-stop shop, with real credit for doing it? The app already
+made cards (AI, manual, hooks, ISE misses) but could not review them, and the hub's "Anki reviews" were `+10` self-report
+buttons. Decision after discussing devices (phone first, then iPad, then Boox): build the in-app reviewer now, **table the
+link to real Anki** (AnkiConnect is desktop-only, so it does not help phone/iPad/Boox).
+
+**Done (`UroStudyHub.html`, built to `UroStudyHub.min.html`):**
+- **📖 Review tab** on the Anki page (default once you have cards; the old "Review" tab is now **📇 Cards**, the card browser).
+  Home: today's count vs the goal, Review / Learning / New tiles, **Quick 10** (or 25 / All), tag filter, ⚙ limits (new/day, daily
+  goal). Card: tap to reveal, Again / Hard / Good / Easy with the next interval on each (62px buttons), undo, edit / suspend /
+  delete, keyboard (space, 1–4, Z). Summary: accuracy, XP, coins, goal and queue-cleared messages. No animation (e-ink safe),
+  column capped at 640px on iPad.
+- **Scheduler** (`ANKI-SCHED-BEGIN/END`, pure ES5): Anki-classic. New: steps 1m/10m, Good-Good graduates to 1d, Easy 4d.
+  Review: Hard ×1.2, Good ×ease, Easy ×ease×1.3 with credit for lateness; ease 2.5 (min 1.3); Again = lapse → 10m relearn → 1d.
+  Cloze notes = one unit per cloze number (Anki sub-cards), siblings buried till tomorrow. Study day rolls over at **4am local**.
+  Schedule is stored on the card (`card.sc[unitKey]`, absent = new; `card.susp`), so existing cards need no migration.
+- **Rewards:** 2 XP per graded review (+1 coin per 10, both capped at 100 reviews/day), reviews keep the streak (same rules and
+  milestone coins as marking a topic done), the daily goal pays one token, clearing the queue pays +25 XP +5 coins once a day.
+- **Bug fixed:** `ankiReviews` was a lifetime counter compared against a *daily* goal with no reset, so after ~50 total taps the hub
+  task vanished and the token never paid again. The goal now counts `ankiDays[studyDay]`; `ankiReviews` stays as the lifetime total
+  for analytics. The hub row now reads "N cards to review · x/goal today" and jumps to the Review tab; the manual `+10/+25/+50`
+  buttons still work (count toward the goal, no XP) for reviews done in real Anki.
+- **Tests:** `node tools/anki-sched.test.mjs` (32, run under 3+ time zones) and `node tools/anki-study.drive.mjs` (63: phone
+  viewport E2E incl. 360px layout, iPad, dark mode). Existing `arcade-cards` (74), `ise-plan` unit (45) and drive (150) still pass.
+
+**Next steps:**
+- **Cross-device sync** is the real gap: phone, iPad and Boox each keep their own deck state in localStorage, so a card reviewed on
+  one is still due on another. Options: a "back up / move my deck" code (cheap, like the `URO:ISE:` backup) or the Supabase Phase 2
+  item. Cards already have stable ids and per-unit `last` timestamps, so "newest review wins per card" is a straightforward merge;
+  `ankiDays` would need to be per-device and summed.
+- Parked by choice: link to real Anki (AnkiConnect: read reviewed-today/due counts and credit them, desktop only; verify action
+  names against the current docs first, they moved to sourcehut), import from an Anki plain-text export, FSRS, swipe gestures,
+  on-card images. Cards pushed to Anki are not marked "in Anki", so pushing and reviewing in-app would double-review.
+- Playtest on the live phone: is Quick 10 / 10 new per day the right default, and is 2 XP per review the right size next to 50 XP for a topic?
+
+**Open questions:** the app's other counters (pomodoros, heatmap, streak) use the UTC date while Anki days use local time with a 4am
+rollover, so on a US evening the streak day and the Anki day can differ by one; fine for now, worth unifying if it ever shows.
+
 ## 2026-11-11 — 🎮 Arcade variety: play counter, daily first-play bonus, weekly Case Minimums
 
 Andrew's worry: some games are more polished and more fun than others, so players will grind Path of Pathology or Stone Squadron and
