@@ -256,8 +256,26 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - **XP & Coins** — earned from completing topics, lectures, readings, Anki reviews, pomodoros, SASP
 - **11-rank progression** — Pre-Med → ... → Department Chair
 - **Daily streak** with streak shield upgrade
-- **Tokens** — currency for playing games. Earned via study activities.
+- **Tokens** — currency for playing games. Earned via study activities. A launch costs 1 token whatever the game (out of tokens:
+  one free trial per game per day, then a gate question). A game's coin **unlock** price (150–350 💰, `unlockCost` in `ARCADE_GAMES`)
+  is paid once; the token is the only ongoing price. Every game pays through `gameReward` under the same cap (150 💰 / 80 XP per claim).
 - **Activity Log** — tracks all study actions with timestamps
+- **Arcade variety (2026-11-11)** — nudges players toward a mix of games with carrots, never locks. All bookkeeping is the pure
+  `ARCADE-PLAY` block in `UroStudyHub.html` (`ARCADE_GAMES` list, `arcadeRecordPlay` / `arcadeRecordOpen`), unit-tested by
+  `tools/arcade-play.test.mjs`, driven end to end by block E of `tools/arcade-cards.drive.mjs`. A *play* = a round that finished and
+  paid (coins or XP > 0); a launch is counted separately.
+  - `s.gameStats[id] = { opens, plays, coins, last }` — the per-game counter (the Arcade card shows "N× played"; before this only the
+    total `s.games` existed).
+  - **Daily first-play bonus** — the first paid round of each game each *local* day also pays +25 💰 +10 XP (`FIRST_PLAY_COINS/XP`;
+    `s.dailyFirst = { day, games }`). The card says "+25 💰 first play today", then "✓ today's bonus taken". A toast shows the bonus line.
+  - **📋 Case Minimums** — paid rounds in N *different* games in a Monday–Sunday week (`s.rotation = { week, games, claimed }`) pay once per
+    tier (`MINIMUM_TIERS`): 3 games +1 🪙, 5 games +1 🪙 +30 💰, 7 games +2 🪙 +100 💰 (the "full rotation", counted in `s.rotationFull`).
+    The tokens go straight to `s.tokens`, not the activity log / `tokensEarned`, so they never light up the *study* heatmap or analytics.
+    (Named "Case Minimums", not "case log", because the Case Log is the real surgical-case feature.)
+  - Day and week keys are local time (`arcadeDay` / `arcadeWeek`); the streak and daily login still use UTC dates.
+  - The top toast now has one timer (`flashToast`): an older toast's timeout used to clear a newer one early.
+  - **Coin balance:** all shop items (unlocks 1,750 + upgrades 2,880 + themes 500 ≈ 5,100 💰) get bought up eventually, and the daily
+    bonus adds up to 8 × 25 💰 a day, so expect the shop to run dry; see STATUS.md "Next steps" for the perk-expansion plan.
 
 ### Mini-Games (overlay via `showGame` state)
 

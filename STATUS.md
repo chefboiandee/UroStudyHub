@@ -42,6 +42,101 @@ link to real Anki** (AnkiConnect is desktop-only, so it does not help phone/iPad
 **Open questions:** the app's other counters (pomodoros, heatmap, streak) use the UTC date while Anki days use local time with a 4am
 rollover, so on a US evening the streak day and the Anki day can differ by one; fine for now, worth unifying if it ever shows.
 
+## 2026-11-11 — 🎮 Arcade variety: play counter, daily first-play bonus, weekly Case Minimums
+
+Andrew's worry: some games are more polished and more fun than others, so players will grind Path of Pathology or Stone Squadron and
+skip the rest. Pricing the fun games up only shrinks play (the coin unlock is paid once; the token cost is flat), so this session adds
+carrots instead. Steps 1 and 2 of a six-idea plan (the rest are under Next steps); no game is locked or taxed.
+
+**Done (`UroStudyHub.html`, Boox-safe: plain `var` / `function`, nothing newer than ES5 in the new code):**
+- **Play counter** `s.gameStats[id] = { opens, plays, coins, last }`. A *play* is a round that finished and paid; launches are counted
+  separately (an effect on `showGame`, so token / trial / admin / gate-question launches are all covered). Before this only the total
+  `s.games` existed, so the mix could not be seen. Each Arcade card now reads "N× played".
+- **Daily first-play bonus**: the first paid round of each game each local day also pays +25 💰 +10 XP, once per game per day.
+  Cards say "+25 💰 first play today" / "✓ today's bonus taken". Needs coins or XP > 0, so launch-and-quit can't farm it.
+- **📋 Case Minimums** (weekly, Mon–Sun, local time): paid rounds in 3 / 5 / 7 different games pay +1 🪙 / +1 🪙 +30 💰 / +2 🪙 +100 💰,
+  once per tier per week; the 7-game tier also counts a lifetime "full rotation" (★ N full). A progress panel sits at the top of the
+  Play tab and each card shows "📋 logged this week". The bonus tokens go to `s.tokens` only (not the activity log / `tokensEarned`),
+  so they don't show up in the study heatmap or analytics. Named "Case Minimums" because "Case Log" is the real surgical-case feature.
+- One toast line per claim ("🎯 First … today: +25 💰 +10 XP · 📋 3 games this week: +1 🪙"). **Fixed along the way:** the top toast
+  had five independent timeouts, so an older toast cleared a newer one early (the daily-login toast was cutting the bonus line short);
+  all five now go through `flashToast` with a single timer. The toast pill also no longer wraps at half the screen width.
+- `GAMES` moved out of `GameSelectScreen` to module-scope `ARCADE_GAMES`, so the bookkeeping knows every id (add a game there once).
+- The bookkeeping is a pure `ARCADE-PLAY-BEGIN/END` block, like the ISE logic, so it is unit-tested without a browser.
+
+**Verified:** `tools/arcade-play.test.mjs` (new, 24 tests; run under `TZ=America/New_York`, `UTC`, `Pacific/Auckland`: week boundaries,
+DST days, year change, per-day / per-week resets, tier payouts, no mutation of the input state, pre-feature profiles).
+`tools/arcade-cards.drive.mjs` 119 checks pass (74 old + new block E and extra Snap checks: bonus once per day, counters, tiers 3 / 5 /
+full from a seeded week, stale day and week reset, an old save with none of the new keys). Frame games are paid through the real
+postMessage claim from inside their frame. Stone Squadron's claim is not driven (its page needs three.js from a CDN) but it uses the
+same `squadron:claim` → `gameReward` path. Looked at the Arcade at phone width, dark and light.
+
+**Next steps:**
+1. **Idea 3: daily "On Call" rotation**: 2–3 games boosted by date (e.g. 2× coins or the token back on a good run), badge on the card.
+2. **Idea 4: shared meta currency**: CME credits earned in *every* game, spent in Path of Pathology's Call Room (fold into
+   `UROCRAWL_ROADMAP.md` step 3), so Crawl grinders have a reason to visit the others.
+3. **Idea 5: cross-game hooks**: a Buzzer / Snap streak gives a starting boon in Crawl; a Squadron clear unlocks a bestiary entry.
+4. **Idea 6: pick by time / "Pick for me"**: add a `mins` class (quick / medium / deep) to `ARCADE_GAMES`, an "I have 5 / 15 / 30 min"
+   filter, and a "Pick for me" button weighted to games with the oldest `gameStats[id].last`.
+5. **Shop perks (Andrew's note: the shop will be bought out quickly).** Everything in the shop is ≈ 5,100 💰 in total (unlocks 1,750,
+   upgrades 2,880, themes 500) and the daily bonus adds up to 200 💰 a day on top of round payouts. Candidates, cheapest first:
+   more themes and profile titles / frames (rank flair, "Full rotation" badge); a repeatable coin sink such as a capped weekly
+   token pack or a gate-question skip; a levelled "Residency Stipend" that raises the first-play bonus; "Pager Priority" (2 free trials
+   a day per game); Crawl-side cosmetics bought with CME credits (ties to idea 4); a late-game "Fellowship" prestige reset for a
+   permanent badge. Pick a few with Andrew before building.
+6. Send `gameStats` / `rotationFull` to the analytics sync (`urostudyhub-analytics-script.js`) so the mix is visible in the sheet.
+
+**Open questions:** is 25 💰 the right bonus size given the shop will drain faster (lower it, or pay part as XP)? Are 3 / 5 / 7 the right
+tiers (a new player only has Snap free, so week one tops out at what they can afford to unlock; that also nudges buying unlocks)?
+A bigger one-time "first ever play of this game" bonus? Should the daily bonus favour the teaching games over the pure-fun ones?
+
+## 2026-11-11 (later) — 🦀 Path of Pathology: the Invader (third boss), the wall + perforation system, the Oncology dungeon
+
+Andrew (via the brief): a third boss, the muscle-invasive bladder tumour, in a round bladder arena whose wall can
+perforate, with the perforation system built generically. Staghorn and Fournier are untouched (all their checks pass).
+(The other brief that arrived with it, reps / patrons / the Fournier title card, was already in the game since 11-09; its
+harness block M still passes, nothing was redone.)
+
+**Done (`games/uro-crawl.html`, one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 237 checks):**
+- **§14c wall + perforation (generic)**: `makeWall({cx, cy, rx, ry, n, tagOf, onPerforate, onSealed})` builds `G.wall` and
+  `G.arena` (an ellipse every entity, bullet and beam collides with; `enterRoom` clears both). `wallHit(seg, dmg)` fills a
+  segment's meter (`PERF.FILL` 120 damage); full = `wallPerforate`: a hole, a flood (70% speed, shorts the Bovie), a wave of
+  Tumour Seeds and damage by the segment's tag (`PERF_KINDS`: LATERAL / POSTERIOR minor 8-10 dmg + 3 seeds; DOME severe 22
+  dmg + 6 seeds + whatever `onPerforate` does). Plug within 5.5 s: hold a Foley balloon over the hole, or one cauterizing
+  hit (Roller Ball, Bovie COAG, loop coag) → `wallPlug`; left alone it is chronic and leaks a seed every 5-7 s. Distension:
+  the Irrigation Hose fills a meter; past 60% every perf meter fills 50% faster. Drawn as a fleshy ring (thinner at the
+  dome) with an integrity gauge on each segment's inner lip.
+- **§14d The Invader** (`?boss=mibc`, 2200 HP = urothelium 500 / lamina propria 500 / muscle 700 / perivesical 500):
+  Phase 1 (Ta/T1) frond fans, lobbed seeds that plant CIS carpets (each living one = −15% damage to the body, max 3),
+  papillary turrets (mitomycin slows them). Phase 2 (T2): it burrows (untouchable) and pushes four invasive fronts into
+  wall segments; damage to a front counts ×2 against the muscle layer, but every CUT or ENERGY hit thins that segment
+  (lasers and water do not), and electrocautery (Bovie, Roller Ball, Button, loop) on a LATERAL front can set off the
+  obturator jerk: aim yanked, surgeon shoved, +12% on that meter. New boon Obturator Block (Bovie's pool) removes the jerk
+  and halves staggers. A dome perforation enrages the boss for 15 s. Phase 3 (T3/T4): through the wall, fat adds, faster
+  attacks; ordinary damage only strips it to an exposed core, and the kill is a charged radical cystectomy: hold fire in
+  range for 1.5 s, then release. Every attack telegraphed ≥ 0.5 s. Its HUD is a panel in the top-left corner (a round room
+  leaves it empty): name, stage, the three layers as stacked bars, a two-line hint, distension.
+- **Dungeon**: the final boss is rolled in thirds from the seed (seeds that rolled the Staghorn with r < 1/3 or Fournier
+  with 1/2 ≤ r < 5/6 keep theirs). The Invader's run is the ONCOLOGY dungeon: rooms draw only MALIGNANT + BENIGN (label in
+  the room strip). Its rest room adds a chemo pole (neoadjuvant cisplatin: boss −20% HP, you −15% max HP for the fight,
+  declinable) and makes the crate a Roller Ball if you carry nothing that plugs a hole. Cisplatin +55% and pembrolizumab
+  +35% vs the Invader. `?boss=…&room=K` now picks the run's boss without jumping to room 9.
+- **Bestiary**: The Invader, Tumour Seed, Perivesical Fat. Win text per boss; the Invader's reads "Muscle present in
+  specimen: Muscle-invasive disease confirmed. Pathology report filed." Summary adds perforations / plugged.
+- Small generic hooks added for it: `e.dmgMul`, `e.minHp`, `def.onDeath`, `def.solid`, `def.coagHint`, `opts.free` on
+  `spawnEnemy`, `clampArena`, hazard kind `flood`, `P.jerk`.
+
+**Verified:** headless Chromium, every block passes (237), new block O (28 checks: arena, layers, each phase, ×2, which
+classes thin the wall, the jerk and what does not cause it, both perforation kinds, coag plug, Foley tamponade, chronic
+leak, distension, cystectomy charge / early release / kill, win screen, neoadjuvant, crate, dungeon families, boss pool,
+bestiary, the wall system standing alone in an ordinary room). Script parses as ES2019.
+**Roadmap:** `UROCRAWL_ROADMAP.md` had this boss parked behind Step 2 (which was going to build the perforation system).
+It is ticked there now, Step 2e says to reuse §14c, and the harness letters for Steps 1-3 moved to P, Q, R.
+**Next steps:** play it on the phone and tune: `MIBC.T` (length), `PERF.FILL` (how forgiving the wall is), `JERK_CHANCE`,
+`CYST_TIME` / `CYST_RANGE`, CIS cap (`maxR` 60). Is a chronic hole too punishing with no way to fix it late?
+**Open questions:** Stone / Infection themes for the other two dungeons (only Oncology has one). Should direct weapon
+contact with the wall (stray beams, bullets) also thin it? Right now only hits on the fronts do.
+
 ## 2026-11-11 — 🗺️ Uro Crawl: roadmap doc for the next three sessions
 
 Andrew's follow-up ideas, written down as one-session steps so a fresh session can be told "read `UROCRAWL_ROADMAP.md`
@@ -60,8 +155,20 @@ and do the next step". Docs only; no game code changed.
   `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
   A module split of the game is a separate task after Step 3.
 
-**Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
+- **Reflux plugging reworked** (Andrew): you carry a bulking needle (not a weapon; cannot hurt the serpent; dropped on hit or
+  by backwash) and inject around each port in a ring of four points, like Deflux; the Bulking Gel weapon is gone.
+- **Step 4 reshaped** (Andrew: more action/time-trial, and a Metroid-style serpent): about half the Peds rooms are timed skill
+  trials (Valve Run, Tide Dash, Aim Gallery, Catheter Course, Pop-Off, Torsion ER) with par medals, stickers and movement tech
+  you keep (Perfect Roll, Roll Cancel, Slide, Flick Shot); the Reflux boss is a kidney head with a ureter tail that swims
+  loops and dives into wall ports; a Sim Lab hub station replays trials.
+- **Step 4 added** (Andrew: a Peds dungeon): the toy-box Peds Wing with the Wilms elite, hydronephrotic kidneys (SFU grades),
+  BBD blob, botryoid rhabdomyosarcoma, PUV gates, a torsion emergency room (abstract knot), and the Reflux megaureter-serpent
+  boss (tide waves + plugging ports with a bulking-gel weapon). Content rule: no children and no paediatric genital or pelvic
+  anatomy drawn, so hypospadias / exstrophy / cloaca / prolapse / torsed testis / VACTRL / myelomeningocele are not creatures.
+
+**Next steps:** Step 1 (the Invader took block O; Steps 1-4 take P, Q, R, S: the Path of Pathology look pass took N).
 **Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
+
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
 
 Andrew's playtest notes: enemies look too alike (wants a subtle outline colour per type), the small round ones especially;

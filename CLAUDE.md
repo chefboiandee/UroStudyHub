@@ -23,7 +23,7 @@ inside another workspace; nothing here depends on that one any more.)
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
   `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, shown to players as
   **Path of Pathology** (the file, storage key and hooks keep the working name Uro Crawl), pure canvas, no deps;
-  two bosses, `?boss=staghorn|fournier`; weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
+  three bosses, `?boss=staghorn|fournier|mibc` (the Invader: round arena on the generic wall + perforation system, §14c / §14d); weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
   Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
@@ -31,7 +31,9 @@ inside another workspace; nothing here depends on that one any more.)
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
   In-Service sprint: `node tools/ise-plan.test.mjs` (pure Node, scheduler) and `node tools/ise-plan.drive.mjs`
   (headless E2E; set `CDN_DIR` to a node_modules with react/react-dom 18.2.0, @babel/standalone 7.23.9, katex 0.16.9 when offline).
-  Arcade card games (Snap Decision, Board Buzzer, Staging Attack, the retired-games refund): `node tools/arcade-cards.drive.mjs` (same `CDN_DIR` trick).
+  Arcade card games (Snap Decision, Board Buzzer, Staging Attack, the retired-games refund) and the play counter / daily first-play bonus /
+  Case Minimums (block E; `ONLY=E` runs just that block): `node tools/arcade-cards.drive.mjs` (same `CDN_DIR` trick). The pure bookkeeping
+  behind those: `TZ=America/New_York node tools/arcade-play.test.mjs` (also try `TZ=UTC` and `TZ=Pacific/Auckland`; no browser).
   Uro Crawl: `node tools/uro-crawl.drive.mjs` (needs the `urostudyhub` server; no CDN: the game has no dependencies).
   In-app Anki reviewer (Anki page > Review tab): `node tools/anki-sched.test.mjs` (pure Node; run it under `TZ=America/Chicago`, `UTC`
   and `Pacific/Auckland`, the 4am study-day rollover is the part that bites) and `node tools/anki-study.drive.mjs` (headless E2E on a
