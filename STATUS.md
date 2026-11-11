@@ -3,6 +3,22 @@
 **Updated:** 2026-11-11
 **Tool:** Claude Code
 
+## 2026-11-11 — 🗺️ Uro Crawl: roadmap doc for the next three sessions
+
+Andrew's follow-up ideas, written down as one-session steps so a fresh session can be told "read `UROCRAWL_ROADMAP.md`
+and do the next step". Docs only; no game code changed.
+
+**Done:** `UROCRAWL_ROADMAP.md` (ground rules + a checklist + three full step specs + a parked list), a row in
+`CLAUDE.md`'s read-on-demand table.
+- **Step 1** Staghorn becomes a mobile Minotaur-style duelist (charge, wall-crash stun, tines break).
+- **Step 2** Giant TURP boss: three sections as the scope advances, capsule-fiber progress cue, flow-rate win meter,
+  the hoser bleeder (red-out), verumontanum sphincter injury with an incontinence curse, ureteric-orifice and
+  bladder-neck-contracture warnings, Kegel / Finasteride boons, a generic perforation system.
+- **Step 3** The Call Room hub: walkable pre-run room with starter boon, pins, perks, decor, CME credits and jokes.
+- Parked: Muscle-Invasive Bladder Tumor boss (reuses Step 2's perforation system), rename, later ideas.
+
+**Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
+**Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
 
 Andrew's playtest notes: enemies look too alike (wants a subtle outline colour per type), the small round ones especially;

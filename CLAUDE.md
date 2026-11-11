@@ -12,6 +12,7 @@ inside another workspace; nothing here depends on that one any more.)
 | Roadmap, architecture, features, data model | `UroStudyHub_CLAUDE.md` (big — grep, then slice) |
 | What the last session did, next steps | `STATUS.md` (newest entries at the top) |
 | Stone Squadron (3D ureteroscopy game in `games/`): design notes, roadmap | `STONE_SQUADRON.md` |
+| Uro Crawl (roguelike in `games/uro-crawl.html`): the step-by-step build plan ("read it and do the next step") | `UROCRAWL_ROADMAP.md` |
 | User-facing setup | `SETUP.md` |
 
 ## Layout
