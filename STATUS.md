@@ -3,6 +3,54 @@
 **Updated:** 2026-11-11
 **Tool:** Claude Code
 
+## 2026-11-11 (later still) — 🦌 Path of Pathology: the Staghorn is a mobile head-on duelist (roadmap Step 1)
+
+Andrew: "read `UROCRAWL_ROADMAP.md` and do Step 1". The Staghorn was a big body rooted on the right wall with four fixed
+arms; it is now the Minotaur fight: a stone stag that walks you down, charges, and stuns itself on the wall when you dodge.
+Same three phases, same forced weapon swap. Fournier and the Invader are untouched.
+
+**Done (`games/uro-crawl.html`, one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 261 checks):**
+- **The duel** (§14b, `stag*` functions, every number in the `STAG` table = `UroCrawl.tuning.STAG`): it stalks toward the
+  surgeon with a facing and a gait. **Antler charge**: stops, digs in for 0.7 s behind a red lane that follows you and
+  locks for the last 0.15 s, then runs that line at 640 px/s. Stand in it: gored for 26, and it skids to a stop (no
+  opening). Roll through it or step out: it hits the wall, is **stunned 2.5 s, takes +50%, and one tine snaps off**
+  (a stunned enemy does no contact damage: the existing global rule). **Antler sweep**: a 0.55 s cone up close, 18 damage
+  and a shove. **Ground slam**: `groundSlam` / `staggerPlayer` with the Gentle Giant's quiet camera, then a ring of shards
+  rolls out across the floor to roll through (12, hits once). **Spike volley**: a fan from the rack, 2 spikes per live
+  tine + 1 (9 / 7 / 5 / 3, none without a rack).
+- **Phases**: 1 SHELL: the body takes 25% until 2 of the 4 tines are gone; a tine is its own target (200 HP, LITHO
+  x1.75) and also breaks on a wall crash. 2 INFECTION (66%): biofilm shield (strip with water / Bovie / antibiotics),
+  swarms out of the cracks every 5 s, a slime trail along its path, charges less often (7.5-9 s), a wall crash shakes out
+  3 more bugs, the slam throws two rings a roll apart. 3 CORE (33%): the shell and remaining tines shatter into a smaller,
+  faster core (x1.5 from every class) that opens with a two-armed spiral and a gapped ring, chain-dashes 2-3 times behind
+  0.5 s lanes (a dash that reaches the wall is a 1.2 s stun) and throws fragmentation bursts of suckable shards.
+  Death: slow-mo, the core bursts into 40 shards and each pops into a coin where it lands. Every tell is 0.5 s or longer.
+- **Art**: `drawStag` / `drawStagCore`: a faceted hunched boulder on four stone hooves, a skull with a heavy brow and
+  the stone family's glowing eye crack, a rack that forks into four pointed tines ending exactly on the tine hitboxes,
+  glowing cracks (cyan shell, green infection, orange when it digs in), stars when stunned, blue stone rim throughout.
+  It is the first boss drawn in the back-to-front pass with a ground shadow (`def.depth`); rooted bosses stay underneath.
+- Small generic hooks: `cone` telegraph kind, `e.aimBias` (touch auto-aim goes for tines while the shell holds, the body
+  after), `shard` bullets, nothing shoves a boss in the separation pass.
+
+**Where the build reads the spec one way** (also noted at the end of Step 1 in the roadmap): the shell opens when 2 tines
+are *broken*; tine damage stays in the tine and brushing a tine does not hurt; a gore ends the charge with no crash; HP
+2800 (was 1500) for the 90-120 s target; each phase change is a ~1.3 s roar that nothing gets through; the core's dashes
+are a fixed 0.46 s so they can chain; the old phase-1 stone adds are gone.
+
+**Verified:** headless Chromium, every block passes (261). Block B (phase gates, shield, win screen) was adapted to the
+new shell rule; new block P is 24 checks: mobility and depth pass, the charge lane (tracks, locks, 640 px/s, straight),
+wall crash (2.5 s stun, tine break, cooldown), +50% and harmless while stunned, gored vs rolled through, the shell and
+auto-aim, volley counts, sweep (front / behind / rolled), slam (thud across the room, ring hits once, roll through, no
+double hit), phase 2 (roar, shield swap, swarm timer, slime trail and slow, cadence, crash swarm, double ring), phase 3
+(core, chain of 2 and of 3 with the wall stun, spiral / gap ring / fragmentation tells), two full fights played by a bot
+with no god mode and the starting loadout (about 70 s each, 27 and 54 damage taken), the shards-to-coins death, and that
+every tell seen was 0.5 s or more. Script parses as ES2019; 60 fps on a phone-sized touch viewport in headless.
+**Roadmap:** Step 1 is ticked; Steps 2-4 take harness blocks Q, R, S.
+**Next steps:** play it on the phone and tune `STAG`: `LOCK` (0.15 s: how late the lane stops following), `SPD`, `STUN`,
+the body HP (2800) and tine HP (200). Then Step 2 (the Giant TURP boss).
+**Open questions:** Is a guaranteed stun on every dodged charge too generous (a human will be gored more than the bot)?
+Should a broken tine also chip the body? Should the Staghorn's run get a STONE dungeon theme like Oncology has?
+
 ## 2026-11-11 — 📖 Review tab: reviewing Anki cards inside the app (phone-first)
 
 Andrew's question: could reviewing live in UroStudyHub so it is a one-stop shop, with real credit for doing it? The app already

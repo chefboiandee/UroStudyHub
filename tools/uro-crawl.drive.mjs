@@ -12,6 +12,9 @@
 // the charged cystectomy, neoadjuvant chemo, the Oncology dungeon and the three-boss pool.
 // Block K: the Antibiotic Dropper. Block L: antibiotic stewardship (the two-drug cap, resistance meters, collateral C. diff /
 // Candida, resistant strains, Culture & Sensitivity + De-escalation). Block M: the reps cast, patron altars, Fournier.
+// Block P: the Staghorn as a mobile head-on duelist (?boss=staghorn): the antler charge and its lane, the wall-crash stun and
+// tine break, gored vs rolled through, the shell, sweep / slam + shard ring / spike volley, the three phases, and two full
+// fights played by a bot with no god mode. (Block B still covers the same boss's phase gates, shield and win screen.)
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -106,19 +109,24 @@ await block('A. weapons', async () => {
 await block('B. boss', async () => {
   const { p, errs } = await open('?seed=5&god=1&boss=staghorn&weapons=holmium,irrigation,bovie');
   await p.evaluate(() => UroCrawl.startRun());
-  let b = await p.evaluate(() => { UroCrawl.step(10); const B = UroCrawl.state.boss; return { arms: B.arms.length, inv: B.body.inv, intro: UroCrawl.state.introT }; });
-  check('boss spawns armored with 4 arms and an intro card', b.arms === 4 && b.inv && b.intro > 1);
+  let b = await p.evaluate(() => { UroCrawl.step(10); const B = UroCrawl.state.boss; return { arms: B.arms.length, mul: B.body.dmgMul, intro: UroCrawl.state.introT }; });
+  check('boss spawns shelled (25% damage) with 4 antler tines and an intro card', b.arms === 4 && b.mul === 0.25 && b.intro > 1);
   await shot(p, 'b-boss-intro');
-  b = await p.evaluate(() => { UroCrawl.step(200); const B = UroCrawl.state.boss; const d = UroCrawl.dealDamage(B.body, 100, 'LITHO', {}); B.arms[0].e.hp = 1; UroCrawl.dealDamage(B.arms[0].e, 50, 'LITHO', {}); B.arms[1].e.hp = 1; UroCrawl.dealDamage(B.arms[1].e, 50, 'LITHO', {}); UroCrawl.step(5); return { dealt: d, cracked: B.arms.filter(a => a.cracked).length, inv: B.body.inv }; });
-  check('phase 1: body immune until 2 arms crack', b.dealt === 0 && b.cracked === 2 && !b.inv);
+  // the boss fights on while this block pokes at it, so the checks hold it still first: no attacks, no stun bonus in the numbers
+  const calm = () => p.evaluate(() => { const B = UroCrawl.state.boss; for (const k in B.cd) B.cd[k] = 99; B.swarmT = 99; B.queue.length = 0; B.run = null; B.body.atk = null; delete B.body.st.stun; B.state = 'stalk'; B.stT = 0; UroCrawl.step(1); });
+  await p.evaluate(() => UroCrawl.step(170)); await calm();
+  b = await p.evaluate(() => { const B = UroCrawl.state.boss; const d = UroCrawl.dealDamage(B.body, 100, 'LITHO', {}); B.arms.forEach(a => { if (B.arms.filter(x => x.cracked).length < 2 && !a.cracked) { a.e.hp = 1; UroCrawl.dealDamage(a.e, 50, 'LITHO', {}); } }); UroCrawl.step(5); return { dealt: d, cracked: B.arms.filter(a => a.cracked).length, mul: B.body.dmgMul, inv: B.body.inv }; });
+  check('phase 1: the shell holds the body to 25% until 2 tines break', Math.abs(b.dealt - 100 * 1.75 * 0.25) < 0.01 && b.cracked === 2 && b.mul === 1 && !b.inv, JSON.stringify(b));
   b = await p.evaluate(() => { const B = UroCrawl.state.boss; B.body.hp = B.body.maxHp * 0.65; UroCrawl.step(5); return { phase: B.phase, shield: B.body.shield, microbes: UroCrawl.state.enemies.filter(e => e.family === 'MICROBE').length, slime: UroCrawl.state.hazards.filter(h => h.kind === 'slime').length }; });
   check('phase 2: biofilm shield + swarm + slime', b.phase === 2 && b.shield > 0.9 && b.microbes > 0 && b.slime >= 4, JSON.stringify(b));
-  await p.evaluate(() => UroCrawl.step(300)); await shot(p, 'b-boss-p2');
+  await p.evaluate(() => UroCrawl.step(300)); await shot(p, 'b-boss-p2'); await calm();
   b = await p.evaluate(() => { const B = UroCrawl.state.boss; const dL = UroCrawl.dealDamage(B.body, 100, 'LITHO', {}); for (let i = 0; i < 30; i++) UroCrawl.dealDamage(B.body, 1, 'FLUID', { strip: 0.09 }); const stripped = B.body.shield <= 0; UroCrawl.state.enemies.forEach(e => { if (e.family === 'MICROBE') { e.silent = true; e.hp = 0; } }); UroCrawl.step(60); return { dL, stripped, after: B.body.shield }; });
   check('phase 2 forces a swap: LITHO blocked by the shield, FLUID strips it, no regen once the swarm is dead', b.dL < 20 && b.stripped && b.after <= 0.01, JSON.stringify(b));
-  b = await p.evaluate(() => { const B = UroCrawl.state.boss; B.body.hp = B.body.maxHp * 0.32; UroCrawl.step(5); const d = UroCrawl.dealDamage(B.body, 10, 'FLUID', {}); UroCrawl.step(400); return { phase: B.phase, core: B.body.coreExposed, d, bullets: UroCrawl.state.bullets.length, arms: B.arms.filter(a => a.cracked).length }; });
+  await p.evaluate(() => { const B = UroCrawl.state.boss; B.body.hp = B.body.maxHp * 0.32; UroCrawl.step(100); }); await calm();   // past the roar between phases
+  b = await p.evaluate(() => { const B = UroCrawl.state.boss; const d = UroCrawl.dealDamage(B.body, 10, 'FLUID', {}); B.cd.spiral = 0; let n = 0; while (UroCrawl.state.bullets.length <= 10 && n < 600) { UroCrawl.step(1); n++; } return { phase: B.phase, core: B.body.coreExposed, d, bullets: UroCrawl.state.bullets.length, arms: B.arms.filter(a => a.cracked).length }; });
   check('phase 3: core exposed ×1.5, shell gone, bullet patterns', b.phase === 3 && b.core && Math.abs(b.d - 9) < 0.01 && b.bullets > 10 && b.arms === 4, JSON.stringify(b));
   await shot(p, 'b-boss-p3');
+  await calm();
   b = await p.evaluate(() => { const B = UroCrawl.state.boss; B.body.hp = 1; UroCrawl.dealDamage(B.body, 100, 'LITHO', {}); UroCrawl.step(10); const won = UroCrawl.state.won; UroCrawl.step(400); return { won, overlay: UroCrawl.state.overlay, title: document.getElementById('sumTitle').textContent }; });
   check('boss death → DISCHARGED! summary', b.won && b.overlay === 'summary' && b.title === 'DISCHARGED!');
   await shot(p, 'b-win');
@@ -972,6 +980,228 @@ await block('O. invader', async () => {
     return { n: Wl.segs.length, tag, half, open, banner, plugged, sealed, kept, cleared: G.wall === null && G.arena === null, room: G.roomIndex }; });
   check('the wall + perforation system is generic: any room can makeWall(), feed wallHit(), get the perforation event and plug it; leaving the room clears it', b.n === 8 && b.tag === 'DOME' && b.half === 0.5 && b.open && /INTRAPERITONEAL/.test(b.banner) && b.plugged && b.sealed === 1 && b.kept && b.cleared && b.room === 4, JSON.stringify(b));
   errCheck('O', errs.concat(errs2, errs4, errs5, errs6));
+});
+
+// ───────── P. the Staghorn as a head-on duelist (roadmap Step 1) ─────────
+// __S: put the boss and the surgeon somewhere with every timer clean, silence every attack but one, step until something
+// happens. __stagBot: a surgeon that plays the fight for real (analog movement, mouse aim, held fire with heat management,
+// weapon swaps by phase, sidesteps and rolls driven by what the boss telegraphs); it runs synchronously inside evaluate.
+const STAGLIB = `
+  window.__S = {
+    quiet: function (keep) { const B = UroCrawl.state.boss; for (const k in B.cd) B.cd[k] = 99; if (keep) B.cd[keep] = 0; B.swarmT = 99; },
+    put: function (x, y, face, px, py) { const G = UroCrawl.state, B = G.boss, b = B.body, P = UroCrawl.player(), I = UroCrawl.input;
+      b.x = x; b.y = y; B.px = x; B.py = y; b.vx = b.vy = b.kx = b.ky = 0; B.face = face; B.state = 'stalk'; B.stT = 0; B.run = null; B.tele = null; B.chain = 0; b.atk = null; delete b.st.stun; B.rings.length = 0; B.queue.length = 0;
+      G.teles.length = 0; G.bullets.length = 0; G.texts.length = 0; G.shake = 0; G.flash = 0; G.punch = 0;
+      P.x = px; P.y = py; P.hp = P.maxHp; P.inv = 0; P.roll = 0; P.rollCd = 0; P.stag = 0; I.mode = 'kb'; I.keys = {}; I.stick = null; I.mouseFire = false; I.edges = {}; },
+    until: function (pred, max) { let n = 0; while (!pred() && n < (max || 600)) { UroCrawl.step(1); n++; } return n; },
+    mics: function () { return UroCrawl.state.enemies.filter(e => !e.dead && e.family === 'MICROBE').length; },
+    killMics: function () { UroCrawl.state.enemies.forEach(e => { if (e.family === 'MICROBE') { e.silent = true; e.hp = 0; } }); UroCrawl.step(1); },
+    broken: function () { return UroCrawl.state.boss.arms.filter(a => a.cracked).length; }
+  };
+  window.__stagBot = function (maxSteps, o) {
+    o = o || {};
+    const G = UroCrawl.state, P = UroCrawl.player(), I = UroCrawl.input, B = G.boss, body = B.body, T = UroCrawl.tuning.STAG, A = { x0: 26, y0: 26, x1: 934, y1: 514 };
+    const log = { steps: 0, t0: G.time, phaseAt: {}, hits: [], rolls: 0, minTele: 9, kinds: {}, states: {}, maxSpd: 0, won: false, dead: false };
+    const D = (a, b) => Math.hypot(a.x - b.x, a.y - b.y), slot = id => G.weapons.findIndex(w => w.id === id);
+    I.mode = 'kb'; let strafe = 1, strafeT = 0, hold = false, hp = P.hp;
+    for (let n = 0; n < maxSteps && !G.over; n++) {
+      const ph = B.phase, d = D(body, P), ab = Math.atan2(P.y - body.y, P.x - body.x), stunned = !!body.st.stun;
+      log.states[B.state] = (log.states[B.state] || 0) + 1; if (log.phaseAt[ph] === undefined) log.phaseAt[ph] = +(G.time - log.t0).toFixed(1);
+      G.teles.forEach(t => { if (t.kind !== 'spawn') { log.minTele = Math.min(log.minTele, t.dur); log.kinds[t.kind] = 1; } });
+      log.maxSpd = Math.max(log.maxSpd, Math.hypot(body.vx, body.vy));
+      // what to shoot, with what
+      let tgt = body, want = 'holmium';
+      const tines = B.arms.filter(a => !a.cracked).map(a => a.e), mics = G.enemies.filter(e => !e.dead && e.family === 'MICROBE' && e.spawnT <= 0);
+      if (ph === 1 && B.arms.length - tines.length < T.NEED && tines.length) tgt = tines.slice().sort((p, q) => D(p, P) - D(q, P))[0];
+      if (ph === 2) { const near = mics.filter(e => D(e, P) < 160).sort((p, q) => D(p, P) - D(q, P)); if (near.length && slot('bovie') >= 0) { tgt = near[0]; want = 'bovie'; } else if (body.shield > 0 && slot('irrigation') >= 0) want = 'irrigation'; }
+      const ws = slot(want); if (ws >= 0 && G.wIndex !== ws) UroCrawl.selectWeapon(ws);
+      const w = G.weapons[G.wIndex]; I.mx = tgt.x; I.my = tgt.y;
+      if (w.id === 'holmium') { if (w.heat > 0.9) hold = true; if (w.heat < 0.3) hold = false; } else hold = false;
+      I.mouseFire = !hold && D(tgt, P) - tgt.r < (w.id === 'holmium' ? 222 : w.id === 'irrigation' ? 192 : 160) && G.introT <= 0;
+      // where to stand: a ring around the boss, strafing; then whatever the telegraphs say
+      const ring = stunned ? 150 : want === 'irrigation' ? 175 : 195, rx = Math.cos(ab), ry = Math.sin(ab), rad = d < ring - 15 ? 1 : d > ring + 15 ? -1 : 0;
+      strafeT -= 1 / 60; if (strafeT <= 0) { strafeT = 1.4 + (n % 5) * 0.3; strafe = -strafe; }
+      let mx = rx * rad - ry * strafe * 0.55, my = ry * rad + rx * strafe * 0.55, roll = false;
+      const inRoom = (x, y, m) => x > A.x0 + m && x < A.x1 - m && y > A.y0 + m && y < A.y1 - m;
+      if (B.state === 'dig' || (B.state === 'charge' && B.run && !B.run.hit)) {       // the lane: step out of it sideways, roll if it is on top of us
+        const a = B.state === 'charge' ? B.run.a : B.face, ca = Math.cos(a), sa = Math.sin(a), px = P.x - body.x, py = P.y - body.y, along = px * ca + py * sa, perp = -px * sa + py * ca;
+        let side = perp >= 0 ? 1 : -1; if (!inRoom(P.x - sa * side * 110, P.y + ca * side * 110, 14)) side = -side;
+        const half = (ph === 3 ? 38 : T.LANE / 2) + 13 + 22;
+        if (along > -40 && (Math.abs(perp) < half || side * perp < 0)) { mx = -sa * side; my = ca * side; }
+        if (B.state === 'charge' && along > 0 && along < 300 && Math.abs(perp) < half - 8) roll = true;
+      }
+      else if (B.state === 'sweepTele' && d < T.SWEEP_R + 40) { mx = rx; my = ry; if (B.stT < 0.2 && d < T.SWEEP_R + 16) roll = true; }
+      else if (B.state === 'slamTele' && d < T.SLAM_R + T.SLAM_TREMOR + 40) { mx = rx; my = ry; }
+      else if (!stunned && d < 120) { mx = rx; my = ry; }
+      for (const rg of B.rings) {                                                    // shard rings: a diagonal roll, on i-frames as the ring passes
+        if (rg.done || rg.delay > 0) continue; const gap = D(rg, P) - rg.r;
+        if (gap > 0 && gap < 30) { const ra = Math.atan2(rg.y - P.y, rg.x - P.x) + (d > 230 ? 0.5 : 1.35) * strafe; mx = Math.cos(ra); my = Math.sin(ra); roll = true; }
+      }
+      let worst = null;                                                              // bullets: sidestep the one that will arrive first
+      for (const b of G.bullets) {
+        if (!b.hostile || b.kind === 'lob') continue; const rxp = P.x - b.x, ryp = P.y - b.y, v2 = b.vx * b.vx + b.vy * b.vy; if (v2 < 1) continue;
+        const tca = (rxp * b.vx + ryp * b.vy) / v2; if (tca < 0 || tca > 0.55) continue;
+        const cx = rxp - b.vx * tca, cy = ryp - b.vy * tca, miss = Math.hypot(cx, cy); if (miss > 30) continue;
+        if (!worst || tca < worst.tca) worst = { tca, miss, b, cx, cy };
+      }
+      if (worst && !roll) { const v = Math.hypot(worst.b.vx, worst.b.vy), nx = -worst.b.vy / v, ny = worst.b.vx / v, s = (worst.cx * nx + worst.cy * ny) >= 0 ? 1 : -1; mx = nx * s; my = ny * s; if (worst.tca < 0.14 && worst.miss < 18) roll = true; }
+      if (P.x < A.x0 + 40) mx += 0.8; if (P.x > A.x1 - 40) mx -= 0.8; if (P.y < A.y0 + 40) my += 0.8; if (P.y > A.y1 - 40) my -= 0.8;
+      const mm = Math.hypot(mx, my); if (mm > 1) { mx /= mm; my /= mm; }
+      I.stick = { bx: 0, by: 0, kx: mx * 48, ky: my * 48 };
+      if (roll && P.rollCd <= 0 && P.roll <= 0 && mm > 0.2) { I.edges.roll = true; log.rolls++; }
+      UroCrawl.step(1); log.steps++;
+      if (P.hp < hp - 0.01) log.hits.push([+(G.time - log.t0).toFixed(1), Math.round(hp - P.hp), B.state, ph]); hp = P.hp;
+    }
+    I.stick = null; I.mouseFire = false;
+    log.won = G.won; log.dead = G.over && !G.won; log.secs = +(G.time - log.t0).toFixed(1); log.hp = Math.round(P.hp); log.crashes = B.crashes; log.gores = B.gores; log.phase = B.phase;
+    log.taken = log.hits.reduce((s, h) => s + h[1], 0); log.shards = G.bullets.filter(b => b.kind === 'shard').length;
+    return log;
+  };
+`;
+await block('P. staghorn duel', async () => {
+  // past the 2.6 s intro; timeScale 0 means only step() advances the sim, so nothing drifts between evaluate calls
+  const fresh = async (q) => { const o = await open(q); await o.p.evaluate(STAGLIB); await o.p.evaluate(() => { UroCrawl.startRun(); UroCrawl.input.mode = 'kb'; UroCrawl.step(170); UroCrawl.state.timeScale = 0; }); return o; };
+  const near = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 0.011 : eps), W = '&weapons=holmium,irrigation,bovie';
+
+  // the body, the charge and its telegraph, the wall crash
+  const { p, errs } = await fresh('?seed=5&boss=staghorn' + W);
+  let b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, E = UroCrawl.tables.ENEMIES, body = B.body;
+    __S.quiet(); __S.put(700, 270, Math.PI, 150, 270); const x0 = body.x; UroCrawl.step(60); const walked = x0 - body.x;
+    __S.put(700, 270, Math.PI, 700, 80); UroCrawl.step(50); const off = Math.abs(Math.atan2(Math.sin(B.face + Math.PI / 2), Math.cos(B.face + Math.PI / 2)));   // surgeon straight above: it turns to face up
+    return { kind: B.kind, tines: B.arms.length, ids: B.arms.map(a => a.e.id).join(), hp: B.arms.map(a => a.e.maxHp).join(), live: B.arms.every(a => a.e.isArm && !a.e.dead && !a.cracked), r: body.r, max: body.maxHp, mul: body.dmgMul,
+      depth: !!E.staghorn.depth, rooted: !!E.staghorn.stationary, others: !!E.fournier.depth || !!E.mibc.depth, walked, off, phases: B.phases.join(), hint: B.hint, T: UroCrawl.tuning.STAG }; });
+  const T = b.T;
+  check('?boss=staghorn is a mobile beast: it walks the surgeon down, turns to face them, and is drawn in the depth-sorted pass (the rooted bosses are not)', b.kind === 'staghorn' && b.walked > 40 && b.off < 0.2 && b.depth && !b.rooted && !b.others && b.r === T.R && b.phases === 'SHELL,INFECTION,CORE', JSON.stringify({ walked: +b.walked.toFixed(1), off: +b.off.toFixed(2), r: b.r, max: b.max }));
+  check('the rack is 4 separate tine targets (200 HP each) and the body starts shelled at 25%, with a hint that says how to open it', b.tines === 4 && b.ids === 'stagarm,stagarm,stagarm,stagarm' && b.hp === '200,200,200,200' && b.live && b.mul === T.SHELL && T.SHELL === 0.25 && /2 tines/.test(b.hint) && /wall/.test(b.hint), b.hint);
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player(), T = UroCrawl.tuning.STAG;
+    __S.quiet('charge'); __S.put(700, 270, Math.PI, 250, 270); UroCrawl.step(1);
+    const ad = (a, c) => Math.abs(Math.atan2(Math.sin(a - c), Math.cos(a - c))), st0 = B.state, tele = G.teles.filter(t => t.kind === 'line')[0], dur = tele && tele.dur, thick = tele && tele.thick;
+    UroCrawl.step(12); P.y = 170; UroCrawl.step(15); const len = tele.len, track = ad(tele.a, Math.atan2(P.y - body.y, P.x - body.x));   // the lane follows the surgeon while it digs in
+    let n = 28; while (B.stT > T.LOCK && n < 80) { UroCrawl.step(1); n++; }
+    const aLock = B.face; P.y = 440; while (B.state === 'dig' && n < 80) { UroCrawl.step(1); n++; }                                // ...then locks: moving now changes nothing
+    const aRun = B.run ? B.run.a : null, x1 = body.x, y1 = body.y; UroCrawl.step(12);
+    const spd = Math.hypot(body.vx, body.vy), straight = aRun === null ? 9 : ad(Math.atan2(body.y - y1, body.x - x1), aRun), locked = aRun === null ? 9 : ad(aLock, aRun), far = Math.hypot(body.x - x1, body.y - y1), hpRun = P.hp;
+    // into the wall
+    const k = __S.until(() => B.state !== 'charge', 200), stun = body.st.stun ? body.st.stun.t : 0, state = B.state, cracked = __S.broken(), which = B.arms.findIndex(a => a.cracked), cd = B.cd.charge, texts = G.texts.map(t => t.text).join('|'), wallGap = body.x - 26 - body.r;
+    UroCrawl.step(1); const mul = body.dmgMul, hint = B.hint;
+    P.x = body.x + 30; P.y = body.y; P.inv = 0; UroCrawl.step(30); const hpStunned = P.hp;                                           // a stunned boss is harmless to touch
+    const left = __S.until(() => B.state !== 'stunned', 300); P.x = body.x + 30; P.y = body.y; P.inv = 0; UroCrawl.step(40); const hpAwake = P.hp;
+    // a second crash takes a second tine: the shell is open, and the stun is the full +50%
+    __S.quiet('charge'); __S.put(700, 270, Math.PI, 250, 270); P.inv = 99; __S.until(() => B.state === 'stunned', 300); UroCrawl.step(1);
+    const cracked2 = __S.broken(), mul2 = body.dmgMul, d15 = UroCrawl.dealDamage(body, 10, 'NEUTRAL', {}), exposed = B.exposed;
+    return { st0, dur, thick, len, track, digSteps: n, locked, straight, spd, far, hpRun, k, stun, state, cracked, which, cd, texts, wallGap, mul, hint, hpStunned, stunSteps: 31 + left, hpAwake, cracked2, mul2, d15, exposed, crashes: B.crashes }; });
+  check('antler charge: it stops and digs in for 0.7 s behind an aim lane that follows the surgeon, locks for the last beat, then runs that line at high speed', b.st0 === 'dig' && near(b.dur, 0.7) && b.thick === T.LANE && b.len > 400 && b.track < 0.1 && b.digSteps >= 42 && b.digSteps <= 44 && b.locked < 1e-9 && near(b.spd, T.SPD[1], 0.5) && b.straight < 0.03 && b.far > 100 && b.hpRun === 100, JSON.stringify({ dur: b.dur, track: +b.track.toFixed(3), digSteps: b.digSteps, spd: b.spd, far: Math.round(b.far) }));
+  check('wall crash: stunned 2.5 s against the wall, one tine snaps off (an inner one first), and the charge goes on cooldown', b.state === 'stunned' && near(b.stun, T.STUN[1], 0.02) && b.wallGap < 45 && b.cracked === 1 && (b.which === 1 || b.which === 2) && /STUNNED!/.test(b.texts) && /TINE BROKEN/.test(b.texts) && b.cd >= 4.4 && b.cd <= 5.4 && b.stunSteps >= 148 && b.stunSteps <= 153 && /STUNNED/.test(b.hint), JSON.stringify({ stun: b.stun, which: b.which, cd: +b.cd.toFixed(2), stunSteps: b.stunSteps, wallGap: +b.wallGap.toFixed(1) }));
+  check('the stunned boss takes +50% and does no contact damage; awake again, touching it hurts', near(b.mul, T.SHELL * T.STUN_MUL, 1e-9) && b.hpStunned === 100 && b.hpAwake < 100 && b.cracked2 === 2 && near(b.mul2, T.STUN_MUL, 1e-9) && near(b.d15, 15, 1e-9) && b.exposed && b.crashes === 2, JSON.stringify({ mul: b.mul, hpStunned: b.hpStunned, hpAwake: b.hpAwake, mul2: b.mul2, d15: b.d15 }));
+  await shot(p, 'p-stunned');
+
+  // gored if you stand in the lane; roll through it on i-frames and it hits the wall instead
+  const { p: p2, errs: errs2 } = await fresh('?seed=6&boss=staghorn' + W);
+  b = await p2.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player();
+    __S.quiet('charge'); __S.put(700, 270, Math.PI, 250, 270); __S.until(() => B.state === 'charge', 80); __S.until(() => B.state !== 'charge', 200);
+    const gore = { hp: P.hp, state: B.state, gores: B.gores, crashes: B.crashes, stun: !!body.st.stun, gap: body.x - 26 - body.r, text: G.texts.some(t => t.text === 'GORED'), broken: __S.broken() };
+    __S.quiet('charge'); __S.put(700, 270, Math.PI, 250, 270); __S.until(() => B.state === 'charge', 80);
+    let rolled = 0, n = 0; while (B.state === 'charge' && n < 200) { const lead = Math.min.apply(null, B.arms.filter(a => !a.cracked).map(a => a.e.x - a.e.r).concat([body.x - body.r])); if (!rolled && lead - (P.x + P.r) < 62) { UroCrawl.input.keys.KeyD = true; UroCrawl.input.edges.roll = true; rolled = 1; } UroCrawl.step(1); n++; }
+    UroCrawl.input.keys = {};
+    return { gore, dodge: { hp: P.hp, gores: B.gores, crashes: B.crashes, state: B.state, text: G.texts.some(t => t.text === 'DODGE'), rolled, px: P.x, broken: __S.broken() } }; });
+  check('standing in the lane: gored for heavy damage, and it skids to a stop short of the wall (no crash, no stun, no opening)', b.gore.hp === 100 - T.DMG[1] && b.gore.gores === 1 && b.gore.crashes === 0 && !b.gore.stun && b.gore.state === 'recover' && b.gore.gap > 60 && b.gore.text && b.gore.broken === 0, JSON.stringify(b.gore));
+  check('rolling through the charge on i-frames takes no damage, and the boss carries on into the wall: stunned, a tine gone', b.dodge.rolled === 1 && b.dodge.hp === 100 && b.dodge.gores === 1 && b.dodge.crashes === 1 && b.dodge.state === 'stunned' && b.dodge.text && b.dodge.broken === 1 && b.dodge.px > 380, JSON.stringify(b.dodge));
+
+  // the shell, tines as targets, the spike volley, the sweep, the slam and its shard ring
+  const { p: p3, errs: errs3 } = await fresh('?seed=7&boss=staghorn' + W);
+  b = await p3.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player(), spikes = () => G.bullets.filter(x => x.hostile && x.shape === 'spike').length;
+    const volley = () => { __S.quiet('volley'); __S.put(650, 270, Math.PI, 250, 270); UroCrawl.step(1); const st = B.state, cone = G.teles.filter(t => t.kind === 'cone')[0], dur = cone ? cone.dur : 0; __S.until(() => B.state !== 'volleyTele', 80); return { st, dur, n: spikes() }; };
+    const v4 = volley(), aimAt = () => { UroCrawl.input.mode = 'touch'; UroCrawl.step(1); const t = G.aimTarget; UroCrawl.input.mode = 'kb'; return t ? t.id : null; };   // what touch auto-aim picks
+    __S.quiet(); __S.put(650, 270, Math.PI, 250, 270); const aim1 = aimAt();
+    const hp0 = body.hp, d25 = UroCrawl.dealDamage(body, 100, 'NEUTRAL', {}), hp1 = body.hp, dT = UroCrawl.dealDamage(B.arms[0].e, 100, 'LITHO', {}), passed = hp1 - body.hp;     // tine damage stays in the tine
+    B.arms[0].e.hp = 1; UroCrawl.dealDamage(B.arms[0].e, 50, 'LITHO', {}); UroCrawl.step(2); const mul1 = body.dmgMul;
+    B.arms[3].e.hp = 1; UroCrawl.dealDamage(B.arms[3].e, 50, 'LITHO', {}); UroCrawl.step(2); const mul2 = body.dmgMul, exposedText = G.texts.some(t => t.text === 'BODY EXPOSED!'), d100 = UroCrawl.dealDamage(body, 100, 'NEUTRAL', {}), hint = B.hint, aim2 = aimAt();
+    const v2 = volley();
+    B.arms.forEach(a => { if (!a.cracked) { a.e.hp = 1; UroCrawl.dealDamage(a.e, 50, 'LITHO', {}); } }); UroCrawl.step(2); const v0 = volley();
+    return { v4, v2, v0, d25, dT, passed, mul1, mul2, exposedText, d100, hint, aim1, aim2, broken: __S.broken() }; });
+  check('shell: the body takes 25% until 2 tines are broken; a tine takes LITHO ×1.75 and keeps its damage to itself; two down = BODY EXPOSED. Touch auto-aim goes for the tines first, the body after', near(b.d25, 25, 1e-9) && near(b.dT, 175, 1e-9) && b.passed === 0 && b.mul1 === T.SHELL && b.mul2 === 1 && b.exposedText && near(b.d100, 100, 1e-9) && b.hint === '' && b.aim1 === 'stagarm' && b.aim2 === 'staghorn', JSON.stringify({ d25: b.d25, dT: b.dT, mul1: b.mul1, mul2: b.mul2, aim1: b.aim1, aim2: b.aim2 }));
+  check('spike volley: telegraphed 0.55 s, 2 spikes per live tine + 1 (9 with the full rack, 5 with two, none once the rack is gone)', b.v4.st === 'volleyTele' && near(b.v4.dur, T.VOLLEY_TELE) && b.v4.n === 9 && b.v2.n === 5 && b.v0.st === 'stalk' && b.v0.n === 0 && b.broken === 4, JSON.stringify([b.v4, b.v2, b.v0]));
+  const { p: p4, errs: errs4 } = await fresh('?seed=7&boss=staghorn' + W);
+  b = await p4.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player(), I = UroCrawl.input;
+    // sweep: in front, behind, rolled
+    __S.quiet('sweep'); __S.put(600, 270, Math.PI, 500, 270); UroCrawl.step(1); const st = B.state, cone = G.teles.filter(t => t.kind === 'cone')[0], n = 1 + __S.until(() => B.state === 'sweep', 80), front = P.hp, pushed = 500 - P.x;
+    __S.quiet('sweep'); __S.put(600, 270, Math.PI, 700, 270); UroCrawl.step(1); __S.until(() => B.state === 'sweep', 80); const behind = P.hp;
+    __S.quiet('sweep'); __S.put(600, 270, Math.PI, 500, 270); UroCrawl.step(1); let k = 0; while (B.state === 'sweepTele' && k < 80) { if (B.stT <= 0.06 && P.roll <= 0 && P.rollCd <= 0) { I.keys.KeyA = true; I.edges.roll = true; } UroCrawl.step(1); k++; } I.keys = {}; const rolled = P.hp;
+    // slam from across the room: a thud, then the shard ring arrives
+    __S.quiet('slam'); __S.put(480, 270, Math.PI, 200, 150); UroCrawl.step(1); const st2 = B.state, circ = G.teles.filter(t => t.kind === 'circle')[0], jump = body.atk ? body.atk.jump : 0; let lift = 0, m = 1; while (B.state === 'slamTele' && m < 90) { lift = Math.max(lift, UroCrawl.enemyLift(body)); UroCrawl.step(1); m++; }
+    const far = { hp: P.hp, shake: G.shake, flash: G.flash, punch: G.punch, stag: P.stag || 0, rings: B.rings.length, steps: m, r: circ && circ.r, r2: circ && circ.r2, dur: circ && circ.dur, jump, lift: Math.round(lift) };
+    __S.until(() => !B.rings.length || B.rings[0].done, 200); const ringHit = P.hp; UroCrawl.step(30); const ringOnce = P.hp;
+    // roll through the ring
+    __S.quiet('slam'); __S.put(480, 270, Math.PI, 200, 150); UroCrawl.step(1); __S.until(() => B.rings.length > 0, 90); k = 0;
+    while (B.rings.length && !B.rings[0].done && k < 200) { const rg = B.rings[0], gap = Math.hypot(P.x - rg.x, P.y - rg.y) - rg.r; if (gap < 26 && P.roll <= 0 && P.rollCd <= 0) { I.keys.KeyD = true; I.edges.roll = true; } UroCrawl.step(1); k++; } I.keys = {}; const ringRoll = P.hp, dodgeText = G.texts.some(t => t.text === 'DODGE');
+    // under it: the slam itself, and the ring does not hit twice
+    __S.quiet('slam'); __S.put(480, 270, Math.PI, 410, 270); UroCrawl.step(1); __S.until(() => B.state !== 'slamTele', 90); const under = P.hp, stag = P.stag || 0; __S.until(() => !B.rings.length, 200); const underAfter = P.hp;
+    return { st, cone: cone && { r: cone.r, half: cone.half, dur: cone.dur }, n, front, pushed, behind, rolled, st2, far, ringHit, ringOnce, ringRoll, dodgeText, under, stag, underAfter }; });
+  check('antler sweep: a 0.55 s cone in front of it; caught inside = 18 damage and a shove, behind it or rolling = nothing', b.st === 'sweepTele' && b.cone && b.cone.r === T.SWEEP_R && near(b.cone.dur, T.SWEEP_TELE) && b.n >= 33 && b.n <= 35 && b.front === 100 - T.SWEEP_DMG && b.pushed > 20 && b.behind === 100 && b.rolled === 100, JSON.stringify({ n: b.n, front: b.front, pushed: Math.round(b.pushed), behind: b.behind, rolled: b.rolled }));
+  check('ground slam reuses groundSlam: a 0.7 s jump (red disc + tremor ring); across the room it is a thud (no damage, no stagger, no flash, shake ≤ 1.5)', b.st2 === 'slamTele' && b.far.r === T.SLAM_R && b.far.r2 === T.SLAM_R + T.SLAM_TREMOR && near(b.far.dur, T.SLAM_TELE) && b.far.jump > 20 && b.far.lift > 20 && b.far.steps >= 42 && b.far.steps <= 45 && b.far.hp === 100 && b.far.stag === 0 && b.far.flash === 0 && b.far.punch === 0 && b.far.shake <= 1.5 && b.far.rings === 1, JSON.stringify(b.far));
+  check('the slam throws a ring of shards across the floor: it hits a standing surgeon once, a roll goes through it, and under the slam you take the slam (and a stagger), not both', b.ringHit === 100 - T.RING_DMG && b.ringOnce === b.ringHit && b.ringRoll === 100 && b.dodgeText && b.under === 100 - T.SLAM_DMG && b.stag > 0.3 && b.underAfter === b.under, JSON.stringify({ ringHit: b.ringHit, ringRoll: b.ringRoll, under: b.under, stag: +b.stag.toFixed(2), underAfter: b.underAfter }));
+
+  // phase 2: infection
+  const { p: p5, errs: errs5 } = await fresh('?seed=8&boss=staghorn' + W);
+  b = await p5.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player(), slime = () => G.hazards.filter(h => h.kind === 'slime');
+    __S.quiet(); __S.put(650, 270, Math.PI, 250, 270); body.hp = body.maxHp * 0.65; UroCrawl.step(2);
+    const a = { phase: B.phase, state: B.state, shield: body.shield, mics: __S.mics(), slime: slime().length, roar: UroCrawl.dealDamage(body, 100, 'LITHO', {}), banner: G.banner && G.banner.sub };
+    UroCrawl.step(90); __S.quiet(); const dL = UroCrawl.dealDamage(body, 100, 'LITHO', {}); for (let i = 0; i < 12; i++) UroCrawl.dealDamage(body, 1, 'FLUID', { strip: 0.09 }); const stripped = body.shield <= 0;
+    __S.killMics(); UroCrawl.step(60); const stays = body.shield;
+    B.swarmT = 0.01; UroCrawl.step(2); const swarmTele = G.teles.filter(t => t.kind === 'flash').map(t => t.dur)[0], next = B.swarmT; UroCrawl.step(45); const swarm = __S.mics(); B.swarmT = 99; UroCrawl.step(60); const regrow = body.shield;
+    // the trail, the cadence, the crash swarm, the double ring
+    __S.killMics(); G.hazards.length = 0; __S.quiet('charge'); __S.put(700, 270, Math.PI, 250, 270); P.inv = 99; __S.until(() => B.state === 'stunned', 300);
+    const trail = slime(), onLine = trail.filter(h => Math.abs(h.y - (270 + body.r * 0.3)) < 12).length, span = trail.length ? Math.max.apply(null, trail.map(h => h.x)) - Math.min.apply(null, trail.map(h => h.x)) : 0, cd = B.cd.charge, crashMics = __S.mics(), stun = body.st.stun ? body.st.stun.t : 0;
+    const pud = trail[Math.floor(trail.length / 2)]; __S.put(body.x, body.y, B.face, pud.x, pud.y); B.state = 'recover'; B.stT = 9; __S.killMics(); UroCrawl.input.keys.KeyW = true; UroCrawl.step(8); const slow = pud.y - P.y; P.x = pud.x; P.y = 150; UroCrawl.step(8); const fast = 150 - P.y; UroCrawl.input.keys = {};
+    __S.quiet('slam'); __S.put(480, 270, Math.PI, 200, 150); P.inv = 99; UroCrawl.step(1); __S.until(() => B.state !== 'slamTele', 90); const rings = B.rings.length, delay = rings > 1 ? B.rings[1].delay : 0;
+    return { a, dL, stripped, stays, swarmTele, next, swarm, regrow, trail: trail.length, onLine, span, cd, crashMics, stun, slow, fast, rings, delay, T: UroCrawl.tuning.STAG }; });
+  check('phase 2 at 66%: a roar nothing gets through, then the biofilm shield, a swarm out of the cracks and slime underfoot', b.a.phase === 2 && b.a.state === 'roar' && b.a.roar === 0 && b.a.shield > 0.9 && b.a.mics >= 4 && b.a.slime >= 4 && /biofilm/.test(b.a.banner), JSON.stringify(b.a));
+  check('phase 2 forces the swap: LITHO is cut to a tenth by the shield, FLUID strips it, it stays off once the swarm is dead; a new swarm bursts out every 5 s (0.6 s tell) and regrows it', b.dL < 20 && b.stripped && b.stays <= 0.01 && near(b.swarmTele, 0.6) && near(b.next, T.SWARM, 0.05) && b.swarm >= 5 && b.regrow > 0.1, JSON.stringify({ dL: b.dL, stays: b.stays, swarm: b.swarm, regrow: +b.regrow.toFixed(2) }));
+  check('phase 2: it leaves a slime trail along its path that slows the surgeon, charges less often (7.5–9 s), a wall crash shakes out more of the swarm, and the slam throws two rings a roll apart', b.trail >= 10 && b.onLine >= 10 && b.span > 400 && b.slow < b.fast * 0.75 && b.cd >= 7.5 && b.cd <= 9 && b.crashMics >= 3 && near(b.stun, T.STUN[2], 0.02) && b.rings === 2 && b.delay > 0.8, JSON.stringify({ trail: b.trail, span: Math.round(b.span), slow: +b.slow.toFixed(1), fast: +b.fast.toFixed(1), cd: +b.cd.toFixed(2), crashMics: b.crashMics, rings: b.rings, delay: b.delay }));
+  await shot(p5, 'p-infection');
+
+  // phase 3: the core runner
+  const { p: p6, errs: errs6 } = await fresh('?seed=9&boss=staghorn' + W);
+  b = await p6.evaluate(() => { const G = UroCrawl.state, B = G.boss, body = B.body, P = UroCrawl.player(), T = UroCrawl.tuning.STAG;
+    __S.quiet(); __S.put(650, 270, Math.PI, 250, 270); body.hp = body.maxHp * 0.32; UroCrawl.step(3);
+    const a = { phase: B.phase, state: B.state, r: body.r, core: !!body.coreExposed, broken: __S.broken(), shield: body.shield, roar: UroCrawl.dealDamage(body, 100, 'LITHO', {}), next: B.cd.spiral < 1 };
+    UroCrawl.step(90); __S.quiet(); const d9 = UroCrawl.dealDamage(body, 10, 'FLUID', {});
+    // a chain of two dashes, each behind its own 0.5 s lane; then a third that reaches the wall
+    const chain = (n, bx, px) => { __S.quiet('charge'); __S.put(bx, 270, 0, px, 270); P.inv = 99; UroCrawl.step(1); const rolled = B.chain, tele = G.teles.filter(t => t.kind === 'line')[0], dur = tele ? tele.dur : 0; B.chain = n; const c0 = B.crashes;
+      let digs = 1, prev = 'dig', spd = 0, dash = 0, cur = 0, k = 0; while ((B.state === 'dig' || B.state === 'charge') && k < 400) { UroCrawl.step(1); k++; if (B.state === 'dig' && prev !== 'dig') digs++; if (B.state === 'charge') { cur++; spd = Math.max(spd, Math.hypot(body.vx, body.vy)); } else { dash = Math.max(dash, cur); cur = 0; } prev = B.state; }
+      return { rolled, dur, digs, spd, dash, end: B.state, crashed: B.crashes - c0, stun: body.st.stun ? body.st.stun.t : 0 }; };
+    const two = chain(2, 120, 900), three = chain(3, 120, 900);
+    // spiral, then the ring with a gap
+    __S.quiet('spiral'); __S.put(480, 270, 0, 200, 270); P.inv = 99; UroCrawl.step(1); const st = B.state, tell = G.teles.filter(t => t.kind === 'flash')[0], tdur = tell ? tell.dur : 0; __S.until(() => B.state === 'spiral', 80); const spin = __S.until(() => B.state !== 'spiral', 300), spiral = G.bullets.filter(x => x.hostile).length, ringTell = G.teles.filter(t => t.kind === 'flash').map(t => t.dur)[0];
+    G.bullets.length = 0; UroCrawl.step(33); const ring = G.bullets.filter(x => x.hostile && x.r === 8).map(x => Math.atan2(x.vy, x.vx)).sort((p, q) => p - q); let gap = 0; for (let i = 0; i < ring.length; i++) { const nx = i + 1 < ring.length ? ring[i + 1] : ring[0] + Math.PI * 2; gap = Math.max(gap, nx - ring[i]); }
+    // fragmentation
+    __S.quiet('frag'); __S.put(480, 270, 0, 200, 270); P.inv = 99; UroCrawl.step(1); const st2 = B.state, ftell = G.teles.filter(t => t.kind === 'flash').map(t => t.dur)[0]; __S.until(() => B.state !== 'fragTele', 80); const shards = G.bullets.filter(x => x.hostile && x.suckable).length;
+    return { a, d9, two, three, st, tdur, spin, spiral, ringTell, ring: ring.length, gap, st2, ftell, shards, walk: T.WALK }; });
+  check('phase 3 at 33%: the shell and every remaining tine shatter, leaving a smaller core that takes ×1.5 from every class', b.a.phase === 3 && b.a.state === 'roar' && b.a.roar === 0 && b.a.r === T.CORE_R && T.CORE_R < T.R && b.a.core && b.a.broken === 4 && b.a.shield === 0 && near(b.d9, 9, 1e-9) && b.walk[3] > b.walk[1] * 1.5, JSON.stringify(Object.assign({ d9: b.d9 }, b.a)));
+  check('the core chain-dashes 2–3 times, each behind a 0.5 s lane, faster than the beast; a dash that reaches the wall stuns it for only 1.2 s', (b.two.rolled === 2 || b.two.rolled === 3) && near(b.two.dur, T.DIG[3]) && T.DIG[3] === 0.5 && b.two.digs === 2 && b.two.end === 'recover' && b.two.crashed === 0 && near(b.two.spd, T.SPD[3], 0.5) && T.SPD[3] > T.SPD[1] && b.two.dash <= 29 && b.three.digs === 3 && b.three.end === 'stunned' && b.three.crashed === 1 && near(b.three.stun, T.STUN[3], 0.02) && T.STUN[3] === 1.2, JSON.stringify({ two: b.two, three: b.three }));
+  check('core patterns are telegraphed and leave a way through: a two-armed spiral (0.6 s tell), a ring with a gap (0.5 s tell), a fragmentation burst of suckable shards (0.8 s tell)', b.st === 'spiralTele' && near(b.tdur, 0.6) && b.spin >= 140 && b.spiral > 20 && near(b.ringTell, 0.5) && b.ring >= 10 && b.ring <= 13 && b.gap > 0.9 && b.st2 === 'fragTele' && near(b.ftell, 0.8) && b.shards === 26, JSON.stringify({ spin: b.spin, spiral: b.spiral, ring: b.ring, gap: +b.gap.toFixed(2), shards: b.shards }));
+  await shot(p6, 'p-core');
+
+  // a full fight, played: no god mode, starting loadout, the bot reads the telegraphs
+  let minTele = 9; const kinds = {}, runs = [];
+  for (const seed of [11, 42]) {
+    const o = await open('?seed=' + seed + '&boss=staghorn'); await o.p.evaluate(STAGLIB);
+    const r = await o.p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(160); return __stagBot(60 * 240, {}); });
+    minTele = Math.min(minTele, r.minTele); Object.assign(kinds, r.kinds); runs.push(r);
+    check('autoplay seed ' + seed + ': the surgeon duels it through all three phases and kills it (no god mode)', r.won && !r.dead && r.phase === 3 && r.phaseAt[2] > 5 && r.phaseAt[3] > r.phaseAt[2] + 5 && r.secs > r.phaseAt[3] + 3 && r.secs >= 45 && r.secs <= 150 && r.crashes >= 2 && r.hp > 0, r.secs + ' s · phases at ' + JSON.stringify(r.phaseAt) + ' · hp left ' + r.hp + ' · took ' + r.taken + ' · wall crashes ' + r.crashes + ' · gored ' + r.gores + ' · rolls ' + r.rolls);
+    if (seed === 42) {
+      const shards = r.shards; await o.p.waitForTimeout(2200);   // the slow-mo ending runs on the real clock: shards land and pop into coins
+      const coins = await o.p.evaluate(() => { const G = UroCrawl.state; return { coins: G.pickups.filter(x => x.kind === 'coin').length, left: G.bullets.filter(x => x.kind === 'shard').length, scale: G.timeScale }; });
+      await shot(o.p, 'p-death'); await o.p.waitForFunction(() => UroCrawl.state.overlay === 'summary', null, { timeout: 8000 });
+      const end = await o.p.evaluate(() => ({ title: document.getElementById('sumTitle').textContent, sub: document.getElementById('sumSub').textContent, rvu: UroCrawl.state.stats.rvu }));
+      check('death: slow-mo, the core bursts into shards and the shards pop into coins; then the STONE FREE summary', shards === 40 && coins.left < shards && (coins.coins > 0 || end.rvu > 0) && end.title === 'DISCHARGED!' && /Staghorn is rubble/.test(end.sub), JSON.stringify({ shards, coins, rvu: end.rvu }));
+    }
+    errs.push(...o.errs); await o.p.close();
+  }
+  check('every Staghorn attack seen in those fights was telegraphed for at least 0.5 s (lane, cone, circle, flash)', minTele >= 0.5 && kinds.line && kinds.cone && kinds.circle && kinds.flash, 'shortest ' + minTele + ' s · ' + Object.keys(kinds).join(','));
+  const best = await p.evaluate(() => { const E = UroCrawl.tables.ENEMIES; return { fact: E.staghorn.fact, hidden: !!E.staghorn.hidden, tine: !!E.stagarm.hidden, name: E.stagarm.name }; });
+  check('bestiary: "Staghorn calculi fill the renal pelvis and calyces like antlers"; the tines stay hidden parts', /^Staghorn calculi fill the renal pelvis and calyces like antlers/.test(best.fact) && !best.hidden && best.tine && best.name === 'Antler Tine', best.fact);
+  errCheck('P', errs.concat(errs2, errs3, errs4, errs5, errs6));
 });
 
 await browser.close();
