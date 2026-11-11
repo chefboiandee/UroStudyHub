@@ -21,7 +21,12 @@ and do the next step". Docs only; no game code changed.
   `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
   A module split of the game is a separate task after Step 3.
 
-**Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
+- **Step 4 added** (Andrew: a Peds dungeon): the toy-box Peds Wing with the Wilms elite, hydronephrotic kidneys (SFU grades),
+  BBD blob, botryoid rhabdomyosarcoma, PUV gates, a torsion emergency room (abstract knot), and the Reflux megaureter-serpent
+  boss (tide waves + plugging ports with a bulking-gel weapon). Content rule: no children and no paediatric genital or pelvic
+  anatomy drawn, so hypospadias / exstrophy / cloaca / prolapse / torsed testis / VACTRL / myelomeningocele are not creatures.
+
+**Next steps:** Step 1 (blocks are now O, P, Q, R: the Path of Pathology look pass took N).
 **Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
 
