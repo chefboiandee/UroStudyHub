@@ -3,6 +3,53 @@
 **Updated:** 2026-11-11
 **Tool:** Claude Code
 
+## 2026-11-11 (later) — 🦀 Path of Pathology: the Invader (third boss), the wall + perforation system, the Oncology dungeon
+
+Andrew (via the brief): a third boss, the muscle-invasive bladder tumour, in a round bladder arena whose wall can
+perforate, with the perforation system built generically. Staghorn and Fournier are untouched (all their checks pass).
+(The other brief that arrived with it, reps / patrons / the Fournier title card, was already in the game since 11-09; its
+harness block M still passes, nothing was redone.)
+
+**Done (`games/uro-crawl.html`, one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 237 checks):**
+- **§14c wall + perforation (generic)**: `makeWall({cx, cy, rx, ry, n, tagOf, onPerforate, onSealed})` builds `G.wall` and
+  `G.arena` (an ellipse every entity, bullet and beam collides with; `enterRoom` clears both). `wallHit(seg, dmg)` fills a
+  segment's meter (`PERF.FILL` 120 damage); full = `wallPerforate`: a hole, a flood (70% speed, shorts the Bovie), a wave of
+  Tumour Seeds and damage by the segment's tag (`PERF_KINDS`: LATERAL / POSTERIOR minor 8-10 dmg + 3 seeds; DOME severe 22
+  dmg + 6 seeds + whatever `onPerforate` does). Plug within 5.5 s: hold a Foley balloon over the hole, or one cauterizing
+  hit (Roller Ball, Bovie COAG, loop coag) → `wallPlug`; left alone it is chronic and leaks a seed every 5-7 s. Distension:
+  the Irrigation Hose fills a meter; past 60% every perf meter fills 50% faster. Drawn as a fleshy ring (thinner at the
+  dome) with an integrity gauge on each segment's inner lip.
+- **§14d The Invader** (`?boss=mibc`, 2200 HP = urothelium 500 / lamina propria 500 / muscle 700 / perivesical 500):
+  Phase 1 (Ta/T1) frond fans, lobbed seeds that plant CIS carpets (each living one = −15% damage to the body, max 3),
+  papillary turrets (mitomycin slows them). Phase 2 (T2): it burrows (untouchable) and pushes four invasive fronts into
+  wall segments; damage to a front counts ×2 against the muscle layer, but every CUT or ENERGY hit thins that segment
+  (lasers and water do not), and electrocautery (Bovie, Roller Ball, Button, loop) on a LATERAL front can set off the
+  obturator jerk: aim yanked, surgeon shoved, +12% on that meter. New boon Obturator Block (Bovie's pool) removes the jerk
+  and halves staggers. A dome perforation enrages the boss for 15 s. Phase 3 (T3/T4): through the wall, fat adds, faster
+  attacks; ordinary damage only strips it to an exposed core, and the kill is a charged radical cystectomy: hold fire in
+  range for 1.5 s, then release. Every attack telegraphed ≥ 0.5 s. Its HUD is a panel in the top-left corner (a round room
+  leaves it empty): name, stage, the three layers as stacked bars, a two-line hint, distension.
+- **Dungeon**: the final boss is rolled in thirds from the seed (seeds that rolled the Staghorn with r < 1/3 or Fournier
+  with 1/2 ≤ r < 5/6 keep theirs). The Invader's run is the ONCOLOGY dungeon: rooms draw only MALIGNANT + BENIGN (label in
+  the room strip). Its rest room adds a chemo pole (neoadjuvant cisplatin: boss −20% HP, you −15% max HP for the fight,
+  declinable) and makes the crate a Roller Ball if you carry nothing that plugs a hole. Cisplatin +55% and pembrolizumab
+  +35% vs the Invader. `?boss=…&room=K` now picks the run's boss without jumping to room 9.
+- **Bestiary**: The Invader, Tumour Seed, Perivesical Fat. Win text per boss; the Invader's reads "Muscle present in
+  specimen: Muscle-invasive disease confirmed. Pathology report filed." Summary adds perforations / plugged.
+- Small generic hooks added for it: `e.dmgMul`, `e.minHp`, `def.onDeath`, `def.solid`, `def.coagHint`, `opts.free` on
+  `spawnEnemy`, `clampArena`, hazard kind `flood`, `P.jerk`.
+
+**Verified:** headless Chromium, every block passes (237), new block O (28 checks: arena, layers, each phase, ×2, which
+classes thin the wall, the jerk and what does not cause it, both perforation kinds, coag plug, Foley tamponade, chronic
+leak, distension, cystectomy charge / early release / kill, win screen, neoadjuvant, crate, dungeon families, boss pool,
+bestiary, the wall system standing alone in an ordinary room). Script parses as ES2019.
+**Roadmap:** `UROCRAWL_ROADMAP.md` had this boss parked behind Step 2 (which was going to build the perforation system).
+It is ticked there now, Step 2e says to reuse §14c, and the harness letters for Steps 1-3 moved to P, Q, R.
+**Next steps:** play it on the phone and tune: `MIBC.T` (length), `PERF.FILL` (how forgiving the wall is), `JERK_CHANCE`,
+`CYST_TIME` / `CYST_RANGE`, CIS cap (`maxR` 60). Is a chronic hole too punishing with no way to fix it late?
+**Open questions:** Stone / Infection themes for the other two dungeons (only Oncology has one). Should direct weapon
+contact with the wall (stray beams, bullets) also thin it? Right now only hits on the fronts do.
+
 ## 2026-11-11 — 🗺️ Uro Crawl: roadmap doc for the next three sessions
 
 Andrew's follow-up ideas, written down as one-session steps so a fresh session can be told "read `UROCRAWL_ROADMAP.md`
@@ -26,8 +73,9 @@ and do the next step". Docs only; no game code changed.
   boss (tide waves + plugging ports with a bulking-gel weapon). Content rule: no children and no paediatric genital or pelvic
   anatomy drawn, so hypospadias / exstrophy / cloaca / prolapse / torsed testis / VACTRL / myelomeningocele are not creatures.
 
-**Next steps:** Step 1 (blocks are now O, P, Q, R: the Path of Pathology look pass took N).
+**Next steps:** Step 1 (the Invader took block O; Steps 1-4 take P, Q, R, S: the Path of Pathology look pass took N).
 **Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
+
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
 
 Andrew's playtest notes: enemies look too alike (wants a subtle outline colour per type), the small round ones especially;
