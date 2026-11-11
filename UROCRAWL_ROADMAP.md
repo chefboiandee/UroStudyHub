@@ -10,7 +10,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 - [ ] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style)
 - [ ] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon
 - [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
-- [ ] **Step 4** — Dungeon 5, the Peds Wing: Wilms elite, the Reflux serpent boss, torsion emergency room
+- [ ] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
 - Parked (only when asked): true isometric view, RCC thrombus boss — see the end of this file.
@@ -221,7 +221,7 @@ and harness block (R) covers it; earlier blocks pass.
 ## Step 4 — Dungeon 5: The Peds Wing
 
 Do this after Step 3 (the hub's case board unlocks it). It is a **bright, toy-box dungeon** to contrast with the four dark
-clinical ones, with one new boss, one elite and one special room. Prerequisites: the hub, the generic wall + perforation system that shipped with the Invader (§14c: `makeWall`, `wallHit`,
+clinical ones, with one new boss, one elite and a set of action time-trial rooms. Prerequisites: the hub, the generic wall + perforation system that shipped with the Invader (§14c: `makeWall`, `wallHit`,
 `wallPlug`), Step 2's landmark warning pulse, and the existing weapons, boons and enemy-family system.
 
 ### 4a. Content rules for this dungeon (important)
@@ -239,8 +239,9 @@ props, a sticker-chart HUD. Arena obstacles are blocks and toy-box walls. Peds-s
 weapon has −15 % range and +20 % weak-point damage (a "pediatric scope" modifier shown on the HUD), and arenas are ~15 % tighter.
 
 ### 4c. Dungeon mechanics and boons
-- **Anesthesia clock** (soft, optional): each room shows a calm timer; clearing it fast pays bonus RVUs. Slow clears just
-  lose the bonus: never a punishment.
+- **Par times and medals** (replaces a plain clock): every room in this dungeon shows a calm par timer. Beat it for a
+  bronze / silver / gold medal (the same idea as Stone Squadron's medals) and bonus RVUs; a slow clear only loses the bonus,
+  never punishes. Medals earn **stickers** for a sticker book shown in the hub, plus CME credits (Step 3).
 - **Boons** (new patron pool: **Wilms**, Max Wilms, historical caricature; Young also gives the valve boons): Vincristine /
   Dactinomycin ("VA": +40 % vs Wilms and rhabdomyosarcoma), VAC (adds cyclophosphamide: +25 % more vs rhabdomyosarcoma),
   Polyethylene glycol (clears BBD blobs faster), Timed Voiding (slows water enemies), Biofeedback, DDAVP (slows
@@ -264,40 +265,68 @@ weapon has −15 % range and +20 % weak-point damage (a "pediatric scope" modifi
 | **Infant UTI swarm** | MICROBE | E. coli swarm variants with a fever-glow; Continuous Antibiotic Prophylaxis halves them | easy (reuse) |
 Not recommended as enemies (see 4a): hypospadias, exstrophy, cloaca, urethral prolapse, VACTRL, myelomeningocele, torsed testis.
 
-### 4e. Special room: the Torsion Emergency Room
-A timed rescue room, not a fight. An abstract twisted knot of rope-like cord spins in the middle of the arena. A viability ring
-drains over 60 s (the real window is about 6 hours: "time is tissue"). The player untwists it by rotating the aim stick/mouse
-in the opposite direction through two full turns (touch: a circular drag). Success: coins, a "SAVED!" banner and a
-bestiary fact; timeout: no reward and a plain, joke-free bestiary line about the real time window. Appears as a rare door in the
-Peds dungeon, and the abstract knot must not resemble anatomy.
+### 4e. Trial rooms: action time trials (about half of this dungeon's rooms; the rest are fights)
+The Peds Wing is mostly about **skill and speed, not just killing**: toy-box obstacle courses and drills that teach movement
+and aim. Each trial has a par time (4c medals), a personal-best record, no deaths (a failed attempt just restarts the room
+after the timer), and replays from the hub's Sim Lab (4g). They are drills, never framed around a patient.
+| Trial | What you do | What it teaches |
+|---|---|---|
+| **Valve Run** | Cross a corridor of PUV gates that swing open and shut on a rhythm (cut one to slow it) | roll i-frames and timing |
+| **Tide Dash** | An auto-advancing wall of fluid chases you through a winding course; collect gel plugs on the way | sprinting lines, tight turns |
+| **Aim Gallery** | Moving, popping and orbiting targets (balloons, clay "stones") in waves with your own loadout | tracking with beams, leading projectiles, charge timing |
+| **Catheter Course** | Steer through a narrow winding tube; touching the wall costs time | precision movement |
+| **Pop-Off** | A row of hydronephrotic balloons fill at different rates: decompress each before it pops | target priority, quick aim |
+| **Torsion Emergency Room** | An abstract twisted rope-knot spins in the middle; a viability ring drains over 60 s (the real window is ~6 hours: "time is tissue"). Rotate your aim opposite to the twist through two full turns (touch: a circular drag). Success: coins, a "SAVED!" banner, a bestiary fact; timeout: no reward and a plain, joke-free fact line. The knot must not resemble anatomy | aim control under a clock |
 
-### 4f. Boss: REFLUX (a megaureter serpent), `?boss=reflux`
-The second **mobile** boss, with a new verb: **plug the ports to stop the tide.**
-- **Body:** a long, segmented serpent (reuse the Enterococcus chain code), glowing with a dilated, tortuous look that grows
-  with the phases. Isaac-style, kind of cute, never anatomical.
-- **Tide (the core mechanic):** every ~12 s a telegraphed wave of backflow sweeps from the boss's side toward the player
-  (ripples and arrows first, then a wall of fluid). The wave pushes the player back along the floor and drains a bit of HP;
-  obstacles (toy blocks) act as breakwaters; rolling through (i-frames) avoids it.
-- **Ports:** 3–4 glowing orifice ports on the arena wall mark where the reflux comes from. **Plug a port with the Bulking Gel
-  Injector** (aim at the port, ~1 s): a plugged port cannot generate tide and, while any port is plugged, the serpent loses
-  regen and is vulnerable for the next stranded phase. Mounds last ~15 s or until a slam knocks them out, so you plug
-  and fight in cycles. Plug all ports at once for a long vulnerable window.
-- **Phases follow VUR grades:** I–II (a short, straight serpent, light tides), III (it coils, adds loops and E. coli
-  "pyelonephritis" swarm adds on every tide), IV–V (tortuous, blunted calyx look: big loops sweeping the arena, double tides,
-  and the real fix appears as a one-time "Antireflux Tunnel" capstone cut available to CUT weapons on its core).
-- **Counters:** Continuous Antibiotic Prophylaxis halves the swarm adds; any FLUID tool pushes tide away; the Foley balloon
-  can plug a port once for free (like a tamponade).
-- Win text: "Reflux resolved. Follow-up cystogram scheduled." Fight length 120–150 s, every attack telegraphed ≥ 0.5 s.
-  Add `?boss=reflux` to the boss parameter list.
+**Movement tech (learned in trials, kept for every dungeon, stored in `META.tech`):** the first completion of a trial teaches
+its technique with a short on-screen prompt; Gold adds a small mastery badge.
+- **Perfect Roll** (Valve Run): rolling in the last 0.15 s before a telegraphed hit lands refunds the roll cooldown and gives
+  +25 % move speed for 1 s.
+- **Roll Cancel** (Catheter Course): a roll cancels weapon recovery frames, which makes slow tools such as the Loop sweep and
+  ESWL charge flow better.
+- **Slide** (Tide Dash): hold a direction through the roll for a short, fast slide.
+- **Flick Shot** (Aim Gallery): a quick tap-aim after a roll gets a brief aim-assist snap on the nearest target.
+These are skill refunds, not raw power: keep the numbers small and show them on the pause screen's tech list.
+Rooms that are fights use the elite and enemy list in 4d; keep them the minority.
+
+### 4f. Boss: REFLUX, the kidney serpent (`?boss=reflux`)
+The second **mobile** boss, and a free-swimming one. **Design reference (inspiration only, copy nothing): the long, looping
+sea serpent of Metroid Fusion and the hole-hiding snake of Super Metroid**: a long body you must read, a vulnerable head,
+patterns that loop around the arena, and a hide-and-pop rhythm.
+- **Body:** a **kidney for a head** (a bean shape with calyx "eyes" and the renal pelvis as its maw) trailing a **long ureter
+  tail** (10-12 segments). The tail carries a visible **peristaltic wave**: lumps of motion travelling down it, which is both
+  the look and the hit zone (only the lump segment of the tail is dangerous at a given moment, so you can read where to
+  squeeze past). Isaac-style, grotesque-cute, abstract, never anatomical.
+- **Moves (Fusion-style loops):** it swims big sine and figure-eight loops across the arena with a rippled path preview
+  (0.7 s of ripples) before each pass. **Head is the weak point (×2); the tail is a contact hazard and takes ×0.4.**
+- **Ports (Super-Metroid-style hide-and-pop):** 3-4 glowing orifice ports on the arena wall. Between loops it **dives into a
+  port** (gurgle and a bulge 0.7 s before it re-emerges) and pops out of another, spitting a 3-fan of fluid pellets.
+  Every dive/return creates a **backwash**: a ripple that pushes the player along the floor and chips HP (the reflux/"tide").
+  Toy blocks act as breakwaters; a roll through avoids it.
+- **The verb: plug the ports.** The **Bulking Gel Injector** leaves a gel mound on a port (~15 s, or until a slam knocks it
+  out). A serpent can only dive into unplugged ports: plugging reduces its hiding places and backwash, and with all ports plugged it is
+  stranded and **forced to swim in the open with its head exposed** for a long vulnerable window. Plug and fight in cycles.
+- **Phases follow the VUR grades:** I-II (a short straight serpent, light backwash), III (it coils, adds loops and an E. coli
+  "pyelonephritis" swarm on every backwash), IV-V (tortuous, blunted-calyx look: big overlapping loops, double backwash, and
+  the real fix appears as a one-time "Antireflux Tunnel" capstone cut on its head for CUT weapons).
+- **Counters:** Continuous Antibiotic Prophylaxis halves the swarm adds; any FLUID tool pushes backwash away; the Foley
+  balloon can plug a port once for free. The movement tech (4e) pays off here: Perfect Roll the backwash, Slide under loops.
+- Win text: "Reflux resolved. Follow-up cystogram scheduled." Fight length 120-150 s, every attack telegraphed ≥ 0.5 s.
+  Add `?boss=reflux` to the boss parameter list. Reuse the Enterococcus chain code for the segmented body; build the
+  peristaltic wave as a travelling phase offset along the chain.
 
 ### 4g. Hub tie-ins (Step 3)
-Peds-wing decor in the Call Room catalog (stickers, a mural, a toy box), a friendly **child-life specialist** NPC with ≥ 8 lines
-who gives the Sticker Chart pin keepsake, and a Wilms portrait on the trophy wall once met. Unlocks after beating the first
-four bosses (Staghorn, Fournier, the Giant TURP and the Invader).
+Peds-wing decor in the Call Room catalog (stickers, a mural, a toy box), a **sticker book** that fills with medal stickers, a
+friendly **child-life specialist** NPC with ≥ 8 lines who gives the Sticker Chart pin keepsake, a Wilms portrait on the trophy
+wall once met, and a **Sim Lab** station where every trial can be replayed on its own with personal bests and the medal
+ladder (so movement and aim can be practised without a run). The Peds dungeon unlocks after the first four bosses
+(Staghorn, Fournier, the Giant TURP and the Invader).
 
 **Done when:** `?dungeon=peds` (or the hub's case board) runs the Peds Wing end to end with the reflux boss; harness block (S)
-covers the pediatric-scope modifier, the elite, the gates, hydronephrosis decompression vs popping, the tide wave and
-breakwaters, port plugging and the vulnerable window, the three phases, the torsion room, the new boons; earlier blocks pass.
+covers the pediatric-scope modifier, the par-time medals and sticker book, each trial's success, fail-restart and best-time
+record, the movement tech unlocks and their effects (Perfect Roll refund, Roll Cancel, Slide, Flick Shot), the elite, the gates,
+hydronephrosis decompression vs popping, the serpent's loops, port dive/pop, backwash and breakwaters, port plugging and the
+vulnerable window, the three phases, the Sim Lab replay, and the new boons; earlier blocks pass.
 
 ---------------------------------------------------------------------------------------------------
 
