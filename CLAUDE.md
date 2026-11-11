@@ -22,7 +22,7 @@ inside another workspace; nothing here depends on that one any more.)
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
   `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, shown to players as
   **Path of Pathology** (the file, storage key and hooks keep the working name Uro Crawl), pure canvas, no deps;
-  two bosses, `?boss=staghorn|fournier`; weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
+  three bosses, `?boss=staghorn|fournier|mibc` (the Invader: round arena on the generic wall + perforation system, §14c / §14d); weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
   Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).

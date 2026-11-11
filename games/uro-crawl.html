@@ -4,7 +4,8 @@
   types and the window.UroCrawl test hooks keep it). A goofy dungeon-crawler roguelike set inside a diseased urinary
   tract: rooms of pathologic monsters, rock–paper–scissors instrument switching (lasers break stones, loops cut
   tumours, heat burns bugs and lobes, water flushes clots and strips biofilm), Hades-style door choices and boons,
-  and two bosses: the Staghorn Calculus and Fournier's Gangrene (the Hydra). No quizzes: the learning is osmosis
+  and three bosses: the Staghorn Calculus, Fournier's Gangrene (the Hydra) and the Invader (a muscle-invasive bladder
+  tumour in a round arena whose wall can perforate: §14c is the reusable wall + perforation system, §14d the boss). No quizzes: the learning is osmosis
   plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
   body-horror gags played for laughs; everything stylized and abstract, never anatomical. Seen from a raised 3/4
   camera (far wall face, foreshortened tiles, ground shadows, back-to-front draw order). Type reads at a glance: a thin
@@ -17,8 +18,8 @@
   Standalone page: the app opens it in a frame with ?embed=1 and gets {type:'crawl:claim'} on the first input,
   {type:'crawl:exit'} from the Exit button, and {type:'crawl:result', won, rooms, kills, rvu, seconds} at run end.
 
-  URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier (start at that boss; ?boss=1 rolls one; a normal
-              run rolls the final boss from the seed)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
+  URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier|mibc (start at that boss; ?boss=1 rolls one; with
+              ?room=K it only picks the run's boss and dungeon; a normal run rolls the final boss from the seed)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
               ?mods=holmium_joules,scalpel_backstab (weapon mods at run start; grants the weapon if not carried)
               ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
@@ -231,7 +232,7 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 <div class="ov" id="ov-help">
   <div class="panel">
     <h2>How to play</h2>
-    <p>Clear the room, pick a door, grab the reward, repeat. The Staghorn waits in room 9. Every instrument has a <b>class</b>; every monster has a <b>family</b>. Match them: bright pip over a monster = what hurts it, crossed pip = what it shrugs off.</p>
+    <p>Clear the room, pick a door, grab the reward, repeat. A boss waits in room 9. Every instrument has a <b>class</b>; every monster has a <b>family</b>. Match them: bright pip over a monster = what hurts it, crossed pip = what it shrugs off.</p>
     <div class="matrix" id="matrix"></div>
     <p class="hint" id="famLegend"></p>
     <p class="hint">A slam's red disc hurts and staggers you; the dashed ring past it only staggers (slowed, no attacking). Roll through the landing to shrug off both. Swap to the right tool and your first big hit gets a <b>Right Tool</b> bonus. Biofilm shields block 90% until stripped by water or cautery. Cutting makes things bleed; heat cauterizes. Freeze a stone, then shatter it.</p>
@@ -300,7 +301,7 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 <!-- ANTIBIOTIC STEWARDSHIP (the two-drug cap) -->
 <div class="ov" id="ov-steward">
   <div class="panel narrow" style="text-align:center">
-    <h2>Antibiotic stewardship</h2>
+    <h2 id="stewardTitle">Antibiotic stewardship</h2>
     <p class="hint" id="stewardSub"></p>
     <div class="menu" id="stewardChoices"></div>
   </div>
@@ -800,12 +801,21 @@ function pointInObstacle(px, py) {
   }
   return null;
 }
-function insideArena(x, y, r) { r = r || 0; return x >= ARENA.x + r && x <= ARENA.x + ARENA.w - r && y >= ARENA.y + r && y <= ARENA.y + ARENA.h - r; }
+// Round rooms: G.arena = { cx, cy, rx, ry } is an ellipse inside ARENA that everything collides with (null = the usual
+// rectangle). Set by makeWall (§14c), cleared by enterRoom.
+function arenaVal(x, y, r) { var A = G.arena, ax = Math.max(8, A.rx - r), ay = Math.max(8, A.ry - r), dx = (x - A.cx) / ax, dy = (y - A.cy) / ay; return dx * dx + dy * dy; }
+function insideArena(x, y, r) { r = r || 0; if (!(x >= ARENA.x + r && x <= ARENA.x + ARENA.w - r && y >= ARENA.y + r && y <= ARENA.y + ARENA.h - r)) return false; return !G.arena || arenaVal(x, y, r) <= 1; }
+function clampArena(x, y, r) {
+  r = r || 0; x = clamp(x, ARENA.x + r, ARENA.x + ARENA.w - r); y = clamp(y, ARENA.y + r, ARENA.y + ARENA.h - r);
+  if (G.arena) { var v = arenaVal(x, y, r); if (v > 1) { var k = 1 / Math.sqrt(v); x = G.arena.cx + (x - G.arena.cx) * k; y = G.arena.cy + (y - G.arena.cy) * k; } }
+  return { x: x, y: y };
+}
 // push a circle entity out of walls + obstacles; returns true if it touched something
 function resolveCircle(e, r) {
   var hit = false; r = r || e.r;
   if (e.x < ARENA.x + r) { e.x = ARENA.x + r; hit = true; } if (e.x > ARENA.x + ARENA.w - r) { e.x = ARENA.x + ARENA.w - r; hit = true; }
   if (e.y < ARENA.y + r) { e.y = ARENA.y + r; hit = true; } if (e.y > ARENA.y + ARENA.h - r) { e.y = ARENA.y + ARENA.h - r; hit = true; }
+  if (G.arena) { var av = arenaVal(e.x, e.y, r); if (av > 1) { var ak = 1 / Math.sqrt(av); e.x = G.arena.cx + (e.x - G.arena.cx) * ak; e.y = G.arena.cy + (e.y - G.arena.cy) * ak; hit = true; } }
   var obs = G.obstacles;
   for (var i = 0; i < obs.length; i++) {
     var o = obs[i]; if (o.dead) continue;
@@ -936,11 +946,11 @@ function popcornBurst(w, e, dmg) {
   Snd.sfx('tink');
 }
 
-function aimPointAt(d) { return { x: clamp(P.x + Math.cos(P.aim) * d, ARENA.x + 10, ARENA.x + ARENA.w - 10), y: clamp(P.y + Math.sin(P.aim) * d, ARENA.y + 10, ARENA.y + ARENA.h - 10) }; }
+function aimPointAt(d) { return clampArena(P.x + Math.cos(P.aim) * d, P.y + Math.sin(P.aim) * d, 10); }
 // CO₂ light is absorbed by water: standing in saline/water, a puddle within the first 60 px, or a FLUID jet/bolt crossing the beam
 function beamInWater() {
-  if (inHazard(P.x, P.y, 'saline') || inHazard(P.x, P.y, 'water')) return true;
-  var m = muzzle(); for (var d = 12; d <= 60; d += 12) { var px = m.x + Math.cos(m.a) * d, py = m.y + Math.sin(m.a) * d; if (inHazard(px, py, 'saline') || inHazard(px, py, 'water')) return true; }
+  if (inHazard(P.x, P.y, 'saline') || inHazard(P.x, P.y, 'water') || inHazard(P.x, P.y, 'flood')) return true;
+  var m = muzzle(); for (var d = 12; d <= 60; d += 12) { var px = m.x + Math.cos(m.a) * d, py = m.y + Math.sin(m.a) * d; if (inHazard(px, py, 'saline') || inHazard(px, py, 'water') || inHazard(px, py, 'flood')) return true; }
   var cx = Math.cos(m.a), sy = Math.sin(m.a), bs = G.bullets;
   for (var i = 0; i < bs.length; i++) { var b = bs[i]; if (b.dead || !(b.cls === 'FLUID' || b.shape === 'goo')) continue; var dx = b.x - m.x, dy = b.y - m.y, t = dx * cx + dy * sy; if (t < 0 || t > 320) continue; if (Math.abs(dx * sy - dy * cx) <= b.r + 6) return true; }
   return false;
@@ -1005,7 +1015,7 @@ var WEAPONS = {
         var la = Math.atan2(w.ly, w.lx), stop = null;
         w.lunge -= dt; P.x += w.lx * dt; P.y += w.ly * dt; P.inv = Math.max(P.inv, 0.06); resolveCircle(P, P.r);
         var hs = enemiesInArc(P.x, P.y, la, 44, Math.PI);
-        for (var i = 0; i < hs.length; i++) { var lt = hs[i]; if (w.lungeHit.indexOf(lt) >= 0) continue; w.lungeHit.push(lt); WEAPONS.scalpel.cut(w, lt, lunger ? 36 : 28, 240, true, la); if (!stop && !lt.dead && !lt.def.flat && !lt.def.noCollide) stop = lt; }
+        for (var i = 0; i < hs.length; i++) { var lt = hs[i]; if (w.lungeHit.indexOf(lt) >= 0) continue; w.lungeHit.push(lt); WEAPONS.scalpel.cut(w, lt, lunger ? 36 : 28, 240, true, la); if (!stop && !lt.dead && !lt.def.flat && (!lt.def.noCollide || lt.def.solid)) stop = lt; }
         if (stop) { var gap = stop.r + P.r + 8, sd = dist(stop.x, stop.y, P.x, P.y); if (sd < gap) { var ba = sd > 0.01 ? ang(stop.x, stop.y, P.x, P.y) : la + Math.PI; P.x = stop.x + Math.cos(ba) * gap; P.y = stop.y + Math.sin(ba) * gap; resolveCircle(P, P.r); } w.lunge = 0; }
         w.fx = { kind: 'arc', x: P.x, y: P.y, a: la, rad: 50, half: 0.5, t: 0.1, dur: 0.1, cls: 'CUT', dir: 1 };
         if (w.lunge <= 0) { w.lunge = 0; P.inv = Math.max(P.inv, LUNGE_GRACE); }
@@ -1114,9 +1124,10 @@ var WEAPONS = {
       var m = muzzle(), spray = wflag(w, 'spray'), range = 170 * wmod(w, 'range') * (spray ? 0.7 : 1), half = spray ? 1.22 : 0.75, hop = spray ? 143 : 110;
       if (!tickReady(w, dt, 0.15 / wmod(w, 'rate'))) return;
       Snd.sfx('arc');
-      if (inHazard(P.x, P.y, 'saline') && !hasBoon('groundpad') && !wflag(w, 'groundPad') && rnd() < 0.7) {
+      var flooded = !!inHazard(P.x, P.y, 'flood');   // a perforation's flood shorts the Bovie outright; saline pools only make it fizzle
+      if ((flooded || inHazard(P.x, P.y, 'saline')) && !hasBoon('groundpad') && !wflag(w, 'groundPad') && (flooded || rnd() < 0.7)) {
         burst(m.x, m.y, 4, { color: '#ffb630', speed: 140, life: 0.2, size: 2 }); w.fx = { kind: 'chain', pts: [{ x: m.x, y: m.y }, { x: m.x + Math.cos(m.a + rr(-1, 1)) * 30, y: m.y + Math.sin(m.a + rr(-1, 1)) * 30 }], t: 0.08, cls: 'ENERGY', fizzle: true };
-        if (!w.fizzT || G.time - w.fizzT > 0.9) { w.fizzT = G.time; addText(P.x, P.y - 34, 'FIZZLE (saline)', { color: '#8ea2b6', size: 11 }); }
+        if (!w.fizzT || G.time - w.fizzT > 0.9) { w.fizzT = G.time; addText(P.x, P.y - 34, flooded ? 'SHORTED (flood)' : 'FIZZLE (saline)', { color: '#8ea2b6', size: 11 }); }
         return;
       }
       var cands = enemiesInArc(m.x, m.y, m.a, range, half).filter(function (e) { return raycast(m.x, m.y, ang(m.x, m.y, e.x, e.y), dist(m.x, m.y, e.x, e.y)) >= dist(m.x, m.y, e.x, e.y) - e.r - 4; });
@@ -1898,7 +1909,7 @@ function aoeOnPlayer(x, y, r, dmg, src) { if (dist(x, y, P.x, P.y) <= r + P.r) h
    Rolling through the landing (i-frames) avoids both. The camera only kicks when the surgeon is actually caught: a slam
    across the room is a thud and a ring, never the same jolt as taking a hit. Returns 'hit' | 'tremor' | 'dodged' | 'far'. */
 var STAGGER_SLOW = 0.4;
-function staggerPlayer(t) { if (!P || G.over || !(t > 0)) return; P.stag = Math.max(P.stag || 0, t); addText(P.x, P.y - 42, 'STAGGERED', { color: '#ffe066', size: 12 }); Snd.sfx('tink'); }
+function staggerPlayer(t) { if (!P || G.over || !(t > 0)) return; if (hasBoon('obturatorblock')) t *= 0.5; P.stag = Math.max(P.stag || 0, t); addText(P.x, P.y - 42, 'STAGGERED', { color: '#ffe066', size: 12 }); Snd.sfx('tink'); }
 function groundSlam(e, r, dmg, o) {
   o = o || {};
   var tr = r + (o.tremor === undefined ? 55 : o.tremor), d = dist(e.x, e.y, P.x, P.y) - P.r, col = o.color || '#ffb199', dodged = P.inv > 0, res = 'far';
@@ -2316,7 +2327,7 @@ var ENEMIES = {
     name: 'CIS Carpet', sub: 'Carcinoma in situ', family: 'MALIGNANT', hp: 60, r: 40, speed: 0, cost: 3, minRoom: 3, contact: 0, stationary: true, flat: true, noPush: true, noGrab: true, noCollide: true, urothelial: true, tweaks: { FLUID: 3, ENERGY: 1.2 },
     fact: 'Carcinoma in situ is a flat, high-grade, velvety red patch: easy to miss on cystoscopy and treated with intravesical BCG.',
     init: function (e) { e.dmgT = 0; e.shape = []; for (var i = 0; i < 12; i++) e.shape.push(rr(0.8, 1.15)); e.seed = rr(1, 99); },
-    update: function (e, dt, d, a) { e.vx = e.vy = 0; if (e.r < 90 && !hasBoon('bcg')) e.r += 3.5 * dt; if (hasBoon('bcg') && e.r > 25) e.r -= 2 * dt; e.dmgT -= dt; if (d < e.r && e.dmgT <= 0) { e.dmgT = 0.5; hurtPlayer(3, 'cis', 0, true); } },
+    update: function (e, dt, d, a) { e.vx = e.vy = 0; if (e.r < (e.maxR || 90) && !hasBoon('bcg')) e.r += 3.5 * dt; if (hasBoon('bcg') && e.r > 25) e.r -= 2 * dt; e.dmgT -= dt; if (d < e.r && e.dmgT <= 0) { e.dmgT = 0.5; hurtPlayer(3, 'cis', 0, true); } },
     draw: function (c, e) {
       c.globalAlpha = 0.75; c.fillStyle = '#ff6b8a'; c.beginPath(); for (var i = 0; i < 12; i++) { var an = i / 12 * TAU, rr0 = e.r * e.shape[i]; if (i === 0) c.moveTo(Math.cos(an) * rr0, Math.sin(an) * rr0); else c.lineTo(Math.cos(an) * rr0, Math.sin(an) * rr0); } c.closePath(); c.fill(); c.lineWidth = 3; c.strokeStyle = famColor(e) || '#8f1f3a'; c.stroke();
       c.fillStyle = 'rgba(255,255,255,0.15)'; for (var j = 0; j < 7; j++) { c.beginPath(); c.arc(Math.cos(j * 2.4) * e.r * 0.5, Math.sin(j * 2.4) * e.r * 0.5, 3, 0, TAU); c.fill(); } c.globalAlpha = 1;
@@ -2508,7 +2519,7 @@ var ENEMIES = {
     fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 6; }, draw: function (c, e) { drawStump(c, e); }
   }
 };
-var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'esbl', 'vre', 'cre', 'cdiff', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump'];
+var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'esbl', 'vre', 'cre', 'cdiff', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'tumorseed', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'fatglob', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump', 'mibc', 'mibcroot', 'perfhole'];
 /* ── antibiotic collateral + resistant strains (§6c) ──
    cdiff: the broad-spectrum tax — stationary spore pods that puff toxin clouds and burst into one when killed. Never in the
    normal pool (cost 0); spawned as collateral in the room after a combat room while you hold Pip-Tazo or Meropenem. */
@@ -2545,6 +2556,50 @@ ENEMIES.vre = resistantVariant('enterococcus', { name: 'VRE Chain', sub: 'Vancom
   fact: 'VRE shrugs off vancomycin: linezolid or daptomycin, and contact precautions for everyone it touches.' });
 ENEMIES.cre = resistantVariant('klebsiella', { name: 'CRE Klebsiella', sub: 'Carbapenem-resistant Klebsiella', cost: 7, minRoom: 5, resistTo: { meropenem: 0, piptazo: 0.5 }, abx: ['cipro'],
   fact: 'Carbapenem-resistant Klebsiella is the stewardship nightmare: meropenem fails and Pip-Tazo barely works, leaving colistin and the newest agents.' });
+/* ── the Oncology dungeon: the Invader (boss), its invasive fronts, perforation holes, and the adds they spill.
+   Behaviour lives in §14b (boss) and §14c (wall + perforation); none of these enter the normal wave pool (cost 0). ── */
+ENEMIES.tumorseed = {
+  name: 'Tumour Seed', sub: 'Spilled tumour cells', family: 'MALIGNANT', hp: 24, r: 9, speed: 150, cost: 0, minRoom: 99, contact: 6, grab: true, urothelial: true, noClear: true,
+  fact: 'A bladder perforation during resection can spill tumour cells outside the bladder. Extraperitoneal perforations usually heal with catheter drainage; intraperitoneal ones may need surgical repair.',
+  init: function (e) { e.timer = rr(0.4, 1); e.hop = 0; e.seed = rr(1, 99); e.ph = rr(0, TAU); },
+  update: function (e, dt, d, a) { e.ph += dt * 6; if (e.hop > 0) { e.hop -= dt; e.lift = Math.sin(clamp(1 - e.hop / 0.32, 0, 1) * Math.PI) * 9; e.vx = Math.cos(e.hopA) * 230; e.vy = Math.sin(e.hopA) * 230; return; } e.lift = 0; e.vx *= 0.8; e.vy *= 0.8; e.timer -= dt; if (e.timer <= 0) { e.timer = rr(0.5, 0.9); e.hop = 0.32; e.hopA = a + rr(-0.5, 0.5); e.sx = 1.3; e.sy = 0.75; } },
+  draw: function (c, e) {   // a ragged clump of cells with two mismatched bloodshot eyes
+    var r = e.r, sd = e.seed || 1, i, a0;
+    for (i = 0; i < 4; i++) { a0 = i / 4 * TAU + sd; c.beginPath(); c.arc(Math.cos(a0) * r * 0.5, Math.sin(a0) * r * 0.5, r * 0.62, 0, TAU); rim(c, e, 2.4); }
+    for (i = 0; i < 4; i++) { a0 = i / 4 * TAU + sd; c.beginPath(); c.arc(Math.cos(a0) * r * 0.5, Math.sin(a0) * r * 0.5, r * 0.62, 0, TAU); c.fillStyle = i % 2 ? '#e0526e' : '#c93f5d'; c.fill(); outline(c, 2.4); }
+    c.fillStyle = '#d14a66'; c.beginPath(); c.arc(0, 0, r * 0.55, 0, TAU); c.fill();
+    eyes(c, 0, -1, r * 0.42, r * 0.34, e.look, e.blink, 'angry', { asym: 0.6, veins: true });
+  }
+};
+ENEMIES.fatglob = {
+  name: 'Perivesical Fat', sub: 'Fat from outside the bladder wall', family: 'BENIGN', hp: 55, r: 15, speed: 60, cost: 0, minRoom: 99, contact: 7, grab: true, noClear: true,
+  fact: 'Tumour through the bladder wall into the perivesical fat is stage T3; into neighbouring organs, T4. Muscle-invasive disease is treated with cisplatin-based neoadjuvant chemotherapy and radical cystectomy.',
+  init: function (e) { e.seed = rr(1, 99); e.ph = rr(0, TAU); },
+  update: function (e, dt, d, a) { e.ph += dt * 3; seek(e, P.x, P.y, 60); },
+  onDeath: function (e) { addHazard({ kind: 'sticky', x: e.x, y: e.y, r: 26, t: 5 }); },
+  draw: function (c, e) {   // greasy yellow globules, half asleep
+    var r = e.r, i, L = [[-0.45, -0.3, 0.62], [0.45, -0.32, 0.6], [0.4, 0.4, 0.58], [-0.42, 0.4, 0.6]];
+    for (i = 0; i < 4; i++) { c.beginPath(); c.arc(L[i][0] * r, L[i][1] * r, L[i][2] * r, 0, TAU); rim(c, e, 3); }
+    for (i = 0; i < 4; i++) { c.beginPath(); c.arc(L[i][0] * r, L[i][1] * r, L[i][2] * r, 0, TAU); c.fillStyle = i % 2 ? '#ffd24a' : '#ffe27a'; c.fill(); outline(c, 3); }
+    c.fillStyle = '#ffe27a'; c.beginPath(); c.arc(0, 0, r * 0.62, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.5)'; for (i = 0; i < 4; i++) { c.beginPath(); c.arc(L[i][0] * r - 3, L[i][1] * r - 3, 2.2, 0, TAU); c.fill(); }
+    shutEyes(c, 0, -r * 0.1, r * 0.34, r * 0.17); mouth(c, 0, r * 0.3, r * 0.16, 'wavy');
+  }
+};
+ENEMIES.mibc = {
+  name: 'The Invader', sub: 'BOSS — muscle-invasive bladder tumour', family: 'MALIGNANT', hp: 2200, r: 66, speed: 0, cost: 0, minRoom: 99, contact: 16, boss: true, stationary: true, noPush: true, noGrab: true, noCollide: true, solid: true, urothelial: true, mibc: true,
+  fact: 'Bladder cancer is staged by depth. Ta and T1 stay above the muscle: resect, then BCG or mitomycin. T2 is in the detrusor muscle: neoadjuvant cisplatin, then radical cystectomy. T3 is through the wall into the fat. A resection specimen has to contain muscle to stage it, and resecting that deep is how the wall gets perforated.',
+  init: function (e) { e.seed = 29; }, update: function (e, dt) {}, draw: function (c, e) { drawMibcBody(c, e); }
+};
+ENEMIES.mibcroot = {
+  name: 'Invasive Front', family: 'MALIGNANT', hp: 140, r: 22, speed: 0, cost: 0, minRoom: 99, contact: 10, hidden: true, isRoot: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, solid: true, urothelial: true, mibc: true,
+  fact: '', init: function (e) { e.seed = rr(1, 99); e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 2; e.vx = e.vy = 0; }, draw: function (c, e) { drawMibcRoot(c, e); }
+};
+ENEMIES.perfhole = {
+  name: 'Perforation', family: 'CLOT', hp: 5000, r: 20, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, isStump: true, isHole: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true,
+  coagHint: 'PLUG IT: Foley balloon over it, or coag it (Roller Ball)',
+  fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 5; e.vx = e.vy = 0; }, draw: function (c, e) { drawPerfHole(c, e); }
+};
 (function () { for (var id in ENEMIES) ENEMIES[id].id = id; })();
 // pips: the class an enemy is weakest to / resists most (class-level tweaks included)
 function enemyWeakness(def) {
@@ -2559,8 +2614,8 @@ function enemyWeakness(def) {
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOONS = {
   /* chemo / oncologic */
-  cisplatin:   { name: 'Cisplatin', kind: 'chemo', rarity: 'common', desc: '+40% vs bladder/urothelial tumours (Frond, CIS). Seminoma takes ×2. Poisons them.',
-    dmg: function (e) { return e.def.seminoma ? 2.0 : e.def.urothelial ? 1.4 : 1; }, poison: function (e) { return e.def.seminoma || e.def.urothelial; } },
+  cisplatin:   { name: 'Cisplatin', kind: 'chemo', rarity: 'common', desc: '+40% vs bladder/urothelial tumours (Frond, CIS), +55% vs the Invader. Seminoma takes ×2. Poisons them.',
+    dmg: function (e) { return e.def.seminoma ? 2.0 : e.def.mibc ? 1.55 : e.def.urothelial ? 1.4 : 1; }, poison: function (e) { return e.def.seminoma || e.def.urothelial; } },
   gemcitabine: { name: 'Gemcitabine', kind: 'chemo', rarity: 'common', desc: '+30% vs bladder/urothelial tumours. Pairs with Cisplatin for the GC duo.',
     dmg: function (e) { return e.def.urothelial ? 1.3 : 1; }, poison: function (e) { return e.def.urothelial; } },
   gc:          { name: 'GC Regimen', kind: 'chemo', rarity: 'rare', requires: ['cisplatin', 'gemcitabine'], desc: 'DUO: +15% more vs urothelial tumours, and they burst into a poison cloud on death.',
@@ -2572,8 +2627,8 @@ var BOONS = {
   docetaxel:   { name: 'Docetaxel', kind: 'chemo', rarity: 'common', desc: '+35% vs prostate enemies.', dmg: function (e) { return e.def.prostate ? 1.35 : 1; }, poison: function (e) { return e.def.prostate; } },
   adt:         { name: 'ADT (Abiraterone/Enza)', kind: 'chemo', rarity: 'common', desc: 'Prostate enemies are slowed 40% and stop growing. +20% vs prostate.', dmg: function (e) { return e.def.prostate ? 1.2 : 1; } },
   sunitinib:   { name: 'Sunitinib (TKI)', kind: 'chemo', rarity: 'rare', desc: '+35% vs RCC, and it is starved: no more satellites.', dmg: function (e) { return e.def.rcc ? 1.35 : 1; } },
-  pembro:      { name: 'Pembrolizumab', kind: 'chemo', rarity: 'rare', desc: '+20% vs all MALIGNANT. Killed malignants may explode and cascade damage into their neighbours.',
-    dmg: function (e) { return e.family === 'MALIGNANT' ? 1.2 : 1; }, onKill: function (e) { if (e.family === 'MALIGNANT' && rnd() < 0.4) { var hs = enemiesNear(e.x, e.y, 90); for (var i = 0; i < hs.length; i++) if (hs[i].family === 'MALIGNANT') dealDamage(hs[i], 30, 'NEUTRAL', { wid: 'pembro', knock: 60, ang: ang(e.x, e.y, hs[i].x, hs[i].y) }); G.fxRings.push({ x: e.x, y: e.y, r: 10, r1: 90, t: 0.3, dur: 0.3, color: '#ff6b8a' }); } } },
+  pembro:      { name: 'Pembrolizumab', kind: 'chemo', rarity: 'rare', desc: '+20% vs all MALIGNANT, +35% vs the Invader. Killed malignants may explode and cascade damage into their neighbours.',
+    dmg: function (e) { return e.def.mibc ? 1.35 : e.family === 'MALIGNANT' ? 1.2 : 1; }, onKill: function (e) { if (e.family === 'MALIGNANT' && rnd() < 0.4) { var hs = enemiesNear(e.x, e.y, 90); for (var i = 0; i < hs.length; i++) if (hs[i].family === 'MALIGNANT') dealDamage(hs[i], 30, 'NEUTRAL', { wid: 'pembro', knock: 60, ang: ang(e.x, e.y, hs[i].x, hs[i].y) }); G.fxRings.push({ x: e.x, y: e.y, r: 10, r1: 90, t: 0.3, dur: 0.3, color: '#ff6b8a' }); } } },
   bep:         { name: 'BEP', kind: 'chemo', rarity: 'epic', unlock: 3, desc: 'EPIC: Bleomycin + etoposide + cisplatin. +60% vs Seminoma and +25% vs all MALIGNANT.',
     dmg: function (e) { return e.def.seminoma ? 1.6 : e.family === 'MALIGNANT' ? 1.25 : 1; }, poison: function (e) { return e.family === 'MALIGNANT'; } },
   /* antibiotics (spectrum matters a little; fungi ignore them) */
@@ -2613,9 +2668,10 @@ var BOONS = {
   bipolar:     { name: 'Bipolar Forceps', kind: 'gear', rarity: 'uncommon', desc: 'Cauterize bonuses deal +50%, and any ENERGY hit on a bleeding enemy cauterizes it.' },
   cbi:         { name: 'Continuous Bladder Irrigation', kind: 'gear', rarity: 'common', desc: 'FLUID hits do +15% and strip biofilm faster; you walk through slime and goo at full speed.', dmg: function (e, cls) { return cls === 'FLUID' ? 1.15 : 1; }, strip: 0.3, stripCls: 'FLUID' },
   cystoscope:  { name: 'Cystoscopy', kind: 'gear', rarity: 'uncommon', desc: 'Every enemy spawns revealed: its weakness, what it resists, and any antibiotic it ignores. +5% crit chance.' },
+  obturatorblock: { name: 'Obturator Block', kind: 'med', rarity: 'common', desc: 'A nerve block before you resect the side wall: cautery on the lateral bladder wall no longer sets off the obturator jerk. Staggers on you last half as long.' },
   grading:     { name: 'Gleason Grading', kind: 'grade', rarity: 'epic', consumable: true, desc: 'Grade one boon you hold up a tier (Grade 3 max): its bonuses grow by half of their base per grade. One use; Gleason only offers it.', consume: function () { return false; } }
 };
-var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'grading'];
+var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'obturatorblock', 'grading'];
 (function () { for (var id in BOONS) BOONS[id].id = id; })();
 var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ffd166', grade: '#ffd166' };
 
@@ -2664,7 +2720,7 @@ var PATRONS = {
     blurb: 'Built modern urology at Johns Hopkins: the perineal prostatectomy, the punch, the first urology journal.',
     greet: ['Steady hands, sharp steel, and a plan for the bleeding.', 'Baltimore sends its regards. Take what a surgeon needs.', 'A new specialty needs new tools. Here are a few.'],
     look: { skin: '#f4d2b0', hair: '#555b66', hairStyle: 'side', facial: 'none', glasses: 'round', collar: 'bowtie', suit: '#2a2a2a', tie: '#ff4d6d', acc: 'none', grin: 'grin' } },
-  bovie:   { name: 'Bovie', full: 'William T. Bovie (1882–1958)', color: '#ffb630', glyph: 'bolt', pool: ['groundpad', 'debride', 'smokevac', 'bipolar'],
+  bovie:   { name: 'Bovie', full: 'William T. Bovie (1882–1958)', color: '#ffb630', glyph: 'bolt', pool: ['groundpad', 'debride', 'smokevac', 'bipolar', 'obturatorblock'],
     blurb: 'The physicist whose electrosurgical generator (1926, with Cushing) still carries his name in every OR.',
     greet: ['Current cuts, current coagulates. Mind the ground pad.', 'Every surgeon says my name and few know my face. Fitting.', 'Physics in the operating room. You are welcome.'],
     look: { skin: '#efc7a0', hair: '#8a7a66', hairStyle: 'bald', facial: 'none', glasses: 'square', collar: 'labcoat', suit: '#e8eef5', tie: '#ffb630', acc: 'bolt', grin: 'grin' } },
@@ -2949,7 +3005,7 @@ function tryTakeBoon(id, onDone, onCancel) {
   giveBoon(id); onDone();
 }
 function openSteward(id, onDone, onCancel) {
-  stewardRef = { id: id, onDone: onDone, onCancel: onCancel }; openOverlay('steward');
+  stewardRef = { id: id, onDone: onDone, onCancel: onCancel }; openOverlay('steward'); $('stewardTitle').textContent = 'Antibiotic stewardship';
   var b = BOONS[id], held = activeAbx(), box = $('stewardChoices'); box.innerHTML = '';
   $('stewardSub').textContent = 'Two antibiotics at a time — that is the rule. To start ' + b.name + ', stop one of the two you are running, or skip it. Resistance you have bred stays with the run.';
   held.forEach(function (hid) {
@@ -2957,6 +3013,15 @@ function openSteward(id, onDone, onCancel) {
     btn.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); var ref = stewardRef; stewardRef = null; dropBoon(hid); giveBoon(id, true); ref.onDone(); }); box.appendChild(btn);
   });
   var skip = el('button', 'btn danger', 'SKIP ' + esc(b.name.toUpperCase())); skip.type = 'button'; skip.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); var ref2 = stewardRef; stewardRef = null; ref2.onCancel(); }); box.appendChild(skip);
+}
+// Neoadjuvant chemo (rest room, Oncology dungeon): cisplatin before the Invader. It starts 20% down; you fight it at −15% max HP.
+function openNeoadj(r) {
+  openOverlay('steward'); $('stewardTitle').textContent = 'Neoadjuvant chemotherapy';
+  $('stewardSub').textContent = 'A cisplatin infusion before the Invader. It starts the fight with ' + Math.round(MIBC.NEOADJ_HP * 100) + '% less HP; you fight it at −' + Math.round(MIBC.NEOADJ_COST * 100) + '% max HP. Cisplatin-based chemotherapy before radical cystectomy is the standard for muscle-invasive bladder cancer.';
+  var box = $('stewardChoices'); box.innerHTML = '';
+  var take = el('button', 'btn primary', 'TAKE THE INFUSION'); take.type = 'button';
+  take.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); G.neoadj = true; r.used = true; hideScreens(); if (P) addText(P.x, P.y - 44, 'CISPLATIN INFUSING', { color: '#d98cff', size: 15 }); Snd.sfx('buy'); }); box.appendChild(take);
+  var no = el('button', 'btn', 'DECLINE'); no.type = 'button'; no.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); hideScreens(); }); box.appendChild(no);
 }
 // antibiotics go through abxBonus() (spectrum × strain × run resistance × grade); everything else scales its bonus by its Gleason grade
 function boonMult(e, cls, wid) { var m = 1; for (var i = 0; i < G.boons.length; i++) { var id = G.boons[i], b = BOONS[id]; if (!b.dmg) continue; m *= b.abxActive ? abxBonus(id, e) : 1 + (b.dmg(e, cls, wid) - 1) * boonTierMul(id); } return m; }
@@ -2970,7 +3035,7 @@ function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (t
 function dealDamage(e, base, cls, o) {
   o = o || {};
   if (!e || e.dead || e.spawnT > 0) return 0;
-  if (e.def.isStump) { if ((o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'))) && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
+  if (e.def.isStump) { if ((o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'))) && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, e.def.coagHint || 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
   m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid);
@@ -2995,6 +3060,7 @@ function dealDamage(e, base, cls, o) {
   if (e.st.mark) m *= 1.1;
   if (e.coreExposed) m *= 1.5;
   if (o.mul) m *= o.mul;   // per-hit multiplier from weapon mods (Backstab)
+  if (e.dmgMul) m *= e.dmgMul;   // per-entity multiplier set by a boss script (the Invader's CIS field)
   if (e.elite) { if (!e.armorCls && cls !== 'NEUTRAL') { e.armorCls = cls; addText(e.x, e.y - e.r - 16, 'ARMORED vs ' + CLASSES[cls].name.toUpperCase(), { color: '#ffd166', size: 11 }); } else if (cls === e.armorCls && !o.pierceArmor) m *= 0.2; }
   var rightTool = false;
   if (G.swapBonusT > 0 && mBase >= 1.5 && cls !== 'NEUTRAL') { m *= hasBoon('perfectswap') ? 1.5 : 1.25; G.swapBonusT = 0; rightTool = true; }
@@ -3039,6 +3105,7 @@ function dealDamage(e, base, cls, o) {
   if (hasBoon('bcg') && fam === 'MALIGNANT') applyStatus(e, 'mark', 5, 1);
   if (boonWantsPoison(e)) applyStatus(e, 'poison', 3, 4);
   if (e.onDamaged) e.onDamaged(e, dmg, cls, o);
+  if (e.minHp && e.hp < e.minHp) e.hp = e.minHp;   // a boss script can hold a body at a floor (the Invader's core waits for the cystectomy)
   if (e.hp <= 0) killEnemy(e, cls, o.wid);
   return dmg;
 }
@@ -3067,7 +3134,7 @@ function updateStatuses(e, dt) {
   e.dotT = (e.dotT || 0) + dt;
   if (e.dotT >= 0.5) {
     e.dotT = 0;
-    for (var n in acc) { var d = acc[n]; acc[n] = 0; if (d <= 0) continue; if (e.inv) continue; e.hp -= d; var cls = DOT_CLASS[n] || 'NEUTRAL'; G.stats.dmg[cls] += d; addText(e.x + rr(-8, 8), e.y - e.r - 4, String(Math.max(1, Math.round(d))), { color: STATUS_DEFS[n].color, size: 11, vy: -30 }); if (n === 'bleed' && G.decals.length < 40) G.decals.push({ x: e.x + rr(-8, 8), y: e.y + rr(0, 8), r: rr(5, 10), color: 'rgba(200,40,60,0.45)', t: 10 }); if (e.hp <= 0) { killEnemy(e, cls, null); return; } }
+    for (var n in acc) { var d = acc[n]; acc[n] = 0; if (d <= 0) continue; if (e.inv) continue; e.hp -= d; var cls = DOT_CLASS[n] || 'NEUTRAL'; G.stats.dmg[cls] += d; addText(e.x + rr(-8, 8), e.y - e.r - 4, String(Math.max(1, Math.round(d))), { color: STATUS_DEFS[n].color, size: 11, vy: -30 }); if (n === 'bleed' && G.decals.length < 40) G.decals.push({ x: e.x + rr(-8, 8), y: e.y + rr(0, 8), r: rr(5, 10), color: 'rgba(200,40,60,0.45)', t: 10 }); if (e.minHp && e.hp < e.minHp) e.hp = e.minHp; if (e.hp <= 0) { killEnemy(e, cls, null); return; } }
   }
   if (e.id === 'uric' && hasBoon('kcitrate') && (inHazard(e.x, e.y, 'sticky') || inHazard(e.x, e.y, 'water') || inHazard(e.x, e.y, 'goo') || inHazard(e.x, e.y, 'slime'))) { e.hp -= 8 * dt; e.dissolving = true; if (e.hp <= 0) { killEnemy(e, 'FLUID', null); return; } } else e.dissolving = false;
 }
@@ -3079,7 +3146,7 @@ function spawnEnemy(id, x, y, opts) {
   if (e.elite) { e.hp = e.maxHp = Math.round(def.hp * 1.5); e.r = Math.round(def.r * 1.12); }
   if (opts.hpMul) e.hp = e.maxHp = Math.round(e.hp * opts.hpMul);
   if (id === 'uric' && hasBoon('allopurinol')) e.hp = e.maxHp = Math.round(e.hp * 0.7);
-  if (!insideArena(e.x, e.y, e.r)) { e.x = clamp(e.x, ARENA.x + e.r, ARENA.x + ARENA.w - e.r); e.y = clamp(e.y, ARENA.y + e.r, ARENA.y + ARENA.h - e.r); }
+  if (!opts.free && !insideArena(e.x, e.y, e.r)) { var cp = clampArena(e.x, e.y, e.r); e.x = cp.x; e.y = cp.y; }   // opts.free: wall-mounted boss parts stay where they are put
   G.enemies.push(e); def.init(e);
   if (G.fosfoRoom === G.roomIndex && e.family === 'MICROBE' && !def.fungus) applyStatus(e, 'poison', 4, 10);
   if ((G.revealRoom === G.roomIndex && e.family === 'MICROBE') || hasBoon('cystoscope')) applyStatus(e, 'reveal', 999, 1);   // culture result / Nitze's cystoscope: spawn revealed
@@ -3129,6 +3196,7 @@ function killEnemy(e, cls, wid) {
   }
   if (e.drained) { addHazard({ kind: 'pus', x: e.x, y: e.y, r: 46, t: 6, dps: 5 }); burst(e.x, e.y, 24, { color: '#d4ff5a', speed: 220, life: 0.5, size: 4, kind: 'goo', g: 350 }); Snd.sfx('pop'); }
   if (def.gasOnDeath && !e.silent) { radialBurst(e.x, e.y, 6, 150, 6, { color: '#b8ff5a', r: 6, life: 2.5 }); burst(e.x, e.y, 10, { color: '#b8ff5a', speed: 100, life: 0.4, size: 4, kind: 'smoke' }); }
+  if (def.onDeath && !e.silent) def.onDeath(e, cls, wid);
   if (def.id === 'cyst') { addHazard({ kind: 'water', x: e.x, y: e.y, r: 42, t: 10 }); if (e.complex) for (var c2 = 0; c2 < 2; c2++) spawnEnemy('ecoli', e.x + rr(-16, 16), e.y + rr(-16, 16), {}); }
   if (def.id === 'enterococcus' || def.base === 'enterococcus') { for (var l = 0; l < G.enemies.length; l++) { var lk = G.enemies[l]; if (lk.id === 'entero_link' && lk.head === e && !lk.dead) { lk.hp = 0; lk.silent = false; killEnemy(lk, cls, wid); } } }
   if (def.toxinOnDeath && !e.silent) { addHazard({ kind: 'toxin', x: e.x, y: e.y, r: 58, t: 3.5 }); burst(e.x, e.y, 14, { color: '#b8ff5a', speed: 110, life: 0.5, size: 5, kind: 'smoke' }); addText(e.x, e.y - e.r - 24, 'TOXIN CLOUD', { color: '#b8ff5a', size: 12 }); }   // C. difficile pods burst
@@ -3214,14 +3282,15 @@ function bestTarget() {
   for (var i = 0; i < es.length; i++) {
     var e = es[i]; if (!enemyTargetable(e)) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 430) continue;
     var m = MATRIX[cls][e.family] * enemyTweak(e, cls, cur ? cur.id : null), score = -d;
-    if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += 60; if (e.isArm) score += 30; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
+    if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += G.boss && G.boss.core ? 460 : 60; if (e.isArm) score += 30; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
     if (e.id === 'clot') score -= 120;
     if (e.def.isStump) { var coag = cur && (cur.id === 'roller' || (cur.id === 'bovie' && cur.mode === 1) || (cur.id === 'loop' && cur.mode === 2)); score += coag ? 120 : -500; }
     if (score > bs) { bs = score; best = e; }
   }
   return best;
 }
-function computeAim(mv) {
+function computeAim(mv) { computeAimRaw(mv); if (P.jerk) P.aim += P.jerk.off * (P.jerk.t / P.jerk.dur); }
+function computeAimRaw(mv) {
   G.aimTarget = null;
   if (Input.mode === 'kb') {
     P.aim = ang(P.x, P.y, Input.mx, Input.my);
@@ -3244,9 +3313,11 @@ function updatePlayer(dt) {
   if (!hasBoon('cbi') && (inHazard(P.x, P.y, 'slime') || inHazard(P.x, P.y, 'sticky') || inHazard(P.x, P.y, 'biofilm'))) sp *= 0.62;   // Foley's CBI: full speed through slime and goo
   var goo = inHazard(P.x, P.y, 'goo'); if (goo) { if (!hasBoon('cbi')) sp *= 0.7; P.gooT = (P.gooT || 0) - dt; if (P.gooT <= 0) { P.gooT = 0.5; hurtPlayer(1.5, 'goo', 0, true); } }
   var tox = inHazard(P.x, P.y, 'toxin'); if (tox) { sp *= 0.85; P.toxT = (P.toxT || 0) - dt; if (P.toxT <= 0) { P.toxT = 0.5; hurtPlayer(2, 'toxin', 0, true); } }   // C. difficile toxin cloud
+  if (inHazard(P.x, P.y, 'flood')) sp *= 0.7;   // a perforation's flood
   var pus = inHazard(P.x, P.y, 'pus'); if (pus) { sp *= 0.8; P.pusT = (P.pusT || 0) - dt; if (P.pusT <= 0) { P.pusT = 0.5; hurtPlayer(1.5, 'pus', 0, true); } }
   if (P.necroSlow) { sp *= 0.6; P.necroSlow = false; }
   if (P.stag > 0) { P.stag -= dt; sp *= STAGGER_SLOW; }   // staggered by a slam: slowed, and updateWeapons holds fire
+  if (P.jerk) { P.jerk.t -= dt; if (P.jerk.t <= 0) P.jerk = null; }   // obturator jerk: computeAim adds the offset while it lasts
   if (!hasBoon('smokevac') && inHazard(P.x, P.y, 'burn')) P.burn = Math.max(P.burn, 1.5);   // Bovie's Smoke Evacuator: your own burn zones don't hurt you
   if (P.roll > 0) {
     P.roll -= dt; P.x += P.rollDx * dt; P.y += P.rollDy * dt; P.rollT = (P.rollT || 0) + dt;
@@ -3521,6 +3592,12 @@ function levelProgress(xp) { var lvl = 1, need = 100; while (xp >= need && lvl <
 function weaponUnlocked(id) { var d = WEAPONS[id]; return !d.unlock || residencyLevel() >= d.unlock || (Q.weapons && Q.weapons.indexOf(id) >= 0); }
 function boonUnlocked(id) { var b = BOONS[id]; return !b.unlock || residencyLevel() >= b.unlock; }
 
+/* The final boss is rolled from the seed (or ?boss=staghorn|fournier|mibc) and sets the run's dungeon. A dungeon with `fams`
+   draws its rooms from those enemy families: Oncology is tumours, benign masses and CIS carpet all the way down. */
+var BOSS_IDS = ['staghorn', 'fournier', 'mibc'];
+var DUNGEONS = { staghorn: { name: '', fams: null }, fournier: { name: '', fams: null }, mibc: { name: 'ONCOLOGY', fams: ['MALIGNANT', 'BENIGN'] } };
+// thirds; the split keeps every seed that used to roll the Staghorn (r < 1/3) or Fournier (1/2 ≤ r < 5/6) on that boss
+function rollBossId(seed) { var r = mulberry32((seed === undefined ? SEED : seed) ^ 0x51ab)(); return r < 1 / 3 ? 'staghorn' : r < 0.5 ? 'mibc' : r < 5 / 6 ? 'fournier' : 'mibc'; }
 function startRun() {
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
   G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.detailT = 0; G.detailSlot = -1;
@@ -3528,7 +3605,7 @@ function startRun() {
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
-  G.bossId = Q.boss === 'fournier' ? 'fournier' : Q.boss === 'staghorn' ? 'staghorn' : (mulberry32(SEED ^ 0x51ab)() < 0.5 ? 'staghorn' : 'fournier');
+  G.bossId = BOSS_IDS.indexOf(Q.boss) >= 0 ? Q.boss : rollBossId(); G.dungeon = DUNGEONS[G.bossId]; G.neoadj = false; G.neoadjLoss = 0; G.arena = null; G.wall = null;
   var ws = Q.weapons ? Q.weapons.split(',') : ['holmium', 'scalpel'];
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
   if (!G.weapons.length) giveWeapon('holmium');
@@ -3538,7 +3615,7 @@ function startRun() {
     for (var mi = 0; mi < qm.length; mi++) { var md = MODS[qm[mi]]; if (!md) continue; var have = false; for (var ci = 0; ci < G.weapons.length; ci++) if (G.weapons[ci].id === md.weapon) have = true; if (!have) giveWeapon(md.weapon); giveMod(qm[mi], true); }
   }
   G.screen = 'run'; G.running = true; hideScreens(); Snd.setMusicMode('calm'); META.runs = (META.runs || 0) + 1; saveMeta();
-  var start = Q.boss ? 9 : clamp(parseInt(Q.room, 10) || 1, 1, 9);
+  var start = clamp(parseInt(Q.room, 10) || (Q.boss ? 9 : 1), 1, 9);   // ?boss=… alone starts at the boss; with ?room=K it only picks which boss (and dungeon) the run has
   if (start > 1 && !Q.weapons) { giveWeapon('bovie'); if (start >= 4) giveWeapon('irrigation'); }
   var kind = start === 9 ? 'boss' : start === 8 ? 'rest' : start === 1 ? 'tutorial' : 'combat';
   enterRoom(makeRoomPlan(start, kind));
@@ -3569,6 +3646,7 @@ function findSpawnPos(r, preferRight, tries) {
   for (var i = 0; i < tries; i++) {
     var x = rr(ARENA.x + r + 10, ARENA.x + ARENA.w - r - 10), y = rr(ARENA.y + r + 10, ARENA.y + ARENA.h - r - 10);
     if (preferRight && x < 420) x = rr(420, ARENA.x + ARENA.w - r - 10);
+    if (G.arena && !insideArena(x, y, r + 6)) continue;
     if (dist(x, y, P.x, P.y) < 140 + r) continue;
     var o = { x: x, y: y }; var ok = true; var obs = G.obstacles;
     for (var k = 0; k < obs.length; k++) { var ob = obs[k]; if (ob.dead) continue; if (ob.type === 'rect') { if (x > ob.x - r - 6 && x < ob.x + ob.w + r + 6 && y > ob.y - r - 6 && y < ob.y + ob.h + r + 6) { ok = false; break; } } else if (dist(x, y, ob.x, ob.y) < ob.r + r + 6) { ok = false; break; } }
@@ -3576,15 +3654,15 @@ function findSpawnPos(r, preferRight, tries) {
     for (var d in DOOR_POS) { var dp = DOOR_POS[d]; if (dist(x, y, dp.x + dp.w / 2, dp.y + dp.h / 2) < 70) { ok = false; break; } }
     if (ok) return o;
   }
-  return { x: clamp(P.x + 300, ARENA.x + r, ARENA.x + ARENA.w - r), y: 270 };
+  return clampArena(P.x + 300, 270, r + 6);
 }
 function freeSpot(x, y, r) { var p = { x: x, y: y }; for (var i = 0; i < 30; i++) { if (!pointInObstacle(p.x, p.y) && insideArena(p.x, p.y, r)) { var ok = true; for (var k = 0; k < G.obstacles.length; k++) { var ob = G.obstacles[k]; if (ob.dead) continue; if (ob.type === 'rect' ? (p.x > ob.x - r && p.x < ob.x + ob.w + r && p.y > ob.y - r && p.y < ob.y + ob.h + r) : dist(p.x, p.y, ob.x, ob.y) < ob.r + r) { ok = false; break; } } if (ok) return p; } p = { x: x + rr(-120, 120), y: y + rr(-100, 100) }; } return { x: x, y: y }; }
 
 function enterRoom(plan) {
-  G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null;
+  G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null; G.arena = null; G.wall = null;
   G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.dropRes = {};
   for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.bal = null; w.swing = null; w.lunge = 0; w.fx = null; w.fx2 = null; w.charge = 0; }
-  P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0;
+  P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0; P.jerk = null; P.stag = 0;
   var t = ROOM_TEMPLATES[plan.template].build();
   for (var o = 0; o < t.obstacles.length; o++) { var ob = t.obstacles[o]; G.obstacles.push({ type: ob.type, x: ob.x, y: ob.y, w: ob.w, h: ob.h, r: ob.r, stricture: !!ob.stricture, regrowT: 0 }); }
   for (var h = 0; h < t.hazards.length; h++) addHazard({ kind: t.hazards[h].kind, x: t.hazards[h].x, y: t.hazards[h].y, r: t.hazards[h].r });
@@ -3606,7 +3684,8 @@ function enterRoom(plan) {
   var collateral = G.collateral; G.collateral = null; if (collateral && G.waves) spawnCollateral(collateral);               // the broad-spectrum tax rolled in the last room
   if (plan.kind === 'tutorial') G.tutorial = { step: 0, moved: false, fired: false, rolled: false, swapped: false, t: 0 }; else G.tutorial = null;
   if (plan.kind === 'boss') spawnBoss(G.bossId || 'staghorn');
-  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); }
+  // rest room. Before the Invader: the crate is a Roller Ball unless you already carry something that plugs a perforation, and a chemo pole offers the neoadjuvant infusion
+  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: G.bossId === 'mibc' && !carriedWeapon('roller') && !carriedWeapon('foley') ? { id: 'roller', rarity: 'common' } : rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); if (G.bossId === 'mibc' && !G.neoadj) G.rewards.push({ kind: 'neoadj', x: 240, y: 340 }); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
   if (!G.waves) roomCleared(true);
@@ -3645,6 +3724,7 @@ function genDoorOptions(plan) {
 /* ── waves / enemy director ── */
 function pickFamilies(idx, kind) {
   if (idx === 1) return ['STONE'];
+  if (G.dungeon && G.dungeon.fams) return G.dungeon.fams.slice();
   var rot = G.famRotation, early = rot.filter(function (f) { return f !== 'STONE'; });
   if (idx <= 3) return [early[(idx - 2) % early.length]];
   var n = idx <= 5 ? 2 : 3, out = [], start = ri(rot.length);
@@ -3793,12 +3873,18 @@ function updateRewards(dt) {
       else if (r.kind === 'altar') openBoonScreen(r);
       else if (r.kind === 'shop') openShop(r);
       else if (r.kind === 'rep') openRepScreen(r);
+      else if (r.kind === 'neoadj') openNeoadj(r);
     }
   }
 }
 /* ── run end ── */
 function die() { if (G.over) return; G.over = true; G.won = false; G.timeScale = 0.3; G.endT = 1.6; Snd.sfx('death'); shakeIt(10); burst(P.x, P.y, 40, { color: '#38e8ff', speed: 260, life: 0.8, size: 4 }); burst(P.x, P.y, 20, { color: '#ff4d6d', speed: 200, life: 0.8, size: 3 }); setBanner('CODE BLUE', '', 2); }
-function win() { if (G.over) return; G.over = true; G.won = true; G.timeScale = 0.25; G.endT = 3.2; Snd.sfx('jingle'); setBanner('STONE FREE!', '', 3); addXPLive(120); }
+var WIN_TEXT = {
+  staghorn: ['STONE FREE!', 'The Staghorn is rubble. Stone-free, no stent, no complications. Go eat something.'],
+  fournier: ['SOURCE CONTROLLED!', 'Debrided to healthy tissue, cultures sent, antibiotics running. Go eat something.'],
+  mibc: ['EN BLOC!', 'Muscle present in specimen: Muscle-invasive disease confirmed. Pathology report filed.']
+};
+function win() { if (G.over) return; G.over = true; G.won = true; G.timeScale = 0.25; G.endT = 3.2; Snd.sfx('jingle'); setBanner((WIN_TEXT[G.bossId] || WIN_TEXT.staghorn)[0], '', 3); addXPLive(120); }
 function addXPLive(n) { G.xpGained = (G.xpGained || 0) + n; }
 function finishRun() {
   G.running = false; var won = G.won, st = G.stats, secs = Math.floor(G.time);
@@ -3820,7 +3906,7 @@ function skipRoom() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   §14b BOSSES — the final room rolls one of two (or ?boss=staghorn|fournier).
+   §14b BOSSES — the final room rolls one of three (or ?boss=staghorn|fournier|mibc). The Invader is in §14d.
    STAGHORN CALCULUS: Phase 1 "Shell": crack 2 of 4 armored arms. Phase 2 "Infection": biofilm shield regrows while
    the swarm lives (strip with FLUID/Bovie/antibiotics, kill the swarm, LITHO the body). Phase 3 "Core": spirals,
    rings, fragmentation bursts (suck the shards with the Trilogy for RVUs). ~60–90 s.
@@ -3832,12 +3918,13 @@ function skipRoom() {
    a 45 s clock; hit the migrating SOURCE weak point or go into septic shock. ~90–120 s.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOSS_ARMS = [{ a: -2.25, len: 165 }, { a: -0.95, len: 185 }, { a: 0.95, len: 185 }, { a: 2.25, len: 165 }];
-function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else spawnStaghorn(); }
+function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else if (kind === 'mibc') spawnMibc(); else spawnStaghorn(); }
 function microbesAlive() { var n = 0; for (var i = 0; i < G.enemies.length; i++) { var e = G.enemies[i]; if (!e.dead && e.family === 'MICROBE' && !e.boss && !e.def.isLobe && !e.def.isStump) n++; } return n; }
 function bossQueue(delay, fn) { G.boss.queue.push({ t: delay, fn: fn }); }
 function runQueue(B, dt) { for (var q = B.queue.length - 1; q >= 0; q--) { B.queue[q].t -= dt; if (B.queue[q].t <= 0) { var fn = B.queue[q].fn; B.queue.splice(q, 1); fn(); } } }
-function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else updateStaghorn(dt); }
-function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else drawBossArms(c); }
+function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else if (B.kind === 'mibc') updateMibc(dt); else updateStaghorn(dt); }
+function bossColor(B) { return B.kind === 'fournier' ? '#ff4d6d' : B.kind === 'mibc' ? '#ff6b8a' : '#38e8ff'; }
+function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else if (B.kind === 'staghorn') drawBossArms(c); }
 function bossPartDied(e) {
   var B = G.boss; if (!B) return;
   if (e.boss) { bossDefeated(e); return; }
@@ -3848,8 +3935,8 @@ function bossDefeated(e) {
   var B = G.boss; B.dead = true; G.cleared = true; B.sepsis = false;
   for (var k = 0; k < G.enemies.length; k++) { var o = G.enemies[k]; if (!o.dead && o !== e) { o.silent = true; o.hp = 0; killEnemy(o, 'NEUTRAL', null); } }
   for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
-  var col = B.kind === 'fournier' ? '#b86a78' : '#d8c7a4';
-  burst(e.x, e.y, 120, { color: col, speed: 420, life: 1.4, size: 5, kind: B.kind === 'fournier' ? 'goo' : 'frag', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
+  var col = B.kind === 'fournier' ? '#b86a78' : B.kind === 'mibc' ? '#c2415c' : '#d8c7a4';
+  burst(e.x, e.y, 120, { color: col, speed: 420, life: 1.4, size: 5, kind: B.kind === 'staghorn' ? 'frag' : 'goo', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
   G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 400, t: 1, dur: 1, color: '#38e8ff' }); shakeIt(16); G.punch = 0.4; hitstop(0.18);
   G.stats.rooms = Math.max(G.stats.rooms, 9); win();
 }
@@ -4085,6 +4172,383 @@ function drawStump(c, e) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §14c WALL + PERFORATION — generic. A round room whose boundary is a ring of segments, each with an
+   integrity meter. Any boss or room can use it:
+     makeWall({ cx, cy, rx, ry, n, tagOf, live, seedId, onPerforate, onSealed })   builds G.wall and G.arena
+     wallSegAt(x, y) / wallPoint(seg, inset)                                         look a segment up / a point on it
+     wallHit(seg, amount, src)      a deep hit landed on that segment: `amount` is in damage; PERF.FILL of it perforates
+     wallPerforate(seg)             the event: hole + flood + seed wave + damage by the segment's kind (PERF_KINDS[tag])
+     wallPlug(seg, how)             sealed in time: Foley balloon held over the hole, or a cauterizing hit on it
+   Segments are tagged LATERAL / DOME / POSTERIOR. A hole left alone for PERF.WINDOW seconds is chronic: it stays open
+   and keeps leaking seeds. Distension (the Irrigation Hose) makes every meter fill PERF.DISTEND_MUL times faster.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var PERF = { FILL: 120, WINDOW: 5.5, PLUG_TIME: 0.7, DISTEND_AT: 0.6, DISTEND_MUL: 1.5, DISTEND_UP: 0.3, DISTEND_DOWN: 0.07, SEED_CAP: 9 };
+var PERF_KINDS = {
+  LATERAL:   { label: 'EXTRAPERITONEAL PERFORATION', sub: 'side wall: minor. Plug it: Foley balloon, or coag (Roller Ball)', severe: false, dmg: 8, flood: 90, seeds: 3, leak: 7, enrage: 0, color: '#ffb630' },
+  POSTERIOR: { label: 'EXTRAPERITONEAL PERFORATION', sub: 'back wall: minor. Plug it: Foley balloon, or coag (Roller Ball)', severe: false, dmg: 10, flood: 100, seeds: 3, leak: 7, enrage: 0, color: '#ffb630' },
+  DOME:      { label: 'INTRAPERITONEAL PERFORATION', sub: 'the dome: severe. Plug it NOW', severe: true, dmg: 22, flood: 150, seeds: 6, leak: 5, enrage: 15, color: '#ff4d6d' }
+};
+function wallTag(mid) { var d = mid * 180 / Math.PI; return d > -150 && d < -30 ? 'DOME' : d > 30 && d < 150 ? 'POSTERIOR' : 'LATERAL'; }
+function makeWall(o) {
+  var n = o.n || 12, segs = [];
+  for (var i = 0; i < n; i++) { var a0 = -Math.PI + i / n * TAU, a1 = a0 + TAU / n, mid = (a0 + a1) / 2; segs.push({ i: i, a0: a0, a1: a1, mid: mid, tag: (o.tagOf || wallTag)(mid, i), perf: 0, open: false, sealed: false, chronic: false, broken: false, warned: false, plugT: 0, leakT: 0, plug: 0, flash: 0, hole: null, flood: null }); }
+  G.arena = { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry };
+  G.wall = { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry, segs: segs, thick: o.thick || 26, distension: 0, distWarn: false, live: o.live !== false, alert: null, seedId: o.seedId || 'tumorseed', onPerforate: o.onPerforate || null, onSealed: o.onSealed || null, perforations: 0, plugs: 0, t: 0 };
+  return G.wall;
+}
+function wallPoint(seg, inset) { var Wl = G.wall; inset = inset || 0; return { x: Wl.cx + Math.cos(seg.mid) * (Wl.rx - inset), y: Wl.cy + Math.sin(seg.mid) * (Wl.ry - inset) }; }
+function wallSegAt(x, y) { var Wl = G.wall; if (!Wl) return null; var a = Math.atan2((y - Wl.cy) / Wl.ry, (x - Wl.cx) / Wl.rx), n = Wl.segs.length; return Wl.segs[clamp(Math.floor((a + Math.PI) / TAU * n), 0, n - 1)]; }
+function countId(id) { var n = 0, es = G.enemies; for (var i = 0; i < es.length; i++) if (!es[i].dead && es[i].id === id) n++; return n; }
+function wallHit(seg, amount, src) {
+  var Wl = G.wall; if (!Wl || !Wl.live || !seg || seg.open || seg.broken || !(amount > 0)) return 0;
+  var add = amount / PERF.FILL * (Wl.distension >= PERF.DISTEND_AT ? PERF.DISTEND_MUL : 1);
+  seg.perf = Math.min(1, seg.perf + add); seg.flash = 0.3;
+  if (seg.perf >= 0.6 && seg.perf < 1 && !seg.warned) { seg.warned = true; var wp = wallPoint(seg, 46); addText(wp.x, wp.y, 'WALL THINNING', { color: '#ffd166', size: 12, sub: seg.tag, subColor: PERF_KINDS[seg.tag].color }); Snd.sfx('tink'); }
+  if (seg.perf >= 1) wallPerforate(seg);
+  return add;
+}
+function wallSeeds(seg, n) {
+  var Wl = G.wall, alive = countId(Wl.seedId);
+  for (var i = 0; i < n && alive < PERF.SEED_CAP; i++, alive++) { var p0 = wallPoint(seg, rr(50, 95)), cp = clampArena(p0.x + rr(-34, 34), p0.y + rr(-34, 34), 14); spawnEnemy(Wl.seedId, cp.x, cp.y, {}); }
+}
+function wallPerforate(seg) {
+  var Wl = G.wall; if (!Wl || seg.open) return;
+  var K = PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL, hp = wallPoint(seg, 6), fp = wallPoint(seg, K.flood * 0.55);
+  seg.open = true; seg.sealed = false; seg.chronic = false; seg.perf = 1; seg.plugT = PERF.WINDOW; seg.leakT = K.leak; seg.plug = 0; seg.warned = true; Wl.perforations++;
+  seg.flood = addHazard({ kind: 'flood', x: fp.x, y: fp.y, r: K.flood });
+  var hole = spawnEnemy('perfhole', hp.x, hp.y, { instant: true, force: true, free: true });
+  if (hole) { hole.seg = seg; hole.st.bleed = { t: 99999, dps: 0 }; hole.onCauterized = function () { wallPlug(seg, 'coag'); }; seg.hole = hole; }
+  wallSeeds(seg, K.seeds);
+  hurtPlayer(K.dmg, 'perforation', undefined, true); G.flash = Math.max(G.flash, 0.3); shakeIt(K.severe ? 10 : 5); if (K.severe) { G.punch = Math.max(G.punch, 0.2); hitstop(0.08); }
+  var ap = wallPoint(seg, 80); addText(ap.x, ap.y, 'PERFORATION!', { color: K.color, size: K.severe ? 18 : 14, dur: 1.6, vy: -14 });   // said at the hole; the details go to the boss panel (or a banner)
+  if (!G.boss) setBanner(K.label, K.sub, 2.8);
+  Wl.alert = { text: K.label, sub: K.sub, color: K.color, t: 3.2 }; Snd.sfx(K.severe ? 'alarm' : 'pop'); Snd.sfx('shatter');
+  burst(hp.x, hp.y, 22, { color: '#ffe9a8', speed: 240, life: 0.5, size: 4, kind: 'goo', g: 200 }); G.fxRings.push({ x: hp.x, y: hp.y, r: 10, r1: K.flood, t: 0.5, dur: 0.5, color: K.color });
+  if (Wl.onPerforate) Wl.onPerforate(seg, K);
+}
+function wallCloseHole(seg) { var h = seg.hole; seg.hole = null; if (h && !h.dead) { h.silent = true; h.hp = 0; killEnemy(h, 'NEUTRAL', null); } }
+function wallPlug(seg, how) {
+  var Wl = G.wall; if (!Wl || !seg.open || seg.chronic) return false;
+  seg.open = false; seg.sealed = true; seg.perf = 0.45; seg.plug = 0; seg.warned = false; Wl.plugs++;
+  if (seg.flood) { seg.flood.t = 1.5; seg.flood.max = 1.5; seg.flood = null; }
+  wallCloseHole(seg);
+  var tp = wallPoint(seg, 34);
+  addText(tp.x, tp.y, how === 'foley' ? 'TAMPONADE' : 'COAGULATED', { color: '#5df07a', size: 15, sub: 'PERFORATION SEALED', subColor: '#5df07a' }); Snd.sfx('buy');
+  burst(tp.x, tp.y, 12, { color: '#5df07a', speed: 120, life: 0.4, size: 3 }); addRVU(3, tp.x, tp.y);
+  if (Wl.onSealed) Wl.onSealed(seg, how);
+  return true;
+}
+function updateWall(dt) {
+  var Wl = G.wall; if (!Wl) return; Wl.t += dt; if (Wl.alert) { Wl.alert.t -= dt; if (Wl.alert.t <= 0) Wl.alert = null; }
+  var cur = curWeapon(), filling = !!(cur && cur.id === 'irrigation' && cur.fx && cur.fx.style === 'jet' && fireHeld());
+  Wl.distension = clamp(Wl.distension + (filling ? PERF.DISTEND_UP : -PERF.DISTEND_DOWN) * dt, 0, 1);
+  if (Wl.distension >= PERF.DISTEND_AT && !Wl.distWarn) { Wl.distWarn = true; addText(P.x, P.y - 48, 'BLADDER DISTENDED', { color: '#7ad7ff', size: 13, sub: 'thin wall: it perforates 50% faster', subColor: '#ffd166' }); Snd.sfx('tink'); }
+  else if (Wl.distension < PERF.DISTEND_AT - 0.1) Wl.distWarn = false;
+  var bal = cur && cur.id === 'foley' && cur.bal && cur.bal.on ? cur.bal : null;
+  for (var i = 0; i < Wl.segs.length; i++) {
+    var seg = Wl.segs[i]; if (seg.flash > 0) seg.flash -= dt; if (!seg.open) continue;
+    var K = PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL;
+    if (!seg.chronic) {
+      var hp = wallPoint(seg, 6);
+      if (bal && dist(P.x, P.y, hp.x, hp.y) <= bal.r + 16) { seg.plug += dt / PERF.PLUG_TIME; if (seg.plug >= 1) { wallPlug(seg, 'foley'); continue; } } else seg.plug = Math.max(0, seg.plug - dt * 2);
+      seg.plugT -= dt;
+      if (seg.plugT <= 0) { seg.chronic = true; wallCloseHole(seg); var tp = wallPoint(seg, 40); addText(tp.x, tp.y, 'TOO LATE', { color: '#ff4d6d', size: 14, sub: 'it stays open and keeps seeding', subColor: '#ff8fa3' }); Snd.sfx('alarm'); }
+    }
+    seg.leakT -= dt; if (seg.leakT <= 0) { seg.leakT = K.leak; wallSeeds(seg, 1); }
+  }
+}
+/* the ring: everything outside it masked, a thick fleshy band per segment (the dome is thinner), an integrity gauge on the
+   inner lip of each one, holes, patches, and what is left of a segment a tumour burst through */
+function drawWallUnder(c) {
+  var Wl = G.wall; if (!Wl) return; var th = Wl.thick, t = G.realTime, i;
+  c.fillStyle = '#070b10'; c.beginPath(); c.rect(0, 0, W, H); c.ellipse(Wl.cx, Wl.cy, Wl.rx + th * 0.4, Wl.ry + th * 0.4, 0, 0, TAU, true); c.fill('evenodd');
+  c.fillStyle = 'rgba(200,80,105,' + (0.07 + 0.05 * Wl.distension) + ')'; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx, Wl.ry, 0, 0, TAU); c.fill();
+  c.lineCap = 'butt';
+  for (i = 0; i < Wl.segs.length; i++) {
+    var seg = Wl.segs[i], K = PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL, g = 0.018, tw = (seg.tag === 'DOME' ? th * 0.72 : th) * (1 - 0.4 * seg.perf), rx = Wl.rx + tw * 0.5, ry = Wl.ry + tw * 0.5, a0 = seg.a0 + g, a1 = seg.a1 - g;
+    if (seg.broken) {   // burst open: fat bulging through, stubs of wall at either end
+      for (var f = 0; f < 4; f++) { var fa = seg.a0 + (f + 0.5) / 4 * (seg.a1 - seg.a0); c.beginPath(); c.arc(Wl.cx + Math.cos(fa) * (Wl.rx + 8), Wl.cy + Math.sin(fa) * (Wl.ry + 8), 13 + (f % 2) * 4, 0, TAU); c.fillStyle = f % 2 ? '#ffd24a' : '#ffe27a'; c.fill(); outline(c, 3); }
+      continue;
+    }
+    c.strokeStyle = OUTLINE; c.lineWidth = tw + 7; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, rx, ry, 0, a0, a1); c.stroke();
+    c.strokeStyle = seg.flash > 0 ? '#fff' : seg.perf < 0.35 ? '#c9788a' : seg.perf < 0.7 ? '#dc9a8f' : '#efc3b0'; c.lineWidth = tw; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, rx, ry, 0, a0, a1); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.18)'; c.lineWidth = 2.5; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx + 2, Wl.ry + 2, 0, a0, a1); c.stroke();
+    var mid = seg.mid, mx = Wl.cx + Math.cos(mid) * rx, my = Wl.cy + Math.sin(mid) * ry;
+    if (seg.open) {   // the hole: a dark gap through the band; a chronic one pulses
+      var hw = (seg.a1 - seg.a0) * 0.2; c.strokeStyle = '#04070a'; c.lineWidth = th + 12; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx + th * 0.4, Wl.ry + th * 0.4, 0, mid - hw, mid + hw); c.stroke();
+      if (seg.chronic) { c.strokeStyle = 'rgba(255,77,109,' + (0.5 + 0.4 * Math.sin(t * 6)) + ')'; c.lineWidth = 3; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx + 1, Wl.ry + 1, 0, mid - hw, mid + hw); c.stroke(); }
+    } else if (seg.sealed) { c.save(); c.translate(mx, my); c.rotate(mid + Math.PI / 2); c.fillStyle = '#5df07a'; roundRect(c, -13, -7, 26, 14, 5); c.fill(); outline(c, 2.5); stitches(c, -9, 0, 9, 0, 3); c.restore(); }
+    // integrity gauge on the inner lip
+    var integ = 1 - seg.perf, ga = a0 + 0.02, gb = a1 - 0.02, quiet = !Wl.live && seg.perf <= 0;
+    c.globalAlpha = quiet ? 0.45 : 1; c.lineCap = 'round';
+    c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 6; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx - 9, Wl.ry - 9, 0, ga, gb); c.stroke();
+    if (integ > 0.02) { c.strokeStyle = integ > 0.6 ? '#7dffb0' : integ > 0.3 ? '#ffd166' : (Math.floor(t * 8) % 2 ? '#fff' : '#ff6b8a'); c.lineWidth = 3.5; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx - 9, Wl.ry - 9, 0, ga, ga + (gb - ga) * integ); c.stroke(); }
+    c.globalAlpha = 1; c.lineCap = 'butt';
+  }
+  // which wall is which
+  var labs = [['DOME', Wl.cx, Wl.cy - Wl.ry + 26, PERF_KINDS.DOME.color], ['LATERAL', Wl.cx - Wl.rx + 50, Wl.cy - 30, PERF_KINDS.LATERAL.color], ['POSTERIOR', Wl.cx, Wl.cy + Wl.ry - 24, PERF_KINDS.POSTERIOR.color]];
+  c.globalAlpha = Wl.live ? 0.8 : 0.4; for (i = 0; i < labs.length; i++) text(c, labs[i][0], labs[i][1], labs[i][2], 9, labs[i][3], 'center', 900); c.globalAlpha = 1;
+}
+function drawPerfHole(c, e) {
+  var seg = e.seg, K = seg ? (PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL) : PERF_KINDS.LATERAL, t = G.realTime, k = seg ? clamp(seg.plugT / PERF.WINDOW, 0, 1) : 0.6, i;
+  c.fillStyle = '#05080b'; blobPath(c, 17, (e.ph || 0) * 0.2, 7, 0.16); c.fill(); c.strokeStyle = '#f2b8a8'; c.lineWidth = 3; c.stroke(); c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.stroke();
+  c.strokeStyle = 'rgba(255,230,150,0.75)'; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); for (i = 0; i < 4; i++) { var a = i * 1.6 + t * 2, d0 = 20 + ((t * 40 + i * 9) % 14); c.moveTo(Math.cos(a) * d0, Math.sin(a) * d0); c.lineTo(Math.cos(a) * (d0 - 8), Math.sin(a) * (d0 - 8)); } c.stroke();
+  c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 6; c.beginPath(); c.arc(0, 0, 27, 0, TAU); c.stroke();
+  c.strokeStyle = k > 0.35 ? K.color : (Math.floor(t * 8) % 2 ? '#fff' : '#ff4d6d'); c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 27, -Math.PI / 2, -Math.PI / 2 + TAU * k); c.stroke();
+  if (seg && seg.plug > 0) { c.strokeStyle = '#5df07a'; c.lineWidth = 5; c.beginPath(); c.arc(0, 0, 33, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(seg.plug, 0, 1)); c.stroke(); }
+  if (seg) text(c, 'PLUG ' + Math.max(0, seg.plugT).toFixed(1), 0, 42, 10, '#fff', 'center', 900);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §14d THE INVADER — muscle-invasive bladder tumour, boss of the Oncology dungeon (?boss=mibc).
+   A round bladder arena (§14c wall). Health is three wall layers plus what lies beyond them: urothelium (Ta) and
+   lamina propria (T1) are Phase 1, muscle (T2) is Phase 2, the perivesical mass (T3/T4) is Phase 3. 2200 HP in layers of
+   500 / 500 / 700 / 500 (MIBC.T holds the thresholds); the muscle layer goes at double rate through the fronts.
+   Phase 1: frond fans, lobbed seeds that plant CIS carpets (each living carpet = −15% damage to the body, max 3),
+            papillary frond turrets. Water, coag, BCG and mitomycin are the answers.
+   Phase 2: it burrows (body untouchable) and pushes invasive fronts into the wall. Damage to a front counts double
+            against the muscle layer, but every CUT or ENERGY hit thins that wall segment (lasers and water do not), and
+            electrocautery on a LATERAL segment can set off the obturator jerk. A segment that fills perforates (§14c).
+   Phase 3: through the wall. Fat adds, faster attacks; the mass grinds down to an exposed core that only a charged
+            radical cystectomy removes: hold fire on it until the ring is full, then release.
+   Every attack is telegraphed for at least 0.5 s. ~90–120 s.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var MIBC = { T: [1700, 1200, 500], LAYER_NAMES: ['UROTHELIUM · Ta', 'LAMINA PROPRIA · T1', 'MUSCLE · T2', 'PERIVESICAL · T3'], ROOT_MULT: 2, FIELD: 0.15, JERK_CHANCE: 0.5, JERK_PERF: 0.12, CYST_TIME: 1.5, CYST_RANGE: 165, NEOADJ_HP: 0.2, NEOADJ_COST: 0.15, ARENA: { cx: 480, cy: 278, rx: 330, ry: 190 } };
+var ELECTRO = { bovie: 1, roller: 1, button: 1, loop: 1 };   // electrosurgery sets off the obturator nerve; lasers (holmium, thulium, GreenLight, CO₂) do not
+function spawnMibc() {
+  var A = MIBC.ARENA;
+  makeWall({ cx: A.cx, cy: A.cy, rx: A.rx, ry: A.ry, n: 12, live: false, onPerforate: mibcPerforated });
+  P.x = A.cx - A.rx + 64; P.y = A.cy;
+  var body = spawnEnemy('mibc', A.cx + A.rx - 50, A.cy, { instant: true, force: true, free: true });
+  body.noClear = false; body.shield = 0; body.shieldMax = 0;
+  if (G.neoadj) { body.hp = Math.round(body.maxHp * (1 - MIBC.NEOADJ_HP)); var loss = Math.round(P.maxHp * MIBC.NEOADJ_COST); P.maxHp -= loss; P.hp = Math.min(P.hp, P.maxHp); G.neoadjLoss = loss; }
+  var B = G.boss = { kind: 'mibc', body: body, arms: [], roots: [], base: [], phase: 1, layer: 0, t: 0, fanT: 2.6, lobT: 4.2, frondT: 2, lashT: 3.5, volleyT: 2.4, pulseT: 6, fatT: 2, burstT: 4, rootT: 3.5, enrageT: 0, jerkCd: 0, jerks: 0, core: false, cyst: 0, cystFull: false, charging: false, lash: null, queue: [], dead: false, sepsis: false,
+    name: 'THE INVADER', sub: 'BOSS · muscle-invasive bladder tumour', phases: ['Ta / T1 · PAPILLARY', 'T2 · MUSCLE-INVASIVE', 'T3 / T4 · THROUGH THE WALL'], hint: '' };
+  B.base = [wallSegAt(body.x, body.y - 30), wallSegAt(body.x, body.y + 30)];
+  if (G.neoadj) addText(P.x + 40, P.y - 50, 'NEOADJUVANT CISPLATIN: IT STARTS 20% DOWN', { color: '#d98cff', size: 13 });
+  G.introT = 2.6; Snd.sfx('roar'); shakeIt(14); G.punch = 0.3;
+}
+function mibcPerforated(seg, K) {
+  var B = G.boss; if (!B || B.kind !== 'mibc') return;
+  for (var i = 0; i < B.roots.length; i++) { var R = B.roots[i]; if (R.seg === seg && !R.e.dead) { R.done = true; R.e.silent = true; R.e.hp = 0; killEnemy(R.e, 'NEUTRAL', null); } }   // the front on that segment falls through the hole
+  if (K.enrage) { B.enrageT = K.enrage; addText(B.body.x - 70, B.body.y - 84, 'ENRAGED', { color: '#ff4d6d', size: 18 }); Snd.sfx('roar'); }
+}
+function mibcOrigin(B) { return { x: B.body.x - 46, y: B.body.y }; }   // its mouth, on the lumen side
+function mibcCore(B) { return { x: B.body.x - 34, y: B.body.y }; }
+function mibcFan(B, n, spread) {
+  var body = B.body, o = mibcOrigin(B), a = ang(o.x, o.y, P.x, P.y);
+  G.teles.push({ kind: 'line', x: o.x, y: o.y, a: a, len: 380, t: 0.55, dur: 0.55, thick: 30 });
+  bossQueue(0.55, function () { if (body.dead) return; fanBurst(o.x, o.y, ang(o.x, o.y, P.x, P.y), n, spread, 205, 9, { color: '#ff8fa3', r: 7, shape: 'frond' }); body.sx = 1.12; body.sy = 0.9; Snd.sfx('shot'); });
+}
+function mibcLob(B, n) {
+  var o = mibcOrigin(B);
+  for (var i = 0; i < n; i++) {
+    var tg = clampArena(P.x + rr(-70, 70), P.y + rr(-60, 60), 30);
+    G.teles.push({ kind: 'circle', x: tg.x, y: tg.y, r: 34, t: 0.8, dur: 0.8 });
+    spawnBullet({ kind: 'lob', hostile: true, x: o.x, y: o.y, sx: o.x, sy: o.y, tx: tg.x, ty: tg.y, t: 0, dur: 0.8, r: 9, color: '#ff6b8a', life: 5, onLand: mibcSeedLands });
+  }
+  Snd.sfx('lob');
+}
+function mibcSeedLands(b) {
+  aoeOnPlayer(b.x, b.y, 30, 8, 'seed'); burst(b.x, b.y, 8, { color: '#ff6b8a', speed: 110, life: 0.35, size: 3, kind: 'goo', g: 300 }); Snd.sfx('pop');
+  var B = G.boss; if (!B || B.dead || B.kind !== 'mibc') return;
+  if (countId('cis') < 3) { var cs = spawnEnemy('cis', b.x, b.y, { instant: true }); if (cs) { cs.r = 22; cs.maxR = 60; cs.noClear = true; } }
+  else if (countId('tumorseed') < 4) spawnEnemy('tumorseed', b.x, b.y, { instant: true });
+}
+function mibcFrond(B) {
+  var A = MIBC.ARENA, x = 0, y = 0;
+  for (var k = 0; k < 12; k++) { var a = rr(1.0, 5.3); x = A.cx + Math.cos(a) * A.rx * 0.72; y = A.cy + Math.sin(a) * A.ry * 0.72; if (dist(x, y, P.x, P.y) > 110) break; }
+  var e = spawnEnemy('papillary', x, y, {}); if (e) e.noClear = true;
+}
+function mibcRootSegs(B, n) {   // spread around the ring: a LATERAL, a DOME, a POSTERIOR, then whatever is free; never the tumour's own base, an occupied segment or a hole
+  var Wl = G.wall, used = {}, out = [], i;
+  for (i = 0; i < B.base.length; i++) if (B.base[i]) used[B.base[i].i] = 1;
+  for (i = 0; i < B.roots.length; i++) if (!B.roots[i].e.dead) used[B.roots[i].seg.i] = 1;
+  function take(tag) { var c = Wl.segs.filter(function (s2) { return !used[s2.i] && !s2.open && !s2.broken && (!tag || s2.tag === tag); }); if (!c.length) return; var s3 = c[ri(c.length)]; used[s3.i] = 1; out.push(s3); }
+  var order = ['LATERAL', 'DOME', 'POSTERIOR', null, null, null];
+  for (i = 0; i < order.length && out.length < n; i++) take(order[i]);
+  return out;
+}
+function mibcAddRoot(B, seg) {
+  var p = wallPoint(seg, 10), e = spawnEnemy('mibcroot', p.x, p.y, { instant: true, force: true, free: true }); if (!e) return null;
+  e.seg = seg; e.onDamaged = mibcRootHit; e.sx = 1.5; e.sy = 0.6;
+  var rec = { e: e, seg: seg, flash: 0, done: false }; B.roots.push(rec);
+  burst(p.x, p.y, 12, { color: '#c2415c', speed: 160, life: 0.4, size: 3, kind: 'goo', g: 300 });
+  return rec;
+}
+// a hit on an invasive front: double against the muscle layer; CUT / ENERGY also thin the wall it sits in
+function mibcRootHit(e, dmg, cls, o) {
+  var B = G.boss; if (!B || B.kind !== 'mibc' || B.phase !== 2 || B.body.dead) return;
+  var body = B.body; body.hp = Math.max(MIBC.T[2], body.hp - dmg * MIBC.ROOT_MULT); body.flash = 0.08;
+  if (!e.x2T || G.time - e.x2T > 0.9) { e.x2T = G.time; addText(e.x, e.y - e.r - 30, '×2 MUSCLE', { color: '#ff8fa3', size: 11 }); }
+  if (cls !== 'CUT' && cls !== 'ENERGY') return;
+  var seg = e.seg; wallHit(seg, dmg, cls);
+  if (cls === 'ENERGY' && seg.tag === 'LATERAL' && o && ELECTRO[o.wid] && !hasBoon('obturatorblock') && B.jerkCd <= 0 && rnd() < MIBC.JERK_CHANCE) obturatorJerk(seg);
+}
+function obturatorJerk(seg) {
+  var B = G.boss; if (B) { B.jerkCd = 0.9; B.jerks = (B.jerks || 0) + 1; }
+  var wp = wallPoint(seg, 0), a = ang(P.x, P.y, wp.x, wp.y) + rr(-0.7, 0.7);
+  P.jerk = { off: (rnd() < 0.5 ? -1 : 1) * rr(0.8, 1.3), t: 0.5, dur: 0.5 };
+  P.x += Math.cos(a) * 30; P.y += Math.sin(a) * 30; resolveCircle(P, P.r);
+  wallHit(seg, MIBC.JERK_PERF * PERF.FILL, 'jerk');
+  addText(P.x, P.y - 46, 'OBTURATOR JERK!', { color: '#ffb630', size: 15, sub: 'cautery on the side wall', subColor: '#ffd166' }); shakeIt(3); Snd.sfx('shock');
+}
+function mibcLash(B, x, y, len) {
+  var a = ang(x, y, P.x, P.y);
+  G.teles.push({ kind: 'line', x: x, y: y, a: a, len: len, t: 0.65, dur: 0.65, thick: 26 });
+  bossQueue(0.65, function () { if (B.dead || B.body.dead) return; B.lash = { x: x, y: y, a: a, len: len, t: 0.22, hit: false }; G.fxLines.push({ x0: x, y0: y, x1: x + Math.cos(a) * len, y1: y + Math.sin(a) * len, t: 0.22, dur: 0.22, color: '#c2415c', w: 24 }); Snd.sfx('swing'); });
+}
+function mibcFat(B) { if (countId('fatglob') >= 4) return; var body = B.body, p = clampArena(body.x - rr(70, 140), body.y + rr(-120, 120), 20); spawnEnemy('fatglob', p.x, p.y, {}); }
+function mibcPhase2(B) {
+  B.phase = 2; var body = B.body, Wl = G.wall; body.inv = true; body.invText = 'BURROWED: RESECT THE FRONTS'; body.dmgMul = 1; Wl.live = true;
+  setBanner('PHASE 2', 'T2: it is in the muscle. Resect the fronts and watch the wall', 2.6); Snd.sfx('roar'); shakeIt(10); G.punch = 0.2;
+  burst(body.x - 30, body.y, 30, { color: '#8f2a40', speed: 220, life: 0.6, size: 4, kind: 'goo', g: 250 });
+  var picks = mibcRootSegs(B, 4); for (var i = 0; i < picks.length; i++) mibcAddRoot(B, picks[i]);
+  B.volleyT = 2.4; B.lashT = 3.8; B.pulseT = 6.5; B.rootT = 3.5;
+}
+function mibcPhase3(B) {
+  B.phase = 3; var body = B.body, Wl = G.wall, i; body.inv = false; body.minHp = 1; body.dmgMul = 1; body.atk = null; Wl.live = false; G.teles = G.teles.filter(function (t0) { return t0.e !== body; });
+  for (i = 0; i < B.roots.length; i++) { var R = B.roots[i]; R.done = true; if (!R.e.dead) { R.e.silent = true; R.e.hp = 0; killEnemy(R.e, 'NEUTRAL', null); } }
+  for (i = 0; i < B.base.length; i++) if (B.base[i] && !B.base[i].open) B.base[i].broken = true;
+  setBanner('PHASE 3', 'T3 / T4: through the wall, into the fat', 2.6); Snd.sfx('roar'); Snd.sfx('shatter'); shakeIt(14); G.punch = 0.3; hitstop(0.1);
+  burst(body.x, body.y, 40, { color: '#ffd24a', speed: 300, life: 0.8, size: 5, kind: 'goo', g: 300 }); burst(body.x, body.y, 30, { color: '#c2415c', speed: 260, life: 0.7, size: 4 });
+  mibcFat(B); mibcFat(B);
+  B.fanT = 1.8; B.burstT = 3.6; B.lashT = 2.8; B.fatT = 6.5;
+}
+function mibcCystectomy(B, dt) {
+  var cp = mibcCore(B), fire = fireHeld(), held = fire && P.roll <= 0 && !(P.stag > 0) && !G.over;
+  var on = held && dist(P.x, P.y, cp.x, cp.y) <= MIBC.CYST_RANGE && (Input.mode !== 'kb' || Math.abs(angDiff(P.aim, ang(P.x, P.y, cp.x, cp.y))) < 0.9);   // touch / pad auto-aim may be on an add: being in range is enough
+  if (on) { B.cyst = Math.min(1, B.cyst + dt / MIBC.CYST_TIME); B.charging = true; if (B.cyst >= 1 && !B.cystFull) { B.cystFull = true; Snd.sfx('crit'); addText(cp.x, cp.y - 70, 'RELEASE!', { color: '#fff', size: 20 }); } return; }
+  if (B.charging && !fire) {   // let go: with a full ring that is the cut
+    B.charging = false;
+    if (B.cyst >= 1) { mibcResect(B); return; }
+    if (B.cyst > 0.15) addText(cp.x, cp.y - 60, 'INCOMPLETE', { color: '#ffd166', size: 13, sub: 'hold until the ring is full', subColor: '#ffd166' });
+    B.cyst = 0; B.cystFull = false; return;
+  }
+  B.cyst = Math.max(0, B.cyst - dt * 0.8); if (B.cyst < 1) B.cystFull = false; if (!fire) B.charging = false;
+}
+function mibcResect(B) {
+  var body = B.body, cur = curWeapon(), cp = mibcCore(B);
+  addText(cp.x, cp.y - 90, 'RADICAL CYSTECTOMY', { color: '#fff', size: 24, sub: 'en bloc', subColor: '#ffd166' });
+  G.fxLines.push({ x0: cp.x - 90, y0: cp.y - 90, x1: cp.x + 70, y1: cp.y + 90, t: 0.35, dur: 0.35, color: '#fff', w: 16 });
+  body.minHp = 0; body.hp = 0; killEnemy(body, 'CUT', cur ? cur.id : null);
+}
+function updateMibc(dt) {
+  var B = G.boss, body = B.body, T = MIBC.T, i;
+  B.t += dt; body.look = ang(body.x, body.y, P.x, P.y); runQueue(B, dt);
+  if (B.lash) { var s = B.lash; s.t -= dt; var cx = Math.cos(s.a), sy = Math.sin(s.a), tt = clamp((P.x - s.x) * cx + (P.y - s.y) * sy, 0, s.len); if (dist(P.x, P.y, s.x + cx * tt, s.y + sy * tt) < 15 + P.r && !s.hit && P.inv <= 0) { s.hit = true; hurtPlayer(14, 'lash', s.a); } if (s.t <= 0) B.lash = null; }
+  if (G.introT > 0) return;
+  B.enrageT = Math.max(0, B.enrageT - dt); B.jerkCd = Math.max(0, B.jerkCd - dt);
+  var step = dt * (B.enrageT > 0 ? 1.6 : 1) * (B.phase === 3 ? 1.4 : 1), hp = body.hp;
+  var layer = hp > T[0] ? 0 : hp > T[1] ? 1 : hp > T[2] ? 2 : 3;
+  if (layer !== B.layer) { if (layer === 1 && B.phase === 1) { addText(body.x - 70, body.y - 90, 'T1: INTO THE LAMINA PROPRIA', { color: '#ff8fa3', size: 14 }); Snd.sfx('shatter'); B.frondT = Math.min(B.frondT, 1); B.lobT = Math.min(B.lobT, 1.5); } B.layer = layer; }
+  if (B.phase === 1 && hp <= T[1]) mibcPhase2(B); else if (B.phase === 2 && hp <= T[2]) mibcPhase3(B);
+  if (B.phase === 1) {
+    var nCis = Math.min(3, countId('cis')); body.dmgMul = 1 - MIBC.FIELD * nCis;
+    B.hint = nCis ? 'CIS FIELD ×' + nCis + ': it takes ' + Math.round(MIBC.FIELD * nCis * 100) + '% less|flush the carpets (water, BCG)' : 'resect it: loop, scalpel, cautery';
+    B.fanT -= step; B.lobT -= step; B.frondT -= step;
+    if (B.fanT <= 0) { B.fanT = rr(2.6, 3.2); mibcFan(B, 7, 1.0); }
+    if (B.lobT <= 0) { B.lobT = rr(4.6, 5.6); mibcLob(B, 2); }
+    if (B.frondT <= 0) { B.frondT = hasBoon('mitomycin') ? 13 : 8; if (countId('papillary') < (B.layer >= 1 ? 3 : 2)) mibcFrond(B); }
+  }
+  else if (B.phase === 2) {
+    B.hint = 'BURROWED: resect the fronts (×2)|cut and cautery thin the wall; lasers do not';
+    var live = [];
+    for (i = 0; i < B.roots.length; i++) { var R = B.roots[i]; R.flash = Math.max(0, R.flash - dt); if (R.e.dead) { if (!R.done) { R.done = true; addText(R.e.x, R.e.y - 30, 'FRONT RESECTED', { color: '#ff8fa3', size: 13 }); } } else live.push(R); }
+    if (live.length < 3) { B.rootT -= dt; if (B.rootT <= 0) { B.rootT = 3.5; var ns = mibcRootSegs(B, 1); if (ns.length) { var nr = mibcAddRoot(B, ns[0]); if (nr) addText(nr.e.x, nr.e.y - 34, 'IT INVADES AGAIN', { color: '#ff8fa3', size: 12 }); } else if (!live.length && body.inv) { body.inv = false; addText(body.x - 60, body.y - 90, 'NO WALL LEFT TO HIDE IN', { color: '#ff8fa3', size: 14 }); } } } else B.rootT = 3.5;
+    if (!body.inv) B.hint = 'NO WALL LEFT: it is out in the open|hit the mass itself';
+    B.volleyT -= step; B.lashT -= step; B.pulseT -= step;
+    if (B.volleyT <= 0 && live.length) {
+      B.volleyT = rr(2.3, 2.9); var rv = live[ri(live.length)]; rv.flash = 0.5; G.teles.push({ kind: 'flash', x: rv.e.x, y: rv.e.y, t: 0.5, dur: 0.5, r: 30 });
+      (function (r2) { bossQueue(0.5, function () { if (r2.e.dead) return; var ia = ang(r2.e.x, r2.e.y, MIBC.ARENA.cx, MIBC.ARENA.cy), ox = r2.e.x + Math.cos(ia) * 22, oy = r2.e.y + Math.sin(ia) * 22; fanBurst(ox, oy, ang(ox, oy, P.x, P.y), 3, 0.5, 215, 9, { color: '#ff8fa3', r: 7, shape: 'frond' }); r2.e.sx = 1.2; r2.e.sy = 0.85; Snd.sfx('shot'); }); })(rv);
+    }
+    if (B.lashT <= 0 && live.length) { B.lashT = rr(5, 6.2); var rl = live[ri(live.length)]; mibcLash(B, rl.e.x, rl.e.y, 320); }
+    if (B.pulseT <= 0 && !body.atk) { B.pulseT = rr(7, 8.5); telegraph(body, 0.7, 'circle', { r: 110, r2: 160 }, function (e2) { groundSlam(e2, 110, 14, { tremor: 50, color: '#c2415c' }); }); }
+  }
+  else {
+    B.fanT -= step; B.burstT -= step; B.lashT -= step; B.fatT -= step;
+    if (B.fanT <= 0) { B.fanT = rr(2.4, 3); mibcFan(B, 5, 0.8); }
+    if (B.burstT <= 0) {
+      B.burstT = rr(5.2, 6.2); var o = mibcOrigin(B); G.teles.push({ kind: 'flash', x: o.x, y: o.y, t: 0.6, dur: 0.6, r: 80 });
+      bossQueue(0.6, function () { if (body.dead) return; var gap = ang(o.x, o.y, P.x, P.y) + rr(-0.4, 0.4); for (var q = 0; q < 16; q++) { var ra = q / 16 * TAU; if (Math.cos(ra) > 0.5 || Math.abs(angDiff(ra, gap)) < 0.45) continue; enemyShot(o.x, o.y, ra, 185, 8, { color: '#ffd166', r: 8 }); } Snd.sfx('shock'); });
+    }
+    if (B.lashT <= 0) { B.lashT = rr(4, 5); mibcLash(B, body.x - 30, body.y, 380); }
+    if (B.fatT <= 0) { B.fatT = 6.5; mibcFat(B); }
+    if (!B.core && body.hp <= 1) { B.core = true; setBanner('CORE EXPOSED', 'hold FIRE on it to charge the radical cystectomy, then release', 3.2); Snd.sfx('shatter'); hitstop(0.08); shakeIt(8); }
+    if (B.core) mibcCystectomy(B, dt);
+    if (B.dead) return;
+    B.hint = B.core ? (B.cyst >= 1 ? 'RELEASE!' : 'RADICAL CYSTECTOMY|hold FIRE on the core, then release') : 'THROUGH THE WALL|break the mass down to its core';
+  }
+}
+/* ── art: abstract and grotesque, never anatomical — a lobulated mass of nodules, lopsided eyes and a jag of a maw,
+   growing out of the wall to its right ── */
+function drawMibcBody(c, e) {
+  var B = G.boss && G.boss.kind === 'mibc' ? G.boss : null, phase = B ? B.phase : 1, r = e.r, t = G.realTime, i, a0, enr = !!(B && B.enrageT > 0);
+  var base = phase === 3 ? '#a8324c' : '#c2415c', dark = '#8f2a40', N = 9, lob = [];
+  c.save();
+  if (phase === 2) { c.translate(r * 0.42, 0); c.scale(0.86, 0.86); }   // sunk into the wall
+  else if (phase === 3) c.scale(1.08, 1.08);
+  if (phase === 3) for (i = 0; i < 5; i++) { a0 = -1.1 + i * 0.55; c.beginPath(); c.arc(Math.cos(a0) * r * 0.98, Math.sin(a0) * r * 0.98, r * 0.24, 0, TAU); c.fillStyle = i % 2 ? '#ffd24a' : '#ffe27a'; c.fill(); outline(c, 3); }
+  for (i = 0; i < N; i++) { a0 = i / N * TAU + 0.2; lob.push([Math.cos(a0) * r * 0.72, Math.sin(a0) * r * 0.72, r * (0.3 + 0.08 * hsh(29, i)) * (1 + 0.04 * Math.sin(t * 2 + i))]); }
+  for (i = 0; i < N; i++) { c.beginPath(); c.arc(lob[i][0], lob[i][1], lob[i][2], 0, TAU); rim(c, e, 4); }
+  blobPath(c, r * 0.82, t * 0.5, 6, 0.05); rim(c, e, 5);
+  for (i = 0; i < N; i++) { c.beginPath(); c.arc(lob[i][0], lob[i][1], lob[i][2], 0, TAU); c.fillStyle = i % 2 ? base : dark; c.fill(); outline(c, 4); }
+  blobPath(c, r * 0.82, t * 0.5, 6, 0.05); c.fillStyle = base; c.fill(); outline(c, 5);
+  if (phase === 1) for (i = 0; i < 6; i++) {   // papillary fronds frilling the lumen side
+    a0 = Math.PI + (i - 2.5) * 0.36; var sw = Math.sin(t * 3 + i) * 3, tx = Math.cos(a0) * r * 1.24 + sw, ty = Math.sin(a0) * r * 1.24;
+    c.beginPath(); c.moveTo(Math.cos(a0) * r * 0.72, Math.sin(a0) * r * 0.72); c.quadraticCurveTo(Math.cos(a0) * r + sw, Math.sin(a0) * r, tx, ty); tube(c, null, 5, '#ff7c98', 2.4);
+    c.beginPath(); c.arc(tx, ty, 5.5, 0, TAU); c.fillStyle = '#ff9db2'; c.fill(); outline(c, 2.4);
+  }
+  if (phase === 2) { c.strokeStyle = 'rgba(70,14,30,0.75)'; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); for (i = 0; i < 5; i++) { var yy = -r * 0.7 + i * r * 0.35; c.moveTo(r * 0.2, yy); c.quadraticCurveTo(r * 0.6, yy + 6, r * 0.95, yy - 4); } c.stroke(); }
+  veins(c, r * 0.8, 9, 31, 'rgba(90,10,40,0.6)'); pustules(c, r * 0.8, 6, 37, 'rgba(255,190,200,0.7)', 5);
+  var EY = [[-0.42, -0.42, 0.2], [-0.05, -0.52, 0.11], [0.3, -0.3, 0.15], [-0.62, -0.05, 0.1], [0.1, -0.12, 0.08], [0.44, 0.12, 0.09]];
+  for (i = 0; i < EY.length; i++) cyclops(c, EY[i][0] * r, EY[i][1] * r, EY[i][2] * r, e.look, i === 0 ? e.blink : (Math.sin(t * 1.1 + i * 2.3) > 0.94 ? 0.1 : 1), { veins: true, iris: enr ? '#c0102a' : '#1a1218' });
+  c.fillStyle = '#2a0f18'; c.beginPath(); c.moveTo(-r * 0.62, r * 0.28); for (var m = 0; m <= 6; m++) c.lineTo(-r * 0.62 + m / 6 * r * 0.9, r * 0.28 + (m % 2 ? r * 0.07 : -r * 0.03)); c.lineTo(r * 0.24, r * 0.58); for (var n = 6; n >= 0; n--) c.lineTo(-r * 0.62 + n / 6 * r * 0.9, r * 0.58 + (n % 2 ? -r * 0.05 : r * 0.02)); c.closePath(); c.fill(); outline(c, 3.5);
+  teeth(c, -r * 0.17, r * 0.28, r * 0.4, 6, true); drool(c, -r * 0.2, r * 0.6, 3, 'rgba(255,170,190,0.7)', 5);
+  if (phase === 3) {   // the core: dim while the mass still covers it, blazing once it is exposed
+    var pulse = 0.6 + 0.4 * Math.sin(t * 9), open = !!(B && B.core);
+    c.fillStyle = 'rgba(255,255,255,' + (open ? 0.3 + 0.3 * pulse : 0.12) + ')'; c.beginPath(); c.arc(-r * 0.45, 0, r * (open ? 0.42 : 0.3), 0, TAU); c.fill();
+    c.beginPath(); c.arc(-r * 0.45, 0, r * 0.2 * (0.9 + 0.1 * pulse), 0, TAU); c.fillStyle = open ? '#fff3b0' : '#ffb3c6'; c.fill(); outline(c, 3);
+  }
+  if (enr) { c.fillStyle = 'rgba(255,40,60,' + (0.16 + 0.14 * Math.sin(t * 9)) + ')'; c.beginPath(); c.arc(0, 0, r * 1.05, 0, TAU); c.fill(); }
+  c.restore();
+  if (e.inv) { c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.arc(r * 0.3, 0, r * 0.95, 0, TAU); c.stroke(); c.setLineDash([]); }
+  if (B && B.core) {   // the cystectomy ring
+    var k = B.cyst; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 9; c.beginPath(); c.arc(-34, 0, 46, 0, TAU); c.stroke();
+    c.strokeStyle = k >= 1 ? (Math.floor(t * 10) % 2 ? '#fff' : '#ffd166') : '#ff4d6d'; c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.arc(-34, 0, 46, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.002, k)); c.stroke();
+  }
+}
+function drawMibcRoot(c, e) {
+  var r = e.r, Wl = G.wall, into = Wl ? Math.atan2(Wl.cy - e.y, Wl.cx - e.x) : Math.PI / 2, t = G.realTime, i;
+  var L = [[-0.15, -0.42, 0.6, '#a8324c', 3.4], [-0.15, 0.42, 0.6, '#a8324c', 3.4], [0.2, 0, 0.78, '#c2415c', 4]];
+  c.save(); c.rotate(into);   // +x now points into the room; the tendrils run back into the wall
+  for (i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(-r * 0.3, i * r * 0.45); c.quadraticCurveTo(-r * 0.9, i * r * 0.7 + Math.sin(t * 2 + i) * 3, -r * 1.45, i * r * 0.95); tube(c, null, 6, '#8f2a40', 2.4); }
+  for (i = 0; i < 3; i++) { c.beginPath(); c.arc(L[i][0] * r, L[i][1] * r, L[i][2] * r, 0, TAU); rim(c, e, L[i][4]); }
+  for (i = 0; i < 3; i++) { c.beginPath(); c.arc(L[i][0] * r, L[i][1] * r, L[i][2] * r, 0, TAU); c.fillStyle = L[i][3]; c.fill(); outline(c, L[i][4]); }
+  c.restore();
+  var fx = Math.cos(into) * r * 0.25, fy = Math.sin(into) * r * 0.25;
+  cyclops(c, fx, fy - 3, r * 0.36, e.look, e.blink, { veins: true }); mouth(c, fx, fy + r * 0.48, r * 0.24, 'jag');
+}
+function drawMibcPanel(c, B) {   // top-left corner (a round room leaves it empty): name, stage, the three wall layers top to bottom, the hint, distension
+  var hp = B.body.hp, T = MIBC.T, mx = B.body.maxHp, x = 18, y = 46, bw = 132, i, Wl = G.wall;
+  var rows = [[T[0], mx, '#ff9db2', MIBC.LAYER_NAMES[0]], [T[1], T[0], '#ff6b8a', MIBC.LAYER_NAMES[1]], [T[2], T[1], '#c2334d', MIBC.LAYER_NAMES[2]]];
+  if (B.phase === 3) rows.push([0, T[2], B.core ? '#fff3b0' : '#ffd24a', B.core ? 'CORE · cystectomy' : MIBC.LAYER_NAMES[3]]);
+  text(c, B.name, x, y, 13, '#ff8fa3', 'left', 900); text(c, B.phases[B.phase - 1], x, y + 13, 9, '#ffc2cf', 'left', 800);
+  if (B.enrageT > 0) text(c, 'ENRAGED ' + Math.ceil(B.enrageT) + 's', x + 118, y, 10, Math.floor(G.realTime * 6) % 2 ? '#fff' : '#ff4d6d', 'left', 900);
+  y += 24;
+  for (i = 0; i < rows.length; i++) {
+    var f = i === 3 && B.core ? B.cyst : clamp((hp - rows[i][0]) / (rows[i][1] - rows[i][0]), 0, 1), yy = y + i * 11, cur = i === Math.min(B.layer, rows.length - 1);
+    c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, x - 1, yy - 1, bw + 2, 9, 3); c.fill(); c.fillStyle = rows[i][2]; if (f > 0.01) { roundRect(c, x, yy, Math.max(3, bw * f), 7, 2.5); c.fill(); }
+    text(c, rows[i][3], x + bw + 6, yy + 4, 8, cur ? rows[i][2] : '#6f8496', 'left', 900);
+  }
+  y += rows.length * 11 + 6;
+  var lines = (Wl && Wl.alert ? Wl.alert.text + '|' + Wl.alert.sub : B.hint || '').split('|'), hc = Wl && Wl.alert ? Wl.alert.color : '#ffd166';
+  for (i = 0; i < lines.length && i < 3; i++) { if (lines[i]) text(c, lines[i], x, y + i * 11, i === 0 ? 10 : 9, i === 0 ? hc : '#e8d9a8', 'left', i === 0 ? 900 : 700); }
+  y += Math.min(3, lines.length) * 11 + 4;
+  if (Wl && Wl.distension > 0.03) { var hot = Wl.distension >= PERF.DISTEND_AT; c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, x - 1, y - 1, 82, 9, 3); c.fill(); c.fillStyle = hot ? '#ff8f6b' : '#7ad7ff'; c.fillRect(x, y, 80 * Wl.distension, 7); c.fillStyle = '#fff'; c.fillRect(x + 80 * PERF.DISTEND_AT, y - 2, 1.5, 11); text(c, hot ? 'DISTENDED: perforates +50% faster' : 'DISTENSION', x + 88, y + 4, 8, hot ? '#ff8f6b' : '#7ad7ff', 'left', 900); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §15 RENDERING — dark clinical teal arena, saturated monsters, class-coloured player weapons
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var PAL = { wallOuter: '#070e14', wall: '#172836', wallEdge: '#2a4152', floor: '#0f1d27', tile: 'rgba(255,255,255,0.03)', tileDark: 'rgba(0,0,0,0.14)' };
@@ -4192,7 +4656,7 @@ function paintFloor(c) {
 function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r); c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h); c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r); c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath(); }
 function drawDoors(c) {
   // entrance (always shut behind you)
-  var wd = DOOR_POS.W; c.fillStyle = '#0d1a24'; c.fillRect(wd.x, wd.y, wd.w, wd.h); c.fillStyle = PAL.wallEdge; for (var b = 0; b < 4; b++) c.fillRect(wd.x + 4 + b * 7, wd.y + 6, 3, wd.h - 12);
+  var wd = DOOR_POS.W; if (!G.arena) { c.fillStyle = '#0d1a24'; c.fillRect(wd.x, wd.y, wd.w, wd.h); c.fillStyle = PAL.wallEdge; for (var b = 0; b < 4; b++) c.fillRect(wd.x + 4 + b * 7, wd.y + 6, 3, wd.h - 12); }
   for (var i = 0; i < G.doors.length; i++) {
     var d = G.doors[i], col = d.type === 'rep' && d.weapon ? CLASSES[WEAPONS[d.weapon].cls].color : d.type === 'boon' && d.patron ? PATRONS[d.patron].color : DOOR_TYPES[d.type].color, cx = d.x + d.w / 2, cy = d.y + d.h / 2, vert = d.side === 'E';
     c.fillStyle = '#0d1a24'; c.fillRect(d.x, d.y, d.w, d.h);
@@ -4240,7 +4704,7 @@ function drawObstacle(c, o) {
     if (o.r < 12) { c.fillStyle = '#5a7a90'; c.beginPath(); c.arc(o.x, o.y - hh, o.r * 0.5, 0, TAU); c.fill(); }
   }
 }
-var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'], toxin: ['rgba(120,170,60,0.32)', 'rgba(184,255,90,0.6)'] };
+var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'], flood: ['rgba(255,214,120,0.26)', 'rgba(255,236,170,0.6)'], toxin: ['rgba(120,170,60,0.32)', 'rgba(184,255,90,0.6)'] };
 function drawHazards(c) {
   for (var i = 0; i < G.decals.length; i++) { var d = G.decals[i]; c.globalAlpha = Math.min(1, d.t / 3); c.fillStyle = d.color; c.beginPath(); c.ellipse(d.x, d.y, d.r, d.r * 0.7, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
@@ -4269,7 +4733,7 @@ function drawRewards(c) {
   for (var i = 0; i < G.rewards.length; i++) {
     var r = G.rewards[i]; if (r.used) continue; var bob = Math.sin(G.realTime * 3 + i) * 3, glow = 0.35 + 0.25 * Math.sin(G.realTime * 4 + i);
     c.save(); c.translate(r.x, r.y);
-    var col = r.kind === 'altar' ? (r.patron ? PATRONS[r.patron].color : '#d98cff') : r.kind === 'crate' ? '#ff9f43' : r.kind === 'rep' && r.weapon ? CLASSES[WEAPONS[r.weapon].cls].color : '#ffd166';
+    var col = r.kind === 'neoadj' ? '#d98cff' : r.kind === 'altar' ? (r.patron ? PATRONS[r.patron].color : '#d98cff') : r.kind === 'crate' ? '#ff9f43' : r.kind === 'rep' && r.weapon ? CLASSES[WEAPONS[r.weapon].cls].color : '#ffd166';
     c.fillStyle = hexA(col, glow * 0.5); c.beginPath(); c.ellipse(0, 14, 34, 14, 0, 0, TAU); c.fill();
     c.fillStyle = '#2a3b4c'; roundRect(c, -24, 4, 48, 16, 6); c.fill(); outline(c, 3);
     c.translate(0, bob);
@@ -4286,6 +4750,12 @@ function drawRewards(c) {
       c.fillStyle = '#5a3b22'; roundRect(c, 11, -8, 18, 14, 3); c.fill(); outline(c, 2.5); drawGlyph(c, wd.cls, 20, -1, 4, false);
       c.save(); c.translate(0, -66 + Math.sin(G.realTime * 3 + i) * 2); c.rotate(-0.5); drawTool(c, r.weapon, 26, rc); c.restore();
       text(c, rep.name.split(' ')[0].toUpperCase(), 0, 16, 9, rc, 'center', 900);
+    }
+    else if (r.kind === 'neoadj') {   // an IV pole with a bag of cisplatin
+      c.strokeStyle = OUTLINE; c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 6); c.lineTo(0, -52); c.moveTo(-13, -52); c.lineTo(13, -52); c.stroke(); c.strokeStyle = '#cfd8e3'; c.lineWidth = 3; c.stroke();
+      c.fillStyle = '#f1e9ff'; roundRect(c, 3, -50, 20, 28, 6); c.fill(); outline(c, 2.5); c.fillStyle = '#b06bff'; roundRect(c, 5, -38, 16, 14, 4); c.fill(); c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Pt', 13, -31);
+      c.strokeStyle = '#b06bff'; c.lineWidth = 2; c.beginPath(); c.moveTo(13, -22); c.quadraticCurveTo(16, -8, 6, 0); c.stroke();
+      text(c, 'NEOADJUVANT', 0, 16, 9, col, 'center', 900); text(c, 'CHEMO', 0, 27, 9, col, 'center', 900);
     }
     else { c.fillStyle = '#f0e0b0'; c.beginPath(); c.arc(0, -16, 16, 0, TAU); c.fill(); outline(c, 3); c.fillStyle = '#2fa38a'; c.beginPath(); c.arc(0, -16, 14, Math.PI, 0); c.fill(); c.fillStyle = '#f4c89a'; c.beginPath(); c.arc(0, -10, 8, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = '#1a1218'; c.fillRect(-5, -11, 3, 3); c.fillRect(2, -11, 3, 3); c.fillStyle = '#fff'; c.font = '900 11px ' + FONT; c.textAlign = 'center'; c.strokeStyle = OUTLINE; c.lineWidth = 3; c.strokeText('SHOP', 0, 14); c.fillText('SHOP', 0, 14); }
     c.restore();
@@ -4667,7 +5137,7 @@ function drawHUD(c) {
     if (isCur) { c.strokeStyle = '#fff'; c.lineWidth = 2 + Math.sin(G.realTime * 6); c.beginPath(); c.arc(cx, sy, 11, 0, TAU); c.stroke(); }
     if (r < 9) { c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(cx + 8, sy - 1, 4, 2); }
   }
-  text(c, 'ROOM ' + G.roomIndex + ' / 9' + (G.room && G.room.kind === 'elite' ? ' · ELITE' : ''), W / 2, sy + 20, 10, '#8fa6b8', 'center', 800);
+  text(c, 'ROOM ' + G.roomIndex + ' / 9' + (G.room && G.room.kind === 'elite' ? ' · ELITE' : '') + (G.dungeon && G.dungeon.name ? ' · ' + G.dungeon.name : ''), W / 2, sy + 20, 10, '#8fa6b8', 'center', 800);
   // RVU + timer
   c.fillStyle = '#ffd166'; c.beginPath(); c.arc(W - 118, 22, 7, 0, TAU); c.fill(); outline(c, 2);
   text(c, G.rvu + ' RVU', W - 106, 22, 15, '#ffd166', 'left');
@@ -4697,12 +5167,15 @@ function drawHUD(c) {
   // boss bar
   if (G.boss && !G.boss.dead && G.introT <= 0) {
     var B = G.boss, bw = 420, bx2 = W / 2 - bw / 2, by2 = 72, bf = clamp(B.body.hp / B.body.maxHp, 0, 1);
-    text(c, B.name + ' — ' + B.phases[B.phase - 1], bx2, by2 - 11, 11, B.kind === 'fournier' ? '#ff8fa3' : '#38e8ff', 'left', 900);
-    c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 - 2, by2 - 2, bw + 4, 16, 6); c.fill();
-    c.fillStyle = B.kind === 'fournier' ? (B.phase === 3 ? '#ff4d6d' : B.phase === 2 ? '#5bd47a' : '#b86a78') : (B.phase === 3 ? '#ffb630' : B.phase === 2 ? '#7cf29a' : '#d8c7a4'); roundRect(c, bx2, by2, Math.max(4, bw * bf), 12, 5); c.fill();
-    if (B.body.shield > 0) { c.fillStyle = 'rgba(124,242,154,0.6)'; roundRect(c, bx2, by2 + 13, bw * B.body.shield, 3, 1.5); c.fill(); }
-    c.fillStyle = '#fff'; c.fillRect(bx2 + bw * 0.66 - 1, by2 - 4, 2, 20); c.fillRect(bx2 + bw * 0.33 - 1, by2 - 4, 2, 20);
-    if (B.hint) text(c, B.hint, W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
+    if (B.kind === 'mibc') drawMibcPanel(c, B);   // its own corner panel: three wall layers, top to bottom
+    else {
+      text(c, B.name + ' — ' + B.phases[B.phase - 1], bx2, by2 - 11, 11, B.kind === 'staghorn' ? '#38e8ff' : '#ff8fa3', 'left', 900);
+      c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 - 2, by2 - 2, bw + 4, 16, 6); c.fill();
+      c.fillStyle = B.kind === 'fournier' ? (B.phase === 3 ? '#ff4d6d' : B.phase === 2 ? '#5bd47a' : '#b86a78') : (B.phase === 3 ? '#ffb630' : B.phase === 2 ? '#7cf29a' : '#d8c7a4'); roundRect(c, bx2, by2, Math.max(4, bw * bf), 12, 5); c.fill();
+      if (B.body.shield > 0) { c.fillStyle = 'rgba(124,242,154,0.6)'; roundRect(c, bx2, by2 + 13, bw * B.body.shield, 3, 1.5); c.fill(); }
+      c.fillStyle = '#fff'; c.fillRect(bx2 + bw * 0.66 - 1, by2 - 4, 2, 20); c.fillRect(bx2 + bw * 0.33 - 1, by2 - 4, 2, 20);
+    }
+    if (B.hint && B.kind !== 'mibc') text(c, B.hint, W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
     if (B.sepsis) { var sk = clamp(B.sepsisT / B.sepsisMax, 0, 1); c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 + 80, by2 + 36, bw - 160, 10, 4); c.fill(); c.fillStyle = sk > 0.3 ? '#ff4d6d' : (Math.floor(G.realTime * 6) % 2 ? '#fff' : '#ff4d6d'); roundRect(c, bx2 + 80, by2 + 36, (bw - 160) * sk, 10, 4); c.fill(); text(c, 'SEPSIS — source control in ' + fmtTime(Math.max(0, B.sepsisT)), W / 2, by2 + 56, 12, '#ff6b8a', 'center', 900); }
   }
   // tutorial prompts
@@ -4718,7 +5191,7 @@ function drawHUD(c) {
   // banner
   if (G.banner) { var bn2 = G.banner, k = bn2.t / bn2.dur, a = k < 0.15 ? k / 0.15 : k > 0.8 ? (1 - k) / 0.2 : 1, pop = k < 0.15 ? 1.4 - 0.4 * (k / 0.15) : 1; c.globalAlpha = a; text(c, bn2.text, W / 2, 150, Math.round(44 * pop), '#fff', 'center', 900); if (bn2.sub) text(c, bn2.sub, W / 2, 186, 16, '#ffd166', 'center', 800); c.globalAlpha = 1; }
   // boss intro card
-  if (G.introT > 0 && G.boss) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = G.boss.kind === 'fournier' ? '#ff4d6d' : '#38e8ff'; c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, G.boss.name, W / 2, H / 2 - 12, Math.round((G.boss.name.length > 18 ? 42 : 50) * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, G.boss.sub, W / 2, H / 2 + 34, 16, G.boss.kind === 'fournier' ? '#ff8fa3' : '#38e8ff', 'center', 800); c.globalAlpha = 1; }
+  if (G.introT > 0 && G.boss) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = bossColor(G.boss); c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, G.boss.name, W / 2, H / 2 - 12, Math.round((G.boss.name.length > 18 ? 42 : 50) * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, G.boss.sub, W / 2, H / 2 + 34, 16, G.boss.kind === 'staghorn' ? '#38e8ff' : '#ff8fa3', 'center', 800); c.globalAlpha = 1; }
   // input mode hint (desktop) / fps
   if (DEBUG) { text(c, 'FPS ' + G.fps + ' · E ' + G.enemies.length + ' · B ' + G.bullets.length + ' · P ' + G.parts.length + ' · seed ' + SEED + (G.spawner ? ' · SPAWNER: 1-9,0 → ' + SPAWN_KEYS.join(',') : ' · ` spawner'), 16, H - 10, 10, '#0f0', 'left', 800); }
 }
@@ -4765,7 +5238,7 @@ function render(dtReal) {
   c.save();
   c.translate(G.shakeX, G.shakeY);
   if (G.punch > 0) { var k = 1 + G.punch * 0.08; c.translate(W / 2, H / 2); c.scale(k, k); c.translate(-W / 2, -H / 2); }
-  drawFloor(c); drawHazards(c); drawHeadlamp(c); drawTeles(c); drawObstacles(c); drawRewards(c); drawDoors(c); drawSeedsTurrets(c); drawPickups(c);
+  drawFloor(c); drawHazards(c); drawHeadlamp(c); drawTeles(c); if (G.wall) drawWallUnder(c); drawObstacles(c); drawRewards(c); drawDoors(c); drawSeedsTurrets(c); drawPickups(c);
   if (G.boss) drawBossUnder(c);
   var es = G.enemies, i;
   for (i = 0; i < es.length; i++) if (es[i].def.flat) drawEnemy(c, es[i]);
@@ -5061,8 +5534,9 @@ function renderShop() {
 function openSummary(won, xp, newLevel, isBest) {
   var st = G.stats; openOverlay('summary');
   $('sumTitle').textContent = won ? 'DISCHARGED!' : 'CODE BLUE'; $('sumTitle').style.color = won ? '#5df07a' : '#ff4d6d';
-  $('sumSub').textContent = won ? 'The Staghorn is rubble. Stone-free, no stent, no complications. Go eat something.' : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
+  $('sumSub').textContent = won ? (WIN_TEXT[G.bossId] || WIN_TEXT.staghorn)[1] : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
   var tiles = [['Rooms cleared', st.rooms + ' / 9'], ['Kills', st.kills], ['RVU earned', st.rvu], ['Time', fmtTime(G.time)], ['Super-effective hits', st.superHits], ['Swaps / rolls', st.swaps + ' / ' + st.rolls], ['Damage taken', Math.round(st.dmgTaken)]];
+  if (G.wall) tiles.push(['Perforations / plugged', G.wall.perforations + ' / ' + G.wall.plugs]);
   if (G.pens) tiles.push(['Free swag (does nothing)', G.pens]); if (st.grades) tiles.push(['Gleason grades', st.grades]); if (st.collateral) tiles.push(['Collateral rooms', st.collateral]); if (st.deesc) tiles.push(['De-escalations', st.deesc]);
   var html = ''; for (var i = 0; i < tiles.length; i++) html += '<div><small>' + tiles[i][0] + '</small><b>' + tiles[i][1] + '</b></div>';
   for (var c = 0; c < CLASS_LIST.length; c++) html += '<div style="border-left:4px solid ' + CLASSES[CLASS_LIST[c]].color + '"><small>' + CLASSES[CLASS_LIST[c]].name + ' damage</small><b>' + Math.round(st.dmg[CLASS_LIST[c]] || 0) + '</b></div>';
@@ -5087,7 +5561,7 @@ function update(dt) {
   updatePlayer(dt); updateWeapons(dt); updateUlt(dt);
   var es = G.enemies; for (var i = 0; i < es.length; i++) if (!es[i].dead) updateEnemy(es[i], dt);
   for (var j = es.length - 1; j >= 0; j--) if (es[j].dead) es.splice(j, 1);
-  updateBoss(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateFields(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
+  updateBoss(dt); updateWall(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateFields(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
   G.detailT = Math.max(0, G.detailT - dt);
   clearEdges();
 }
@@ -5167,7 +5641,8 @@ window.UroCrawl = {
   step: function (n) { n = n || 1; if (!G.running) return; for (var i = 0; i < n; i++) { if (G.over) { G.endT -= STEP; if (G.endT <= 0 && G.overlay !== 'summary') { G.timeScale = 1; finishRun(); } continue; } update(STEP); } },
   startRun: function () { if (!G.running) { META.helpSeen = true; beginRun(); } },
   selectWeapon: selectWeapon, dealDamage: dealDamage, hurtPlayer: hurtPlayer, seed: function () { return SEED; },
-  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW },
+  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC },
+  makeWall: makeWall, wallHit: wallHit, wallPerforate: wallPerforate, wallPlug: wallPlug, wallSegAt: wallSegAt, wallPoint: wallPoint, insideArena: insideArena, rollBossId: rollBossId,
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };

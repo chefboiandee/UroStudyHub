@@ -8,6 +8,8 @@
 // upgrade paths: the MODS table, every mod's in-game effect for the five starting weapons, the aspects, Instrument Rep
 // doors + screen + reroll, the shop sample, the HUD pips/detail card and the giveMod / ?mods= / ?aspects= hooks.
 // Block N: look and feel — family rim colours, ground slams + stagger, the scalpel lunge, every enemy drawing.
+// Block O: the Invader (?boss=mibc): round arena, the generic wall + perforation system, obturator jerk, the three stages,
+// the charged cystectomy, neoadjuvant chemo, the Oncology dungeon and the three-boss pool.
 // Block K: the Antibiotic Dropper. Block L: antibiotic stewardship (the two-drug cap, resistance meters, collateral C. diff /
 // Candida, resistant strains, Culture & Sensitivity + De-escalation). Block M: the reps cast, patron altars, Fournier.
 //
@@ -255,7 +257,7 @@ await block('G. abscess', async () => {
 // ───────── H. Fournier's gangrene ─────────
 await block('H. fournier', async () => {
   const sel = await (async () => { const out = {}; for (const q of ['?seed=1&boss=fournier', '?seed=1&boss=staghorn', '?seed=1&boss=1', '?seed=2&boss=1']) { const { p } = await open(q); out[q] = await p.evaluate(() => { UroCrawl.startRun(); return UroCrawl.state.boss && UroCrawl.state.boss.kind; }); await p.close(); } return out; })();
-  check('?boss selects the boss (explicit names; ?boss=1 rolls one)', sel['?seed=1&boss=fournier'] === 'fournier' && sel['?seed=1&boss=staghorn'] === 'staghorn' && /staghorn|fournier/.test(sel['?seed=1&boss=1']), JSON.stringify(sel));
+  check('?boss selects the boss (explicit names; ?boss=1 rolls one)', sel['?seed=1&boss=fournier'] === 'fournier' && sel['?seed=1&boss=staghorn'] === 'staghorn' && /staghorn|fournier|mibc/.test(sel['?seed=1&boss=1']), JSON.stringify(sel));
   const { p, errs } = await open('?seed=8&god=1&boss=fournier&weapons=scalpel,roller,irrigation');
   await p.evaluate(() => UroCrawl.startRun());
   let b = await p.evaluate(() => { UroCrawl.step(10); const B = UroCrawl.state.boss; return { kind: B.kind, lobes: B.lobes.length, inv: B.body.inv, necro: B.body.necro, intro: UroCrawl.state.introT, sugar: B.sugar.length, legs: B.legs.length }; });
@@ -839,6 +841,137 @@ await block('N. look and feel', async () => {
   check('help explains the outline colours; every bestiary thumbnail has a drawing', /Stone/.test(b.lg) && /Microbe/.test(b.lg) && /Benign/.test(b.lg) && b.blank.length === 0 && b.n >= 33, 'blank: ' + b.blank.join(', '));
   await shot(p2, 'n-bestiary');
   errCheck('N', errs.concat(errs2));
+});
+
+// ───────── O. the Invader (muscle-invasive bladder tumour): round arena, wall + perforation, three stages ─────────
+await block('O. invader', async () => {
+  const Q = '&weapons=scalpel,foley,bovie,roller';   // four slots: 0 scalpel · 1 Foley · 2 Bovie · 3 Roller Ball
+  const fresh = async (q) => { const o = await open(q); await o.p.evaluate(() => { UroCrawl.startRun(); UroCrawl.input.mode = 'kb'; UroCrawl.step(170); }); return o; };   // past the 2.6 s intro
+  // the wall and the arena
+  const { p, errs } = await fresh('?seed=9&boss=mibc' + Q);
+  let b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, Wl = G.wall, P = UroCrawl.player(), tags = {}; Wl.segs.forEach(s => { tags[s.tag] = (tags[s.tag] || 0) + 1; });
+    P.x = 40; P.y = 40; UroCrawl.step(1); const in1 = UroCrawl.insideArena(P.x, P.y, P.r - 0.01); P.x = 900; P.y = 500; UroCrawl.step(1); const in2 = UroCrawl.insideArena(P.x, P.y, P.r - 0.01); P.x = 300; P.y = 278;
+    return { kind: B.kind, name: B.name, hp: B.body.hp, max: B.body.maxHp, segs: Wl.segs.length, tags, arena: !!G.arena, in1, in2, live: Wl.live, phases: B.phases.length, dungeon: G.dungeon.name, T: UroCrawl.tuning.MIBC.T }; });
+  check('?boss=mibc: The Invader in a round arena, a 12-segment wall tagged LATERAL / DOME / POSTERIOR, the surgeon kept inside it', b.kind === 'mibc' && b.name === 'THE INVADER' && b.segs === 12 && b.tags.LATERAL === 4 && b.tags.DOME === 4 && b.tags.POSTERIOR === 4 && b.arena && b.in1 && b.in2 && b.dungeon === 'ONCOLOGY', JSON.stringify(b.tags));
+  check('health is three wall layers (urothelium 2200→1700, lamina propria →1200, muscle →500) plus the mass beyond', b.hp === 2200 && b.max === 2200 && b.T.join() === '1700,1200,500' && b.phases === 3);
+  // Phase 1: fronds, CIS field, telegraphs
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, P = UroCrawl.player(); let minTele = 9, kinds = {};
+    for (let i = 0; i < 60 * 14; i++) { UroCrawl.step(1); P.hp = P.maxHp; G.teles.forEach(t => { if (t.kind !== 'spawn') { minTele = Math.min(minTele, t.dur); kinds[t.kind] = 1; } }); }
+    const count = id => G.enemies.filter(e => !e.dead && e.id === id).length, cis = count('cis'), fronds = count('papillary'), mul = B.body.dmgMul, hp0 = B.body.hp, d = UroCrawl.dealDamage(B.body, 100, 'NEUTRAL', {});
+    return { minTele, kinds: Object.keys(kinds).sort().join(), cis, fronds, mul, d, drop: hp0 - B.body.hp, phase: B.phase, layer: B.layer, hint: B.hint }; });
+  check('Phase 1: papillary frond turrets and planted CIS carpets; each living carpet costs 15% of your damage to the body', b.phase === 1 && b.fronds >= 1 && b.cis >= 1 && Math.abs(b.mul - (1 - 0.15 * Math.min(3, b.cis))) < 1e-9 && Math.abs(b.d - 100 * b.mul) < 0.01 && /CIS FIELD/.test(b.hint), JSON.stringify({ cis: b.cis, fronds: b.fronds, mul: b.mul, d: b.d }));
+  check('Phase 1 attacks are telegraphed for at least 0.5 s', b.minTele >= 0.5 && /circle/.test(b.kinds) && /line/.test(b.kinds), 'shortest ' + b.minTele + ' s · ' + b.kinds);
+  // Phase 2: burrow, fronts, ×2, perf from CUT / ENERGY only
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, Wl = G.wall, P = UroCrawl.player(); G.enemies.forEach(e => { if (e.id === 'cis' || e.id === 'papillary') { e.silent = true; e.hp = 0; } });
+    B.body.hp = 1200; UroCrawl.step(3); P.hp = P.maxHp; const roots = B.roots.filter(r => !r.e.dead), tags = roots.map(r => r.seg.tag).sort().join(), distinct = new Set(roots.map(r => r.seg.i)).size, base = B.base.map(s => s.i);
+    const blocked = UroCrawl.dealDamage(B.body, 50, 'CUT', {}), r0 = roots.filter(r => r.seg.tag === 'POSTERIOR')[0], seg = r0.seg;
+    let hp = B.body.hp; const dL = UroCrawl.dealDamage(r0.e, 10, 'LITHO', { wid: 'holmium' }), dropL = hp - B.body.hp, perfL = seg.perf;
+    hp = B.body.hp; const dF = UroCrawl.dealDamage(r0.e, 10, 'FLUID', { wid: 'irrigation' }), dropF = hp - B.body.hp, perfF = seg.perf;
+    hp = B.body.hp; const dC = UroCrawl.dealDamage(r0.e, 10, 'CUT', { wid: 'scalpel' }), dropC = hp - B.body.hp, perfC = seg.perf;
+    return { phase: B.phase, inv: B.body.inv, live: Wl.live, n: roots.length, tags, distinct, onBase: roots.some(r => base.indexOf(r.seg.i) >= 0), blocked, dL, dropL, perfL, dF, dropF, perfF, dC, dropC, perfC, fill: UroCrawl.tuning.PERF.FILL }; });
+  check('Phase 2 at 1200 HP: the body burrows (untouchable) and four invasive fronts sit in distinct wall segments (a LATERAL, a DOME and a POSTERIOR among them), never on its own base', b.phase === 2 && b.inv && b.blocked === 0 && b.live && b.n === 4 && b.distinct === 4 && /DOME/.test(b.tags) && /LATERAL/.test(b.tags) && /POSTERIOR/.test(b.tags) && !b.onBase, b.tags);
+  check('damage to a front counts double against the muscle layer', Math.abs(b.dropL - 2 * b.dL) < 0.01 && Math.abs(b.dropC - 2 * b.dC) < 0.01 && b.dC > b.dL, JSON.stringify({ dL: b.dL, dropL: b.dropL, dC: b.dC, dropC: b.dropC }));
+  check('only CUT and ENERGY thin the wall: a laser hit and a water hit leave the segment intact, a cut adds damage / ' + b.fill, b.perfL === 0 && b.perfF === 0 && Math.abs(b.perfC - b.dC / b.fill) < 1e-9, JSON.stringify({ perfL: b.perfL, perfF: b.perfF, perfC: b.perfC }));
+  // obturator jerk
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, P = UroCrawl.player(), lat = B.roots.filter(r => !r.e.dead && r.seg.tag === 'LATERAL')[0], dome = B.roots.filter(r => !r.e.dead && r.seg.tag === 'DOME')[0];
+    const run = (root, cls, wid, n) => { let j = 0; for (let i = 0; i < n; i++) { root.e.hp = 140; root.seg.perf = 0; B.jerkCd = 0; P.jerk = null; B.body.hp = 1150; const j0 = B.jerks; UroCrawl.dealDamage(root.e, 1, cls, { wid }); if (B.jerks > j0) j++; } root.seg.perf = 0; P.jerk = null; return j; };
+    const px = P.x, py = P.y, aim0 = P.aim; lat.e.hp = 140; lat.seg.perf = 0; let got = null;
+    for (let i = 0; i < 40 && !got; i++) { B.jerkCd = 0; B.body.hp = 1150; const j0 = B.jerks, pf = lat.seg.perf, d = UroCrawl.dealDamage(lat.e, 1, 'ENERGY', { wid: 'bovie' }); if (B.jerks > j0) got = { extra: lat.seg.perf - pf - d / 120, moved: Math.hypot(P.x - px, P.y - py), jerk: !!P.jerk }; else { P.x = px; P.y = py; } }
+    UroCrawl.step(1); const yank = Math.abs(P.aim - Math.atan2(UroCrawl.input.my - P.y, UroCrawl.input.mx - P.x)); P.x = px; P.y = py; P.jerk = null; lat.seg.perf = 0;
+    const bovie = run(lat, 'ENERGY', 'bovie', 40), roller = run(lat, 'ENERGY', 'roller', 40), holmium = run(lat, 'LITHO', 'holmium', 40), green = run(lat, 'ENERGY', 'greenlight', 40), domeB = run(dome, 'ENERGY', 'bovie', 40);
+    const pool = UroCrawl.patronPool('bovie').indexOf('obturatorblock') >= 0; UroCrawl.giveBoon('obturatorblock'); const blockedN = run(lat, 'ENERGY', 'bovie', 40); UroCrawl.dropBoon('obturatorblock'); P.x = px; P.y = py; B.body.hp = 1150;
+    return { got, yank, bovie, roller, holmium, green, domeB, blockedN, pool }; });
+  check('obturator jerk: electrocautery on a LATERAL front yanks the aim, shoves the surgeon and thins that segment further', !!b.got && b.got.jerk && b.got.moved > 20 && Math.abs(b.got.extra - 0.12) < 1e-6 && b.yank > 0.3 && b.bovie > 5 && b.roller > 5, JSON.stringify({ got: b.got, yank: +b.yank.toFixed(2), bovie: b.bovie, roller: b.roller }));
+  check('no jerk from lasers (holmium, GreenLight), none on the dome, none with the Obturator Block boon (a Bovie-patron boon)', b.holmium === 0 && b.green === 0 && b.domeB === 0 && b.blockedN === 0 && b.pool, JSON.stringify({ holmium: b.holmium, green: b.green, dome: b.domeB, block: b.blockedN }));
+  // perforations by kind; the plug
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, Wl = G.wall, P = UroCrawl.player(), K = UroCrawl.tuning.PERF_KINDS, out = {};
+    const seeds = () => G.enemies.filter(e => !e.dead && e.id === 'tumorseed').length, floods = () => G.hazards.filter(h => h.kind === 'flood').length;
+    const lat = B.roots.filter(r => !r.e.dead && r.seg.tag === 'LATERAL')[0], seg = lat.seg; P.hp = P.maxHp = 100; B.enrageT = 0; const s0 = seeds();
+    lat.e.hp = 5000; for (let i = 0; i < 30 && !seg.open; i++) { B.body.hp = 1150; UroCrawl.dealDamage(lat.e, 6, 'CUT', { wid: 'scalpel' }); }
+    out.lat = { open: seg.open, hpLoss: 100 - P.hp, seeds: seeds() - s0, flood: floods(), hole: !!seg.hole, rootGone: lat.e.dead, enrage: B.enrageT, want: K.LATERAL };
+    // flood: slows you and shorts the Bovie
+    const fl = seg.flood; P.x = fl.x; P.y = fl.y; P.stag = 0; UroCrawl.selectWeapon(2); G.swapT = 0; UroCrawl.input.keys.KeyD = true; const x0 = P.x; UroCrawl.step(6); out.slow = (P.x - x0) / (190 / 60 * 6); UroCrawl.input.keys = {}; P.x = fl.x; P.y = fl.y;
+    G.texts.length = 0; UroCrawl.input.mouseFire = true; UroCrawl.step(20); UroCrawl.input.mouseFire = false; out.shorted = G.texts.some(t => /SHORTED/.test(t.text));
+    // coag it (Roller Ball) inside the window
+    const w0 = Wl.plugs; UroCrawl.dealDamage(seg.hole, 1, 'ENERGY', { wid: 'roller', cauterize: true }); UroCrawl.step(2);
+    out.coag = { open: seg.open, sealed: seg.sealed, plugs: Wl.plugs - w0, hole: G.enemies.filter(e => !e.dead && e.id === 'perfhole').length, perf: seg.perf }; UroCrawl.step(100); out.floodAfter = floods();
+    // the dome: severe
+    P.hp = 100; P.x = 300; P.y = 278; G.enemies.forEach(e => { if (e.id === 'tumorseed') { e.silent = true; e.hp = 0; } }); UroCrawl.step(1); const dome = B.roots.filter(r => !r.e.dead && r.seg.tag === 'DOME')[0], dseg = dome.seg, s1 = seeds(); dome.e.hp = 5000; for (let i = 0; i < 30 && !dseg.open; i++) { B.body.hp = 1150; UroCrawl.dealDamage(dome.e, 6, 'CUT', { wid: 'scalpel' }); }
+    out.dome = { open: dseg.open, hpLoss: 100 - P.hp, seeds: seeds() - s1, enrage: B.enrageT, want: K.DOME, alert: Wl.alert && Wl.alert.text };
+    // tamponade: a Foley balloon held over the hole
+    const hp = UroCrawl.wallPoint(dseg, 6); P.x = hp.x; P.y = hp.y + 60; P.hp = 100; UroCrawl.selectWeapon(1); G.swapT = 0; G.bullets.length = 0; UroCrawl.input.mx = hp.x; UroCrawl.input.my = hp.y; UroCrawl.input.mouseFire = true; let n = 0; while (dseg.open && n < 150) { G.enemies.forEach(e => { if (e.id === 'tumorseed' || e.id === 'cis') { e.silent = true; e.hp = 0; } }); UroCrawl.step(1); G.bullets.length = 0; P.hp = 100; P.x = hp.x; P.y = hp.y + 60; n++; } UroCrawl.input.mouseFire = false;
+    out.foley = { open: dseg.open, sealed: dseg.sealed, steps: n, window: UroCrawl.tuning.PERF.WINDOW }; P.x = 300; P.y = 278; UroCrawl.selectWeapon(0); G.swapT = 0;
+    return out; });
+  check('LATERAL perforation (extraperitoneal, minor): hole, flood, 3 tumour seeds, 8 damage, no enrage; the front on it falls through', b.lat.open && b.lat.hpLoss === b.lat.want.dmg && b.lat.want.dmg === 8 && b.lat.seeds === 3 && b.lat.flood === 1 && b.lat.hole && b.lat.rootGone && b.lat.enrage === 0, JSON.stringify(b.lat));
+  check('the flood slows the surgeon to 70% and shorts the Bovie', Math.abs(b.slow - 0.7) < 0.03 && b.shorted, 'speed ×' + b.slow.toFixed(2));
+  check('a cauterizing hit on the hole (Roller Ball) seals it: hole gone, flood drains, the segment is left patched at 45%', !b.coag.open && b.coag.sealed && b.coag.plugs === 1 && b.coag.hole === 0 && Math.abs(b.coag.perf - 0.45) < 1e-9 && b.floodAfter === 0, JSON.stringify(b.coag));
+  check('DOME perforation (intraperitoneal, severe): 22 damage, 6 seeds, the boss enrages for 15 s', b.dome.open && b.dome.hpLoss === 22 && b.dome.seeds === 6 && b.dome.enrage === 15 && /INTRAPERITONEAL/.test(b.dome.alert), JSON.stringify(b.dome));
+  check('holding a Foley balloon over the hole tamponades it inside the window', !b.foley.open && b.foley.sealed && b.foley.steps < b.foley.window * 60, b.foley.steps + ' steps');
+  // left alone: chronic leak. Distension: +50%
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, Wl = G.wall, P = UroCrawl.player(), seeds = () => G.enemies.filter(e => !e.dead && e.id === 'tumorseed').length;
+    G.enemies.forEach(e => { if (e.id === 'tumorseed') { e.silent = true; e.hp = 0; } }); UroCrawl.step(1);
+    const post = B.roots.filter(r => !r.e.dead && r.seg.tag === 'POSTERIOR')[0] || B.roots.filter(r => !r.e.dead)[0], seg = post.seg; post.e.hp = 5000; seg.perf = 0; for (let i = 0; i < 40 && !seg.open; i++) { B.body.hp = 1150; UroCrawl.dealDamage(post.e, 6, 'CUT', { wid: 'scalpel' }); }
+    for (let i = 0; i < 60 * 6; i++) { UroCrawl.step(1); P.hp = P.maxHp; } const chronic = seg.chronic, hole = !!seg.hole, late = UroCrawl.wallPlug(seg, 'coag'), s0 = seeds(); G.enemies.forEach(e => { if (e.id === 'tumorseed') { e.silent = true; e.hp = 0; } }); UroCrawl.step(1);
+    for (let i = 0; i < 60 * 8; i++) { UroCrawl.step(1); P.hp = P.maxHp; } const leaked = seeds();
+    // distension
+    const r2 = B.roots.filter(r => !r.e.dead && !r.seg.open)[0], s2 = r2.seg; r2.e.hp = 5000; s2.perf = 0; Wl.distension = 0; const a = UroCrawl.wallHit(s2, 12, 'CUT'); Wl.distension = 0.7; const c = UroCrawl.wallHit(s2, 12, 'CUT'); s2.perf = 0;
+    G.maxWeapons = 5; UroCrawl.giveWeapon('irrigation'); G.weapons.forEach((w, i) => { if (w.id === 'irrigation') UroCrawl.selectWeapon(i); }); G.swapT = 0; Wl.distension = 0; UroCrawl.input.mx = P.x - 100; UroCrawl.input.my = P.y; UroCrawl.input.mouseFire = true; for (let i = 0; i < 60 * 2.5; i++) { UroCrawl.step(1); P.hp = P.maxHp; B.body.hp = 1150; } UroCrawl.input.mouseFire = false; const dist = Wl.distension;
+    return { chronic, hole, late, leaked, a, c, dist, open: seg.open }; });
+  check('a perforation left for 5.5 s is chronic: it cannot be plugged any more and keeps leaking seeds', b.chronic && !b.hole && b.late === false && b.open && b.leaked >= 1, JSON.stringify({ chronic: b.chronic, leaked: b.leaked }));
+  check('distension: the Irrigation Hose fills the bladder, and past 60% every perf meter fills 50% faster', b.dist >= 0.6 && Math.abs(b.c / b.a - 1.5) < 1e-9, JSON.stringify({ distension: +b.dist.toFixed(2), ratio: b.c / b.a }));
+  await p.waitForTimeout(250); await shot(p, 'o-phase2');
+  // Phase 3 and the cystectomy
+  b = await p.evaluate(() => { const G = UroCrawl.state, B = G.boss, Wl = G.wall, P = UroCrawl.player(), out = {};
+    B.body.hp = 500; UroCrawl.step(3); P.hp = P.maxHp; out.p3 = { phase: B.phase, roots: B.roots.filter(r => !r.e.dead).length, broken: Wl.segs.filter(s => s.broken).length, live: Wl.live, inv: !!B.body.inv };
+    UroCrawl.step(60); out.fat = G.enemies.filter(e => !e.dead && e.id === 'fatglob').length;
+    UroCrawl.dealDamage(B.body, 99999, 'CUT', {}); UroCrawl.step(2); out.floor = { hp: B.body.hp, dead: B.body.dead, core: B.core, over: G.over };
+    const c = { x: B.body.x - 34, y: B.body.y }; P.x = c.x - 110; P.y = c.y; P.stag = 0; P.hp = P.maxHp = 500; UroCrawl.selectWeapon(0); G.swapT = 0; UroCrawl.input.mx = c.x; UroCrawl.input.my = c.y;
+    UroCrawl.input.mouseFire = true; for (let i = 0; i < 30; i++) { UroCrawl.step(1); P.x = c.x - 110; P.y = c.y; P.stag = 0; } const half = B.cyst; UroCrawl.input.mouseFire = false; UroCrawl.step(2); out.early = { half, after: B.cyst, dead: B.body.dead };
+    UroCrawl.input.mouseFire = true; let n = 0; while (B.cyst < 1 && n < 200) { UroCrawl.step(1); P.x = c.x - 110; P.y = c.y; P.stag = 0; P.hp = 500; n++; } out.full = { steps: n, held: !B.body.dead && !G.over, cyst: B.cyst };
+    UroCrawl.input.mouseFire = false; UroCrawl.step(2); out.kill = { dead: B.body.dead, over: G.over, won: G.won, banner: G.banner && G.banner.text };
+    return out; });
+  check('Phase 3 at 500 HP: through the wall. Fronts gone, its two base segments burst, perivesical fat adds, the wall stops thinning', b.p3.phase === 3 && b.p3.roots === 0 && b.p3.broken === 2 && !b.p3.live && !b.p3.inv && b.fat >= 2, JSON.stringify(b.p3) + ' fat ' + b.fat);
+  check('ordinary damage only strips it to an exposed core (1 HP): it cannot be killed that way', b.floor.hp === 1 && !b.floor.dead && b.floor.core && !b.floor.over, JSON.stringify(b.floor));
+  check('radical cystectomy: hold fire on the core for 1.5 s (letting go early resets the charge), then release to kill', b.early.half > 0.2 && b.early.half < 0.5 && b.early.after === 0 && !b.early.dead && b.full.cyst === 1 && b.full.held && Math.abs(b.full.steps - 90) <= 3 && b.kill.dead && b.kill.won && b.kill.banner === 'EN BLOC!', JSON.stringify({ early: b.early, full: b.full, kill: b.kill }));
+  await p.evaluate(() => { UroCrawl.step(500); }); await p.waitForTimeout(300);
+  b = await p.evaluate(() => ({ overlay: UroCrawl.state.overlay, title: document.getElementById('sumTitle').textContent, sub: document.getElementById('sumSub').textContent, stats: document.getElementById('sumStats').textContent }));
+  check('the win screen files the pathology report, with the normal run summary', b.overlay === 'summary' && b.title === 'DISCHARGED!' && b.sub === 'Muscle present in specimen: Muscle-invasive disease confirmed. Pathology report filed.' && /Rooms cleared/.test(b.stats) && /Perforations/.test(b.stats), b.sub);
+  await shot(p, 'o-summary');
+  // neoadjuvant chemo in the rest room; the Oncology dungeon; the boss pool; the bestiary; skipRoom
+  const { p: p2, errs: errs2 } = await open('?seed=12&boss=mibc&room=8' + Q);
+  b = await p2.evaluate(() => { UroCrawl.startRun(); UroCrawl.input.mode = 'kb'; UroCrawl.step(5); const G = UroCrawl.state, P = UroCrawl.player(), r = G.rewards.filter(x => x.kind === 'neoadj')[0]; if (!r) return { has: false };
+    P.x = r.x + 80; P.y = r.y; UroCrawl.step(3); P.x = r.x; P.y = r.y; UroCrawl.step(3); const o = G.overlay, title = document.getElementById('stewardTitle').textContent, btns = [...document.querySelectorAll('#stewardChoices .btn')].map(x => x.textContent);
+    document.querySelectorAll('#stewardChoices .btn')[1].click(); const declined = !G.neoadj && G.overlay === null && !r.used;
+    P.x = r.x + 80; UroCrawl.step(3); P.x = r.x; UroCrawl.step(3); document.querySelectorAll('#stewardChoices .btn')[0].click(); const took = G.neoadj && r.used && G.overlay === null, max0 = P.maxHp;
+    const d = G.doors.filter(x => x.open)[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); const B = G.boss;
+    return { has: true, room: 8, o, title, btns, declined, took, max0, kind: B && B.kind, hp: B && B.body.hp, max: B && B.body.maxHp, pmax: P.maxHp, layer: B && B.layer }; });
+  check('the rest room before the Invader offers neoadjuvant chemo (decline or take): the boss starts at 80% HP and you fight at −15% max HP', b.has && b.o === 'steward' && /Neoadjuvant/.test(b.title) && b.btns.length === 2 && b.declined && b.took && b.kind === 'mibc' && b.hp === 1760 && b.max === 2200 && b.pmax === Math.round(b.max0 * 0.85), JSON.stringify({ hp: b.hp, pmax: b.pmax, max0: b.max0, btns: b.btns }));
+  const { p: p3 } = await open('?seed=12&boss=staghorn&room=8' + Q);
+  const noChemo = await p3.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(5); return UroCrawl.state.rewards.filter(x => x.kind === 'neoadj').length; });
+  const { p: p3b } = await open('?seed=12&boss=mibc&room=8&weapons=scalpel,holmium');
+  const crate = await p3b.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(5); const c = UroCrawl.state.rewards.filter(x => x.kind === 'crate')[0]; return c && c.item && c.item.id; });
+  check('before the Invader, the rest-room crate is a Roller Ball when you carry nothing that plugs a perforation', crate === 'roller', String(crate));
+  const { p: p4, errs: errs4 } = await open('?seed=31&god=1&boss=mibc&room=5');
+  b = await p4.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state, E = UroCrawl.tables.ENEMIES, fams = {}; G.waves.list.forEach(w => w.forEach(x => { fams[E[x.id].family] = 1; }));
+    const roll = { staghorn: 0, fournier: 0, mibc: 0 }; let kept = true; const mb = a => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    for (let sd = 1; sd <= 600; sd++) { const id = UroCrawl.rollBossId(sd), r = mb(sd ^ 0x51ab); roll[id]++; if (r < 1 / 3 && id !== 'staghorn') kept = false; if (r >= 0.5 && r < 5 / 6 && id !== 'fournier') kept = false; }
+    const vis = ['mibc', 'tumorseed', 'fatglob'].every(id => E[id] && !E[id].hidden && E[id].fact.length > 40), hid = ['mibcroot', 'perfhole'].every(id => E[id] && E[id].hidden);
+    return { fams: Object.keys(fams).sort().join(), name: G.dungeon.name, room: G.roomIndex, roll, kept, vis, hid, fam: E.mibc.family, boss: E.mibc.boss }; });
+  check('Oncology dungeon (the Invader\'s run): rooms draw only tumours and benign masses; staghorn / fournier runs offer no chemo', b.room === 5 && b.name === 'ONCOLOGY' && /^(BENIGN|MALIGNANT|BENIGN,MALIGNANT)$/.test(b.fams) && noChemo === 0, b.fams);
+  check('the boss pool rolls all three from the seed (about a third each), and every seed that used to roll the Staghorn or Fournier in its kept range still does', b.roll.staghorn > 150 && b.roll.fournier > 150 && b.roll.mibc > 150 && b.kept, JSON.stringify(b.roll));
+  check('bestiary: The Invader, Tumour Seed and Perivesical Fat have entries; fronts and holes stay hidden parts', b.vis && b.hid && b.fam === 'MALIGNANT' && b.boss === true);
+  const { p: p5, errs: errs5 } = await fresh('?seed=4&god=1&boss=mibc');
+  b = await p5.evaluate(() => { UroCrawl.skipRoom(); UroCrawl.step(300); return { won: UroCrawl.state.won, over: UroCrawl.state.over }; });
+  check('skipRoom still ends the fight as a win (the autoplay path)', b.won && b.over);
+  // the wall system on its own, in an ordinary room
+  const { p: p6, errs: errs6 } = await open('?seed=3&god=1&room=3');
+  b = await p6.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(5); const G = UroCrawl.state, P = UroCrawl.player(); G.enemies.forEach(e => { e.silent = true; e.inhaled = true; e.hp = 0; }); UroCrawl.step(1); G.waves.next = 99; let sealed = 0;
+    const Wl = UroCrawl.makeWall({ cx: 480, cy: 270, rx: 470, ry: 250, n: 8, onSealed: () => { sealed++; } }); P.x = 480; P.y = 270; const seg = UroCrawl.wallSegAt(480, 30), tag = seg.tag;   // wide enough to keep the east door inside it
+    const a = UroCrawl.wallHit(seg, 60, 'CUT'), half = seg.perf; UroCrawl.wallHit(seg, 60, 'CUT'); const open = seg.open, banner = G.banner && G.banner.text; UroCrawl.step(2); const plugged = UroCrawl.wallPlug(seg, 'foley');
+    P.x = 20; P.y = 20; UroCrawl.step(1); const kept = UroCrawl.insideArena(P.x, P.y, P.r - 0.01); UroCrawl.skipRoom(); UroCrawl.step(5); const d = G.doors.filter(x => x.open)[0]; P.x = d.side === 'E' ? d.x - 20 : d.x + d.w / 2; P.y = d.side === 'E' ? d.y + d.h / 2 : (d.side === 'N' ? d.y + d.h + 20 : d.y - 20); UroCrawl.step(80);
+    return { n: Wl.segs.length, tag, half, open, banner, plugged, sealed, kept, cleared: G.wall === null && G.arena === null, room: G.roomIndex }; });
+  check('the wall + perforation system is generic: any room can makeWall(), feed wallHit(), get the perforation event and plug it; leaving the room clears it', b.n === 8 && b.tag === 'DOME' && b.half === 0.5 && b.open && /INTRAPERITONEAL/.test(b.banner) && b.plugged && b.sealed === 1 && b.kept && b.cleared && b.room === 4, JSON.stringify(b));
+  errCheck('O', errs.concat(errs2, errs4, errs5, errs6));
 });
 
 await browser.close();
