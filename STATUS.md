@@ -43,10 +43,33 @@ harness block M still passes, nothing was redone.)
 classes thin the wall, the jerk and what does not cause it, both perforation kinds, coag plug, Foley tamponade, chronic
 leak, distension, cystectomy charge / early release / kill, win screen, neoadjuvant, crate, dungeon families, boss pool,
 bestiary, the wall system standing alone in an ordinary room). Script parses as ES2019.
+**Roadmap:** `UROCRAWL_ROADMAP.md` had this boss parked behind Step 2 (which was going to build the perforation system).
+It is ticked there now, Step 2e says to reuse §14c, and the harness letters for Steps 1-3 moved to P, Q, R.
 **Next steps:** play it on the phone and tune: `MIBC.T` (length), `PERF.FILL` (how forgiving the wall is), `JERK_CHANCE`,
 `CYST_TIME` / `CYST_RANGE`, CIS cap (`maxR` 60). Is a chronic hole too punishing with no way to fix it late?
 **Open questions:** Stone / Infection themes for the other two dungeons (only Oncology has one). Should direct weapon
 contact with the wall (stray beams, bullets) also thin it? Right now only hits on the fronts do.
+
+## 2026-11-11 — 🗺️ Uro Crawl: roadmap doc for the next three sessions
+
+Andrew's follow-up ideas, written down as one-session steps so a fresh session can be told "read `UROCRAWL_ROADMAP.md`
+and do the next step". Docs only; no game code changed.
+
+**Done:** `UROCRAWL_ROADMAP.md` (ground rules + a checklist + three full step specs + a parked list), a row in
+`CLAUDE.md`'s read-on-demand table.
+- **Step 1** Staghorn becomes a mobile Minotaur-style duelist (charge, wall-crash stun, tines break).
+- **Step 2** Giant TURP boss: three sections as the scope advances, capsule-fiber progress cue, flow-rate win meter,
+  the hoser bleeder (red-out), verumontanum sphincter injury with an incontinence curse, ureteric-orifice and
+  bladder-neck-contracture warnings, Kegel / Finasteride boons, a generic perforation system.
+- **Step 3** The Call Room hub: walkable pre-run room with starter boon, pins, perks, decor, CME credits and jokes.
+- Parked: Muscle-Invasive Bladder Tumor boss (reuses Step 2's perforation system), rename, later ideas.
+
+- **Boox rule relaxed for games** (Andrew: the Boox is for AI tutoring only, not games): `AGENTS.md` and the roadmap now say
+  `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
+  A module split of the game is a separate task after Step 3.
+
+**Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
+**Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
 
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
 
