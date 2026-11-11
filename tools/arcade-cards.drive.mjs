@@ -42,6 +42,7 @@ function check(name, ok, detail) {
   return !!ok;
 }
 async function block(name, fn) {
+  if (process.env.ONLY && !name.startsWith(process.env.ONLY)) return; // ONLY=E runs just the E blocks
   try { await fn(); } catch (e) { check(name + ' (step threw)', false, String(e && e.message ? e.message : e).split('\n')[0]); }
 }
 
@@ -176,7 +177,10 @@ await block('B. snap', async () => {
   await p.waitForTimeout(300);
   const pr = await getProg(p);
   const m = over.match(/\+(\d+) 💰 · \+(\d+) XP/);
-  check('claim paid coins once', pr.coins === coinsBefore + +m[1] && pr.xp === +m[2], 'coins ' + coinsBefore + '→' + pr.coins + ' xp=' + pr.xp);
+  // the first finished Snap round of the day also pays the first-play bonus (+25 💰 +10 XP), once
+  check('claim paid coins once, plus the first-play bonus', pr.coins === coinsBefore + +m[1] + 25 && pr.xp === +m[2] + 10, 'coins ' + coinsBefore + '→' + pr.coins + ' xp=' + pr.xp);
+  check('first-play toast shown', await p.getByText(/First Snap Decision today: \+25 💰 \+10 XP/).count() === 1);
+  check('play counter: 1 play, 1 launch', pr.gameStats && pr.gameStats.snap && pr.gameStats.snap.plays === 1 && pr.gameStats.snap.opens === 1, JSON.stringify(pr.gameStats));
   check('claim button disabled', await btn(p, /Claimed ✓/).isDisabled());
   check('best score persisted', pr.gameBest && pr.gameBest.snap > 0 && /New best!/.test(over), 'best=' + JSON.stringify(pr.gameBest));
 
@@ -198,8 +202,19 @@ await block('B. snap', async () => {
   await p.waitForTimeout(300);
   const pr2 = await getProg(p);
   check('best unchanged or higher after round 2', pr2.gameBest.snap >= pr.gameBest.snap);
+  // a second claim the same day pays only the round: the bonus is once per game per day
+  const over2 = await p.locator('body').innerText();
+  const m2 = over2.match(/\+(\d+) 💰 · \+(\d+) XP/);
+  const before2 = await getProg(p);
+  await btn(p, /^Claim/).click();
+  await p.waitForTimeout(300);
+  const after2 = await getProg(p);
+  check('second claim of the day pays no bonus', after2.coins === before2.coins + +m2[1] && after2.xp === before2.xp + +m2[2], 'coins ' + before2.coins + '→' + after2.coins);
+  check('play counter: 2 plays, still 1 launch', after2.gameStats.snap.plays === 2 && after2.gameStats.snap.opens === 1, JSON.stringify(after2.gameStats.snap));
   await btn(p, /< Games/).click();
   await p.getByText('🎮 Arcade').waitFor();
+  const snapMeta = await p.locator('[data-game-meta="snap"]').innerText();
+  check('Snap card shows 2× played and the bonus taken', /2× played/.test(snapMeta) && /today's bonus taken/.test(snapMeta) && /logged this week/.test(snapMeta), snapMeta.replace(/\s+/g, ' '));
   errCheck('B end', errs);
   await ctx.close();
 });
@@ -316,6 +331,157 @@ await block('D. staging', async () => {
   await btn(p, /Play again/).click();
   check('back to the ready card', (await p.getByText(/Survive the waves/).count()) === 1);
   errCheck('D end', errs);
+  await ctx.close();
+});
+
+// ───────── E. play counter, daily first-play bonus, weekly Case Minimums ─────────
+// The frame games (Uro Rush, Pre-Op, Path of Pathology) are paid through the same postMessage claim the real pages send,
+// posted from inside their own frame so the app's origin + source check passes. Stone Squadron is left out (it needs three.js
+// from a CDN); the deeper tiers are reached from a seeded week instead of by playing seven games.
+const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const weekKey = (d = new Date()) => { const x = new Date(d.getTime()); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return dayKey(x); };
+const ALL_UNLOCKED = { snap: true, rush: true, preop: true, squadron: true, drugmatch: true, buzzer: true, staging: true, crawl: true };
+// lastLoginDate = today (UTC, as the app keys it): otherwise the "Daily login bonus" toast fires 1 s after load and overwrites a
+// game's bonus toast, which a person would not hit but a harness claiming within a second of loading does.
+const utcToday = () => new Date().toISOString().split('T')[0];
+async function eOpen(extra, admin = true) {
+  const seed = { uroStudyHub_mode: 'light', uroStudyHub_progress: JSON.stringify(Object.assign({ role: 'resident', coins: 0, xp: 0, tokens: 5, unlockedGames: ALL_UNLOCKED, lastLoginDate: utcToday() }, extra)), uroStudyHub_activePlan: 'aua' };
+  if (admin) seed.uroStudyHub_admin = 'true';
+  return open(seed);
+}
+async function gameFrame(p, re) {
+  for (let i = 0; i < 60; i++) { const f = p.frames().find((x) => re.test(x.url())); if (f) { await f.waitForLoadState('domcontentloaded'); return f; } await p.waitForTimeout(100); }
+  throw new Error('game frame not found: ' + re);
+}
+async function post(p, re, msg) { const fr = await gameFrame(p, re); await fr.evaluate((m) => parent.postMessage(m, location.origin), msg); await p.waitForTimeout(350); }
+const RUSH = /uro-rush\.html/, PREOP = /preop-please\.html/, CRAWL = /uro-crawl\.html/;
+const toastText = (p) => p.evaluate(() => [...document.querySelectorAll('div')].filter((d) => d.style && d.style.zIndex === '300').map((e) => e.innerText).join(' | '));
+const caseCount = async (p) => (await p.locator('[data-case-count]').innerText()).replace(/\s+/g, ' ');
+
+await block('E1. counters, daily bonus, tier 3', async () => {
+  const { ctx, p, errs } = await eOpen({});
+  await openArcade(p);
+  check('panel starts at 0 of 7', /^0 \/ 7 games this week/.test(await caseCount(p)), await caseCount(p));
+  check('3 tier chips, none paid', await p.locator('[data-tier]').count() === 3 && await p.locator('[data-tier]').filter({ hasText: '✓' }).count() === 0);
+  check('all 8 unlocked games offer the first-play bonus', await p.locator('[data-game-meta]').filter({ hasText: '+25 💰 first play today' }).count() === 8);
+  check('every card starts at 0× played', await p.locator('[data-game-meta]').filter({ hasText: '0× played' }).count() === 8);
+
+  await btn(p, /Uro Rush/).first().click();
+  await p.waitForTimeout(300);
+  const c0 = await getProg(p);
+  check('launch counted before any claim', c0.gameStats && c0.gameStats.rush && c0.gameStats.rush.opens === 1 && c0.gameStats.rush.plays === 0, JSON.stringify(c0.gameStats));
+  await post(p, RUSH, { type: 'rush:claim', coins: 40, xp: 10 });
+  const c1 = await getProg(p);
+  check('rush: round + first-play bonus', c1.coins === c0.coins + 40 + 25 && c1.xp === c0.xp + 10 + 10, 'coins ' + c0.coins + '→' + c1.coins);
+  check('rush: counters + daily record + week record', c1.gameStats.rush.plays === 1 && c1.gameStats.rush.coins === 40 && c1.dailyFirst.day === dayKey() && c1.dailyFirst.games.rush === true && c1.rotation.week === weekKey() && c1.rotation.games.rush === 1, JSON.stringify([c1.gameStats.rush, c1.dailyFirst, c1.rotation]));
+  check('rush: toast names the bonus', await p.getByText(/First Uro Rush today: \+25 💰 \+10 XP/).count() === 1);
+
+  await openArcade(p);
+  check('panel shows 1 of 7', /^1 \/ 7 games/.test(await caseCount(p)), await caseCount(p));
+  const rm = (await p.locator('[data-game-meta="rush"]').innerText()).replace(/\s+/g, ' ');
+  check('rush card: 1× played, logged, bonus taken', /1× played/.test(rm) && /logged this week/.test(rm) && /today's bonus taken/.test(rm), rm);
+  check('other cards still offer the bonus', await p.locator('[data-game-meta]').filter({ hasText: '+25 💰 first play today' }).count() === 7);
+
+  // same game again: the round pays, the bonus does not, and it is not a second game for the week
+  await btn(p, /Uro Rush/).first().click();
+  await p.waitForTimeout(200);
+  const c2 = await getProg(p);
+  await post(p, RUSH, { type: 'rush:claim', coins: 40, xp: 10 });
+  const c3 = await getProg(p);
+  check('rush again: no bonus', c3.coins === c2.coins + 40 && c3.xp === c2.xp + 10, 'coins ' + c2.coins + '→' + c3.coins);
+  check('rush again: 2 plays, 2 launches, still 1 game this week', c3.gameStats.rush.plays === 2 && c3.gameStats.rush.opens === 2 && Object.keys(c3.rotation.games).length === 1 && c3.rotation.games.rush === 2, JSON.stringify(c3.rotation));
+
+  await openArcade(p);
+  await btn(p, /Pre-Op, Please/).first().click();
+  await p.waitForTimeout(200);
+  await post(p, PREOP, { type: 'preop:claim', coins: 30, xp: 8 });
+  const c4 = await getProg(p);
+  check('preop: second game, bonus paid, no tier yet', c4.coins === c3.coins + 30 + 25 && c4.tokens === c3.tokens && Object.keys(c4.rotation.games).length === 2, 'tokens ' + c4.tokens);
+
+  await openArcade(p);
+  await btn(p, /Path of Pathology/).first().click();
+  await p.waitForTimeout(200);
+  await post(p, CRAWL, { type: 'crawl:result', won: false, rooms: 3, kills: 10 }); // 3×8 + 2 = 26 coins, 15 XP
+  const c5 = await getProg(p);
+  check('crawl: third game pays the round, the bonus and a token', c5.coins === c4.coins + 26 + 25 && c5.xp === c4.xp + 15 + 10 && c5.tokens === c4.tokens + 1, 'coins ' + c4.coins + '→' + c5.coins + ' tokens ' + c4.tokens + '→' + c5.tokens);
+  check('crawl: 3-game tier recorded', c5.rotation.claimed['3'] === true && Object.keys(c5.rotation.games).length === 3, JSON.stringify(c5.rotation));
+  check('crawl: toast shows bonus and tier on one line', await p.getByText(/First Path of Pathology today: \+25 💰 \+10 XP · 📋 3 games this week: \+1 🪙/).count() === 1);
+  const tokenRows = (pr) => (pr.activityLog || []).filter((e) => e.tokens > 0).length; // opening the arcade logs a zero-token "feature" row; that is fine
+  check('token bonus stays out of the study stats', c5.tokensEarned === c4.tokensEarned && tokenRows(c5) === tokenRows(c4), 'earned ' + c5.tokensEarned);
+  await post(p, CRAWL, { type: 'crawl:exit' });
+  await openArcade(p);
+  check('panel shows 3 of 7 with tier 3 paid', /^3 \/ 7 games/.test(await caseCount(p)) && /✓/.test(await p.locator('[data-tier="3"]').innerText()) && !/✓/.test(await p.locator('[data-tier="5"]').innerText()));
+  errCheck('E1 end', errs);
+  await ctx.close();
+});
+
+await block('E2. tier 5 and the full rotation from a seeded week', async () => {
+  const wk = weekKey();
+  // four games logged and the 3-game tier already paid; Path of Pathology is the fifth
+  let { ctx, p, errs } = await eOpen({ rotation: { week: wk, games: { snap: 1, buzzer: 1, staging: 2, drugmatch: 1 }, claimed: { 3: true } }, dailyFirst: { day: dayKey(), games: { snap: true } } });
+  await openArcade(p);
+  check('seeded week reads 4 of 7', /^4 \/ 7 games/.test(await caseCount(p)), await caseCount(p));
+  await btn(p, /Path of Pathology/).first().click();
+  await p.waitForTimeout(200);
+  const a0 = await getProg(p);
+  await post(p, CRAWL, { type: 'crawl:result', won: true, rooms: 9, kills: 40 }); // 72 + 10 + 50 = 132 coins, 45 + 35 = 80 → 80 XP
+  const a1 = await getProg(p);
+  check('tier 5 pays 1 token and 30 coins on top of round + first-play bonus', a1.tokens === a0.tokens + 1 && a1.coins === a0.coins + 132 + 25 + 30, 'coins ' + a0.coins + '→' + a1.coins + ' tokens ' + a0.tokens + '→' + a1.tokens);
+  check('tier 5 recorded, tier 7 not', a1.rotation.claimed['5'] === true && !a1.rotation.claimed['7'] && a1.rotationFull === 0);
+  await p.waitForTimeout(2500); // still showing 3 s after the claim: the daily-login toast's timer (boot + 3.5 s) must not cut it short
+  check('toast names tier 5', await p.getByText(/📋 5 games this week: \+1 🪙 \+30 💰/).count() === 1, 'toast=' + JSON.stringify(await toastText(p)));
+  errCheck('E2a end', errs);
+  await ctx.close();
+
+  // six games logged, tiers 3 + 5 paid; Uro Rush is the seventh
+  ({ ctx, p, errs } = await eOpen({ rotation: { week: wk, games: { snap: 1, buzzer: 1, staging: 1, drugmatch: 1, preop: 1, crawl: 1 }, claimed: { 3: true, 5: true } }, rotationFull: 2 }));
+  await openArcade(p);
+  await btn(p, /Uro Rush/).first().click();
+  await p.waitForTimeout(200);
+  const b0 = await getProg(p);
+  await post(p, RUSH, { type: 'rush:claim', coins: 20, xp: 5 });
+  const b1 = await getProg(p);
+  check('full rotation pays 2 tokens and 100 coins', b1.tokens === b0.tokens + 2 && b1.coins === b0.coins + 20 + 25 + 100 && b1.rotationFull === 3, 'coins ' + b0.coins + '→' + b1.coins + ' tokens ' + b0.tokens + '→' + b1.tokens + ' full=' + b1.rotationFull);
+  check('toast says full rotation', await p.getByText(/📋 Full rotation! \+2 🪙 \+100 💰/).count() === 1, 'toast=' + JSON.stringify(await toastText(p)));
+  await openArcade(p);
+  check('panel shows 7 of 7, all tiers paid, full-rotation count', /^7 \/ 7 games/.test(await caseCount(p)) && await p.locator('[data-tier]').filter({ hasText: '✓' }).count() === 3 && /★ 3 full/.test(await p.locator('[data-full-rotations]').innerText()));
+  errCheck('E2b end', errs);
+  await ctx.close();
+});
+
+await block('E3. a new day and a new week reset the bonuses; tokens and launches', async () => {
+  const lastWeek = weekKey(new Date(Date.now() - 7 * 86400000)), yesterday = dayKey(new Date(Date.now() - 86400000));
+  // not admin: opening a game spends a token. Last week's record and yesterday's bonus are stale.
+  const { ctx, p, errs } = await eOpen({ tokens: 3, rotation: { week: lastWeek, games: { snap: 3, rush: 2, preop: 1, buzzer: 1, crawl: 1, staging: 1 }, claimed: { 3: true, 5: true } }, dailyFirst: { day: yesterday, games: { rush: true, snap: true } }, rotationFull: 1 }, false);
+  await openArcade(p);
+  check('last week reads as 0 of 7 with no tiers paid', /^0 \/ 7 games/.test(await caseCount(p)) && await p.locator('[data-tier]').filter({ hasText: '✓' }).count() === 0, await caseCount(p));
+  check("yesterday's bonus is open again on every card", await p.locator('[data-game-meta]').filter({ hasText: '+25 💰 first play today' }).count() === 8);
+  const t0 = await getProg(p);
+  await btn(p, /Uro Rush/).first().click();
+  await p.waitForTimeout(300);
+  const t1 = await getProg(p);
+  check('a launch spends one token and counts once', t1.tokens === t0.tokens - 1 && t1.gameStats.rush.opens === 1, 'tokens ' + t0.tokens + '→' + t1.tokens);
+  await post(p, RUSH, { type: 'rush:claim', coins: 12, xp: 4 });
+  const t2 = await getProg(p);
+  check("today's first rush round pays the bonus again", t2.coins === t1.coins + 12 + 25 && t2.dailyFirst.day === dayKey() && Object.keys(t2.dailyFirst.games).join() === 'rush', 'coins ' + t1.coins + '→' + t2.coins);
+  check("this week's record replaces last week's; lifetime full-rotation count kept", t2.rotation.week === weekKey() && JSON.stringify(t2.rotation.games) === '{"rush":1}' && Object.keys(t2.rotation.claimed).length === 0 && t2.rotationFull === 1, JSON.stringify(t2.rotation));
+  check('old stats kept (older plays are not lost)', t2.gameStats.rush.plays === 1 && t2.tokens === t1.tokens);
+  errCheck('E3 end', errs);
+  await ctx.close();
+});
+
+await block('E4. a profile saved before this feature loads and plays', async () => {
+  const { ctx, p, errs } = await open({ uroStudyHub_mode: 'light', uroStudyHub_admin: 'true', uroStudyHub_progress: JSON.stringify({ role: 'resident', coins: 10, xp: 0, games: 7, unlockedGames: { snap: true, rush: true }, lastLoginDate: utcToday() }), uroStudyHub_activePlan: 'aua' });
+  errCheck('boot E4', errs);
+  await openArcade(p);
+  check('panel renders from nothing', /^0 \/ 7 games/.test(await caseCount(p)), await caseCount(p));
+  await btn(p, /Uro Rush/).first().click();
+  await p.waitForTimeout(200);
+  const o0 = await getProg(p);
+  await post(p, RUSH, { type: 'rush:claim', coins: 9, xp: 3 });
+  const o1 = await getProg(p);
+  check('first claim on an old profile works', o1.coins === o0.coins + 9 + 25 && o1.games === o0.games + 1 && o1.gameStats.rush.plays === 1, 'coins ' + o0.coins + '→' + o1.coins + ' games ' + o0.games + '→' + o1.games);
+  errCheck('E4 end', errs);
   await ctx.close();
 });
 

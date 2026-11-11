@@ -2506,6 +2506,76 @@ for (id in ARCADE_RETIRED_UNLOCKS) { if (ug[id]) { refund += ARCADE_RETIRED_UNLO
 ug.snap = true;
 return Object.assign({}, st, { arcadeV: ARCADE_VERSION, ups: ups, unlockedGames: ug, coins: (st.coins || 0) + refund, arcadeRefund: (st.arcadeRefund || 0) + refund });
 }
+var ARCADE_GAMES = [
+{ id: "snap", name: "Snap Decision", icon: "👆", desc: "Swipe clinical calls. A new theme every round: OR or not, stent or not, admit or discharge…", color: "#ec4899", main: true, unlockCost: 0, reqs: { touch: true } },
+{ id: "rush", name: "Uro Rush", icon: "🏥", desc: "Clinic and the consult pager in one shift, switching at random. Joystick on touch.", color: "#38bdf8", unlockCost: 150, reqs: { touch: true } },
+{ id: "preop", name: "Pre-Op, Please", icon: "🛂", desc: "Check tomorrow's cases against the policy binder — clear, defer, or escalate.", color: "#d9b44a", unlockCost: 200, reqs: { touch: true } },
+{ id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
+{ id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
+{ id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
+{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } },
+{ id: "crawl", name: "Path of Pathology", icon: "🗡️", desc: "Dungeon crawler through a diseased urinary tract. No quiz: lasers break stones, loops cut tumours, water flushes clots. Touch or mouse.", color: "#38e8ff", unlockCost: 250, reqs: {} }
+];
+var ARCADE_GAME_IDS = ARCADE_GAMES.map(function(g) { return g.id; });
+function arcadeGame(id) { for (var i = 0; i < ARCADE_GAMES.length; i++) { if (ARCADE_GAMES[i].id === id) return ARCADE_GAMES[i]; } return null; }
+var FIRST_PLAY_COINS = 25, FIRST_PLAY_XP = 10;
+var MINIMUM_TIERS = [
+{ n: 3, tokens: 1, coins: 0 },
+{ n: 5, tokens: 1, coins: 30 },
+{ n: 7, tokens: 2, coins: 100, full: true } // 7 of 8, so one game a device can't run or a player hasn't unlocked doesn't block it
+];
+function minimumReward(t) { return (t.tokens ? "+" + t.tokens + " 🪙" : "") + (t.tokens && t.coins ? " " : "") + (t.coins ? "+" + t.coins + " 💰" : ""); }
+function arcadeDay(d) {
+d = d || new Date();
+var m = d.getMonth() + 1, n = d.getDate();
+return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (n < 10 ? "0" : "") + n;
+}
+function arcadeWeek(d) {
+var x = new Date((d || new Date()).getTime());
+x.setHours(12, 0, 0, 0);
+x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+return arcadeDay(x);
+}
+function arcadeRotation(st, week) {
+var r = st && st.rotation;
+return r && r.week === week ? { week: week, games: r.games || {}, claimed: r.claimed || {} } : { week: week, games: {}, claimed: {} };
+}
+function arcadeFirstPlayOpen(st, id, day) {
+var f = st && st.dailyFirst;
+return !(f && f.day === day && f.games && f.games[id]);
+}
+function arcadeRecordOpen(st, id, day) {
+if (ARCADE_GAME_IDS.indexOf(id) < 0) return st;
+var gs = Object.assign({}, st.gameStats || {}), g = Object.assign({ opens: 0, plays: 0, coins: 0 }, gs[id]);
+g.opens++; g.last = day; gs[id] = g;
+return Object.assign({}, st, { gameStats: gs });
+}
+function arcadeRecordPlay(st, id, coins, xp, day, week, ts) {
+var out = { state: st, text: "", firstPlay: false, tiers: [] };
+if (ARCADE_GAME_IDS.indexOf(id) < 0 || !((coins | 0) > 0 || (xp | 0) > 0)) return out;
+var gs = Object.assign({}, st.gameStats || {}), g = Object.assign({ opens: 0, plays: 0, coins: 0 }, gs[id]);
+g.plays++; g.coins += coins | 0; g.last = day; gs[id] = g;
+var df = st.dailyFirst && st.dailyFirst.day === day ? (st.dailyFirst.games || {}) : {};
+var first = !df[id], dg = Object.assign({}, df); dg[id] = true;
+var rot = arcadeRotation(st, week), rg = Object.assign({}, rot.games), cl = Object.assign({}, rot.claimed);
+rg[id] = (rg[id] || 0) + 1;
+var n = Object.keys(rg).length, gainCoins = first ? FIRST_PLAY_COINS : 0, gainXp = first ? FIRST_PLAY_XP : 0, gainTok = 0, full = st.rotationFull || 0, bits = [];
+if (first) bits.push("🎯 First " + (arcadeGame(id) || { name: id }).name + " today: +" + FIRST_PLAY_COINS + " 💰 +" + FIRST_PLAY_XP + " XP");
+MINIMUM_TIERS.forEach(function(t) {
+if (n < t.n || cl[t.n]) return;
+cl[t.n] = true; gainTok += t.tokens; gainCoins += t.coins; if (t.full) full++;
+out.tiers.push(t);
+bits.push(t.full ? "📋 Full rotation! " + minimumReward(t) : "📋 " + t.n + " games this week: " + minimumReward(t));
+});
+var next = Object.assign({}, st, {
+gameStats: gs, dailyFirst: { day: day, games: dg }, rotation: { week: week, games: rg, claimed: cl }, rotationFull: full,
+coins: (st.coins || 0) + gainCoins, xp: (st.xp || 0) + gainXp, tokens: (st.tokens || 0) + gainTok
+});
+out.firstPlay = first; out.text = bits.join(" · ");
+if (out.text) next.arcadeLast = { ts: ts, text: out.text };
+out.state = next;
+return out;
+}
 var GAME_AUDIO = { ctx: null, on: true };
 try { GAME_AUDIO.on = localStorage.getItem("uroStudyHub_gameSound") !== "off"; } catch (e) {  }
 function primeGameAudio() { // call from inside a click/touch handler (iPad autoplay policy)
@@ -2550,6 +2620,10 @@ sessions: 0, conf: {}, ups: {}, themes: ["default"], theme: "default",
 hi: 0, games: 0, shields: 0, ankiCards: [], savedLectures: [],
 tokens: 0, tokensEarned: 0, tokensSpent: 0, unlockedGames: { snap: true },
 gameBest: {}, // best score per card game, { snap: n, buzzer: n }
+gameStats: {}, // { snap: { opens, plays, coins, last } } — plays = finished rounds that paid, opens = launches
+dailyFirst: { day: "", games: {} },
+rotation: { week: "", games: {}, claimed: {} }, rotationFull: 0,
+arcadeLast: null, // { ts, text } of the last bonus toast, so each shows once
 arcadeV: 0, arcadeRefund: 0, // migrateArcade stamps ARCADE_VERSION; a saved profile without the key must read as 0 after the INIT merge
 activityLog: [],
 ankiReviews: 0, ankiReviewGoal: 50,
@@ -3743,10 +3817,7 @@ setS(function(p) {
 if (p.lastLoginDate === todayStr) return p; // guard against double-fire
 return Object.assign({}, p, { coins: p.coins + 5, lastLoginDate: todayStr });
 });
-setTimeout(function() {
-setTokenToast("+5 🪙 Daily login bonus!");
-setTimeout(function() { setTokenToast(""); }, 2500);
-}, 1000);
+setTimeout(function() { flashToast("+5 🪙 Daily login bonus!", 2500); }, 1000);
 }
 }, []);
 function syncStudyAnalytics() {
@@ -4697,9 +4768,31 @@ function gameReward(coins, xp, keepOpen) {
 var sm = getStreakMultiplier(s.streak || 0);
 var bc = Math.ceil(coins * sm);
 var bx = Math.ceil(xp * sm);
-setS(function(p) { return Object.assign({}, p, { coins: p.coins + bc, xp: p.xp + bx, games: (p.games || 0) + 1 }); });
+var gid = showGame, day = arcadeDay(), week = arcadeWeek(), ts = Date.now();
+setS(function(p) {
+var paid = Object.assign({}, p, { coins: p.coins + bc, xp: p.xp + bx, games: (p.games || 0) + 1 });
+return arcadeRecordPlay(paid, gid, bc, bx, day, week, ts).state;
+});
 if (!keepOpen) setShowGame("");
 }
+var toastTimer = useRef(null);
+function flashToast(msg, ms) {
+setTokenToast(msg);
+if (toastTimer.current) clearTimeout(toastTimer.current);
+toastTimer.current = setTimeout(function() { setTokenToast(""); }, ms || 2500);
+}
+useEffect(function() {
+if (ARCADE_GAME_IDS.indexOf(showGame) < 0) return;
+var id = showGame, day = arcadeDay();
+setS(function(p) { return arcadeRecordOpen(p, id, day); });
+}, [showGame]);
+var arcadeSeen = useRef(s.arcadeLast ? s.arcadeLast.ts : 0);
+useEffect(function() {
+var n = s.arcadeLast;
+if (!n || n.ts === arcadeSeen.current) return;
+arcadeSeen.current = n.ts;
+flashToast(n.text, 4500);
+}, [s.arcadeLast]);
 var TOKEN_REWARDS = { lecture: 3, reading: 2, anki: 2, pomodoro: 2, sasp: 3, topic: 1 };
 var today = new Date().toISOString().slice(0, 10);
 function logFeatureUse(label) {
@@ -4718,8 +4811,7 @@ tokensEarned: (p.tokensEarned || 0) + amt,
 activityLog: (p.activityLog || []).concat([entry]),
 });
 });
-setTokenToast("+" + amt + " 🪙 " + (label || type));
-setTimeout(function() { setTokenToast(""); }, 2500);
+flashToast("+" + amt + " 🪙 " + (label || type), 2500);
 return amt;
 }
 function spendToken() {
@@ -4746,8 +4838,7 @@ activityLog: log,
 });
 });
 if ((s.ankiReviews || 0) + count >= (s.ankiReviewGoal || 50) && (s.ankiReviews || 0) < (s.ankiReviewGoal || 50)) {
-setTokenToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!");
-setTimeout(function() { setTokenToast(""); }, 2500);
+flashToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!", 2500);
 }
 }
 var activityHeatmap = useMemo(function() {
@@ -4900,8 +4991,7 @@ pomodorosToday: (p.lastPomDate === today ? (p.pomodorosToday || 0) : 0) + 1,
 lastPomDate: today,
 });
 });
-setTokenToast("🍅 Pomodoro #" + n + " done! +" + tok + " 🪙 · +" + shown + " 💰");
-setTimeout(function () { setTokenToast(""); }, 3000);
+flashToast("🍅 Pomodoro #" + n + " done! +" + tok + " 🪙 · +" + shown + " 💰", 3000);
 firePomoAlert({ kind: "work", n: n, tok: tok, coins: shown });
 }
 function startBreakInterval() {
@@ -6311,18 +6401,12 @@ background: (a.color || "#c084fc") + "15"
 }
 var [gameTab, setGameTab] = useState("play"); // "play" or "shop"
 function GameSelectScreen() {
-var GAMES = [
-{ id: "snap", name: "Snap Decision", icon: "👆", desc: "Swipe clinical calls. A new theme every round: OR or not, stent or not, admit or discharge…", color: "#ec4899", main: true, unlockCost: 0, reqs: { touch: true } },
-{ id: "rush", name: "Uro Rush", icon: "🏥", desc: "Clinic and the consult pager in one shift, switching at random. Joystick on touch.", color: "#38bdf8", unlockCost: 150, reqs: { touch: true } },
-{ id: "preop", name: "Pre-Op, Please", icon: "🛂", desc: "Check tomorrow's cases against the policy binder — clear, defer, or escalate.", color: "#d9b44a", unlockCost: 200, reqs: { touch: true } },
-{ id: "squadron", name: "Stone Squadron", icon: "🛩️", desc: "Fly the ureteroscope UVJ to renal pelvis and clear every stone. Landscape, touch.", color: "#60a5fa", unlockCost: 250, reqs: { touch: true } },
-{ id: "drugmatch", name: "Drug Match", icon: "💊", desc: "Sort drugs into the right class — conveyor belt!", color: "#22d3ee", unlockCost: 250, reqs: { touch: true } },
-{ id: "buzzer", name: "Board Buzzer", icon: "⚡", desc: "Rapid-fire board questions, with the why.", color: "#f472b6", unlockCost: 300, reqs: { touch: true } },
-{ id: "staging", name: "Staging Attack", icon: "🎯", desc: "Cases drift down the field — pop them with the right T, N, M or stage before they land. Waves get faster. AJCC 8.", color: "#10b981", unlockCost: 350, reqs: { touch: true } },
-{ id: "crawl", name: "Path of Pathology", icon: "🗡️", desc: "Dungeon crawler through a diseased urinary tract. No quiz: lasers break stones, loops cut tumours, water flushes clots. Touch or mouse.", color: "#38e8ff", unlockCost: 250, reqs: {} }
-];
+var GAMES = ARCADE_GAMES; // the list lives at module scope (ARCADE-PLAY block) so the play bookkeeping can see the ids
 var deviceNow = getEffectiveDevice(s.devicePref);
 var showAllGames = s.gamesShowAll === true;
+var dayNow = arcadeDay(), weekNow = arcadeWeek();
+var rotNow = arcadeRotation(s, weekNow), rotCount = Object.keys(rotNow.games).length;
+var rotTop = MINIMUM_TIERS[MINIMUM_TIERS.length - 1].n;
 function handleGameClick(gameId) {
 if (!isGameUnlocked(gameId)) return;
 if (isAdmin) { setShowGame(gameId); return; } // admin skips tokens
@@ -6367,6 +6451,30 @@ return (
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { arcadeRefund: 0 }); }); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", padding: "0 4px" }}>{"✕"}</button>
 </div>
 )}
+<div data-case-minimums style={{ background: "linear-gradient(135deg, var(--c-bg), var(--c-dp7))", border: "1px solid var(--c-cd)", borderRadius: 10, padding: "9px 12px" }}>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+<span style={{ fontSize: 11, fontWeight: 800, color: "var(--a-pur)" }}>{"📋 Case Minimums"}</span>
+<span data-case-count style={{ fontSize: 9, color: "var(--c-mut)" }}>{rotCount + " / " + rotTop + " games this week · resets Monday"}</span>
+</div>
+<div style={{ height: 6, borderRadius: 3, background: "var(--c-br)", margin: "7px 0 6px", overflow: "hidden" }}>
+<div style={{ width: Math.min(100, Math.round(rotCount / rotTop * 100)) + "%", height: "100%", borderRadius: 3, background: "linear-gradient(90deg," + c.a + "," + c.a2 + ")" }} />
+</div>
+<div style={{ display: "flex", gap: 5 }}>
+{MINIMUM_TIERS.map(function(t) {
+var got = !!rotNow.claimed[t.n];
+return (
+<div key={t.n} data-tier={t.n} style={{ flex: 1, textAlign: "center", padding: "3px 2px", borderRadius: 6, border: "1px solid " + (got ? "#22c55e55" : "var(--c-br)"), background: got ? "#22c55e14" : "transparent", opacity: got || rotCount >= t.n ? 1 : 0.65 }}>
+<div style={{ fontSize: 9, fontWeight: 800, color: got ? "var(--a-grn)" : "var(--c-tx)" }}>{(got ? "✓ " : "") + t.n + " games"}</div>
+<div style={{ fontSize: 8, color: "var(--a-am)" }}>{minimumReward(t)}</div>
+</div>
+);
+})}
+</div>
+<div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 5, fontSize: 8, color: "#64748b", lineHeight: 1.4 }}>
+<span>{"Finish a round in different games. Just bonuses, nothing is locked."}</span>
+{(s.rotationFull || 0) > 0 && <span data-full-rotations style={{ whiteSpace: "nowrap", color: "var(--a-am)", fontWeight: 700 }}>{"★ " + s.rotationFull + " full"}</span>}
+</div>
+</div>
 {(function() {
 var sorted = GAMES.slice().sort(function(a, b) {
 var fa = deviceFitsGame(deviceNow, a.reqs).fits ? 0 : 1;
@@ -6390,6 +6498,16 @@ return (
 <div style={{ flex: 1 }}>
 <div style={{ fontSize: 12, fontWeight: 700, color: unlocked ? g.color : "var(--c-br2)" }}>{g.name}{g.main ? " ★" : ""}</div>
 <div style={{ fontSize: 9, color: unlocked ? "var(--c-mut)" : "var(--c-br)", marginTop: 2 }}>{g.desc}</div>
+{unlocked && (function() {
+var plays = ((s.gameStats || {})[g.id] || {}).plays || 0, bonusOpen = arcadeFirstPlayOpen(s, g.id, dayNow);
+return (
+<div data-game-meta={g.id} style={{ display: "flex", flexWrap: "wrap", gap: "2px 8px", marginTop: 4, fontSize: 8, fontWeight: 600 }}>
+<span style={{ color: "#64748b" }}>{plays + "× played"}</span>
+{rotNow.games[g.id] ? <span style={{ color: "var(--a-grn)" }}>{"📋 logged this week"}</span> : null}
+<span style={{ color: bonusOpen ? "var(--a-am)" : "#64748b" }}>{bonusOpen ? "+" + FIRST_PLAY_COINS + " 💰 first play today" : "✓ today's bonus taken"}</span>
+</div>
+);
+})()}
 {!fit.fits && unlocked && <div style={{ fontSize: 8, color: "var(--a-or2)", marginTop: 3, fontWeight: 600 }}>{"⚠ " + fit.reason}</div>}
 </div>
 <span style={{ fontSize: 8, color: statusColor, fontWeight: 600, whiteSpace: "nowrap" }}>{statusLabel}</span>
@@ -8985,7 +9103,7 @@ return (
 })()}
 {gameOverlay}
 {tokenToast && (
-<div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: "var(--a-am)", color: "var(--c-bg)", padding: "8px 20px", borderRadius: 20, fontWeight: 800, fontSize: 14, zIndex: 300, boxShadow: "0 4px 20px rgba(251,191,36,.4)", animation: "none" }}>
+<div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", width: "max-content", maxWidth: "90vw", textAlign: "center", background: "var(--a-am)", color: "var(--c-bg)", padding: "8px 20px", borderRadius: 20, fontWeight: 800, fontSize: 14, zIndex: 300, boxShadow: "0 4px 20px rgba(251,191,36,.4)", animation: "none" }}>
 {tokenToast}
 </div>
 )}
