@@ -3,6 +3,54 @@
 **Updated:** 2026-11-11
 **Tool:** Claude Code
 
+## 2026-11-11 — 🎮 Arcade variety: play counter, daily first-play bonus, weekly Case Minimums
+
+Andrew's worry: some games are more polished and more fun than others, so players will grind Path of Pathology or Stone Squadron and
+skip the rest. Pricing the fun games up only shrinks play (the coin unlock is paid once; the token cost is flat), so this session adds
+carrots instead. Steps 1 and 2 of a six-idea plan (the rest are under Next steps); no game is locked or taxed.
+
+**Done (`UroStudyHub.html`, Boox-safe: plain `var` / `function`, nothing newer than ES5 in the new code):**
+- **Play counter** `s.gameStats[id] = { opens, plays, coins, last }`. A *play* is a round that finished and paid; launches are counted
+  separately (an effect on `showGame`, so token / trial / admin / gate-question launches are all covered). Before this only the total
+  `s.games` existed, so the mix could not be seen. Each Arcade card now reads "N× played".
+- **Daily first-play bonus**: the first paid round of each game each local day also pays +25 💰 +10 XP, once per game per day.
+  Cards say "+25 💰 first play today" / "✓ today's bonus taken". Needs coins or XP > 0, so launch-and-quit can't farm it.
+- **📋 Case Minimums** (weekly, Mon–Sun, local time): paid rounds in 3 / 5 / 7 different games pay +1 🪙 / +1 🪙 +30 💰 / +2 🪙 +100 💰,
+  once per tier per week; the 7-game tier also counts a lifetime "full rotation" (★ N full). A progress panel sits at the top of the
+  Play tab and each card shows "📋 logged this week". The bonus tokens go to `s.tokens` only (not the activity log / `tokensEarned`),
+  so they don't show up in the study heatmap or analytics. Named "Case Minimums" because "Case Log" is the real surgical-case feature.
+- One toast line per claim ("🎯 First … today: +25 💰 +10 XP · 📋 3 games this week: +1 🪙"). **Fixed along the way:** the top toast
+  had five independent timeouts, so an older toast cleared a newer one early (the daily-login toast was cutting the bonus line short);
+  all five now go through `flashToast` with a single timer. The toast pill also no longer wraps at half the screen width.
+- `GAMES` moved out of `GameSelectScreen` to module-scope `ARCADE_GAMES`, so the bookkeeping knows every id (add a game there once).
+- The bookkeeping is a pure `ARCADE-PLAY-BEGIN/END` block, like the ISE logic, so it is unit-tested without a browser.
+
+**Verified:** `tools/arcade-play.test.mjs` (new, 24 tests; run under `TZ=America/New_York`, `UTC`, `Pacific/Auckland`: week boundaries,
+DST days, year change, per-day / per-week resets, tier payouts, no mutation of the input state, pre-feature profiles).
+`tools/arcade-cards.drive.mjs` 119 checks pass (74 old + new block E and extra Snap checks: bonus once per day, counters, tiers 3 / 5 /
+full from a seeded week, stale day and week reset, an old save with none of the new keys). Frame games are paid through the real
+postMessage claim from inside their frame. Stone Squadron's claim is not driven (its page needs three.js from a CDN) but it uses the
+same `squadron:claim` → `gameReward` path. Looked at the Arcade at phone width, dark and light.
+
+**Next steps:**
+1. **Idea 3: daily "On Call" rotation**: 2–3 games boosted by date (e.g. 2× coins or the token back on a good run), badge on the card.
+2. **Idea 4: shared meta currency**: CME credits earned in *every* game, spent in Path of Pathology's Call Room (fold into
+   `UROCRAWL_ROADMAP.md` step 3), so Crawl grinders have a reason to visit the others.
+3. **Idea 5: cross-game hooks**: a Buzzer / Snap streak gives a starting boon in Crawl; a Squadron clear unlocks a bestiary entry.
+4. **Idea 6: pick by time / "Pick for me"**: add a `mins` class (quick / medium / deep) to `ARCADE_GAMES`, an "I have 5 / 15 / 30 min"
+   filter, and a "Pick for me" button weighted to games with the oldest `gameStats[id].last`.
+5. **Shop perks (Andrew's note: the shop will be bought out quickly).** Everything in the shop is ≈ 5,100 💰 in total (unlocks 1,750,
+   upgrades 2,880, themes 500) and the daily bonus adds up to 200 💰 a day on top of round payouts. Candidates, cheapest first:
+   more themes and profile titles / frames (rank flair, "Full rotation" badge); a repeatable coin sink such as a capped weekly
+   token pack or a gate-question skip; a levelled "Residency Stipend" that raises the first-play bonus; "Pager Priority" (2 free trials
+   a day per game); Crawl-side cosmetics bought with CME credits (ties to idea 4); a late-game "Fellowship" prestige reset for a
+   permanent badge. Pick a few with Andrew before building.
+6. Send `gameStats` / `rotationFull` to the analytics sync (`urostudyhub-analytics-script.js`) so the mix is visible in the sheet.
+
+**Open questions:** is 25 💰 the right bonus size given the shop will drain faster (lower it, or pay part as XP)? Are 3 / 5 / 7 the right
+tiers (a new player only has Snap free, so week one tops out at what they can afford to unlock; that also nudges buying unlocks)?
+A bigger one-time "first ever play of this game" bonus? Should the daily bonus favour the teaching games over the pure-fun ones?
+
 ## 2026-11-11 (later) — 🦀 Path of Pathology: the Invader (third boss), the wall + perforation system, the Oncology dungeon
 
 Andrew (via the brief): a third boss, the muscle-invasive bladder tumour, in a round bladder arena whose wall can
