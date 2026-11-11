@@ -248,8 +248,7 @@ weapon has −15 % range and +20 % weak-point damage (a "pediatric scope" modifi
   nocturnal water balloons), Oxybutynin (calms spasm bladders), Clean Intermittent Catheterization (drains pressure meters
   instantly, once a room), Continuous Antibiotic Prophylaxis (halves infection adds), Teddy Bear (absorbs one hit),
   Lollipop (heal pickup), Sticker Chart (small coin bonus per cleared room).
-- **Bulking Gel Injector** (new weapon, FLUID, short range, generic name, no brand): needle shot that leaves a gel mound
-  on a port (used by the boss in 4d). Mound lasts ~15 s; weak damage otherwise.
+- **Bulking needle** (a fight-only carried tool, NOT a weapon; generic name, no brand): see 4f. It cannot damage anything.
 - **Hook valve ablation**: PUV gates (below) are cut with CUT or ENERGY; the Urethrotome is ×1.5 on them.
 
 ### 4d. Enemies (spitball list, with animation difficulty; build the easy ones first)
@@ -272,7 +271,7 @@ after the timer), and replays from the hub's Sim Lab (4g). They are drills, neve
 | Trial | What you do | What it teaches |
 |---|---|---|
 | **Valve Run** | Cross a corridor of PUV gates that swing open and shut on a rhythm (cut one to slow it) | roll i-frames and timing |
-| **Tide Dash** | An auto-advancing wall of fluid chases you through a winding course; collect gel plugs on the way | sprinting lines, tight turns |
+| **Tide Dash** | An auto-advancing wall of fluid chases you through a winding course; collect bonus tokens on the way | sprinting lines, tight turns |
 | **Aim Gallery** | Moving, popping and orbiting targets (balloons, clay "stones") in waves with your own loadout | tracking with beams, leading projectiles, charge timing |
 | **Catheter Course** | Steer through a narrow winding tube; touching the wall costs time | precision movement |
 | **Pop-Off** | A row of hydronephrotic balloons fill at different rates: decompress each before it pops | target priority, quick aim |
@@ -303,9 +302,21 @@ patterns that loop around the arena, and a hide-and-pop rhythm.
   port** (gurgle and a bulge 0.7 s before it re-emerges) and pops out of another, spitting a 3-fan of fluid pellets.
   Every dive/return creates a **backwash**: a ripple that pushes the player along the floor and chips HP (the reflux/"tide").
   Toy blocks act as breakwaters; a roll through avoids it.
-- **The verb: plug the ports.** The **Bulking Gel Injector** leaves a gel mound on a port (~15 s, or until a slam knocks it
-  out). A serpent can only dive into unplugged ports: plugging reduces its hiding places and backwash, and with all ports plugged it is
-  stranded and **forced to swim in the open with its head exposed** for a long vulnerable window. Plug and fight in cycles.
+- **The verb: plug the ports, by carrying a needle (a mechanic unique to this fight).** Like a real Deflux injection, you
+  do not hit the hole: you inject **around** it.
+  - **The needle is a carried object, not a weapon.** A toy-box **tray** at the arena edge holds up to 2 needles and refills one
+    every ~15 s. Walk onto a needle to pick it up. While carrying: you cannot attack or use any weapon, move at 85 %, can still
+    roll, and the HUD swaps the weapon bar for a needle icon. The needle can never hurt the serpent.
+  - **Drop it on purpose** with the alt/drop button to get your weapons back (the needle stays on the floor and can be picked up
+    again). **Getting hit, or a backwash washing over you, also drops it**: it skids away along the floor, and the backwash
+    and the serpent's tail can shove it, so you may have to chase it or take a fresh one from the tray.
+  - **Injecting:** stand within ~60 px of a port and hold fire. Four **injection points** appear in a ring around the
+    orifice; aim at each in turn (about 0.4 s each, ~1.6 s total; on touch the auto-aim snaps to the next point). Complete
+    the ring and a **gel "volcano" mound** closes the hole to a slit: that port is plugged for ~15 s, or until a slam knocks
+    it out. Missing a point or being interrupted leaves a weaker, shorter plug and uses the needle up.
+  - A serpent can only dive into unplugged ports: plugging reduces its hiding places and backwash, and with all ports plugged it is
+    stranded and **forced to swim in the open with its head exposed** for a long vulnerable window. The loop is: grab a needle,
+    survive the loops and backwash while defenceless, plug a port, drop the needle, fight, repeat.
 - **Phases follow the VUR grades:** I-II (a short straight serpent, light backwash), III (it coils, adds loops and an E. coli
   "pyelonephritis" swarm on every backwash), IV-V (tortuous, blunted-calyx look: big overlapping loops, double backwash, and
   the real fix appears as a one-time "Antireflux Tunnel" capstone cut on its head for CUT weapons).
@@ -325,8 +336,8 @@ ladder (so movement and aim can be practised without a run). The Peds dungeon un
 **Done when:** `?dungeon=peds` (or the hub's case board) runs the Peds Wing end to end with the reflux boss; harness block (S)
 covers the pediatric-scope modifier, the par-time medals and sticker book, each trial's success, fail-restart and best-time
 record, the movement tech unlocks and their effects (Perfect Roll refund, Roll Cancel, Slide, Flick Shot), the elite, the gates,
-hydronephrosis decompression vs popping, the serpent's loops, port dive/pop, backwash and breakwaters, port plugging and the
-vulnerable window, the three phases, the Sim Lab replay, and the new boons; earlier blocks pass.
+hydronephrosis decompression vs popping, the serpent's loops, port dive/pop, backwash and breakwaters, needle pick-up, carry limits, drop and loss to backwash, the injection ring, port
+plugging and the vulnerable window, the three phases, the Sim Lab replay, and the new boons; earlier blocks pass.
 
 ---------------------------------------------------------------------------------------------------
 

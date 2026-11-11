@@ -68,6 +68,8 @@ and do the next step". Docs only; no game code changed.
   `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
   A module split of the game is a separate task after Step 3.
 
+- **Reflux plugging reworked** (Andrew): you carry a bulking needle (not a weapon; cannot hurt the serpent; dropped on hit or
+  by backwash) and inject around each port in a ring of four points, like Deflux; the Bulking Gel weapon is gone.
 - **Step 4 reshaped** (Andrew: more action/time-trial, and a Metroid-style serpent): about half the Peds rooms are timed skill
   trials (Valve Run, Tide Dash, Aim Gallery, Catheter Course, Pop-Off, Torsion ER) with par medals, stickers and movement tech
   you keep (Perfect Roll, Roll Cancel, Slide, Flick Shot); the Reflux boss is a kidney head with a ureter tail that swims
