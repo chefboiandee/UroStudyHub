@@ -195,12 +195,25 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF
 
 ### Anki Cards (`page === "anki"`, toggleable)
+- **📖 Review tab (in-app reviewer, 2026-11-11; internal id `study`, default tab once you have cards)** — phone-first: due queue
+  (learning → reviews → new, `ankiNewPerDay` new/day, learn-ahead 20 min), tap to reveal, Again/Hard/Good/Easy with the next
+  interval on each button, Quick 10 / 25 / All sessions, undo, edit / suspend / delete on the card, tag filter, keyboard
+  (space, 1–4, Z). Scheduler is Anki-classic (SM-2 style: steps 1m/10m, grad 1d, easy 4d, ease 2.5, lapse → 10m relearn).
+  Cloze notes are one study unit per cloze number (like Anki's sub-cards), siblings buried until the next day.
+  Pure logic = the `ANKI-SCHED-BEGIN/END` block in `UroStudyHub.html` (`node tools/anki-sched.test.mjs`); UI = `renderAnkiStudy()`.
+  Per-card schedule lives on the card: `card.sc[unitKey] = { st, step, due, ivl, ease, reps, lapses, last, first }` (absent = new);
+  `card.susp` = suspended. Study days roll over at 4am local. **Rewards:** 2 XP per graded review (+1 coin per 10, capped at
+  100 reviews/day), a review keeps the streak (same rules as marking a topic done), the daily goal (`ankiReviewGoal`, counts
+  `ankiDays[studyDay]`, not lifetime) pays one token, clearing the queue pays a once-a-day bonus. Manual "+10" logging on the hub
+  still works (counts toward the goal, no XP). Deliberately NOT built yet: linking to real Anki (AnkiConnect read/answer),
+  cross-device sync (each device has its own deck state — see Phase 2 Cross-Device Sync), FSRS, import from Anki.
+- **📇 Cards tab** (was "Review"): the card browser — select, edit, delete, export; shows each card's study status and Resume for suspended ones
 - AI-generated cards from topics or lectures
 - Manual card creation (basic + cloze types)
 - Batch generation from uploaded content
 - Tag system for organization
 - Export to Anki-importable format (TSV with separate basic/cloze files)
-- AnkiConnect integration (partially implemented)
+- AnkiConnect integration (push cards only; reading reviews / answering from the app is not built)
 - Select, bulk delete (with confirmation), edit cards
 - **Anki toggle** — settings toggle hides all Anki UI (tab, hub tasks, lecture buttons) when disabled
 
@@ -243,8 +256,26 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - **XP & Coins** — earned from completing topics, lectures, readings, Anki reviews, pomodoros, SASP
 - **11-rank progression** — Pre-Med → ... → Department Chair
 - **Daily streak** with streak shield upgrade
-- **Tokens** — currency for playing games. Earned via study activities.
+- **Tokens** — currency for playing games. Earned via study activities. A launch costs 1 token whatever the game (out of tokens:
+  one free trial per game per day, then a gate question). A game's coin **unlock** price (150–350 💰, `unlockCost` in `ARCADE_GAMES`)
+  is paid once; the token is the only ongoing price. Every game pays through `gameReward` under the same cap (150 💰 / 80 XP per claim).
 - **Activity Log** — tracks all study actions with timestamps
+- **Arcade variety (2026-11-11)** — nudges players toward a mix of games with carrots, never locks. All bookkeeping is the pure
+  `ARCADE-PLAY` block in `UroStudyHub.html` (`ARCADE_GAMES` list, `arcadeRecordPlay` / `arcadeRecordOpen`), unit-tested by
+  `tools/arcade-play.test.mjs`, driven end to end by block E of `tools/arcade-cards.drive.mjs`. A *play* = a round that finished and
+  paid (coins or XP > 0); a launch is counted separately.
+  - `s.gameStats[id] = { opens, plays, coins, last }` — the per-game counter (the Arcade card shows "N× played"; before this only the
+    total `s.games` existed).
+  - **Daily first-play bonus** — the first paid round of each game each *local* day also pays +25 💰 +10 XP (`FIRST_PLAY_COINS/XP`;
+    `s.dailyFirst = { day, games }`). The card says "+25 💰 first play today", then "✓ today's bonus taken". A toast shows the bonus line.
+  - **📋 Case Minimums** — paid rounds in N *different* games in a Monday–Sunday week (`s.rotation = { week, games, claimed }`) pay once per
+    tier (`MINIMUM_TIERS`): 3 games +1 🪙, 5 games +1 🪙 +30 💰, 7 games +2 🪙 +100 💰 (the "full rotation", counted in `s.rotationFull`).
+    The tokens go straight to `s.tokens`, not the activity log / `tokensEarned`, so they never light up the *study* heatmap or analytics.
+    (Named "Case Minimums", not "case log", because the Case Log is the real surgical-case feature.)
+  - Day and week keys are local time (`arcadeDay` / `arcadeWeek`); the streak and daily login still use UTC dates.
+  - The top toast now has one timer (`flashToast`): an older toast's timeout used to clear a newer one early.
+  - **Coin balance:** all shop items (unlocks 1,750 + upgrades 2,880 + themes 500 ≈ 5,100 💰) get bought up eventually, and the daily
+    bonus adds up to 8 × 25 💰 a day, so expect the shop to run dry; see STATUS.md "Next steps" for the perk-expansion plan.
 
 ### Mini-Games (overlay via `showGame` state)
 
@@ -439,7 +470,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - [x] Snap Decision — touch-first swipe game (Bench or OR?) with AI-generated deck + seed fallback
 - [ ] Responsive layout audit at 375px and 390px
 - [ ] PWA support (inline service worker + manifest)
-- [ ] Touch-friendly Anki review (swipe gestures)
+- [x] Touch-friendly Anki review (in-app Review tab, buttons + keyboard; swipe gestures not built)
 - [ ] 44px minimum tap targets across non-game UI
 
 ### Parked: 🌌 Trail — learning-constellation map (tracker sub-tab)

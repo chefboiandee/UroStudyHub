@@ -55,7 +55,7 @@ The app uses AI to power the tutor, generate flashcards, and build study plans. 
 ## What AI Does in the App
 
 - **AI Tutor** — upload a lecture PDF or notes → get a structured teaching session that walks you through the material like an attending would
-- **Anki Cards** — auto-generates flashcards from anything you upload
+- **Anki Cards** — auto-generates flashcards from anything you upload, then lets you review them right in the app (spaced repetition, a few cards or a few hundred, with XP and streak credit)
 - **Study Plans** — upload your syllabus → get a personalized day-by-day study schedule
 
 ---

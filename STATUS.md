@@ -51,6 +51,93 @@ the body HP (2800) and tine HP (200). Then Step 2 (the Giant TURP boss).
 **Open questions:** Is a guaranteed stun on every dodged charge too generous (a human will be gored more than the bot)?
 Should a broken tine also chip the body? Should the Staghorn's run get a STONE dungeon theme like Oncology has?
 
+## 2026-11-11 — 📖 Review tab: reviewing Anki cards inside the app (phone-first)
+
+Andrew's question: could reviewing live in UroStudyHub so it is a one-stop shop, with real credit for doing it? The app already
+made cards (AI, manual, hooks, ISE misses) but could not review them, and the hub's "Anki reviews" were `+10` self-report
+buttons. Decision after discussing devices (phone first, then iPad, then Boox): build the in-app reviewer now, **table the
+link to real Anki** (AnkiConnect is desktop-only, so it does not help phone/iPad/Boox).
+
+**Done (`UroStudyHub.html`, built to `UroStudyHub.min.html`):**
+- **📖 Review tab** on the Anki page (default once you have cards; the old "Review" tab is now **📇 Cards**, the card browser).
+  Home: today's count vs the goal, Review / Learning / New tiles, **Quick 10** (or 25 / All), tag filter, ⚙ limits (new/day, daily
+  goal). Card: tap to reveal, Again / Hard / Good / Easy with the next interval on each (62px buttons), undo, edit / suspend /
+  delete, keyboard (space, 1–4, Z). Summary: accuracy, XP, coins, goal and queue-cleared messages. No animation (e-ink safe),
+  column capped at 640px on iPad.
+- **Scheduler** (`ANKI-SCHED-BEGIN/END`, pure ES5): Anki-classic. New: steps 1m/10m, Good-Good graduates to 1d, Easy 4d.
+  Review: Hard ×1.2, Good ×ease, Easy ×ease×1.3 with credit for lateness; ease 2.5 (min 1.3); Again = lapse → 10m relearn → 1d.
+  Cloze notes = one unit per cloze number (Anki sub-cards), siblings buried till tomorrow. Study day rolls over at **4am local**.
+  Schedule is stored on the card (`card.sc[unitKey]`, absent = new; `card.susp`), so existing cards need no migration.
+- **Rewards:** 2 XP per graded review (+1 coin per 10, both capped at 100 reviews/day), reviews keep the streak (same rules and
+  milestone coins as marking a topic done), the daily goal pays one token, clearing the queue pays +25 XP +5 coins once a day.
+- **Bug fixed:** `ankiReviews` was a lifetime counter compared against a *daily* goal with no reset, so after ~50 total taps the hub
+  task vanished and the token never paid again. The goal now counts `ankiDays[studyDay]`; `ankiReviews` stays as the lifetime total
+  for analytics. The hub row now reads "N cards to review · x/goal today" and jumps to the Review tab; the manual `+10/+25/+50`
+  buttons still work (count toward the goal, no XP) for reviews done in real Anki.
+- **Tests:** `node tools/anki-sched.test.mjs` (32, run under 3+ time zones) and `node tools/anki-study.drive.mjs` (63: phone
+  viewport E2E incl. 360px layout, iPad, dark mode). Existing `arcade-cards` (74), `ise-plan` unit (45) and drive (150) still pass.
+
+**Next steps:**
+- **Cross-device sync** is the real gap: phone, iPad and Boox each keep their own deck state in localStorage, so a card reviewed on
+  one is still due on another. Options: a "back up / move my deck" code (cheap, like the `URO:ISE:` backup) or the Supabase Phase 2
+  item. Cards already have stable ids and per-unit `last` timestamps, so "newest review wins per card" is a straightforward merge;
+  `ankiDays` would need to be per-device and summed.
+- Parked by choice: link to real Anki (AnkiConnect: read reviewed-today/due counts and credit them, desktop only; verify action
+  names against the current docs first, they moved to sourcehut), import from an Anki plain-text export, FSRS, swipe gestures,
+  on-card images. Cards pushed to Anki are not marked "in Anki", so pushing and reviewing in-app would double-review.
+- Playtest on the live phone: is Quick 10 / 10 new per day the right default, and is 2 XP per review the right size next to 50 XP for a topic?
+
+**Open questions:** the app's other counters (pomodoros, heatmap, streak) use the UTC date while Anki days use local time with a 4am
+rollover, so on a US evening the streak day and the Anki day can differ by one; fine for now, worth unifying if it ever shows.
+
+## 2026-11-11 — 🎮 Arcade variety: play counter, daily first-play bonus, weekly Case Minimums
+
+Andrew's worry: some games are more polished and more fun than others, so players will grind Path of Pathology or Stone Squadron and
+skip the rest. Pricing the fun games up only shrinks play (the coin unlock is paid once; the token cost is flat), so this session adds
+carrots instead. Steps 1 and 2 of a six-idea plan (the rest are under Next steps); no game is locked or taxed.
+
+**Done (`UroStudyHub.html`, Boox-safe: plain `var` / `function`, nothing newer than ES5 in the new code):**
+- **Play counter** `s.gameStats[id] = { opens, plays, coins, last }`. A *play* is a round that finished and paid; launches are counted
+  separately (an effect on `showGame`, so token / trial / admin / gate-question launches are all covered). Before this only the total
+  `s.games` existed, so the mix could not be seen. Each Arcade card now reads "N× played".
+- **Daily first-play bonus**: the first paid round of each game each local day also pays +25 💰 +10 XP, once per game per day.
+  Cards say "+25 💰 first play today" / "✓ today's bonus taken". Needs coins or XP > 0, so launch-and-quit can't farm it.
+- **📋 Case Minimums** (weekly, Mon–Sun, local time): paid rounds in 3 / 5 / 7 different games pay +1 🪙 / +1 🪙 +30 💰 / +2 🪙 +100 💰,
+  once per tier per week; the 7-game tier also counts a lifetime "full rotation" (★ N full). A progress panel sits at the top of the
+  Play tab and each card shows "📋 logged this week". The bonus tokens go to `s.tokens` only (not the activity log / `tokensEarned`),
+  so they don't show up in the study heatmap or analytics. Named "Case Minimums" because "Case Log" is the real surgical-case feature.
+- One toast line per claim ("🎯 First … today: +25 💰 +10 XP · 📋 3 games this week: +1 🪙"). **Fixed along the way:** the top toast
+  had five independent timeouts, so an older toast cleared a newer one early (the daily-login toast was cutting the bonus line short);
+  all five now go through `flashToast` with a single timer. The toast pill also no longer wraps at half the screen width.
+- `GAMES` moved out of `GameSelectScreen` to module-scope `ARCADE_GAMES`, so the bookkeeping knows every id (add a game there once).
+- The bookkeeping is a pure `ARCADE-PLAY-BEGIN/END` block, like the ISE logic, so it is unit-tested without a browser.
+
+**Verified:** `tools/arcade-play.test.mjs` (new, 24 tests; run under `TZ=America/New_York`, `UTC`, `Pacific/Auckland`: week boundaries,
+DST days, year change, per-day / per-week resets, tier payouts, no mutation of the input state, pre-feature profiles).
+`tools/arcade-cards.drive.mjs` 119 checks pass (74 old + new block E and extra Snap checks: bonus once per day, counters, tiers 3 / 5 /
+full from a seeded week, stale day and week reset, an old save with none of the new keys). Frame games are paid through the real
+postMessage claim from inside their frame. Stone Squadron's claim is not driven (its page needs three.js from a CDN) but it uses the
+same `squadron:claim` → `gameReward` path. Looked at the Arcade at phone width, dark and light.
+
+**Next steps:**
+1. **Idea 3: daily "On Call" rotation**: 2–3 games boosted by date (e.g. 2× coins or the token back on a good run), badge on the card.
+2. **Idea 4: shared meta currency**: CME credits earned in *every* game, spent in Path of Pathology's Call Room (fold into
+   `UROCRAWL_ROADMAP.md` step 3), so Crawl grinders have a reason to visit the others.
+3. **Idea 5: cross-game hooks**: a Buzzer / Snap streak gives a starting boon in Crawl; a Squadron clear unlocks a bestiary entry.
+4. **Idea 6: pick by time / "Pick for me"**: add a `mins` class (quick / medium / deep) to `ARCADE_GAMES`, an "I have 5 / 15 / 30 min"
+   filter, and a "Pick for me" button weighted to games with the oldest `gameStats[id].last`.
+5. **Shop perks (Andrew's note: the shop will be bought out quickly).** Everything in the shop is ≈ 5,100 💰 in total (unlocks 1,750,
+   upgrades 2,880, themes 500) and the daily bonus adds up to 200 💰 a day on top of round payouts. Candidates, cheapest first:
+   more themes and profile titles / frames (rank flair, "Full rotation" badge); a repeatable coin sink such as a capped weekly
+   token pack or a gate-question skip; a levelled "Residency Stipend" that raises the first-play bonus; "Pager Priority" (2 free trials
+   a day per game); Crawl-side cosmetics bought with CME credits (ties to idea 4); a late-game "Fellowship" prestige reset for a
+   permanent badge. Pick a few with Andrew before building.
+6. Send `gameStats` / `rotationFull` to the analytics sync (`urostudyhub-analytics-script.js`) so the mix is visible in the sheet.
+
+**Open questions:** is 25 💰 the right bonus size given the shop will drain faster (lower it, or pay part as XP)? Are 3 / 5 / 7 the right
+tiers (a new player only has Snap free, so week one tops out at what they can afford to unlock; that also nudges buying unlocks)?
+A bigger one-time "first ever play of this game" bonus? Should the daily bonus favour the teaching games over the pure-fun ones?
+
 ## 2026-11-11 (later) — 🦀 Path of Pathology: the Invader (third boss), the wall + perforation system, the Oncology dungeon
 
 Andrew (via the brief): a third boss, the muscle-invasive bladder tumour, in a round bladder arena whose wall can
@@ -116,6 +203,12 @@ and do the next step". Docs only; no game code changed.
   `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
   A module split of the game is a separate task after Step 3.
 
+- **Reflux plugging reworked** (Andrew): you carry a bulking needle (not a weapon; cannot hurt the serpent; dropped on hit or
+  by backwash) and inject around each port in a ring of four points, like Deflux; the Bulking Gel weapon is gone.
+- **Step 4 reshaped** (Andrew: more action/time-trial, and a Metroid-style serpent): about half the Peds rooms are timed skill
+  trials (Valve Run, Tide Dash, Aim Gallery, Catheter Course, Pop-Off, Torsion ER) with par medals, stickers and movement tech
+  you keep (Perfect Roll, Roll Cancel, Slide, Flick Shot); the Reflux boss is a kidney head with a ureter tail that swims
+  loops and dives into wall ports; a Sim Lab hub station replays trials.
 - **Step 4 added** (Andrew: a Peds dungeon): the toy-box Peds Wing with the Wilms elite, hydronephrotic kidneys (SFU grades),
   BBD blob, botryoid rhabdomyosarcoma, PUV gates, a torsion emergency room (abstract knot), and the Reflux megaureter-serpent
   boss (tide waves + plugging ports with a bulking-gel weapon). Content rule: no children and no paediatric genital or pelvic
