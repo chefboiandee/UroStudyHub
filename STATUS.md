@@ -17,6 +17,10 @@ and do the next step". Docs only; no game code changed.
 - **Step 3** The Call Room hub: walkable pre-run room with starter boon, pins, perks, decor, CME credits and jokes.
 - Parked: Muscle-Invasive Bladder Tumor boss (reuses Step 2's perforation system), rename, later ideas.
 
+- **Boox rule relaxed for games** (Andrew: the Boox is for AI tutoring only, not games): `AGENTS.md` and the roadmap now say
+  `games/` pages may use modern JS, modules, libraries and WebGL; `UroStudyHub.html` (incl. the arcade tile/frame host) stays Boox-safe.
+  A module split of the game is a separate task after Step 3.
+
 **Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
 **Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
 ## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room

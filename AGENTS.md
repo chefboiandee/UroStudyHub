@@ -15,6 +15,9 @@ roughly **Chromium ≤92**. Everything must run on that engine:
 - **pdf.js is PINNED to 2.16.105 legacy in `pdfjs/` — never bump it** without
   a real on-device Boox retest.
 - "Works in desktop Chrome" is not done. If it breaks on the Boox, it's broken.
+- **Exception: pages under `games/`** do not have to run on the Boox (Andrew uses it for AI tutoring only, not games), so
+  modern JS, ES modules, libraries and WebGL are fine there. The app itself, including the arcade tile and the frame host in
+  `UroStudyHub.html`, must stay Boox-safe.
 
 ## Layout + workflow
 - `UroStudyHub.html` is the single-file app source and it is huge — **grep
