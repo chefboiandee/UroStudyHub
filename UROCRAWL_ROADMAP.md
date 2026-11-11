@@ -7,7 +7,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 
 ## Progress (tick the box and add the date when a step is merged to `main`)
 
-- [ ] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style)
+- [x] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style). Done 2026-11-11 (as built: the note at the end of Step 1)
 - [ ] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon
 - [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
 - [ ] **Step 4** — Dungeon 5, the Peds Wing: Wilms elite, the Reflux serpent boss, torsion emergency room
@@ -36,7 +36,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–O, 237 checks: O is the Invader; the steps below add blocks P, Q, R and S). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–P, 261 checks: O is the Invader, P is Step 1's Staghorn duel; the steps below add blocks Q, R and S). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -79,6 +79,16 @@ calculi fill the renal pelvis and calyces like antlers."
 
 **Done when:** `?boss=staghorn` is a mobile duel with all three phases; the harness block (P) covers the charge, the
 wall-crash stun and tine break, the three phase transitions, and a full autoplay kill; earlier blocks still pass.
+
+**As built (2026-11-11):** every number is in the `STAG` table (`UroCrawl.tuning.STAG`), the script is the `stag*`
+functions in §14b, the art is `drawStag` / `drawStagCore`. Where the build reads the spec one way or adds to it:
+- The shell opens when **2 tines are broken** (the spec's "while ≥ 2 remain" and "break 2" disagree by one; "break 2" won).
+  Tine damage stays in the tine, and brushing a tine does not hurt: the rack hits with the charge and the sweep.
+- A charge that **gores** the surgeon skids to a stop: no crash, no stun. Only a dodged charge reaches the wall.
+- HP is 2800 (was 1500) to land the 90-120 s target; the bot with the starting loadout takes about 70 s.
+- Each phase change is a ~1.3 s roar that nothing gets through. The core's dashes are a fixed 0.46 s so 2-3 can chain;
+  one that reaches a wall is the 1.2 s stun. The old phase-1 stone adds are gone: it is a duel.
+- The boss body is drawn in the back-to-front pass (`def.depth`); rooted bosses still draw under everything.
 
 ---------------------------------------------------------------------------------------------------
 

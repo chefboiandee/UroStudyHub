@@ -4,7 +4,8 @@
   types and the window.UroCrawl test hooks keep it). A goofy dungeon-crawler roguelike set inside a diseased urinary
   tract: rooms of pathologic monsters, rock–paper–scissors instrument switching (lasers break stones, loops cut
   tumours, heat burns bugs and lobes, water flushes clots and strips biofilm), Hades-style door choices and boons,
-  and three bosses: the Staghorn Calculus, Fournier's Gangrene (the Hydra) and the Invader (a muscle-invasive bladder
+  and three bosses: the Staghorn Calculus (a stone stag you duel head-on: bait its antler charge into a wall to stun it and
+  snap a tine off), Fournier's Gangrene (the Hydra) and the Invader (a muscle-invasive bladder
   tumour in a round arena whose wall can perforate: §14c is the reusable wall + perforation system, §14d the boss). No quizzes: the learning is osmosis
   plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
   body-horror gags played for laughs; everything stylized and abstract, never anatomical. Seen from a raised 3/4
@@ -24,7 +25,9 @@
               ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), giveMod(id), setAspect(weapon, aspect),
-              skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... } }
+              skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... },
+              tuning: { STAG (every Staghorn number), MIBC, PERF, ... } }; state.boss is the live boss script (for the Staghorn:
+              state, face, cd, arms = the four tines, crashes, gores)
 
   Upgrade paths (Hades-style): MODS is a per-weapon table of upgrades in three branches (POWER / CONTROL / SPECIAL),
   tiers 1-3 with prerequisites, up to 6 mods + 1 capstone per weapon per run, offered by "Instrument Rep" doors
@@ -2497,13 +2500,13 @@ var ENEMIES = {
   },
   /* ─── BOSS parts (behaviour lives in §14b) ─── */
   staghorn: {
-    name: 'Staghorn Calculus', sub: 'BOSS — branching struvite stone', family: 'STONE', hp: 1500, r: 62, speed: 0, cost: 0, minRoom: 99, contact: 20, boss: true, stationary: true, noPush: true, noGrab: true, noCollide: false,
-    fact: 'A staghorn calculus fills the renal pelvis and calyces like antlers; most are struvite from urease-producing infection and need PCNL.',
-    init: function (e) { e.seed = 7; }, update: function (e, dt) {}, draw: function (c, e) { drawBossBody(c, e); }
+    name: 'Staghorn Calculus', sub: 'BOSS — branching struvite stone', family: 'STONE', hp: 2800, r: 46, speed: 0, cost: 0, minRoom: 99, contact: 0, boss: true, depth: true, noPush: true, noGrab: true, noCollide: false,   // mobile: the script in §14b moves it and sets contactNow; depth: drawn in the back-to-front pass
+    fact: 'Staghorn calculi fill the renal pelvis and calyces like antlers; most are struvite from urease-producing infection and need PCNL.',
+    init: function (e) { e.seed = 7; }, update: function (e, dt) {}, draw: function (c, e) { drawStag(c, e); }
   },
   stagarm: {
-    name: 'Calyceal Branch', family: 'STONE', hp: 110, r: 24, speed: 0, cost: 0, minRoom: 99, contact: 12, hidden: true, isArm: true, stationary: true, noPush: true, noGrab: true,
-    fact: '', init: function (e) {}, update: function (e, dt) {}, draw: function (c, e) { /* drawn by the boss renderer */ }
+    name: 'Antler Tine', family: 'STONE', hp: 200, r: 17, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, isArm: true, stationary: true, noPush: true, noGrab: true, noCollide: true,
+    fact: '', init: function (e) {}, update: function (e, dt) {}, draw: function (c, e) { /* drawn by drawStag, at this hitbox */ }
   },
   fournier: {
     name: 'Fournier', sub: "BOSS — Fournier's gangrene, necrotizing fasciitis of the perineum", family: 'MICROBE', hp: 1800, r: 96, speed: 0, cost: 0, minRoom: 99, contact: 18, boss: true, stationary: true, noPush: true, noGrab: true,
@@ -2898,10 +2901,10 @@ var DOOR_TYPES = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   §12 BOSSES — only the Staghorn is implemented (§14). The rest are design stubs for future rows.
+   §12 BOSSES — the Staghorn and Fournier are scripted in §14b, the Invader in §14d. The rest are design stubs.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOSSES = {
-  staghorn: { name: 'Staghorn Calculus', hp: 1500, phases: ['Shell', 'Infection', 'Core'], implemented: true },
+  staghorn: { name: 'Staghorn Calculus', hp: 2800, phases: ['Shell', 'Infection', 'Core'], implemented: true },
   fournier: { name: "Fournier's Gangrene", hp: 1800, phases: ['Necrosis', 'Spread', 'Sepsis'], implemented: true }
   // giantbph: { name: 'Giant BPH', hp: 2000, phases: ['Lobes', 'Median lobe', 'Capsule'] }          — three lobes, ENERGY/aquablation phase, retention flood
   // rccthrombus: { name: 'RCC with IVC Thrombus', hp: 2200, phases: ['Mass', 'Thrombus', 'Bleed'] }  — vascular tendrils, cryo/energy, satellites
@@ -3244,7 +3247,7 @@ function updateEnemy(e, dt) {
     if (hit) { if (e.bounceX) e.kx = -e.kx * 0.5; if (e.bounceY) e.ky = -e.ky * 0.5; }
   }
   // soft separation between walkers
-  if (!e.def.stationary && !e.def.noCollide && e.id !== 'ecoli') {
+  if (!e.def.stationary && !e.def.noCollide && !e.boss && e.id !== 'ecoli') {
     var es = G.enemies; for (var j = 0; j < es.length; j++) { var q = es[j]; if (q === e || q.dead || q.spawnT > 0 || q.def.noCollide || q.heldBy) continue; var dd = dist(e.x, e.y, q.x, q.y), min = (e.r + q.r) * 0.8; if (dd < min && dd > 0.01) { var push = (min - dd) * 0.5 * (q.def.stationary ? 1 : 0.5), pa = ang(q.x, q.y, e.x, e.y); e.x += Math.cos(pa) * push; e.y += Math.sin(pa) * push; } }
   }
   // contact damage (a stunned or frozen enemy is harmless to touch)
@@ -3282,7 +3285,7 @@ function bestTarget() {
   for (var i = 0; i < es.length; i++) {
     var e = es[i]; if (!enemyTargetable(e)) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 430) continue;
     var m = MATRIX[cls][e.family] * enemyTweak(e, cls, cur ? cur.id : null), score = -d;
-    if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += G.boss && G.boss.core ? 460 : 60; if (e.isArm) score += 30; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
+    if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += G.boss && G.boss.core ? 460 : 60; if (e.isArm) score += 30; if (e.aimBias) score += e.aimBias; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
     if (e.id === 'clot') score -= 120;
     if (e.def.isStump) { var coag = cur && (cur.id === 'roller' || (cur.id === 'bovie' && cur.mode === 1) || (cur.id === 'loop' && cur.mode === 2)); score += coag ? 120 : -500; }
     if (score > bs) { bs = score; best = e; }
@@ -3907,9 +3910,12 @@ function skipRoom() {
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §14b BOSSES — the final room rolls one of three (or ?boss=staghorn|fournier|mibc). The Invader is in §14d.
-   STAGHORN CALCULUS: Phase 1 "Shell": crack 2 of 4 armored arms. Phase 2 "Infection": biofilm shield regrows while
-   the swarm lives (strip with FLUID/Bovie/antibiotics, kill the swarm, LITHO the body). Phase 3 "Core": spirals,
-   rings, fragmentation bursts (suck the shards with the Trilogy for RVUs). ~60–90 s.
+   STAGHORN CALCULUS (a mobile duel, Minotaur-style): a stone stag that walks you down and charges in a straight line.
+   Roll through the charge and it hits the wall: stunned, +50% damage, a tine snapped off. Phase 1 "Shell": the body
+   takes 25% until 2 of its 4 antler tines are gone (shoot them or let the wall take them). Phase 2 "Infection": biofilm
+   shield regrows while the swarm lives (strip with FLUID/Bovie/antibiotics, kill the swarm, LITHO the body), slime
+   trail. Phase 3 "Core": a small fast core: chain dashes, spirals, gapped rings, fragmentation bursts (suck the shards
+   with the Trilogy for RVUs). ~90–120 s.
    FOURNIER'S GANGRENE (the Hydra): nearly stationary mass filling the upper half. Phase 1 "Necrosis": five necrotic
    lobes; a CUT lobe leaves a bleeding stump that regrows as two unless coagulated (ENERGY cauterize) within 3 s;
    three permanent debridements expose the body, whose necrotic armor must be CUT away. Phase 2 "Spread": creeping
@@ -3917,131 +3923,386 @@ function skipRoom() {
    into fans, polymicrobial adds, sugar crystals that feed its regeneration (Insulin clears them). Phase 3 "Sepsis":
    a 45 s clock; hit the migrating SOURCE weak point or go into septic shock. ~90–120 s.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-var BOSS_ARMS = [{ a: -2.25, len: 165 }, { a: -0.95, len: 185 }, { a: 0.95, len: 185 }, { a: 2.25, len: 165 }];
 function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else if (kind === 'mibc') spawnMibc(); else spawnStaghorn(); }
 function microbesAlive() { var n = 0; for (var i = 0; i < G.enemies.length; i++) { var e = G.enemies[i]; if (!e.dead && e.family === 'MICROBE' && !e.boss && !e.def.isLobe && !e.def.isStump) n++; } return n; }
 function bossQueue(delay, fn) { G.boss.queue.push({ t: delay, fn: fn }); }
 function runQueue(B, dt) { for (var q = B.queue.length - 1; q >= 0; q--) { B.queue[q].t -= dt; if (B.queue[q].t <= 0) { var fn = B.queue[q].fn; B.queue.splice(q, 1); fn(); } } }
 function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else if (B.kind === 'mibc') updateMibc(dt); else updateStaghorn(dt); }
 function bossColor(B) { return B.kind === 'fournier' ? '#ff4d6d' : B.kind === 'mibc' ? '#ff6b8a' : '#38e8ff'; }
-function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else if (B.kind === 'staghorn') drawBossArms(c); }
+function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else if (B.kind === 'staghorn') drawStagUnder(c); }
 function bossPartDied(e) {
   var B = G.boss; if (!B) return;
   if (e.boss) { bossDefeated(e); return; }
-  if (e.isArm) { for (var i = 0; i < B.arms.length; i++) if (B.arms[i].e === e) { B.arms[i].cracked = true; if (!e.silent) { addText(e.x, e.y - 30, 'BRANCH CRACKED', { color: '#38e8ff', size: 14 }); burst(e.x, e.y, 20, { color: '#d8c7a4', speed: 200, life: 0.5, size: 4, kind: 'frag', g: 400 }); shakeIt(6); hitstop(0.06); } } return; }
+  if (e.isArm) { for (var i = 0; i < B.arms.length; i++) if (B.arms[i].e === e) { B.arms[i].cracked = true; if (!e.silent) { addText(e.x, e.y - 30, 'TINE BROKEN', { color: '#38e8ff', size: 14 }); burst(e.x, e.y, 20, { color: '#d8c7a4', speed: 200, life: 0.5, size: 4, kind: 'frag', g: 400 }); shakeIt(6); hitstop(0.06); } } return; }
   if (e.def.isLobe) lobeDied(e);
 }
 function bossDefeated(e) {
   var B = G.boss; B.dead = true; G.cleared = true; B.sepsis = false;
   for (var k = 0; k < G.enemies.length; k++) { var o = G.enemies[k]; if (!o.dead && o !== e) { o.silent = true; o.hp = 0; killEnemy(o, 'NEUTRAL', null); } }
-  for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
+  if (B.kind === 'staghorn') stagShards(e); else for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
   var col = B.kind === 'fournier' ? '#b86a78' : B.kind === 'mibc' ? '#c2415c' : '#d8c7a4';
   burst(e.x, e.y, 120, { color: col, speed: 420, life: 1.4, size: 5, kind: B.kind === 'staghorn' ? 'frag' : 'goo', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
   G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 400, t: 1, dur: 1, color: '#38e8ff' }); shakeIt(16); G.punch = 0.4; hitstop(0.18);
   G.stats.rooms = Math.max(G.stats.rooms, 9); win();
 }
-/* ───────────── Staghorn ───────────── */
+/* ───────────── Staghorn: a head-on duelist ─────────────
+   A stone stag that walks the surgeon down. B.state: stalk → dig (digs in behind an aim line, 0.7 s) → charge (a straight
+   line to the wall) → stunned (it hit the wall: 2.5 s, +50% damage, one tine snaps off) or recover (it gored you instead:
+   no crash, no window). Up close it sweeps the rack (a cone); now and then it slams (groundSlam, then a ring of shards
+   to roll through) or fires a fan of spikes from the tines (2 per live tine + 1). The four tines are separate targets
+   (stagarm rows, placed by stagPlace every step); until STAG.NEED of them are gone the body takes STAG.SHELL damage.
+   Phase 2 adds the biofilm shield, swarms out of the cracks and a slime trail. Phase 3 drops the shell: a small fast
+   core that chain-dashes and fires spirals and gapped rings. Every number is in STAG. */
+var STAG = {
+  R: 46, CORE_R: 30, SHELL: 0.25, NEED: 2,                                  // body radius (beast / core) · body damage until NEED tines are broken
+  WALK: [0, 64, 54, 122], TURN: [0, 2.6, 2.2, 5],                             // per phase (index 1-3)
+  DIG: [0, 0.7, 0.7, 0.5], LOCK: 0.15, SPD: [0, 640, 640, 720], DMG: [0, 26, 26, 20], DASH: 0.46, MIN_RUN: 70, LANE: 120,
+  STUN: [0, 2.5, 2.5, 1.2], STUN_MUL: 1.5,
+  SWEEP_R: 128, SWEEP_HALF: 1.15, SWEEP_DMG: 18, SWEEP_TELE: 0.55,
+  SLAM_R: 96, SLAM_TREMOR: 60, SLAM_DMG: 16, SLAM_TELE: 0.7, RING_SPD: 230, RING_MAX: 440, RING_DMG: 12,
+  VOLLEY_TELE: 0.55, VOLLEY_SPD: 300, VOLLEY_DMG: 9, SWARM: 5, TRAIL: 44
+};
+var STAG_TINES = [{ rel: -0.95, len: 58 }, { rel: -0.35, len: 76 }, { rel: 0.35, len: 76 }, { rel: 0.95, len: 58 }];   // angle off the facing, length from the head
+function stagHead(B) { var b = B.body, k = b.r * 0.5; return { x: b.x + Math.cos(B.face) * k, y: b.y + Math.sin(B.face) * k }; }
+function stagTip(B, i) { var h = stagHead(B), t = STAG_TINES[i], a = B.face + B.swing + t.rel; return { x: h.x + Math.cos(a) * t.len, y: h.y + Math.sin(a) * t.len }; }
+function liveArms() { return G.boss.arms.filter(function (a) { return !a.cracked; }); }
+function stagSet(B, state, t) { B.state = state; B.stT = t || 0; }
+function stagChargeCd(ph) { return ph === 3 ? rr(2, 2.6) : ph === 2 ? rr(7.5, 9) : rr(4.4, 5.4); }
 function spawnStaghorn() {
-  var body = spawnEnemy('staghorn', 740, 270, { instant: true, force: true });
-  body.inv = true; body.noClear = false; body.shield = 0; body.shieldMax = 0;
-  var arms = [];
-  for (var i = 0; i < BOSS_ARMS.length; i++) {
-    var ad = BOSS_ARMS[i], tx = clamp(body.x + Math.cos(ad.a) * ad.len, ARENA.x + 30, ARENA.x + ARENA.w - 30), ty = clamp(body.y + Math.sin(ad.a) * ad.len, ARENA.y + 30, ARENA.y + ARENA.h - 30);
-    var arm = spawnEnemy('stagarm', tx, ty, { instant: true, force: true }); arm.noClear = true; arm.body = body;
-    arm.onDamaged = function (e, dmg) { if (G.boss && !G.boss.body.dead) { G.boss.body.hp = Math.max(1, G.boss.body.hp - dmg * 0.9); G.boss.body.flash = 0.08; } };
-    arms.push({ e: arm, a: ad.a, len: ad.len, tx: tx, ty: ty, cracked: false, flash: 0 });
+  var body = spawnEnemy('staghorn', 730, 270, { instant: true, force: true });
+  body.noClear = false; body.shield = 0; body.shieldMax = 0; body.dmgMul = STAG.SHELL;
+  var B = G.boss = { kind: 'staghorn', body: body, arms: [], phase: 1, t: 0, face: Math.PI, swing: 0, gait: 0, state: 'stalk', stT: 0.6,
+    cd: { charge: 2.2, sweep: 1, slam: 7, volley: 4.4, spiral: 5, frag: 9 }, run: null, chain: 0, tele: null, rings: [], swoosh: null, swarmT: 4, trail: 0, spiral: null, dustT: 0,
+    crashes: 0, gores: 0, exposed: false, dead: false, queue: [], name: 'STAGHORN CALCULUS', sub: 'BOSS · the renal pelvis', phases: ['SHELL', 'INFECTION', 'CORE'], hint: '', sepsis: false };
+  for (var i = 0; i < STAG_TINES.length; i++) {
+    var tp = stagTip(B, i), tine = spawnEnemy('stagarm', tp.x, tp.y, { instant: true, force: true, free: true }); tine.noClear = true; tine.body = body;
+    B.arms.push({ e: tine, i: i, cracked: false, flash: 0 });
   }
-  G.boss = { kind: 'staghorn', body: body, arms: arms, phase: 1, t: 0, fanT: 2.2, volleyT: 4.5, slamT: 7, addT: 11, swarmT: 2.5, armIdx: 0, spiral: { on: false, t: 0, a: 0, idle: 0 }, fragT: 8, moveDir: 1, dead: false, queue: [], slam: null, name: 'STAGHORN CALCULUS', sub: 'BOSS · the renal pelvis', phases: ['SHELL', 'INFECTION', 'CORE'], hint: '', sepsis: false };
   G.introT = 2.6; Snd.sfx('roar'); shakeIt(14); G.punch = 0.3;
 }
-function liveArms() { return G.boss.arms.filter(function (a) { return !a.cracked; }); }
+// the tines ride the head: put each live one at its tip (kept inside the room so it can always be hit). Brushing a tine
+// does not hurt: the rack hits with the charge and the sweep.
+function stagPlace(B, dt, shelled) {
+  for (var i = 0; i < B.arms.length; i++) {
+    var arm = B.arms[i], te = arm.e; arm.flash = Math.max(0, arm.flash - dt);
+    if (!arm.cracked && te.dead) arm.cracked = true; if (arm.cracked) continue;
+    var tp = stagTip(B, i), cp = clampArena(tp.x, tp.y, te.r); te.x = cp.x; te.y = cp.y; te.vx = te.vy = 0; te.kx = te.ky = 0; te.aimBias = shelled ? 0 : -100;   // auto-aim: tines first while the shell holds, the body after
+  }
+}
+function stagInterrupt(B) {   // a phase change cancels whatever it was winding up
+  var body = B.body; body.atk = null; B.run = null; B.chain = 0; B.tele = null; delete body.st.stun;
+  for (var i = 0; i < G.teles.length; i++) if (G.teles[i].e === body || G.teles[i].stag) G.teles[i].t = 0;
+}
+function stagSwarm(B, n, proteus) {
+  var body = B.body; for (var k = 0; k < n; k++) spawnEnemy('ecoli', body.x + rr(-34, 34), body.y + rr(-34, 34), { instant: true });
+  if (proteus) spawnEnemy('proteus', body.x + rr(-30, 30), body.y + rr(-30, 30), { instant: true });
+  burst(body.x, body.y, 16, { color: '#7cf29a', speed: 190, life: 0.4, size: 3, kind: 'goo', g: 300 }); Snd.sfx('pop');
+}
+// shard rings from a slam: they roll outward along the floor and hurt once as they pass; roll through them
+function stagRings(B, dt) {
+  for (var i = B.rings.length - 1; i >= 0; i--) {
+    var rg = B.rings[i]; if (rg.delay > 0) { rg.delay -= dt; if (rg.delay <= 0) Snd.sfx('shatter'); continue; }
+    rg.r += rg.v * dt; if (rg.r >= rg.max) { B.rings.splice(i, 1); continue; }
+    if (rg.done || G.over) continue;
+    if (rg.r > rg.max * 0.9) { rg.done = true; continue; }
+    var d = dist(rg.x, rg.y, P.x, P.y);
+    if (Math.abs(d - rg.r) <= 15) {
+      if (P.inv > 0) { if (P.roll > 0 && !rg.grazed) { rg.grazed = true; addText(P.x, P.y - 30, 'DODGE', { color: '#9fb6c9', size: 11 }); } }
+      else { rg.done = true; hurtPlayer(rg.dmg, 'slam', ang(rg.x, rg.y, P.x, P.y)); }
+    } else if (rg.r > d + 15) rg.done = true;
+  }
+}
+function stagDig(B) {
+  var body = B.body, T = STAG.DIG[B.phase];
+  stagSet(B, 'dig', T); B.dustT = 0;
+  B.tele = { kind: 'line', e: body, stag: true, x: body.x, y: body.y, a: B.face, len: 200, thick: B.phase === 3 ? 76 : STAG.LANE, t: T, dur: T }; G.teles.push(B.tele);
+  Snd.sfx('charge');
+}
+function stagEndRun(B, rest) {
+  var ph = B.phase; B.run = null;
+  if (ph === 3 && B.chain > 1 && !rest) { B.chain--; stagDig(B); return; }   // the core chains 2-3 dashes
+  B.chain = 0; stagSet(B, 'recover', rest || 0.7); B.cd.charge = stagChargeCd(ph);
+}
+function stagCrash(B) {
+  var body = B.body, ph = B.phase, run = B.run, T = STAG.STUN[ph], ca = Math.cos(run.a), sa = Math.sin(run.a), ix = body.x + ca * body.r, iy = body.y + sa * body.r, i;
+  B.crashes++; B.run = null; B.chain = 0; stagSet(B, 'stunned', T); B.cd.charge = stagChargeCd(ph);
+  body.st.stun = { t: T }; body.vx = body.vy = 0; body.kx = -ca * 240; body.ky = -sa * 240; body.sx = 0.74; body.sy = 1.26;
+  var order = [1, 2, 0, 3], arm = null; for (i = 0; i < order.length && !arm; i++) if (B.arms[order[i]] && !B.arms[order[i]].cracked) arm = B.arms[order[i]];
+  if (arm) { arm.e.hp = 0; killEnemy(arm.e, 'NEUTRAL', null); }                // the wall takes a tine
+  burst(ix, iy, 22, { color: '#d8c7a4', speed: 260, life: 0.55, size: 4, kind: 'frag', g: 420, dir: run.a + Math.PI, spread: 1.2 }); burst(ix, iy, 10, { color: '#cbb994', speed: 110, life: 0.5, size: 5, kind: 'smoke' });
+  G.fxRings.push({ x: ix, y: iy, r: 12, r1: 110, t: 0.35, dur: 0.35, color: '#fff3d6' });
+  addText(body.x, body.y - body.r - 34, 'STUNNED!', { color: '#ffe066', size: 20, sub: '+50% damage', subColor: '#ffd166', dur: 1.1 });
+  shakeIt(7); hitstop(0.08); G.punch = Math.max(G.punch, 0.12); Snd.sfx('clang'); Snd.sfx('shatter');
+  if (ph === 2 && microbesAlive() < 14) stagSwarm(B, 3, false);                 // a crash shakes more of the swarm out of the cracks
+  if (ph === 3) for (i = 0; i < 10; i++) enemyShot(ix, iy, run.a + Math.PI + rr(-1.1, 1.1), rr(120, 220), 5, { color: '#d8c7a4', r: 5, shape: 'frag', suckable: true, life: 3 });
+}
+function stagSweep(B) {
+  var body = B.body, d = dist(body.x, body.y, P.x, P.y), a = ang(body.x, body.y, P.x, P.y), inArc = d <= STAG.SWEEP_R + P.r && Math.abs(angDiff(B.face, a)) <= STAG.SWEEP_HALF + 0.05;
+  B.swoosh = { t: 0.24, dur: 0.24, a: B.face }; Snd.sfx('swing');
+  if (inArc && P.inv <= 0 && !G.over) { hurtPlayer(STAG.SWEEP_DMG, 'stone', a); P.x += Math.cos(a) * 34; P.y += Math.sin(a) * 34; resolveCircle(P, P.r); G.punch = Math.max(G.punch, 0.1); }
+  else if (inArc && P.roll > 0) addText(P.x, P.y - 30, 'DODGE', { color: '#9fb6c9', size: 11 });
+}
+function stagSlam(B, e) {
+  groundSlam(e, STAG.SLAM_R, STAG.SLAM_DMG, { tremor: STAG.SLAM_TREMOR, color: '#d8c7a4', dust: 16 }); e.sx = 1.3; e.sy = 0.72;
+  B.rings.push({ x: e.x, y: e.y, r: STAG.SLAM_R, v: STAG.RING_SPD, max: STAG.RING_MAX, dmg: STAG.RING_DMG, delay: 0, done: false });
+  if (B.phase === 2) B.rings.push({ x: e.x, y: e.y, r: STAG.SLAM_R * 0.4, v: STAG.RING_SPD, max: STAG.RING_MAX, dmg: STAG.RING_DMG, delay: 0.95, done: false });
+  stagSet(B, 'recover', 0.6); B.cd.slam = rr(8, 10);
+}
+function stagVolley(B) {
+  var n = liveArms().length * 2 + 1, h = stagHead(B), a = B.tele ? B.tele.a : ang(h.x, h.y, P.x, P.y), i;
+  if (n < 3) return;
+  fanBurst(h.x, h.y, a, n, 0.16 * (n - 1), STAG.VOLLEY_SPD, STAG.VOLLEY_DMG, { color: '#ffd166', shape: 'spike', r: 7 }); Snd.sfx('shot');
+  for (i = 0; i < B.arms.length; i++) if (!B.arms[i].cracked) burst(B.arms[i].e.x, B.arms[i].e.y, 4, { color: '#ffd166', speed: 120, life: 0.25, size: 3 });
+}
+// what next? (only from the stalk, after a short think)
+function stagThink(B, d, live) {
+  var ph = B.phase, cd = B.cd, body = B.body;
+  if (ph === 3) {
+    if (cd.spiral <= 0) { stagSet(B, 'spiralTele', 0.6); G.teles.push({ kind: 'flash', e: body, x: body.x, y: body.y, t: 0.6, dur: 0.6, r: body.r + 22 }); Snd.sfx('charge'); }
+    else if (cd.frag <= 0) { stagSet(B, 'fragTele', 0.8); G.teles.push({ kind: 'flash', e: body, x: body.x, y: body.y, t: 0.8, dur: 0.8, r: 90 }); setBanner('FRAGMENTATION!', 'suck up the shards', 1.2); }
+    else if (cd.charge <= 0) { B.chain = 2 + ri(2); stagDig(B); }
+    return;
+  }
+  if (d < STAG.SWEEP_R - 14 && cd.sweep <= 0) {
+    stagSet(B, 'sweepTele', STAG.SWEEP_TELE);
+    B.tele = { kind: 'cone', e: body, stag: true, x: body.x, y: body.y, a: B.face, r: STAG.SWEEP_R, half: STAG.SWEEP_HALF, t: STAG.SWEEP_TELE, dur: STAG.SWEEP_TELE }; G.teles.push(B.tele);
+  }
+  else if (cd.charge <= 0 && (d > 150 || (cd.charge < -2 && d > 80))) stagDig(B);
+  else if (cd.slam <= 0 && d < 340) {
+    stagSet(B, 'slamTele', STAG.SLAM_TELE + 0.3);
+    telegraph(body, STAG.SLAM_TELE, 'circle', { r: STAG.SLAM_R, r2: STAG.SLAM_R + STAG.SLAM_TREMOR, jump: 30 }, function (e2) { if (G.boss === B && !B.dead && B.state === 'slamTele') stagSlam(B, e2); });
+  }
+  else if (cd.volley <= 0 && d > 150 && live > 0) {
+    var arms = liveArms(), h = stagHead(B), n = arms.length * 2 + 1; for (var i = 0; i < arms.length; i++) arms[i].flash = STAG.VOLLEY_TELE;
+    stagSet(B, 'volleyTele', STAG.VOLLEY_TELE);
+    B.tele = { kind: 'cone', stag: true, thin: true, x: h.x, y: h.y, a: ang(h.x, h.y, P.x, P.y), r: 240, half: 0.08 * (n - 1) + 0.06, t: STAG.VOLLEY_TELE, dur: STAG.VOLLEY_TELE }; G.teles.push(B.tele);
+  }
+}
 function updateStaghorn(dt) {
-  var B = G.boss, body = B.body;
-  B.t += dt; body.look = ang(body.x, body.y, P.x, P.y); runQueue(B, dt);
-  for (var a = 0; a < B.arms.length; a++) { var arm = B.arms[a]; arm.flash = Math.max(0, arm.flash - dt); if (!arm.cracked && arm.e.dead) arm.cracked = true; if (!arm.cracked) { arm.e.x = arm.tx; arm.e.y = arm.ty; } }
-  if (B.slam) { var s = B.slam; s.t -= dt; var cx = Math.cos(s.a), sy = Math.sin(s.a), dx = P.x - s.x, dy = P.y - s.y, t = clamp(dx * cx + dy * sy, 0, s.len), px = s.x + cx * t, py = s.y + sy * t; if (dist(P.x, P.y, px, py) < 28 + P.r && !s.hit && P.inv <= 0) { s.hit = true; hurtPlayer(18, 'slam', s.a); } if (s.t <= 0) B.slam = null; }
-  if (G.introT > 0) return;
+  var B = G.boss, body = B.body, i;
+  B.t += dt; runQueue(B, dt); stagRings(B, dt);
+  if (B.swoosh) { B.swoosh.t -= dt; if (B.swoosh.t <= 0) B.swoosh = null; }
+  if (G.introT > 0) { stagPlace(B, dt, true); B.px = body.x; B.py = body.y; return; }
   var frac = body.hp / body.maxHp;
-  if (B.phase === 1 && frac <= 0.66) enterPhase2(B); else if (B.phase === 2 && frac <= 0.33) enterPhase3(B);
-  var cracked = B.arms.filter(function (x) { return x.cracked; }).length;
-  if (B.phase === 1) { var wasInv = body.inv; body.inv = cracked < 2; if (wasInv && !body.inv) { addText(body.x, body.y - 90, 'BODY EXPOSED!', { color: '#38e8ff', size: 18 }); Snd.sfx('shatter'); } } else body.inv = false;
-  B.hint = body.inv ? 'ARMORED — crack 2 branches' : (B.phase === 2 && body.shield > 0 ? 'BIOFILM — strip it (water / cautery), kill the swarm' : '');
-  var live = liveArms();
-  if (B.phase <= 2 && live.length) {
-    B.fanT -= dt; B.volleyT -= dt;
-    if (B.fanT <= 0) { B.fanT = B.phase === 1 ? rr(2.2, 2.8) : rr(3.6, 4.4); var ar = live[B.armIdx++ % live.length]; ar.flash = 0.5; G.teles.push({ kind: 'flash', x: ar.tx, y: ar.ty, t: 0.5, dur: 0.5, r: 30 }); (function (ar2) { bossQueue(0.5, function () { if (ar2.cracked) return; fanBurst(ar2.tx, ar2.ty, ang(ar2.tx, ar2.ty, P.x, P.y), 5, 0.9, 210, 10, { color: '#ffd166', shape: 'spike', r: 7 }); Snd.sfx('shot'); }); })(ar); }
-    if (B.volleyT <= 0 && B.phase === 1) { B.volleyT = rr(4, 5); var av = live[(B.armIdx + 1) % live.length]; av.flash = 0.5; G.teles.push({ kind: 'line', x: av.tx, y: av.ty, a: ang(av.tx, av.ty, P.x, P.y), len: 600, t: 0.5, dur: 0.5 }); (function (av2) { for (var k = 0; k < 3; k++) bossQueue(0.5 + k * 0.15, function () { if (av2.cracked) return; enemyShot(av2.tx, av2.ty, ang(av2.tx, av2.ty, P.x, P.y), 310, 10, { color: '#ff9f43', r: 7 }); Snd.sfx('shot'); }); })(av); }
+  if (B.phase === 1 && frac <= 0.66) stagPhase2(B); else if (B.phase === 2 && frac <= 0.33) stagPhase3(B);
+  var ph = B.phase, d = dist(body.x, body.y, P.x, P.y), a = ang(body.x, body.y, P.x, P.y), live = liveArms().length, broken = B.arms.length - live;
+  var moved = B.px === undefined ? 0 : dist(body.x, body.y, B.px, B.py); B.px = body.x; B.py = body.y; B.gait += moved * 0.09;
+  for (var k in B.cd) B.cd[k] -= dt;
+  B.stT -= dt; body.vx = body.vy = 0; B.swing = 0;
+  if (B.state === 'stalk') {
+    B.face += clamp(angDiff(B.face, a), -STAG.TURN[ph] * dt, STAG.TURN[ph] * dt);
+    if (d > body.r + P.r + 26) { body.vx = Math.cos(B.face) * STAG.WALK[ph]; body.vy = Math.sin(B.face) * STAG.WALK[ph]; }
+    if (B.stT <= 0 && !G.over) stagThink(B, d, live);
   }
-  if (B.phase === 1) {
-    B.slamT -= dt; B.addT -= dt;
-    if (B.slamT <= 0) { B.slamT = rr(6.5, 8); var sa = ang(body.x, body.y, P.x, P.y); G.teles.push({ kind: 'line', x: body.x, y: body.y, a: sa, len: 760, t: 0.75, dur: 0.75, thick: 56 }); bossQueue(0.75, function () { B.slam = { x: body.x, y: body.y, a: sa, len: 760, t: 0.25, hit: false }; shakeIt(10); G.punch = 0.25; Snd.sfx('clang'); G.fxLines.push({ x0: body.x, y0: body.y, x1: body.x + Math.cos(sa) * 760, y1: body.y + Math.sin(sa) * 760, t: 0.25, dur: 0.25, color: '#d8c7a4', w: 56 }); burst(body.x + Math.cos(sa) * 120, body.y + Math.sin(sa) * 120, 16, { color: '#d8c7a4', speed: 200, life: 0.35, size: 4, dir: sa, spread: 0.6 }); }); }
-    if (B.addT <= 0) { B.addT = 12; for (var n = 0; n < 2; n++) { var pos = findSpawnPos(26, false); pos.x = Math.min(pos.x, 420); spawnEnemy(rnd() < 0.5 ? 'cod' : 'com', pos.x, pos.y, {}); } }
+  else if (B.state === 'dig') {                                                // digs in: the lane follows you until the last beat, then locks
+    if (B.stT > STAG.LOCK) B.face += clamp(angDiff(B.face, a), -7 * dt, 7 * dt);
+    if (B.tele) { B.tele.a = B.face; B.tele.len = Math.min(raycast(body.x, body.y, B.face, 1100) + body.r, ph === 3 ? STAG.SPD[3] * STAG.DASH + body.r : 1100); }
+    body.vx = -Math.cos(B.face) * 14; body.vy = -Math.sin(B.face) * 14;
+    B.dustT -= dt; if (B.dustT <= 0) { B.dustT = 0.07; burst(body.x - Math.cos(B.face) * body.r * 0.5, body.y + body.r * 0.7, 2, { color: '#cbb994', speed: 90, life: 0.35, size: 3, kind: 'smoke', dir: B.face + Math.PI, spread: 0.7 }); }
+    if (B.stT <= 0) { B.run = { a: B.face, t: 0, d: 0, hit: false, stop: 0, grazed: false }; B.tele = null; stagSet(B, 'charge', 0); Snd.sfx('swing'); }
   }
-  if (B.phase === 2) {
-    B.swarmT -= dt;
+  else if (B.state === 'charge') {
+    var run = B.run, spd = STAG.SPD[ph], ca = Math.cos(run.a), sa = Math.sin(run.a), r = body.r;
+    run.t += dt; run.d += moved;
+    if (run.hit) { run.stop -= dt; body.vx = ca * spd * 0.35; body.vy = sa * spd * 0.35; if (run.stop <= 0) stagEndRun(B, 0.9); }
+    else {
+      body.vx = ca * spd; body.vy = sa * spd;
+      // the gore: the body or a live tine reaches the surgeon. Rolling through it on i-frames is the dodge.
+      var touch = d < r + P.r - 2;
+      for (i = 0; i < B.arms.length && !touch; i++) if (!B.arms[i].cracked && dist(B.arms[i].e.x, B.arms[i].e.y, P.x, P.y) < B.arms[i].e.r + P.r - 2) touch = true;
+      if (touch && !G.over) {
+        if (P.inv <= 0) { hurtPlayer(STAG.DMG[ph], 'stone', run.a + (angDiff(run.a, a) >= 0 ? 1.1 : -1.1)); addText(P.x, P.y - 44, 'GORED', { color: '#ff6b8a', size: 13 }); run.hit = true; run.stop = 0.12; B.gores++; G.punch = Math.max(G.punch, 0.15); }
+        else if (P.roll > 0 && !run.grazed) { run.grazed = true; addText(P.x, P.y - 30, 'DODGE', { color: '#9fb6c9', size: 11 }); }
+      }
+      var into = (body.x <= ARENA.x + r + 0.6 && ca < -0.25) || (body.x >= ARENA.x + ARENA.w - r - 0.6 && ca > 0.25) || (body.y <= ARENA.y + r + 0.6 && sa < -0.25) || (body.y >= ARENA.y + ARENA.h - r - 0.6 && sa > 0.25) || (!!G.arena && body.hitWall);
+      if (run.hit) { /* skidding to a stop */ }
+      else if (into) { if (run.d >= STAG.MIN_RUN) stagCrash(B); else stagEndRun(B, 0.5); }
+      else if (ph === 3 && run.t >= STAG.DASH) stagEndRun(B, 0);
+      else if (run.t > 3) stagEndRun(B, 0.5);
+    }
+    B.dustT -= dt; if (B.dustT <= 0 && B.state === 'charge') { B.dustT = 0.04; burst(body.x - ca * r * 0.7, body.y + r * 0.6, 2, { color: ph === 3 ? '#ffb630' : '#cbb994', speed: 70, life: 0.4, size: 4, kind: 'smoke' }); }
+  }
+  else if (B.state === 'stunned') { if (B.stT <= 0 || !body.st.stun) { delete body.st.stun; stagSet(B, 'recover', 0.35); } }
+  else if (B.state === 'sweepTele') {
+    if (B.stT > 0.25) B.face += clamp(angDiff(B.face, a), -3 * dt, 3 * dt);
+    B.swing = -0.55 * (1 - Math.max(0, B.stT) / STAG.SWEEP_TELE); if (B.tele) B.tele.a = B.face;
+    if (B.stT <= 0) { B.tele = null; stagSweep(B); stagSet(B, 'sweep', 0.2); }
+  }
+  else if (B.state === 'sweep') { B.swing = lerp(-0.55, 0.9, 1 - Math.max(0, B.stT) / 0.2); if (B.stT <= 0) { stagSet(B, 'recover', 0.5); B.cd.sweep = rr(2.2, 3); } }
+  else if (B.state === 'slamTele') { if (B.stT <= 0 && !body.atk) stagSet(B, 'recover', 0.3); }   // stagSlam (from the telegraph) normally moves it on
+  else if (B.state === 'volleyTele') {
+    B.face += clamp(angDiff(B.face, a), -STAG.TURN[ph] * dt, STAG.TURN[ph] * dt);
+    if (B.tele) { var vh = stagHead(B); B.tele.x = vh.x; B.tele.y = vh.y; if (B.stT > 0.15) B.tele.a = ang(vh.x, vh.y, P.x, P.y); }
+    if (B.stT <= 0) { stagVolley(B); B.tele = null; stagSet(B, 'recover', 0.4); B.cd.volley = ph === 1 ? rr(4.5, 5.5) : rr(6.5, 8); }
+  }
+  else if (B.state === 'spiralTele') { if (B.stT <= 0) { stagSet(B, 'spiral', 2.4); B.spiral = { a: rr(0, TAU), tick: 0 }; } }
+  else if (B.state === 'spiral') {                                             // two arms with lanes between them, then a ring with one gap
+    var sp = B.spiral; sp.tick -= dt;
+    if (sp.tick <= 0) { sp.tick = 0.09; sp.a += 0.33; for (var m = 0; m < 2; m++) enemyShot(body.x, body.y, sp.a + m * Math.PI, 205, 8, { color: '#ff7a5c', r: 7 }); }
+    if (B.stT <= 0) {
+      var gap = a + rr(-0.5, 0.5); G.teles.push({ kind: 'flash', e: body, x: body.x, y: body.y, t: 0.5, dur: 0.5, r: body.r + 16 });
+      bossQueue(0.5, function () { if (B.dead || B.phase !== 3) return; for (var q = 0; q < 14; q++) { var ra = q / 14 * TAU; if (Math.abs(angDiff(ra, gap)) < 0.5) continue; enemyShot(body.x, body.y, ra, 190, 8, { color: '#ffd166', r: 8 }); } Snd.sfx('shock'); });
+      stagSet(B, 'recover', 1.1); B.cd.spiral = rr(7.5, 9);
+    }
+  }
+  else if (B.state === 'fragTele') { if (B.stT <= 0) { for (var fq = 0; fq < 26; fq++) enemyShot(body.x, body.y, rr(0, TAU), rr(140, 260), 6, { color: '#d8c7a4', r: 6, shape: 'frag', suckable: true, life: 4.5 }); shakeIt(8); Snd.sfx('shatter'); stagSet(B, 'recover', 0.5); B.cd.frag = 10; } }
+  else { if (B.state === 'recover') B.face += clamp(angDiff(B.face, a), -STAG.TURN[ph] * 0.5 * dt, STAG.TURN[ph] * 0.5 * dt); if (B.stT <= 0) stagSet(B, 'stalk', 0.25); }   // recover | roar
+  // armour, contact, hints
+  var stunned = !!body.st.stun, shelled = ph === 1 && broken < STAG.NEED;
+  body.inv = B.state === 'roar'; body.invText = 'CHANGING…'; body.dmgMul = (stunned ? STAG.STUN_MUL : 1) * (shelled ? STAG.SHELL : 1);   // nothing gets through during the roar between phases
+  body.contactNow = stunned || B.state === 'charge' ? 0 : 14; body.aimBias = shelled ? -70 : stunned ? 120 : 0;
+  if (ph === 1 && !shelled && !B.exposed) { B.exposed = true; addText(body.x, body.y - body.r - 40, 'BODY EXPOSED!', { color: '#38e8ff', size: 18 }); Snd.sfx('shatter'); }
+  B.hint = stunned ? 'STUNNED — hit it now (+50% damage)' : shelled ? 'SHELL — break 2 tines, or bait its charge into a wall' : ph === 2 && body.shield > 0 ? 'BIOFILM — strip it (water / cautery), kill the swarm' : '';
+  if (ph === 2) {
     var mic = microbesAlive();
     if (mic > 0) { body.shield = Math.min(1, body.shield + 0.22 * dt); body.shieldMax = 1; } else { body.shieldMax = body.shield > 0 ? 1 : 0; }
-    if (B.swarmT <= 0 && mic < 12) { B.swarmT = 5; G.teles.push({ kind: 'flash', x: body.x - 50, y: body.y, t: 0.6, dur: 0.6, r: 60 }); bossQueue(0.6, function () { for (var k = 0; k < 4; k++) spawnEnemy('ecoli', body.x - 80 + rr(-30, 30), body.y + rr(-70, 70), { instant: true }); spawnEnemy('proteus', body.x - 90, body.y + rr(-40, 40), { instant: true }); addHazard({ kind: 'slime', x: rr(200, 600), y: rr(100, 440), r: 48, t: 12 }); burst(body.x - 60, body.y, 16, { color: '#7cf29a', speed: 180, life: 0.4, size: 3, kind: 'goo', g: 300 }); Snd.sfx('pop'); }); }
+    B.swarmT -= dt;
+    if (B.swarmT <= 0 && mic < 12) { B.swarmT = STAG.SWARM; G.teles.push({ kind: 'flash', e: body, x: body.x, y: body.y, t: 0.6, dur: 0.6, r: body.r + 14 }); bossQueue(0.6, function () { if (B.dead || B.phase !== 2) return; stagSwarm(B, 4, true); }); }
+    B.trail += moved; if (B.trail >= STAG.TRAIL) { B.trail = 0; addHazard({ kind: 'slime', x: body.x, y: body.y + body.r * 0.3, r: 30, t: 7 }); }
   }
-  if (B.phase === 3) {
-    var spd = lerp(90, 135, 1 - frac / 0.33); body.y += B.moveDir * spd * dt; if (body.y < 110) { body.y = 110; B.moveDir = 1; } if (body.y > 430) { body.y = 430; B.moveDir = -1; }
-    var sp = B.spiral;
-    if (sp.on) { sp.t -= dt; sp.tick = (sp.tick || 0) - dt; if (sp.tick <= 0) { sp.tick = 0.09; sp.a += 0.33; for (var m = 0; m < 2; m++) enemyShot(body.x, body.y, sp.a + m * Math.PI, 205, 8, { color: '#ff7a5c', r: 7 }); } if (sp.t <= 0) { sp.on = false; sp.idle = 1.2; var gap = ang(body.x, body.y, P.x, P.y) + rr(-0.5, 0.5); bossQueue(0.4, function () { for (var r = 0; r < 14; r++) { var ra = r / 14 * TAU; if (Math.abs(angDiff(ra, gap)) < 0.5) continue; enemyShot(body.x, body.y, ra, 190, 8, { color: '#ffd166', r: 8 }); } Snd.sfx('shock'); }); } }
-    else { sp.idle -= dt; if (sp.idle <= 0) { sp.on = true; sp.t = 3; sp.a = rr(0, TAU); } }
-    B.fragT -= dt;
-    if (B.fragT <= 0) { B.fragT = 9; G.teles.push({ kind: 'flash', x: body.x, y: body.y, t: 0.8, dur: 0.8, r: 90 }); setBanner('FRAGMENTATION!', 'suck up the shards', 1.2); bossQueue(0.8, function () { for (var f = 0; f < 26; f++) enemyShot(body.x, body.y, rr(0, TAU), rr(140, 260), 6, { color: '#d8c7a4', r: 6, shape: 'frag', suckable: true, life: 4.5 }); shakeIt(8); Snd.sfx('shatter'); }); }
-  }
+  stagPlace(B, dt, shelled);
 }
-function enterPhase2(B) {
-  B.phase = 2; var body = B.body; body.inv = false; body.shield = 1; body.shieldMax = 1; body.lastHitT = -10;
+function stagPhase2(B) {
+  var body = B.body; B.phase = 2; stagInterrupt(B); stagSet(B, 'roar', 1.3);
+  body.shield = 1; body.shieldMax = 1; body.lastHitT = -10; B.swarmT = 4; B.trail = 0;
+  B.cd.charge = Math.max(B.cd.charge, 3.5); B.cd.slam = Math.max(B.cd.slam, 2.5); B.cd.volley = Math.max(B.cd.volley, 3);
   setBanner('PHASE 2', 'INFECTION — strip the biofilm, kill the swarm', 2.2); Snd.sfx('roar'); shakeIt(10); G.punch = 0.2;
-  for (var i = 0; i < 4; i++) addHazard({ kind: 'slime', x: rr(180, 640), y: rr(90, 450), r: 52, t: 40 });
+  for (var i = 0; i < 4; i++) { var sp = clampArena(body.x + rr(-170, 170), body.y + rr(-150, 150), 50); addHazard({ kind: 'slime', x: sp.x, y: sp.y, r: 48, t: 16 }); }
   burst(body.x, body.y, 30, { color: '#7cf29a', speed: 220, life: 0.6, size: 4, kind: 'goo', g: 200 });
-  for (var k = 0; k < 4; k++) spawnEnemy('ecoli', body.x - 90 + rr(-30, 30), body.y + rr(-60, 60), { instant: true });
-  B.swarmT = 4;
+  stagSwarm(B, 4, false);
 }
-function enterPhase3(B) {
-  B.phase = 3; var body = B.body; body.coreExposed = true; body.shield = 0; body.shieldMax = 0; body.inv = false;
-  for (var i = 0; i < B.arms.length; i++) { var ar = B.arms[i]; if (!ar.cracked) { ar.cracked = true; ar.e.silent = true; ar.e.hp = 0; killEnemy(ar.e, 'NEUTRAL', null); } burst(ar.tx, ar.ty, 14, { color: '#d8c7a4', speed: 220, life: 0.6, size: 4, kind: 'frag', g: 400 }); }
+function stagPhase3(B) {
+  var body = B.body; B.phase = 3; stagInterrupt(B); stagSet(B, 'roar', 1.4);
+  body.coreExposed = true; body.shield = 0; body.shieldMax = 0; body.r = STAG.CORE_R; body.sx = 1.5; body.sy = 0.6;
+  for (var i = 0; i < B.arms.length; i++) { var ar = B.arms[i]; burst(ar.e.x, ar.e.y, 12, { color: '#d8c7a4', speed: 220, life: 0.6, size: 4, kind: 'frag', g: 400 }); if (!ar.cracked) { ar.cracked = true; ar.e.silent = true; ar.e.hp = 0; killEnemy(ar.e, 'NEUTRAL', null); } }
   burst(body.x, body.y, 60, { color: '#d8c7a4', speed: 320, life: 0.8, size: 5, kind: 'frag', g: 400 }); burst(body.x, body.y, 30, { color: '#38e8ff', speed: 200, life: 0.5, size: 3 });
   setBanner('PHASE 3', 'CORE EXPOSED — everything hurts it now', 2.2); Snd.sfx('roar'); Snd.sfx('shatter'); shakeIt(14); G.punch = 0.3; hitstop(0.12);
-  B.spiral = { on: false, t: 0, a: 0, idle: 1.2 }; B.fragT = 6;
+  B.cd.charge = 1.6; B.cd.spiral = 0.2; B.cd.frag = 9;   // it opens with the spiral
 }
-function drawBossArms(c) {
-  var B = G.boss; if (!B) return; var body = B.body;
-  for (var i = 0; i < B.arms.length; i++) {
-    var ar = B.arms[i], dead = ar.cracked, col = dead ? '#6e6a62' : B.phase === 2 ? '#9fb09a' : '#b8a98c';
-    c.save(); if (dead) c.globalAlpha = 0.55;
-    var sx = body.x + Math.cos(ar.a) * 40, sy = body.y + Math.sin(ar.a) * 40, mx = lerp(sx, ar.tx, 0.5) + Math.cos(ar.a + 1.6) * 18, my = lerp(sy, ar.ty, 0.5) + Math.sin(ar.a + 1.6) * 18;
-    c.lineCap = 'round'; c.strokeStyle = OUTLINE; c.lineWidth = 34; c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(mx, my, ar.tx, ar.ty); c.stroke();
-    c.strokeStyle = col; c.lineWidth = 26; c.beginPath(); c.moveTo(sx, sy); c.quadraticCurveTo(mx, my, ar.tx, ar.ty); c.stroke();
-    c.lineWidth = 14; c.strokeStyle = OUTLINE; c.beginPath(); c.moveTo(mx, my); c.lineTo(mx + Math.cos(ar.a - 1.2) * 34, my + Math.sin(ar.a - 1.2) * 34); c.stroke(); c.strokeStyle = col; c.lineWidth = 8; c.beginPath(); c.moveTo(mx, my); c.lineTo(mx + Math.cos(ar.a - 1.2) * 34, my + Math.sin(ar.a - 1.2) * 34); c.stroke();
-    c.fillStyle = ar.flash > 0 && Math.floor(ar.flash * 16) % 2 === 0 ? '#ffd166' : col; c.beginPath(); c.arc(ar.tx, ar.ty, 24, 0, TAU); c.fill(); outline(c, 4);
-    if (dead) { c.strokeStyle = '#2a2420'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(ar.tx - 12, ar.ty - 10); c.lineTo(ar.tx + 4, ar.ty + 2); c.lineTo(ar.tx - 6, ar.ty + 14); c.moveTo(ar.tx + 8, ar.ty - 14); c.lineTo(ar.tx + 12, ar.ty + 6); c.stroke(); }
-    else { highlight(c, ar.tx - 8, ar.ty - 9, 7); cyclops(c, ar.tx + 4, ar.ty + 3, 6, ar.e.look || 0, ar.e.blink || 1, { veins: true }); if (!ar.e.dead && ar.e.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(ar.tx, ar.ty, 24, 0, TAU); c.fill(); } }
+// death: the core bursts into shards, and every shard pops into a coin where it lands
+function stagShards(e) {
+  function pop(b) { spawnPickup('coin', b.x, b.y, { value: 2 }); burst(b.x, b.y, 3, { color: '#ffd166', speed: 90, life: 0.3, size: 2 }); }
+  for (var k = 0; k < 40; k++) { var a = rr(0, TAU), sp = rr(160, 520); spawnBullet({ kind: 'shard', x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rr(5, 9), dmg: 0, hostile: false, life: rr(0.2, 0.55), color: '#d8c7a4', onLand: pop }); }
+}
+/* ── the stag, drawn. Local origin = the body's hitbox centre. The head leans toward the facing and the rack reaches to
+   wherever the tine hitboxes are, so what you see is what you can shoot. ── */
+var STAG_BODY = [[-0.97, 0.12], [-0.9, -0.46], [-0.52, -0.9], [0.06, -1.03], [0.62, -0.84], [0.99, -0.34], [1.0, 0.22], [0.74, 0.7], [0.2, 0.9], [-0.46, 0.86], [-0.86, 0.6]];   // a hunched boulder
+var STAG_SKULL = [[-0.95, -0.25], [-0.62, -0.9], [0, -1.02], [0.62, -0.9], [0.95, -0.25], [0.72, 0.5], [0.36, 0.98], [-0.36, 0.98], [-0.72, 0.5]];                              // broad brow, narrow muzzle
+var STAG_CRACKS = [[[-0.78, -0.12], [-0.42, 0.1], [-0.3, 0.5], [-0.05, 0.62]], [[0.1, -0.84], [0.26, -0.42], [0.62, -0.28]], [[0.3, 0.15], [0.55, 0.4], [0.46, 0.78]], [[-0.2, -0.5], [-0.36, -0.2]]];
+function stagPoly(c, pts, kx, ky) { c.beginPath(); for (var j = 0; j < pts.length; j++) { if (j === 0) c.moveTo(pts[j][0] * kx, pts[j][1] * ky); else c.lineTo(pts[j][0] * kx, pts[j][1] * ky); } c.closePath(); }
+function stagCracks(c, r, glow, k) {
+  c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath();
+  for (var i = 0; i < STAG_CRACKS.length; i++) { var cr = STAG_CRACKS[i]; for (var j = 0; j < cr.length; j++) { if (j === 0) c.moveTo(cr[j][0] * r, cr[j][1] * r * 0.9); else c.lineTo(cr[j][0] * r, cr[j][1] * r * 0.9); } }
+  c.strokeStyle = hexA(glow, 0.3 * k); c.lineWidth = 8; c.stroke(); c.strokeStyle = '#2a2420'; c.lineWidth = 3.6; c.stroke(); c.strokeStyle = hexA(glow, 0.35 + 0.65 * k); c.lineWidth = 1.7; c.stroke();
+}
+// four stone hooves under the belly; opposite corners step together
+function stagHooves(c, e, step, col, spread) {
+  var r = e.r, xs = [-0.62, -0.2, 0.24, 0.64];
+  for (var i = 0; i < 4; i++) {
+    var up = Math.max(0, i % 2 ? -step : step), hx = xs[i] * r * (spread || 1), hy = r * (i === 0 || i === 3 ? 0.62 : 0.78) - up * 7, w = r * 0.17, h = r * 0.3;
+    c.beginPath(); c.moveTo(hx - w, hy); c.lineTo(hx + w, hy); c.lineTo(hx + w * 1.15, hy + h); c.lineTo(hx - w * 1.15, hy + h); c.closePath(); body(c, e, col, 3.4);
+    c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(hx - w * 1.05, hy + h * 0.62, w * 2.1, h * 0.3);
+  }
+}
+function stagStars(c, y, w) { for (var k = 0; k < 3; k++) { var sa = G.realTime * 4 + k * 2.09; c.save(); c.translate(Math.cos(sa) * w, y + Math.sin(sa) * w * 0.3); starPath(c, 5.5, 2.4, 5, sa); c.fillStyle = '#ffe066'; c.fill(); outline(c, 1.6); c.restore(); } }
+function drawStag(c, e) {
+  var B = G.boss && G.boss.body === e ? G.boss : null, ph = B ? B.phase : 1, i;
+  if (!B) c.scale(0.58, 0.58);                                               // bestiary thumbnail: leave room for the rack
+  var r = e.r, f = B ? B.face : 2.45, fx = Math.cos(f), fy = Math.sin(f), st = B ? B.state : 'stalk', stunned = !!(e.st && e.st.stun);
+  var gait = B ? B.gait : 0.9, step = Math.sin(gait), hot = st === 'dig' || st === 'charge', pulse = 0.5 + 0.5 * Math.sin(G.realTime * 3.2);
+  var glow = hot ? '#ff8a5c' : ph === 3 ? '#ffd27a' : ph === 2 ? '#a8ff8a' : '#7fe9ff';
+  if (ph === 3) { drawStagCore(c, e, f, step, stunned, hot); return; }
+  var shell = ph === 2 ? '#a3b39c' : '#b8a98c', bone = ph === 2 ? '#d5dcc2' : '#e2d5b2', lean = st === 'dig' ? -5 : st === 'charge' ? 7 : 0;
+  var bx = fx * lean, by = fy * lean * 0.6 - Math.abs(step) * 2.5, hr = r * 0.62, hcx = fx * r * 0.7 + bx * 1.4, hcy = fy * r * 0.5 - r * 0.16 + by + (st === 'dig' ? 4 : 0);
+  var shelled = B ? ph === 1 && !B.exposed : true, heat = stunned ? 1 : hot ? 0.95 : shelled ? 0.35 + 0.25 * pulse : 0.6 + 0.4 * pulse;
+  function torso() {
+    c.save(); c.translate(bx, by); var q = 1 + 0.03 * Math.sin(gait * 2), kx = r * q, ky = r * 0.92 / q;
+    stagPoly(c, STAG_BODY, kx, ky); rim(c, e, 5); c.fillStyle = shell; c.fill(); outline(c, 5);
+    c.save(); c.clip();                                                      // facets: a lit shoulder, a shadowed belly, a ridge down the back
+    c.fillStyle = 'rgba(255,240,205,0.26)'; polyPath(c, [[-0.52 * kx, -0.9 * ky], [0.06 * kx, -1.03 * ky], [0.62 * kx, -0.84 * ky], [0.22 * kx, -0.3 * ky], [-0.3 * kx, -0.36 * ky]]); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.2)'; polyPath(c, [[-0.86 * kx, 0.6 * ky], [-0.3 * kx, 0.36 * ky], [0.36 * kx, 0.42 * ky], [0.74 * kx, 0.7 * ky], [0.2 * kx, 0.9 * ky], [-0.46 * kx, 0.86 * ky]]); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.1)'; polyPath(c, [[0.62 * kx, -0.84 * ky], [0.99 * kx, -0.34 * ky], [1.0 * kx, 0.22 * ky], [0.74 * kx, 0.7 * ky], [0.36 * kx, 0.42 * ky], [0.22 * kx, -0.3 * ky]]); c.fill();
+    c.restore();
+    c.strokeStyle = 'rgba(40,30,24,0.32)'; c.lineWidth = 2; c.lineJoin = 'round'; c.beginPath(); c.moveTo(-0.52 * kx, -0.9 * ky); c.lineTo(-0.3 * kx, -0.36 * ky); c.lineTo(0.22 * kx, -0.3 * ky); c.lineTo(0.62 * kx, -0.84 * ky); c.moveTo(-0.3 * kx, -0.36 * ky); c.lineTo(-0.3 * kx, 0.36 * ky); c.lineTo(-0.86 * kx, 0.6 * ky); c.moveTo(0.22 * kx, -0.3 * ky); c.lineTo(0.36 * kx, 0.42 * ky); c.lineTo(0.74 * kx, 0.7 * ky); c.moveTo(-0.3 * kx, 0.36 * ky); c.lineTo(0.36 * kx, 0.42 * ky); c.stroke();
+    stagCracks(c, r, glow, heat);
+    if (ph === 2) { [[-0.5, -0.3], [0.42, 0.38], [0.08, 0.66], [-0.6, 0.42], [0.55, -0.42]].forEach(function (p) { c.fillStyle = '#5bd47a'; c.beginPath(); c.arc(p[0] * r, p[1] * r * 0.9, r * 0.11, 0, TAU); c.fill(); outline(c, 1.8); }); drool(c, -r * 0.2, r * 0.7, 2, 'rgba(120,230,110,0.8)', 7); }
     c.restore();
   }
-}
-function drawBossBody(c, e) {
-  var B = G.boss, phase = B ? B.phase : 1, r = e.r;
-  var col = phase === 3 ? '#8d8070' : phase === 2 ? '#9fb09a' : '#b8a98c';
-  c.fillStyle = col; blobPath(c, r, 0.4, 7, 0.09); c.fill(); outline(c, 5);
-  if (phase === 2) { c.fillStyle = '#5bd47a'; [[-0.5, -0.3], [0.4, 0.4], [0.1, 0.7], [-0.6, 0.45], [0.55, -0.45]].forEach(function (p) { c.beginPath(); c.arc(p[0] * r, p[1] * r, r * 0.11, 0, TAU); c.fill(); }); }
-  if (phase === 3) {
-    var pulse = 0.6 + 0.4 * Math.sin(G.time * 8);
-    c.fillStyle = 'rgba(56,232,255,' + (0.25 + 0.3 * pulse) + ')'; c.beginPath(); c.arc(0, 4, r * 0.6, 0, TAU); c.fill();
-    c.fillStyle = '#ffb630'; c.beginPath(); c.arc(0, 4, r * 0.32 * (0.9 + 0.1 * pulse), 0, TAU); c.fill(); outline(c, 3);
-    c.strokeStyle = '#2a2420'; c.lineWidth = 3; c.beginPath(); for (var i = 0; i < 6; i++) { var an = i / 6 * TAU + 0.4; c.moveTo(Math.cos(an) * r * 0.5, Math.sin(an) * r * 0.5); c.lineTo(Math.cos(an + 0.2) * r * 0.95, Math.sin(an + 0.2) * r * 0.95); } c.stroke();
+  function rump() { var tx = -fx * r * 0.96 + bx, ty = -fy * r * 0.7 + by - r * 0.12; polyPath(c, [[tx - 8, ty + 4], [tx - fx * 12, ty - 11], [tx + 8, ty + 4]]); body(c, e, shell, 3.4); }
+  // the rack: two beams off the skull, each forking into two pointed tines that end on the tine hitboxes
+  function rack() {
+    var tips = [], s, k2, p, lw = [7 + RIM_W, 7, 0], cols = [famColor(e), OUTLINE, bone], polys = [], joints = [], stubs = [], sw = B ? B.swing : 0;
+    for (i = 0; i < 4; i++) {
+      if (B) { var arm = B.arms[i]; tips.push(arm.cracked ? null : { x: arm.e.x - e.x, y: arm.e.y - e.y, flash: arm.flash }); }
+      else { var ta = f + STAG_TINES[i].rel; tips.push({ x: fx * r * 0.5 + Math.cos(ta) * STAG_TINES[i].len, y: fy * r * 0.5 + Math.sin(ta) * STAG_TINES[i].len, flash: 0 }); }
+    }
+    function taper(A, Z, wa, wz, ext) { var dx = Z.x - A.x, dy = Z.y - A.y, L = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / L, uy = dy / L, ex = Z.x + ux * ext, ey = Z.y + uy * ext; return [[A.x - uy * wa, A.y + ux * wa], [ex - uy * wz, ey + ux * wz], [ex + uy * wz, ey - ux * wz], [A.x + uy * wa, A.y - ux * wa]]; }
+    for (s = 0; s < 2; s++) {
+      var sg = s ? 1 : -1, fa = f + sw + sg * 0.66, fork = { x: fx * r * 0.5 + Math.cos(fa) * 38, y: fy * r * 0.5 + Math.sin(fa) * 38 - 5 };
+      var ba = Math.atan2(fork.y - hcy, fork.x - hcx) + sg * 0.5, base = { x: hcx + Math.cos(ba) * hr * 0.7, y: hcy + Math.sin(ba) * hr * 0.62 };
+      polys.push(taper(base, fork, 8, 6.5, 0)); joints.push(fork);
+      for (k2 = 0; k2 < 2; k2++) { var ti = s ? 2 + k2 : k2, tp = tips[ti], ra = f + sw + STAG_TINES[ti].rel; if (tp) polys.push(taper(fork, tp, 6.5, 1.2, 13)); else stubs.push({ x: fork.x + Math.cos(ra) * 15, y: fork.y + Math.sin(ra) * 15, a: ra, poly: taper(fork, { x: fork.x + Math.cos(ra) * 15, y: fork.y + Math.sin(ra) * 15 }, 6.5, 5, 0) }); }
+    }
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    for (p = 0; p < 3; p++) {
+      if (!cols[p]) continue; c.strokeStyle = cols[p]; c.fillStyle = cols[p]; c.lineWidth = lw[p];
+      for (i = 0; i < polys.length; i++) { polyPath(c, polys[i]); if (p < 2) c.stroke(); else c.fill(); }
+      for (i = 0; i < stubs.length; i++) { polyPath(c, stubs[i].poly); if (p < 2) c.stroke(); else c.fill(); }
+      for (i = 0; i < joints.length; i++) { c.beginPath(); c.arc(joints[i].x, joints[i].y, 7 + lw[p] / 2, 0, TAU); c.fill(); }
+    }
+    c.strokeStyle = 'rgba(120,96,60,0.5)'; c.lineWidth = 1.6; c.beginPath();                                   // growth rings on the tines
+    for (i = 0; i < 4; i++) { var tr = tips[i]; if (!tr) continue; var jf = joints[i < 2 ? 0 : 1], ux = tr.x - jf.x, uy = tr.y - jf.y, L = Math.sqrt(ux * ux + uy * uy) || 1; ux /= L; uy /= L; for (k2 = 1; k2 <= 2; k2++) { var m = k2 / 3, mx = jf.x + ux * L * m, my = jf.y + uy * L * m, hw = 5 * (1 - m * 0.7); c.moveTo(mx - uy * hw, my + ux * hw); c.lineTo(mx + uy * hw, my - ux * hw); } }
+    c.stroke();
+    for (i = 0; i < 4; i++) {
+      var tq = tips[i]; if (!tq) continue;
+      if (hot || (tq.flash > 0 && Math.floor(tq.flash * 16) % 2 === 0)) { c.fillStyle = hot ? 'rgba(255,122,70,0.8)' : '#ffd166'; c.beginPath(); c.arc(tq.x, tq.y, 7.5, 0, TAU); c.fill(); c.fillStyle = hot ? 'rgba(255,122,70,0.3)' : 'rgba(255,209,102,0.35)'; c.beginPath(); c.arc(tq.x, tq.y, 14, 0, TAU); c.fill(); }
+    }
+    c.strokeStyle = '#2a2420'; c.lineWidth = 2; c.beginPath(); for (i = 0; i < stubs.length; i++) { var sb = stubs[i], px = -Math.sin(sb.a), py = Math.cos(sb.a); c.moveTo(sb.x + px * 5, sb.y + py * 5); c.lineTo(sb.x - Math.cos(sb.a) * 4, sb.y - Math.sin(sb.a) * 4); c.lineTo(sb.x - px * 5, sb.y - py * 5); } c.stroke();
   }
-  if (phase === 1) { c.strokeStyle = 'rgba(0,0,0,0.2)'; c.lineWidth = 3; c.beginPath(); c.moveTo(-r * 0.6, -r * 0.1); c.lineTo(-r * 0.2, r * 0.3); c.moveTo(r * 0.2, -r * 0.7); c.lineTo(r * 0.5, -r * 0.2); c.stroke(); }
-  highlight(c, -r * 0.4, -r * 0.5, r * 0.22);
-  // small eyes embedded in the cracks
-  [[-0.7, 0.2, 0.08], [0.72, 0.3, 0.07], [0.05, -0.8, 0.07], [-0.5, 0.65, 0.06], [0.6, -0.6, 0.06]].forEach(function (p, i) { cyclops(c, p[0] * r, p[1] * r, p[2] * r, e.look, i === 1 ? e.blink : 1, { veins: true }); });
-  var ey = phase === 3 ? -r * 0.45 : -r * 0.25;
-  eyes(c, 0, ey, r * 0.36, r * 0.17, e.look, e.blink, 'angry', { veins: true, bags: true, asym: 0.8 });
-  c.fillStyle = '#2a0f18'; c.beginPath(); c.moveTo(-r * 0.5, r * 0.3); for (var m = 0; m <= 6; m++) { var mx = -r * 0.5 + m / 6 * r; c.lineTo(mx, r * 0.3 + (m % 2 ? r * 0.08 : -r * 0.02)); } c.lineTo(r * 0.5, r * 0.62); for (var n = 6; n >= 0; n--) { var nx = -r * 0.5 + n / 6 * r; c.lineTo(nx, r * 0.62 + (n % 2 ? -r * 0.06 : r * 0.02)); } c.closePath(); c.fill(); outline(c, 3.5);
-  teeth(c, 0, r * 0.3, r * 0.45, 5, true); drool(c, 0, r * 0.66, 3, 'rgba(230,230,200,0.6)', 7);
-  if (e.inv) { c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.arc(0, 0, r + 10, 0, TAU); c.stroke(); c.setLineDash([]); }
+  function head() {
+    c.save(); c.translate(hcx, hcy + (stunned ? 4 : 0)); if (stunned) c.rotate(Math.sin(G.realTime * 5) * 0.12);
+    stagPoly(c, STAG_SKULL, hr, hr * 0.92); rim(c, e, 4.5); c.fillStyle = shade(shell, 0.12); c.fill(); outline(c, 4.5);
+    c.save(); c.clip(); c.fillStyle = 'rgba(255,240,205,0.25)'; c.beginPath(); c.ellipse(-hr * 0.2, -hr * 0.8, hr, hr * 0.45, -0.2, 0, TAU); c.fill(); c.fillStyle = 'rgba(0,0,0,0.16)'; polyPath(c, [[-hr * 0.72, hr * 0.46], [hr * 0.72, hr * 0.46], [hr * 0.36, hr * 0.9], [-hr * 0.36, hr * 0.9]]); c.fill(); c.restore();
+    var ox = fx * hr * 0.12, oy = fy * hr * 0.06;
+    c.fillStyle = shade(shell, -0.32); polyPath(c, [[ox - hr * 0.88, oy - hr * 0.62], [ox, oy - hr * 0.34], [ox + hr * 0.88, oy - hr * 0.62], [ox + hr * 0.78, oy - hr * 0.34], [ox, oy - hr * 0.1], [ox - hr * 0.78, oy - hr * 0.34]]); c.fill(); outline(c, 2.6);
+    stoneFace(c, ox, oy + hr * 0.06, hr * 0.72, hr * 0.3, e.look, stunned ? 0.3 : e.blink, stunned ? 'worried' : 'angry', glow);
+    c.fillStyle = '#2a2420'; c.beginPath(); c.ellipse(ox - hr * 0.16, hr * 0.5, 2.6, 3.4, 0.3, 0, TAU); c.ellipse(ox + hr * 0.16, hr * 0.5, 2.6, 3.4, -0.3, 0, TAU); c.fill();   // nostrils
+    if (hot) { c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(ox - hr * 0.3, hr * 0.62 + pulse * 3, 4 + pulse * 2, 0, TAU); c.arc(ox + hr * 0.3, hr * 0.62 + pulse * 3, 4 + pulse * 2, 0, TAU); c.fill(); }   // it snorts
+    mouth(c, ox, hr * 0.74, hr * 0.24, 'jag');
+    if (stunned) stagStars(c, -hr * 1.25, hr * 0.8);
+    c.restore();
+  }
+  stagHooves(c, e, step, shade(shell, -0.4), 1);
+  if (fy < -0.2) { rack(); head(); torso(); rump(); } else { rump(); torso(); rack(); head(); }
+}
+// phase 3: the shell is gone. A small molten core on four quick legs, a few plates still clinging to it.
+function drawStagCore(c, e, f, step, stunned, hot) {
+  var r = e.r, fx = Math.cos(f), fy = Math.sin(f), pulse = 0.6 + 0.4 * Math.sin(G.time * 8), i, an;
+  stagHooves(c, e, step, '#5e5446', 0.9);
+  stagPoly(c, STAG_BODY, r, r * 0.94); rim(c, e, 4.5); c.fillStyle = '#8d8070'; c.fill(); outline(c, 4.5);
+  c.save(); c.clip();
+  c.fillStyle = 'rgba(56,232,255,' + (0.22 + 0.28 * pulse) + ')'; c.beginPath(); c.arc(0, r * 0.12, r * 0.8, 0, TAU); c.fill();
+  c.fillStyle = hot ? '#ff7a3c' : '#ffb630'; c.beginPath(); c.arc(0, r * 0.16, r * 0.5 * (0.9 + 0.1 * pulse), 0, TAU); c.fill(); outline(c, 3);
+  c.fillStyle = 'rgba(255,244,200,' + (0.5 + 0.4 * pulse) + ')'; c.beginPath(); c.arc(-r * 0.1, r * 0.06, r * 0.2, 0, TAU); c.fill();
+  c.restore();
+  c.strokeStyle = '#2a2420'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); for (i = 0; i < 6; i++) { an = i / 6 * TAU + 0.4; c.moveTo(Math.cos(an) * r * 0.56, Math.sin(an) * r * 0.56 + r * 0.12); c.lineTo(Math.cos(an + 0.2) * r * 0.92, Math.sin(an + 0.2) * r * 0.86); } c.stroke();
+  for (i = 0; i < 3; i++) { an = 2.2 + i * 1.9; c.save(); c.translate(Math.cos(an) * r * 0.8, Math.sin(an) * r * 0.74); c.rotate(an); polyPath(c, [[-7, -9], [6, -6], [8, 7], [-5, 9]]); c.fillStyle = '#b8a98c'; c.fill(); outline(c, 2.6); c.restore(); }
+  stoneFace(c, fx * r * 0.2, fy * r * 0.1 - r * 0.4, r * 0.66, r * 0.26, e.look, stunned ? 0.3 : e.blink, stunned ? 'worried' : 'angry', '#fff3c4');
+  if (stunned) stagStars(c, -r * 1.3, r * 0.8);
+}
+// floor layer: the slam's shard rings and the sweep's swoosh
+function drawStagUnder(c) {
+  var B = G.boss, i, j; if (!B || !B.rings) return;
+  c.save(); c.beginPath(); c.rect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); c.clip();
+  for (i = 0; i < B.rings.length; i++) {
+    var rg = B.rings[i]; if (rg.delay > 0) continue;
+    var k = rg.r / rg.max, al = k > 0.88 ? Math.max(0, (1 - k) / 0.12) : 1, n = Math.max(14, Math.round(rg.r / 9));
+    c.globalAlpha = al * 0.3; c.strokeStyle = '#ff5c5c'; c.lineWidth = 16; c.beginPath(); c.arc(rg.x, rg.y, rg.r, 0, TAU); c.stroke();
+    c.globalAlpha = al; c.fillStyle = '#d8c7a4'; c.strokeStyle = OUTLINE; c.lineWidth = 1.5;
+    for (j = 0; j < n; j++) { var sa = j / n * TAU + rg.r * 0.004, cs = Math.cos(sa), sn = Math.sin(sa), px = rg.x + cs * rg.r, py = rg.y + sn * rg.r; c.beginPath(); c.moveTo(px + cs * 8, py + sn * 8); c.lineTo(px - cs * 4 - sn * 4.5, py - sn * 4 + cs * 4.5); c.lineTo(px - cs * 4 + sn * 4.5, py - sn * 4 - cs * 4.5); c.closePath(); c.fill(); c.stroke(); }
+  }
+  c.restore();
+  if (B.swoosh) { var sw = B.swoosh, kk = 1 - sw.t / sw.dur, b = B.body; c.save(); c.globalAlpha = 0.55 * (1 - kk); c.fillStyle = '#fff3d6'; c.beginPath(); c.moveTo(b.x, b.y); c.arc(b.x, b.y, STAG.SWEEP_R, sw.a - STAG.SWEEP_HALF, sw.a - STAG.SWEEP_HALF + 2 * STAG.SWEEP_HALF * Math.min(1, kk * 1.8)); c.closePath(); c.fill(); c.restore(); }
 }
 /* ───────────── Fournier's gangrene (the Hydra) ───────────── */
 var LOBE_ANGLES = [0.5, 1.02, 1.57, 2.12, 2.64];
@@ -4725,6 +4986,7 @@ function drawTeles(c) {
     if (t.kind === 'spawn') { c.strokeStyle = '#ffd166'; c.lineWidth = 3; c.setLineDash([6, 6]); c.beginPath(); c.arc(t.x, t.y, (t.r || 20) + 6, 0, TAU); c.stroke(); c.setLineDash([]); c.fillStyle = 'rgba(255,209,102,0.25)'; c.beginPath(); c.arc(t.x, t.y, ((t.r || 20) + 6) * k, 0, TAU); c.fill(); }
     else if (t.kind === 'flash') { var r = t.r || (t.e ? t.e.r + 8 : 24); c.strokeStyle = '#ff5c5c'; c.lineWidth = 4; c.beginPath(); c.arc(t.x, t.y, r + 4 * pulse, 0, TAU); c.stroke(); c.fillStyle = 'rgba(255,92,92,0.18)'; c.fill(); }
     else if (t.kind === 'circle') { c.fillStyle = 'rgba(255,92,92,0.22)'; c.beginPath(); c.arc(t.x, t.y, t.r, 0, TAU); c.fill(); c.strokeStyle = '#ff5c5c'; c.lineWidth = 3; c.stroke(); c.fillStyle = 'rgba(255,92,92,0.35)'; c.beginPath(); c.arc(t.x, t.y, t.r * k, 0, TAU); c.fill(); if (t.r2) { c.strokeStyle = '#ffe066'; c.lineWidth = 2; c.setLineDash([7, 7]); c.lineDashOffset = -G.realTime * 30; c.beginPath(); c.arc(t.x, t.y, t.r2, 0, TAU); c.stroke(); c.setLineDash([]); } }
+    else if (t.kind === 'cone') { c.beginPath(); c.moveTo(t.x, t.y); c.arc(t.x, t.y, t.r, t.a - t.half, t.a + t.half); c.closePath(); c.fillStyle = 'rgba(255,92,92,0.2)'; c.fill(); c.strokeStyle = '#ff5c5c'; c.lineWidth = t.thin ? 2 : 3; c.stroke(); if (!t.thin) { c.fillStyle = 'rgba(255,92,92,0.35)'; c.beginPath(); c.moveTo(t.x, t.y); c.arc(t.x, t.y, t.r * k, t.a - t.half, t.a + t.half); c.closePath(); c.fill(); } }
     else if (t.kind === 'line') { var len = t.len || 300, th = t.thick || 22; c.translate(t.x, t.y); c.rotate(t.a); c.fillStyle = 'rgba(255,92,92,0.2)'; c.fillRect(0, -th / 2, len, th); c.fillStyle = 'rgba(255,92,92,0.45)'; c.fillRect(0, -th / 2, len * k, th); c.strokeStyle = '#ff5c5c'; c.lineWidth = 2; c.strokeRect(0, -th / 2, len, th); }
     c.restore();
   }
@@ -5020,6 +5282,7 @@ function drawBullets(c) {
       if (b.kind === 'slug') { roundRect(c, -b.r * 2, -b.r * 0.6, b.r * 4, b.r * 1.2, b.r * 0.5); c.fill(); outline(c, 2); }
       else if (b.kind === 'ice') { starPath(c, b.r * 1.3, b.r * 0.6, 6, G.realTime * 6); c.fill(); outline(c, 2); c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, b.r * 0.4, 0, TAU); c.fill(); }
       else if (b.kind === 'basket') { c.strokeStyle = b.color; c.lineWidth = 2; c.beginPath(); c.ellipse(0, 0, b.r * 1.2, b.r, 0, 0, TAU); c.ellipse(0, 0, b.r * 1.2, b.r * 0.4, 0, 0, TAU); c.moveTo(-b.r * 1.2, 0); c.lineTo(b.r * 1.2, 0); c.stroke(); }
+      else if (b.kind === 'shard') { c.rotate(G.realTime * 14 + b.pulse); regPoly(c, b.r * 1.2, 5, 0); c.fill(); outline(c, 1.8); }
       else if (b.kind === 'orbit') { c.rotate(G.realTime * 12); regPoly(c, b.r * 1.2, 5, 0); c.fill(); outline(c, 1.5); c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(-1, -1, b.r * 0.3, 0, TAU); c.fill(); }
       else if (b.kind === 'blade') { c.rotate(G.realTime * 30); c.fillStyle = '#e8eef5'; c.beginPath(); c.moveTo(-b.r * 1.6, 0); c.lineTo(0, -b.r * 0.5); c.lineTo(b.r * 1.6, 0); c.lineTo(0, b.r * 0.5); c.closePath(); c.fill(); outline(c, 1.5); c.fillStyle = b.color; c.beginPath(); c.arc(0, 0, b.r * 0.35, 0, TAU); c.fill(); }
       else { c.beginPath(); c.arc(0, 0, b.r, 0, TAU); c.fill(); outline(c, 2); c.fillStyle = 'rgba(255,255,255,0.8)'; c.beginPath(); c.arc(-b.r * 0.2, -b.r * 0.2, b.r * 0.35, 0, TAU); c.fill(); }
@@ -5228,7 +5491,7 @@ var DEPTH = [];
 function depthCmp(p, q) { return p._dy - q._dy; }
 function drawShadows(c) {
   var es = G.enemies, i; c.fillStyle = 'rgba(0,0,0,0.3)';
-  for (i = 0; i < es.length; i++) { var e = es[i]; if (e.dead || e.spawnT > 0 || e.def.flat || e.boss || e.isArm || e.def.isLobe || e.def.isStump) continue; var k = 1 - Math.min(0.5, enemyLift(e) / 70); c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95 * k, e.r * 0.3 * k, 0, 0, TAU); c.fill(); }
+  for (i = 0; i < es.length; i++) { var e = es[i]; if (e.dead || e.spawnT > 0 || e.def.flat || (e.boss && !e.def.depth) || e.isArm || e.def.isLobe || e.def.isStump) continue; var k = 1 - Math.min(0.5, enemyLift(e) / 70); c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95 * k, e.r * 0.3 * k, 0, 0, TAU); c.fill(); }
   c.beginPath(); c.ellipse(P.x, P.y + 17.5, P.roll > 0 ? 11 : 14, 4.6, 0, 0, TAU); c.fill();
   for (i = 0; i < G.pickups.length; i++) { var pk = G.pickups[i]; c.beginPath(); c.ellipse(pk.x, pk.y + 9, 6, 2.2, 0, 0, TAU); c.fill(); }
 }
@@ -5244,11 +5507,12 @@ function render(dtReal) {
   for (i = 0; i < es.length; i++) if (es[i].def.flat) drawEnemy(c, es[i]);
   drawShadows(c);
   // 3/4 view: obstacles, enemies and the surgeon are drawn back to front (by the y of their feet), so things nearer the
-  // camera overlap things behind them. Boss bodies keep their own layering, under the sorted set.
-  for (i = 0; i < es.length; i++) if (es[i].boss) drawEnemy(c, es[i]);
+  // camera overlap things behind them. Rooted boss bodies keep their own layering, under the sorted set; a boss that
+  // walks the room (def.depth: the Staghorn) is sorted with everything else.
+  for (i = 0; i < es.length; i++) if (es[i].boss && !es[i].def.depth) drawEnemy(c, es[i]);
   for (i = 0; i < es.length; i++) if (es[i].def.isLobe || es[i].def.isStump) drawEnemy(c, es[i]);
   var dl = DEPTH; dl.length = 0;
-  for (i = 0; i < es.length; i++) { var de = es[i]; if (de.def.flat || de.boss || de.def.isLobe || de.def.isStump || de.dead || de.spawnT > 0) continue; de._dy = de.y + de.r * 0.6; dl.push(de); }
+  for (i = 0; i < es.length; i++) { var de = es[i]; if (de.def.flat || (de.boss && !de.def.depth) || de.def.isLobe || de.def.isStump || de.dead || de.spawnT > 0) continue; de._dy = de.y + de.r * 0.6; dl.push(de); }
   var obs = G.obstacles; for (i = 0; i < obs.length; i++) { var ob = obs[i]; if (ob.clot || ob.stricture || ob.dead) continue; ob._dy = ob.type === 'rect' ? ob.y + ob.h : ob.y + ob.r; dl.push(ob); }
   P._dy = P.y + 14; dl.push(P);
   dl.sort(depthCmp);
@@ -5641,7 +5905,7 @@ window.UroCrawl = {
   step: function (n) { n = n || 1; if (!G.running) return; for (var i = 0; i < n; i++) { if (G.over) { G.endT -= STEP; if (G.endT <= 0 && G.overlay !== 'summary') { G.timeScale = 1; finishRun(); } continue; } update(STEP); } },
   startRun: function () { if (!G.running) { META.helpSeen = true; beginRun(); } },
   selectWeapon: selectWeapon, dealDamage: dealDamage, hurtPlayer: hurtPlayer, seed: function () { return SEED; },
-  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC },
+  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC, STAG: STAG },
   makeWall: makeWall, wallHit: wallHit, wallPerforate: wallPerforate, wallPlug: wallPlug, wallSegAt: wallSegAt, wallPoint: wallPoint, insideArena: insideArena, rollBossId: rollBossId,
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
