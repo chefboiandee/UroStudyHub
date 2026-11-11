@@ -10,6 +10,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 - [ ] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style)
 - [ ] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon
 - [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
+- [ ] **Step 4** — Dungeon 5, the Peds Wing: Wilms elite, the Reflux serpent boss, torsion emergency room
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
 - Parked (only when asked): true isometric view, RCC thrombus boss — see the end of this file.
@@ -35,7 +36,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–O, 237 checks: O is the Invader; the steps below add blocks P, Q and R). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–O, 237 checks: O is the Invader; the steps below add blocks P, Q, R and S). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -190,7 +191,7 @@ hub: decor, perks, optional unlocks. RVU coins stay run-only.
 ### 3c. Stations
 | Station | What it does |
 |---|---|
-| **OR door "SCRUB IN"** | Starts a run. A case board beside it shows which dungeon you'll do (Stones → Staghorn, Infection → Fournier, Benign → Giant TURP; Oncology locked until built); a dungeon unlocks after its predecessor's boss is beaten. |
+| **OR door "SCRUB IN"** | Starts a run. A case board beside it shows which dungeon you'll do (Stones → Staghorn, Infection → Fournier, Benign → Giant TURP; Oncology → Invader; Peds locked until built); a dungeon unlocks after its predecessor's boss is beaten. |
 | **Instrument locker** | Pick your 2 starting weapons and their aspects (reuse the aspects screen). Shelves fill in visually as residency level (PGY) unlocks tools; locked tools show as silhouettes with their requirement. |
 | **Pharmacy cart** | The pre-run boon pick: choose 1 of 3 common starter boons drawn from patrons you've met. |
 | **Lanyard pins (keepsakes)** | Each patron met gives a pin; equip one per run for a small perk that levels up (3 levels) with use. |
@@ -214,6 +215,89 @@ Add debug hooks `UroCrawl.hub.addCme(n)`, `.buy(id)`, `.enter()`, `.state` and a
 **Done when:** the hub is reachable from the title and from the summary, every station works with touch and keyboard,
 a run started from the hub uses the picked weapons/aspects/starter boon/pin/perks, CME is earned and spent, decor persists,
 and harness block (R) covers it; earlier blocks pass.
+
+---------------------------------------------------------------------------------------------------
+
+## Step 4 — Dungeon 5: The Peds Wing
+
+Do this after Step 3 (the hub's case board unlocks it). It is a **bright, toy-box dungeon** to contrast with the four dark
+clinical ones, with one new boss, one elite and one special room. Prerequisites: the hub, the generic wall + perforation system that shipped with the Invader (§14c: `makeWall`, `wallHit`,
+`wallPlug`), Step 2's landmark warning pulse, and the existing weapons, boons and enemy-family system.
+
+### 4a. Content rules for this dungeon (important)
+- **No children are drawn.** The patient is unseen inside the arena, like every other dungeon; the joke is the setting.
+- **No pediatric genital or pelvic anatomy is drawn, even cartoonishly.** Conditions defined by genital or pelvic appearance
+  (hypospadias, exstrophy, cloaca, urethral prolapse, a torsed testis as a body) are NOT made into creatures. Torsion appears
+  only as the abstract timed rescue room in 4e. Likewise do not draw birth defects as creatures (VACTRL, myelomeningocele
+  sacs): that reads as mocking affected people. Teach those through mechanics, bestiary text and boons instead
+  (neurogenic bladder as a pressure-managed elite, a "workup" lore line for VACTRL).
+- Same family rim colours and face language as everything else. Historical-figure patrons only.
+
+### 4b. Look and tone
+Pastel nursery palette (still readable against the enemy rim colours), toy-block pillars, stuffed-animal and crayon-mural
+props, a sticker-chart HUD. Arena obstacles are blocks and toy-box walls. Peds-sized instruments: while in this dungeon every
+weapon has −15 % range and +20 % weak-point damage (a "pediatric scope" modifier shown on the HUD), and arenas are ~15 % tighter.
+
+### 4c. Dungeon mechanics and boons
+- **Anesthesia clock** (soft, optional): each room shows a calm timer; clearing it fast pays bonus RVUs. Slow clears just
+  lose the bonus: never a punishment.
+- **Boons** (new patron pool: **Wilms**, Max Wilms, historical caricature; Young also gives the valve boons): Vincristine /
+  Dactinomycin ("VA": +40 % vs Wilms and rhabdomyosarcoma), VAC (adds cyclophosphamide: +25 % more vs rhabdomyosarcoma),
+  Polyethylene glycol (clears BBD blobs faster), Timed Voiding (slows water enemies), Biofeedback, DDAVP (slows
+  nocturnal water balloons), Oxybutynin (calms spasm bladders), Clean Intermittent Catheterization (drains pressure meters
+  instantly, once a room), Continuous Antibiotic Prophylaxis (halves infection adds), Teddy Bear (absorbs one hit),
+  Lollipop (heal pickup), Sticker Chart (small coin bonus per cleared room).
+- **Bulking Gel Injector** (new weapon, FLUID, short range, generic name, no brand): needle shot that leaves a gel mound
+  on a port (used by the boss in 4d). Mound lasts ~15 s; weak damage otherwise.
+- **Hook valve ablation**: PUV gates (below) are cut with CUT or ENERGY; the Urethrotome is ×1.5 on them.
+
+### 4d. Enemies (spitball list, with animation difficulty; build the easy ones first)
+| Enemy | Family | Behaviour | Ease |
+|---|---|---|---|
+| **Hydronephrotic Kidney** (SFU grade 1–4) | BENIGN | A water-balloon kidney whose size and HP are its grade; swells with pressure over time. **Decompress, don't pop**: a Stent Turret hit, a Foley or CIC lowers pressure safely (coins, no hazard); popping floods the floor. Antenatal-ultrasound gag: some rooms render a grayscale ultrasound fan that reveals them | easy |
+| **BBD Blob** (bowel-bladder dysfunction) | BENIGN | Slow, tanky, presses nearby enemies together and slows the player in its radius; PEG and Timed Voiding boons shred it. Name it "BBD" in the bestiary, expand the acronym in the fact line | easy |
+| **Wilms Tumor** (elite) | MALIGNANT | A big fruit-like lump, 450 HP; periodically rolls then slams (reuse `groundSlam`), sheds small "nephroblast" adds. Chemo-sensitive: VA boons are ×1.4. Fact: the most common kidney cancer in children | easy-medium |
+| **Pelvic Rhabdomyosarcoma ("Botryoid")** | MALIGNANT | A cluster of grapes (circles on a stalk) that fires seeds in fans and splits when hit; VAC boons strong | easy |
+| **PUV Gates** (posterior urethral valves) | CLOT-like obstacle | Swinging leaflet gates in corridors that open and shut on a rhythm and trap enemies; cut them with CUT/ENERGY (Urethrotome ×1.5) | easy |
+| **Spasm Bladder** (neurogenic bladder; elite) | BENIGN | A pressure-meter elite: random high-pressure spasm bursts; if its pressure bar fills, it refluxes a fluid wave into the room. Oxybutynin calms it, CIC drains it | medium |
+| **Nocturnal Water Balloons** | BENIGN | Harmless-looking balloons that burst into puddles; DDAVP and Timed Voiding slow them. Keep the joke on the bladder, never the child | easy |
+| **Infant UTI swarm** | MICROBE | E. coli swarm variants with a fever-glow; Continuous Antibiotic Prophylaxis halves them | easy (reuse) |
+Not recommended as enemies (see 4a): hypospadias, exstrophy, cloaca, urethral prolapse, VACTRL, myelomeningocele, torsed testis.
+
+### 4e. Special room: the Torsion Emergency Room
+A timed rescue room, not a fight. An abstract twisted knot of rope-like cord spins in the middle of the arena. A viability ring
+drains over 60 s (the real window is about 6 hours: "time is tissue"). The player untwists it by rotating the aim stick/mouse
+in the opposite direction through two full turns (touch: a circular drag). Success: coins, a "SAVED!" banner and a
+bestiary fact; timeout: no reward and a plain, joke-free bestiary line about the real time window. Appears as a rare door in the
+Peds dungeon, and the abstract knot must not resemble anatomy.
+
+### 4f. Boss: REFLUX (a megaureter serpent), `?boss=reflux`
+The second **mobile** boss, with a new verb: **plug the ports to stop the tide.**
+- **Body:** a long, segmented serpent (reuse the Enterococcus chain code), glowing with a dilated, tortuous look that grows
+  with the phases. Isaac-style, kind of cute, never anatomical.
+- **Tide (the core mechanic):** every ~12 s a telegraphed wave of backflow sweeps from the boss's side toward the player
+  (ripples and arrows first, then a wall of fluid). The wave pushes the player back along the floor and drains a bit of HP;
+  obstacles (toy blocks) act as breakwaters; rolling through (i-frames) avoids it.
+- **Ports:** 3–4 glowing orifice ports on the arena wall mark where the reflux comes from. **Plug a port with the Bulking Gel
+  Injector** (aim at the port, ~1 s): a plugged port cannot generate tide and, while any port is plugged, the serpent loses
+  regen and is vulnerable for the next stranded phase. Mounds last ~15 s or until a slam knocks them out, so you plug
+  and fight in cycles. Plug all ports at once for a long vulnerable window.
+- **Phases follow VUR grades:** I–II (a short, straight serpent, light tides), III (it coils, adds loops and E. coli
+  "pyelonephritis" swarm adds on every tide), IV–V (tortuous, blunted calyx look: big loops sweeping the arena, double tides,
+  and the real fix appears as a one-time "Antireflux Tunnel" capstone cut available to CUT weapons on its core).
+- **Counters:** Continuous Antibiotic Prophylaxis halves the swarm adds; any FLUID tool pushes tide away; the Foley balloon
+  can plug a port once for free (like a tamponade).
+- Win text: "Reflux resolved. Follow-up cystogram scheduled." Fight length 120–150 s, every attack telegraphed ≥ 0.5 s.
+  Add `?boss=reflux` to the boss parameter list.
+
+### 4g. Hub tie-ins (Step 3)
+Peds-wing decor in the Call Room catalog (stickers, a mural, a toy box), a friendly **child-life specialist** NPC with ≥ 8 lines
+who gives the Sticker Chart pin keepsake, and a Wilms portrait on the trophy wall once met. Unlocks after beating the first
+four bosses (Staghorn, Fournier, the Giant TURP and the Invader).
+
+**Done when:** `?dungeon=peds` (or the hub's case board) runs the Peds Wing end to end with the reflux boss; harness block (S)
+covers the pediatric-scope modifier, the elite, the gates, hydronephrosis decompression vs popping, the tide wave and
+breakwaters, port plugging and the vulnerable window, the three phases, the torsion room, the new boons; earlier blocks pass.
 
 ---------------------------------------------------------------------------------------------------
 
