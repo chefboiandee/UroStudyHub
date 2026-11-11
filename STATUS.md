@@ -17,8 +17,55 @@ and do the next step". Docs only; no game code changed.
 - **Step 3** The Call Room hub: walkable pre-run room with starter boon, pins, perks, decor, CME credits and jokes.
 - Parked: Muscle-Invasive Bladder Tumor boss (reuses Step 2's perforation system), rename, later ideas.
 
-**Next steps:** Step 1.
+**Next steps:** Step 1 (blocks are now O, P, Q: the Path of Pathology look pass took N).
 **Open questions:** is the 35 % sphincter hit the right size; should CME also unlock weapons directly, or only decor and perks?
+## 2026-11-11 — 🎨 Path of Pathology (was Uro Crawl): enemy look, family outlines, new surgeon, slam + lunge feel, 3/4 room
+
+Andrew's playtest notes: enemies look too alike (wants a subtle outline colour per type), the small round ones especially;
+the slamming enemy's screen shake feels like being hit; the scalpel lunge leaves you inside the enemy when the i-frames end;
+the main character needs work; asked about an isometric view; likes the name "Path of Pathology". Hitboxes, HP, speeds and
+every existing weapon / boon / mod number are unchanged except where listed.
+
+**Done (`games/uro-crawl.html`, still one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 209 checks):**
+- **Family rim** (`FAMILIES[..].color`, `rim()` / `body()` / `tube()` in §7): a thin band of the family colour outside the
+  dark outline of every enemy: blue stones, green microbes, red malignant, yellow benign, violet clots. Same colours on the
+  bestiary labels and the help grid, plus a one-line legend in How to Play. Width knob: `RIM_W`.
+- **Family face + silhouette language**: stones are rigid and faceted and glare out of a crack (`stoneFace`); microbes are
+  soft with bead eyes and flagella (`beadEyes`, `flagella`); tumours keep the bloodshot googly eyes and teeth; benign things
+  doze (`shutEyes`). Redrawn: COM (mulberry boulder, tusks), COD (caltrop around the "envelope" crystal), uric (see-through
+  rhomboid), cystine (stacked hex plates), struvite (coffin-lid crystal), brushite, fragment (shard), dust, E. coli (rod with
+  flagella), Proteus (long swarmer worm), Pseudomonas (rod with one whip and a spout), Enterococcus (bead chain), Candida
+  (yeast with pseudohyphae) + bud, Klebsiella (rod in a jelly capsule), Clostridium (three drumsticks), C. difficile (crossed
+  rods with spores), satellite, prostate nodule, seminoma (fried-egg cell: one big nucleus-eye), AML (fat globules),
+  oncocytoma, clot. The rest got the rim only.
+- **Ground slams** (`groundSlam`, `staggerPlayer`, §8): Gentle Giant (BPH) now visibly jumps for its 0.7 s telegraph and
+  lands. Red disc (100 px) = 15 damage + 0.7 s stagger; dashed ring out to 165 px = 0.45 s stagger, no damage. Staggered =
+  40% speed and no attacking (stars over the head); rolling through the landing avoids it. A slam that misses is a thud and
+  a ring: shake ≤ 1.5 across the room, 2.5 in the tremor ring, no zoom punch and no red flash unless you were hit. Brushite
+  Brick uses the same helper (smaller); the RCC charge and the COM wall bonk only got the quieter camera.
+- **Scalpel lunge**: carves through whatever the stab kills and stops at arm's length from the first thing that survives it
+  (never inside it), which is knocked back along the dash and staggered 0.6 s; 0.35 s of recovery i-frames after the dash
+  (`LUNGE_GRACE`, `LUNGE_STUN`). Global rule change: a stunned or frozen enemy does no contact damage.
+- **Surgeon** (`drawPlayer`): a chibi resident with scrub cap (your scrub colour), headlamp that follows the aim, mask, big
+  eyes, white coat with tails that trail when moving, legs with a walk cycle, a sleeve reaching to the tool; somersault on
+  roll, stars when staggered, worried brows + sweat at low HP. Hitbox unchanged (r 13 at the chest).
+- **3/4 room**: ground shadows, back-to-front draw order (enemies, blocks and the surgeon sorted by their feet), blocks and
+  pillars with a lit top and a front face (`drawObstacle`, `BLOCK_H`), a far-wall face, foreshortened floor tiles, wall
+  shadows, hops with lift (`e.lift`, `enemyLift`). Paint only: collision and coordinates are untouched.
+- **Name**: title screen, page title and the app's arcade card read **Path of Pathology**. File name, storage key
+  (`urocrawl.v1`, so saves carry over), postMessage types and `window.UroCrawl` keep the working name.
+- Harness: new block N (rim colours, slam telegraph / far / tremor / hit / dodge, lunge stop + grace + stun, lunge through
+  kills, stunned-contact rule, every enemy drawing, help legend, bestiary thumbnails). Block A no longer depends on stone
+  fragments wandering into range (the basket and dropper checks were passing by luck).
+
+**Verified:** headless Chromium, all blocks pass (209); the script parses as ES2019; the built app loads and the arcade-cards
+harness passes (74) with the renamed card.
+**Next steps:** feel it on the phone: is the rim subtle enough (`RIM_W` 4.4 → 3.4 for thinner), is 165 px of tremor too much
+room control for a stationary enemy (`BPH_TREMOR`), is 0.35 s of lunge recovery enough?
+**Open questions:** true isometric (45° diamond, Diablo-style) was NOT done: it wastes the corners of a landscape phone
+screen, shrinks everything about 15%, turns every round telegraph into an ellipse and fights a thumbstick; the 3/4 depth pass
+is the Hades half of that idea. If Andrew still wants the diamond, prototype it in `prototypes/` first. Name alternatives
+floated: Diabladder, Styx & Stones.
 
 ## 2026-11-09 (later 9) — 💉 Uro Crawl: Antibiotic Dropper, antibiotic stewardship, the reps cast, patron altars
 

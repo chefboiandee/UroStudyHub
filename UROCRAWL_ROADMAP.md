@@ -1,7 +1,8 @@
-# Uro Crawl — roadmap for the next sessions
+# Path of Pathology (Uro Crawl) — roadmap for the next sessions
 
-`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~4.8k lines, ES2019, no dependencies) that
-the Arcade hosts in a frame. This file is the build plan. **How to use it:** the owner tells a session
+`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~5.4k lines, ES2019, no dependencies) that
+the Arcade hosts in a frame. Players see the name **Path of Pathology**; the file, `window.UroCrawl`, the `crawl:*`
+messages and the storage key keep the working name Uro Crawl on purpose. This file is the build plan. **How to use it:** the owner tells a session
 *"read UROCRAWL_ROADMAP.md and do Step N"* or *"…and do the next step"* (= the first unchecked box below).
 
 ## Progress (tick the box and add the date when a step is merged to `main`)
@@ -9,7 +10,7 @@ the Arcade hosts in a frame. This file is the build plan. **How to use it:** the
 - [ ] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style)
 - [ ] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon
 - [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
-- Parked (only when asked): Muscle-Invasive Bladder Tumor boss, rename, RCC thrombus boss — see the end of this file.
+- Parked (only when asked): Muscle-Invasive Bladder Tumor boss, true isometric view, RCC thrombus boss — see the end of this file.
 
 ## Ground rules (every step)
 
@@ -22,12 +23,15 @@ the Arcade hosts in a frame. This file is the build plan. **How to use it:** the
    on canvas or in inline CSS and synthesised with Web Audio. `localStorage` only inside try/catch.
 3. **Public repo.** Nothing personal, clinical or secret in any file or commit message. All human characters are
    stylised cartoon caricatures of **historical** figures or invented people; never living real people, never real
-   company brands. Art stays Binding-of-Isaac grotesque-cute and **never anatomically explicit**.
+   company brands. Art stays Binding-of-Isaac grotesque-cute and **never anatomically explicit**. New enemies and arenas follow the
+   current look: the colored family rim (`rim()` / `body()` / `RIM_W`; stones blue, microbes green, malignant red, benign
+   yellow, clots violet), the family face language (`stoneFace`, `beadEyes`, `shutEyes`) and the 3/4 room (back-to-front
+   draw order by feet, `drawObstacle` / `BLOCK_H`, ground shadows; collision and coordinates are untouched).
 4. **Keep everything working.** Existing weapons, bosses, boons, mods and the embed hook (`?embed=1`,
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
-   (Playwright is preinstalled). Add a new numbered block to the harness for the step and keep all earlier blocks green
-   (currently A–M, 196 checks). Also confirm no console errors on load. No `build.py` run is needed unless
+   (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
+   (currently A–N, 209 checks; the steps below add blocks O, P and Q). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -49,7 +53,9 @@ mobile, readable, duelled head-on. It keeps its three phases and the forced weap
   2.5 s, one tine cracks and breaks off with a shard burst, and the stunned boss takes +50 % damage. Wall crashes are the
   main damage window.
 - **Antler sweep:** close-range wide melee arc.
-- **Ground slam:** expanding ring(s) of shards to roll through.
+- **Ground slam:** expanding ring(s) of shards to roll through. Reuse `groundSlam` / `staggerPlayer` and the quiet-camera
+  rules from the Gentle Giant (a slam that misses is a thud and a ring, shake ≤ 1.5; red flash only if you were hit).
+  Note the global rule that a stunned or frozen enemy does no contact damage: the wall-crash stun relies on it.
 - **Spike volley:** the tines fire a fan of spikes at range, fewer as tines are lost.
 
 **Phases (same names, same forced weapon swap):**
@@ -66,7 +72,7 @@ mobile, readable, duelled head-on. It keeps its three phases and the forced weap
 Target fight length 90–120 s. Keep the boss bar with 3 phase ticks and the title card. Bestiary line: "Staghorn
 calculi fill the renal pelvis and calyces like antlers."
 
-**Done when:** `?boss=staghorn` is a mobile duel with all three phases; the harness block (N) covers the charge, the
+**Done when:** `?boss=staghorn` is a mobile duel with all three phases; the harness block (O) covers the charge, the
 wall-crash stun and tine break, the three phase transitions, and a full autoplay kill; earlier blocks still pass.
 
 ---------------------------------------------------------------------------------------------------
@@ -80,7 +86,8 @@ and managing risk**, and the boss is the arena. Replace the commented `giantbph`
 ### 2a. Arena, win condition and visual progress
 - Inside the prostatic urethra, drawn as an Isaac-style abstract flesh arena (never explicit). Pale pink-white lobular
   **adenoma** tissue bulges in from the walls and periodically swells (every ~10 s, telegraphed), shrinking the playable
-  circle; resecting pushes it back. The lobes mostly do not chase you.
+  circle; resecting pushes it back. The lobes mostly do not chase you. The existing **Gentle Giant** BPH enemy (with its slam) stays a normal enemy;
+  the boss's lobes can borrow its slam telegraph and `groundSlam`.
 - **Win = a flow-rate meter (Qmax, ml/s)**, not a boss HP bar: draw a HUD stream that thickens as you win, plus a
   per-lobe progress ring. Win at 20 ml/s. Win screen: "Qmax 24 ml/s: flow restored. Specimen sent to pathology."
 - **Capsule fibers are the progress cue.** As a lobe is resected the lobular surface is scraped away and **circular
@@ -148,7 +155,7 @@ unplugged, it keeps spawning tumor-seed/fluid hazards. If the system already exi
 - **Finasteride:** lobes start 30 % smaller and swell 20 % slower. **Tamsulosin** (existing) also slows the swelling pulses.
 - Optional: **TUR syndrome**: holding the Irrigation Hose > ~6 s total in a row reverses the player's controls for 4 s.
 
-**Done when:** `?boss=bph&section=1|2|3` all work; harness block (O) covers the flow meter win, capsule fibers, a
+**Done when:** `?boss=bph&section=1|2|3` all work; harness block (P) covers the flow meter win, capsule fibers, a
 perforation and its plug, the verumontanum curse and its fixes, ureteric and BNC warnings (including the cap and the
 urethrotome fix), the hoser red-out and both fixes, section transitions; earlier blocks pass.
 
@@ -162,8 +169,8 @@ room, picks a starting boon, equips tools, and steps through the OR door to star
 
 ### 3a. Scene
 - A new screen (`G.screen = 'hub'`), a single-screen top-down room in the same Isaac style, same movement/touch controls
-  as a run. Touch adds one big **INTERACT** button; desktop uses E or click. Walk up to a station to highlight it.
-- Title screen: PLAY enters the hub; keep a QUICK START that skips it. The run summary's button returns to the hub.
+  as a run, drawn with the 3/4 renderer and the new surgeon (`drawPlayer`). Touch adds one big **INTERACT** button; desktop uses E or click. Walk up to a station to highlight it.
+- Title screen (now branded Path of Pathology): PLAY enters the hub; keep a QUICK START that skips it. The run summary's button returns to the hub.
   `?hub=1` boots into it. Hub music mode (slower, jazzy), no combat.
 - Persist new state in `META` (merge defaults in `loadMeta`): `META.hub = { cme: 0, decor: {slot:itemId}, owned: {}, perks: {}, pin: '', met: {}, lines: {} }`.
 
@@ -198,7 +205,7 @@ Add debug hooks `UroCrawl.hub.addCme(n)`, `.buy(id)`, `.enter()`, `.state` and a
 
 **Done when:** the hub is reachable from the title and from the summary, every station works with touch and keyboard,
 a run started from the hub uses the picked weapons/aspects/starter boon/pin/perks, CME is earned and spent, decor persists,
-and harness block (P) covers it; earlier blocks pass.
+and harness block (Q) covers it; earlier blocks pass.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -217,10 +224,10 @@ Holmium/Thulium cause none; an "Obturator Block" boon removes it. Optional bladd
 raises perf rates 50 %. Pre-boss rest room offers "Neoadjuvant chemo" (cisplatin: −20 % boss HP, −15 % max HP for the fight).
 Win text: "Muscle present in specimen: muscle-invasive disease confirmed."
 
-### Rename
-The working title is "Uro Crawl". Candidate: **Path of Pathology** ("Pathologic" is an existing game; avoid it). If renamed,
-change user-visible text only (title, logo, menus, summaries) and keep `uro-crawl.html`, `window.UroCrawl`, the
-`crawl:*` messages and storage keys unchanged.
+### True isometric view
+Not done on purpose (see the 2026-11-11 STATUS entry: it wastes the corners of a landscape phone, shrinks everything,
+turns round telegraphs into ellipses and fights a thumbstick). The 3/4 depth pass already ships. If still wanted,
+prototype the 45-degree diamond in `prototypes/` first. Name alternatives floated: Diabladder, Styx & Stones.
 
 ### Later ideas
 RCC with IVC thrombus boss; testicular-torsion "emergency room" timed rescue room; overactive-bladder erratic elite

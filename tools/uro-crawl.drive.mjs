@@ -7,6 +7,7 @@
 // Also the HIFU / Urethrotome / CO₂ / da Vinci console additions and the Condyloma Cluster, and (block J) the weapon
 // upgrade paths: the MODS table, every mod's in-game effect for the five starting weapons, the aspects, Instrument Rep
 // doors + screen + reroll, the shop sample, the HUD pips/detail card and the giveMod / ?mods= / ?aspects= hooks.
+// Block N: look and feel — family rim colours, ground slams + stagger, the scalpel lunge, every enemy drawing.
 // Block K: the Antibiotic Dropper. Block L: antibiotic stewardship (the two-drug cap, resistance meters, collateral C. diff /
 // Candida, resistant strains, Culture & Sensitivity + De-escalation). Block M: the reps cast, patron altars, Fournier.
 //
@@ -57,9 +58,9 @@ await block('A. weapons', async () => {
   for (const wid of weapons) {
     const r = await p.evaluate((wid) => {
       const G = UroCrawl.state, P = UroCrawl.player();
-      G.enemies.forEach(e => { e.silent = true; e.hp = 0; }); UroCrawl.step(1); G.bullets.length = 0; G.seeds.length = 0; G.turrets.length = 0;
+      G.enemies.forEach(e => { e.silent = true; e.inhaled = true; e.hp = 0; }); UroCrawl.step(1); G.bullets.length = 0; G.seeds.length = 0; G.turrets.length = 0;   // inhaled: the last weapon's stones leave no fragments for the basket to catch instead of its target
       G.weapons.length = 0; G.wIndex = 0; UroCrawl.giveWeapon(wid); G.swapT = 0;
-      P.x = 300; P.y = 270; const dist = wid === 'scalpel' ? 50 : wid === 'roller' || wid === 'button' || wid === 'trilogy' ? 60 : wid === 'loop' ? 80 : 150;
+      P.x = 300; P.y = 270; const dist = wid === 'scalpel' || wid === 'dropper' ? 50 : wid === 'roller' || wid === 'button' || wid === 'trilogy' ? 60 : wid === 'loop' ? 80 : 150;
       const pin = function (e) { e.vx = e.vy = 0; e.x = P.x + dist; e.y = P.y; };
       const t1 = UroCrawl.spawn('com', P.x + dist, P.y, { instant: true }); t1.def = Object.assign({}, t1.def, { update: pin });
       const t2 = UroCrawl.spawn('com', P.x + dist + 40, P.y + 30, { instant: true }); t2.def = t1.def;
@@ -783,6 +784,61 @@ await block('M. reps + patrons', async () => {
   const best = await pf.evaluate(() => { const E = UroCrawl.tables.ENEMIES; return { entries: document.querySelectorAll('#bgrid .bentry').length, visible: Object.keys(E).filter(id => !E[id].hidden).length, overlay: UroCrawl.state.overlay }; });
   check('the bestiary renders every non-hidden enemy, the new strains and the C. difficile pod included', best.overlay === 'bestiary' && best.entries === best.visible && best.entries >= 33, best.entries + ' entries / ' + best.visible + ' visible defs');
   errCheck('M', errs.concat(errsF));
+});
+
+// ───────── N. look and feel: family rims, the 3/4 room, ground slams + stagger, the scalpel lunge ─────────
+await block('N. look and feel', async () => {
+  const { p, errs } = await openJ('?seed=61&room=2&weapons=scalpel,holmium');   // no god mode: damage has to register
+  let b = await p.evaluate(() => { const F = UroCrawl.tables.FAMILIES, hue = h => { const n = parseInt(h.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, bl = n & 255; return r > g && r > bl ? (g > 170 ? 'yellow' : bl > 180 ? 'violet' : 'red') : g > r && g > bl ? 'green' : bl > 220 && r > 150 ? 'violet' : 'blue'; };
+    return { hues: ['STONE', 'MICROBE', 'MALIGNANT', 'BENIGN', 'CLOT'].map(k => hue(F[k].color)), title: document.title, h1: document.querySelector('#ov-title h1').textContent, t: UroCrawl.tuning }; });
+  check('family rim colours: blue stones, green microbes, red malignant, yellow benign, violet clots', b.hues.join() === 'blue,green,red,yellow,violet', b.hues.join());
+  check('the game is titled Path of Pathology', b.title === 'Path of Pathology' && /PATH OF/.test(b.h1) && /PATHOLOGY/.test(b.h1), b.title + ' / ' + b.h1);
+  await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __prep(); });
+  // one BPH slam with the surgeon at `dx` px; opts: roll through the landing
+  const slam = (dx, roll) => p.evaluate(({ dx, roll }) => { const G = UroCrawl.state, P = UroCrawl.player(); __prep(); P.hp = P.maxHp = 100; P.stag = 0; P.inv = 0; P.roll = 0; P.rollCd = 0; G.shake = 0; G.punch = 0; G.flash = 0; UroCrawl.selectWeapon(0); G.swapT = 0;
+    const e = UroCrawl.spawn('bph', 620, 270, { instant: true }); e.dripT = 999; e.timer = 0; P.x = 620 - dx; P.y = 270; __aim(P.x - 100, P.y);
+    UroCrawl.step(2); const tele = G.teles.filter(t => t.kind === 'circle')[0], jump = e.atk ? e.atk.jump : 0; let lift = 0, steps = 0;
+    while (e.atk && steps < 80) { lift = Math.max(lift, UroCrawl.enemyLift(e)); if (roll && e.atk.t <= 0.07 && P.roll <= 0 && P.rollCd <= 0) { UroCrawl.input.keys.KeyA = true; UroCrawl.input.edges.roll = true; } UroCrawl.step(1); steps++; }
+    UroCrawl.input.keys = {}; const out = { hp: P.hp, stag: P.stag, shake: G.shake, punch: G.punch, flash: G.flash, r: tele && tele.r, r2: tele && tele.r2, jump, lift: Math.round(lift), steps, landed: UroCrawl.enemyLift(e) };
+    // while staggered: slowed, and the scalpel will not swing
+    const x0 = P.x; UroCrawl.input.keys.KeyA = true; UroCrawl.input.mouseFire = true; UroCrawl.step(6); out.moved = x0 - P.x; out.cd = G.weapons[0].cd; UroCrawl.input.keys = {}; UroCrawl.input.mouseFire = false;
+    UroCrawl.step(60); out.stagAfter = P.stag; e.silent = true; e.inhaled = true; e.hp = 0; UroCrawl.step(1); return out; }, { dx, roll });
+  const T = b.t, far = await slam(330), trem = await slam(T.BPH_SLAM + 13 + 30), hit = await slam(80), dodge = await slam(T.BPH_SLAM + 13 + 30, true);
+  check('Gentle Giant slam is telegraphed as a jump: a red disc (damage) inside a dashed tremor ring, 0.7 s, and it is airborne on the way', far.r === T.BPH_SLAM && far.r2 === T.BPH_SLAM + T.BPH_TREMOR && far.jump > 20 && far.lift > 20 && far.landed === 0 && far.steps >= 40 && far.steps <= 44, JSON.stringify({ r: far.r, r2: far.r2, jump: far.jump, lift: far.lift, steps: far.steps }));
+  check('a slam across the room: no damage, no stagger, no hit flash, no zoom punch, barely a shake', far.hp === 100 && !(far.stag > 0) && far.flash === 0 && far.punch === 0 && far.shake <= 1.5, JSON.stringify({ hp: far.hp, shake: +far.shake.toFixed(2), flash: far.flash, punch: far.punch }));
+  check('inside the tremor ring: no damage and no hit flash, but STAGGERED (slowed to 40%, cannot attack) for under a second', trem.hp === 100 && trem.stag > 0.3 && trem.flash === 0 && trem.shake <= 2.5 && trem.moved > 3 && trem.moved < 190 / 60 * 6 * 0.5 && trem.cd === 0 && !(trem.stagAfter > 0), JSON.stringify({ hp: trem.hp, stag: +trem.stag.toFixed(2), moved: +trem.moved.toFixed(1), cd: trem.cd, shake: trem.shake }));
+  check('inside the red disc: 15 damage, the hit flash, and a longer stagger', hit.hp === 85 && hit.stag > 0.5 && hit.flash > 0 && hit.shake >= 5, JSON.stringify({ hp: hit.hp, stag: +hit.stag.toFixed(2), flash: hit.flash, shake: hit.shake }));
+  check('rolling through the landing shrugs off the stagger', dodge.hp === 100 && !(dodge.stag > 0), JSON.stringify({ hp: dodge.hp, stag: dodge.stag }));
+  // scalpel lunge
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), T = UroCrawl.tuning; __prep(); P.hp = 100; P.inv = 0; P.stag = 0; UroCrawl.selectWeapon(0); G.swapT = 0; const w = G.weapons[0]; w.cd2 = 0;
+    const D = (a, c) => Math.hypot(a.x - c.x, a.y - c.y);
+    // 1. into something that survives: stop at arm's length, stagger it, keep a beat of i-frames
+    const big = __pin('com', P.x + 110, P.y); const hp0 = big.hp; __aim(P.x + 110, P.y); UroCrawl.input.edges.alt = true; UroCrawl.step(1); let n = 0; while (w.lunge > 0 && n < 30) { UroCrawl.step(1); n++; }
+    const gap = D(P, big) - big.r - P.r, inv = P.inv, stun = big.st.stun ? big.st.stun.t : 0, dmg = hp0 - big.hp, x1 = P.x;
+    // 2. a stunned enemy is harmless to touch; once it wakes up, contact hurts again
+    P.x = big.x - big.r - P.r + 6; P.inv = 0; UroCrawl.step(10); const hpStunned = P.hp; big.st = {}; P.inv = 0; UroCrawl.step(3); const hpAwake = P.hp;
+    __prep(); P.hp = 100; P.inv = 0; w.cd2 = 0; w.lunge = 0;
+    // 3. through things the stab kills: the dash keeps its full length
+    const weak = [__pin('polyp', P.x + 60, P.y), __pin('polyp', P.x + 95, P.y)]; weak.forEach(e => { e.hp = 1; }); const xs = P.x; __aim(P.x + 200, P.y); UroCrawl.input.edges.alt = true; UroCrawl.step(1); n = 0; while (w.lunge > 0 && n < 30) { UroCrawl.step(1); n++; }
+    return { gap, inv, stun, dmg, stopped: x1 - 300, hpStunned, hpAwake, through: P.x - xs, killed: weak.filter(e => e.dead).length, grace: T.LUNGE_GRACE, stunT: T.LUNGE_STUN }; });
+  check('scalpel lunge into a survivor stops at arm\'s length (never inside it), staggers it and leaves recovery i-frames', b.gap >= 6 && b.stopped < 110 && b.dmg > 0 && b.inv >= b.grace - 0.02 && b.stun > b.stunT - 0.1, JSON.stringify({ gap: +b.gap.toFixed(1), stopped: +b.stopped.toFixed(1), inv: +b.inv.toFixed(2), stun: +b.stun.toFixed(2), dmg: +b.dmg.toFixed(1) }));
+  check('a stunned enemy does no contact damage; awake again, it does', b.hpStunned === 100 && b.hpAwake < 100, JSON.stringify({ hpStunned: b.hpStunned, hpAwake: b.hpAwake }));
+  check('the lunge carves through what it kills and keeps its full length', b.killed === 2 && b.through > 120, JSON.stringify({ through: +b.through.toFixed(1), killed: b.killed }));
+  // every enemy renders in the 3/4 room (shadows, depth sort, rims) without throwing; then the bestiary thumbs
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), E = UroCrawl.tables.ENEMIES; __prep(); P.hp = 100; P.x = 120; P.y = 470; let i = 0, n = 0;
+    G.obstacles.push({ type: 'rect', x: 400, y: 380, w: 90, h: 40 }, { type: 'circle', x: 560, y: 400, r: 22 }, { type: 'circle', x: 640, y: 400, r: 8 });
+    Object.keys(E).forEach(id => { const d = E[id]; if (d.boss || d.isArm || d.isLobe || d.isStump || id === 'entero_link') return; const e = UroCrawl.spawn(id, 200 + (i % 10) * 70, 110 + Math.floor(i / 10) * 85, { instant: true }); i++; if (e) { n++; e.def = Object.assign({}, e.def, { update: function (q) { q.vx = q.vy = 0; }, contact: 0 }); } });
+    G.rewards.length = 0; UroCrawl.step(3); UroCrawl.hideScreens(); G.rewards.length = 0; G.bullets.length = 0; return { n, fam: Object.keys(UroCrawl.tables.FAMILIES).length }; });
+  await p.waitForTimeout(350); await shot(p, 'n-gallery');
+  check('every enemy type draws in the room without errors', b.n >= 30 && errs.length === 0, b.n + ' types, errors: ' + errs.slice(0, 2).join(' | '));
+  const { p: p2, errs: errs2 } = await open('?seed=61');
+  await p2.evaluate(() => { document.getElementById('btnHelp').click(); });
+  b = await p2.evaluate(() => { const lg = document.getElementById('famLegend').textContent; document.getElementById('btnHelpOk').click(); document.getElementById('btnBestiary').click();
+    const blank = []; document.querySelectorAll('#bgrid .bentry').forEach(d => { const cv = d.querySelector('canvas'), px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let a = 0; for (let k = 3; k < px.length; k += 4) if (px[k] > 40) a++; if (a < 150) blank.push(d.querySelector('b').textContent + ':' + a); });
+    return { lg, blank, n: document.querySelectorAll('#bgrid .bentry').length }; });
+  check('help explains the outline colours; every bestiary thumbnail has a drawing', /Stone/.test(b.lg) && /Microbe/.test(b.lg) && /Benign/.test(b.lg) && b.blank.length === 0 && b.n >= 33, 'blank: ' + b.blank.join(', '));
+  await shot(p2, 'n-bestiary');
+  errCheck('N', errs.concat(errs2));
 });
 
 await browser.close();
