@@ -2750,7 +2750,7 @@ var BOONS = {
   cystoscope:  { name: 'Cystoscopy', kind: 'gear', rarity: 'uncommon', desc: 'Every enemy spawns revealed: its weakness, what it resists, and any antibiotic it ignores. +5% crit chance.' },
   obturatorblock: { name: 'Obturator Block', kind: 'med', rarity: 'common', desc: 'A nerve block before you resect the side wall: cautery on the lateral bladder wall no longer sets off the obturator jerk. Staggers on you last half as long.' },
   kegel:       { name: 'Kegel Training', kind: 'med', rarity: 'common', desc: 'Pelvic floor training. The verumontanum\'s danger zone is 20% smaller. If the sphincter is ever injured, you leak half as often and the puddles dry twice as fast.' },
-  finasteride: { name: 'Finasteride', kind: 'med', rarity: 'common', desc: '5-alpha-reductase inhibitor: BPH lobes (the Gentle Giant, the Giant TURP\'s adenoma) start 30% smaller, and the Giant TURP swells 20% slower.' },
+  finasteride: { name: 'Finasteride', kind: 'med', rarity: 'common', desc: '5-alpha-reductase inhibitor: BPH lobes (the Gentle Giant, the Giant TURP\'s adenoma) start 30% smaller, and the Giant TURP swells 20% slower and bleeds less (25% fewer arterial bleeders).' },
   grading:     { name: 'Gleason Grading', kind: 'grade', rarity: 'epic', consumable: true, desc: 'Grade one boon you hold up a tier (Grade 3 max): its bonuses grow by half of their base per grade. One use; Gleason only offers it.', consume: function () { return false; } }
 };
 var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'obturatorblock', 'kegel', 'finasteride', 'grading'];
@@ -5048,7 +5048,7 @@ function cureSphincter(how) {
      capsule      a done lobe is a bed. CUT / ENERGY on a bed, or overkill on the last of a lobe, goes into that wall
                   segment (wallHit). A perforation stops that lobe counting until it is plugged (Foley / coag).
      the hoser    resecting can open an arterial bleeder (0.7 s thump first): red fog, you see ~120 px. Hold ENERGY on it
-                  for 1.5 s, or flush with the Irrigation Hose (6 s of view; it keeps bleeding).
+                  for 1.5 s, or flush with the Irrigation Hose (6 s of view; it keeps bleeding). Finasteride: 25% fewer.
      neck scar    ENERGY on the collar lobes (and coagulating a bleeder there) scars the bladder neck; lasers ×0.3, cold
                   steel none. At 100% a contracture ring caps flow at 60% until it is incised (Urethrotome ×1, Scalpel ×3).
                   The ring follows you: in sections 2 and 3 it sits behind you at the west end.
@@ -5063,7 +5063,7 @@ var BPH = {
   SLIDE: 1.2, ADV_DELAY: 0.9, PERF_MUL: 0.6, FIBERS: 0.55,                           // section slide · overcut → wall damage · the fibers start to show at this progress
   RET_FILL: 10, RET_DRAIN: 0.5, VALVE_OPEN: [7, 9], VALVE_TELE: 0.8, RET_DMG: 8,
   SCAR: 1 / 400, LASER: 0.3, SCAR_COAG: 0.06, SCAR_WARN: 0.5, SCAR_RED: 0.8, SCAR_AFTER: 0.5, BNC_HP: 60,
-  HOSE_P: 0.0013, HOSE_CD: 14, HOSE_TELE: 0.7, HOSE_COAG: 1.5, HOSE_FLUSH: 6, HOSE_R: 120, HOSE_R_LIGHT: 180,
+  HOSE_P: 0.0013, HOSE_FIN: 0.75, HOSE_CD: 14, HOSE_TELE: 0.7, HOSE_COAG: 1.5, HOSE_FLUSH: 6, HOSE_R: 120, HOSE_R_LIGHT: 180,   // HOSE_FIN: Finasteride's bleeder chance (a quarter fewer)
   TUR_HOLD: 6, TUR_T: 4, VERU_R: 20, URETERS: [62, 118],
   // a: where on the wall (degrees, 0 = east = ahead) · hp: tissue · q: ml/s it is worth
   SEC: [null,
@@ -5149,8 +5149,11 @@ function bphLobeHit(e, dmg, cls, o) {
   if (o && o.wid === 'loop' && cls === 'CUT') { var ia = Math.atan2(Wl.cy - e.y, Wl.cx - e.x); burst(e.x + Math.cos(ia) * e.r * 0.7, e.y + Math.sin(ia) * e.r * 0.7, 7, { color: '#ffd0c4', speed: 190, life: 0.6, size: 4, kind: 'confetti', dir: ia, spread: 0.9 }); }   // chips fly off the loop
   if (e.hp <= 1) { bphLobeDone(B, L, cls === 'CUT' || cls === 'ENERGY' ? 1 - e.hp : 0); return; }
   var prog = bphLobeProg(L);
-  if (!B.hoser && B.hoserCd <= 0 && prog > 0.12 && rnd() < dmg * BPH.HOSE_P * (0.5 + 1.5 * prog) * BPH.SEC[B.sec].hose) bphStartHoser(B, L);   // likelier the nearer the capsule
+  if (!B.hoser && B.hoserCd <= 0 && prog > 0.12 && rnd() < bphHoseChance(B, L, dmg)) bphStartHoser(B, L);
 }
+// the chance that this stroke opens a bleeder: per point of damage, likelier the nearer the capsule and at the apex;
+// Finasteride shrinks the gland's vessels, so a quarter fewer
+function bphHoseChance(B, L, dmg) { return dmg * BPH.HOSE_P * (0.5 + 1.5 * bphLobeProg(L)) * BPH.SEC[B.sec].hose * (hasBoon('finasteride') ? BPH.HOSE_FIN : 1); }
 // the fibers show: the lobe is done and the flow jumps. Whatever the last stroke had left over went into the capsule.
 function bphLobeDone(B, L, over) {
   var e = L.e; L.done = true; e.hp = 1; e.st = {}; e.special = bphBedHit; e.noAim = true; e.atk = null; e.inv = false; L.wind = 0; L.thrust = 0;
@@ -6654,7 +6657,7 @@ window.UroCrawl = {
   enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC, STAG: STAG, BPH: BPH, LANDMARK: LANDMARK, SPHINCTER: SPHINCTER },
   makeWall: makeWall, wallHit: wallHit, wallPerforate: wallPerforate, wallPlug: wallPlug, wallSegAt: wallSegAt, wallPoint: wallPoint, insideArena: insideArena, rollBossId: rollBossId,
   addLandmark: addLandmark, hitAreaDist: hitAreaDist, injureSphincter: function () { return G.running ? injureSphincter('hook') : false; }, cureSphincter: cureSphincter, sphincterCursed: sphincterCursed, leakPuddle: leakPuddle, openShop: openShop, openRepScreen: openRepScreen, winLine: winLine,
-  bph: { flow: bphFlow, fogR: bphFogR, advance: function () { var B = G.boss; if (B && B.kind === 'bph' && B.sec < 3 && !B.slide) bphSlide(B); }, hoser: function (i) { var B = G.boss; return B && B.kind === 'bph' ? bphStartHoser(B, B.lobes[i || 0], true) : null; }, scar: function (v) { var B = G.boss; if (B && B.kind === 'bph') bphScarSet(B, v); } },
+  bph: { flow: bphFlow, fogR: bphFogR, hoseChance: function (i, dmg) { var B = G.boss; return B && B.kind === 'bph' ? bphHoseChance(B, B.lobes[i || 0], dmg === undefined ? 10 : dmg) : 0; }, advance: function () { var B = G.boss; if (B && B.kind === 'bph' && B.sec < 3 && !B.slide) bphSlide(B); }, hoser: function (i) { var B = G.boss; return B && B.kind === 'bph' ? bphStartHoser(B, B.lobes[i || 0], true) : null; }, scar: function (v) { var B = G.boss; if (B && B.kind === 'bph') bphScarSet(B, v); } },
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };

@@ -36,7 +36,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–Q, 328 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP; the steps below add blocks R and S). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–Q, 329 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP; the steps below add blocks R and S). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -171,7 +171,8 @@ table is `DUNGEONS` / `BOSS_IDS` / `rollBossId` (add the Benign dungeon and `bph
 ### 2g. Boons
 - **Kegel Training** (add to the Foley patron's pool): halves the leak frequency and puddle lifetime if the curse is
   active, and before any injury it shrinks the verumontanum trigger radius by 20 %.
-- **Finasteride:** lobes start 30 % smaller and swell 20 % slower. **Tamsulosin** (existing) also slows the swelling pulses.
+- **Finasteride:** lobes start 30 % smaller and swell 20 % slower, and the fight bleeds less: 25 % fewer arterial bleeders
+  (`BPH.HOSE_FIN`, added 2026-11-12 on request). **Tamsulosin** (existing) also slows the swelling pulses.
 - Optional: **TUR syndrome**: holding the Irrigation Hose > ~6 s total in a row reverses the player's controls for 4 s.
 
 **Done when:** `?boss=bph&section=1|2|3` all work; harness block (Q) covers the flow meter win, capsule fibers, a
@@ -198,7 +199,7 @@ urethrotome fix), the hoser red-out and both fixes, section transitions; earlier
 - **Threats.** Lobes are not solid and do not hurt to touch. What hurts: thrusts (a 0.7 s circle; every third one in
   section 2 is a pinch), the median lobe's drip fan, the acute-retention ring, Nocturia droplets. Swelling shrinks the room
   by up to 18%.
-- **The hoser.** Chance per point of resection, about 2 to 4 a fight, ×1.8 at the apex. The bleeder stays findable through
+- **The hoser.** Chance per point of resection (`bphHoseChance`), about 2 to 4 a fight, ×1.8 at the apex, ×0.75 on Finasteride. The bleeder stays findable through
   the fog (a ring and a label) and telegraphs are redrawn above it.
 - **The slide.** The finished room is a snapshot that scrolls out; "stays visible as a darker cleaned strip" is the dark,
   fibered strip drawn at the west end of the next room, plus the HUD strip on the right.
