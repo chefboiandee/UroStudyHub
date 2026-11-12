@@ -1,7 +1,74 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-11
+**Updated:** 2026-11-12
 **Tool:** Claude Code
+
+## 2026-11-12 — 🚿 Path of Pathology: the Giant TURP (fourth boss), landmarks, the sphincter curse, the Benign dungeon (roadmap Step 2)
+
+Andrew: "read `UROCRAWL_ROADMAP.md` and do Step 2". A fourth boss that is not a duel: the arena is the boss, there is no
+health bar, and you win on a flow meter by resecting three sections of prostate down to the capsule without cutting
+through it. The other three bosses are untouched (all their checks pass).
+
+**Done (`games/uro-crawl.html`, one file / ES2019 / no deps; `tools/uro-crawl.drive.mjs` 328 checks):**
+- **§14f The Giant TURP** (`?boss=bph`, `?section=1|2|3`; every number in `BPH` = `UroCrawl.tuning.BPH`). Qmax starts at
+  4 ml/s; each adenoma lobe on the wall is worth a share (40% while you resect it, the rest when its **capsule fibers**
+  show as tree rings and the bed gets a tick). 20 ml/s wins; a perfect resection is 24. A corner panel shows the gauge with
+  its 20 line and a little stream that thickens; every lobe wears a progress ring (gold once the fibers start to show);
+  a strip on the right shows the three sections, a scope marker and a ring per section.
+  - **1 Bladder neck:** the median lobe is a ball valve: its flap shuts (0.8 s tell), a retention meter rises and the
+    adenoma swells faster until you hit the flap with a cut or cautery; 100% is an acute-retention ring of drops. Two collar
+    lobes sit on the bladder-neck ring. Two ureteric orifices at the bottom.
+  - **2 Lateral lobes:** a long narrow tube, six lobules that thrust inward (0.7 s circle; every third is a pinch from both
+    sides), Nocturia droplets from the two ends.
+  - **3 Apex:** a tight room, bleeders ×1.8, and the verumontanum in front of the sphincter.
+  - Finishing a section slides the scope on (1.2 s: the finished room scrolls away as a darkening snapshot, the next comes
+    in, nothing acts and nothing hurts until it ends).
+- **Risk, which is the fight:** steel or heat on a finished bed, or the overkill of the last stroke, goes into that segment
+  of the capsule (the §14c wall, reused as is: new kinds NECK / CAPSULE / SINUS, Nocturia leaks in, plug with Foley or coag).
+  A lobe on an open hole stops counting until it is sealed. Lasers and water never thin the capsule, so a laser is the safe
+  finisher. **The hoser:** resecting can open an arterial bleeder (0.7 s thump): red fog, you see 120 px (Cold Light: 180);
+  hold ENERGY on it 1.5 s, or flush with the Irrigation Hose for 6 s of view. **Neck scar:** cautery on the collar lobes
+  scars (lasers ×0.3, cold steel none): notice at 50%, red warning and tick at 80%, at 100% a contracture ring caps flow at
+  12 ml/s until it is incised (Urethrotome ×1, Scalpel ×3); the ring follows the scope. **Swelling** every ~10 s shrinks
+  the room up to 18%; resecting pushes it back. **TUR syndrome:** the hose held 6 s reverses your controls for 4 s.
+- **§14e Landmarks (generic, for Step 4 too):** `addLandmark({...})`: a floor structure auto-aim never picks, that warns
+  first (ring pulse, rising tone, a one-line notice) as you or a CUT / ENERGY hit area comes within 40 px, and calls
+  `onInjury` when steel or heat touches it. Ureteric orifice: −15% max HP. **Verumontanum: SPHINCTER INJURY**: red flash,
+  "NOOOO", −35% max HP (never the last point), and the **incontinence curse** for the rest of the run: every roll and
+  every hit leaves a urine puddle that counts as saline (the Bovie fizzles in it or firing through it), the surgeon drips,
+  the win screen says "Continence: lost." Fixes: Kegel Training (half the leaks, half the puddle life, and a 20% smaller
+  trigger before any injury), the Artificial Sphincter (in ~half of shops while cursed, 150 RVU × markup; the next rep
+  opens with "I've got just the thing for that" and sells it for 75). Hook: `UroCrawl.injureSphincter()`.
+- **Benign dungeon:** the boss roll is now quarters (a seed keeps its boss or moves to this one). Benign runs draw only
+  BENIGN rooms, plus **Nocturia** (a sleepwalking droplet in a nightcap) which lives only there. The rest-room crate before
+  this boss is a Resectoscope Loop if you carry none (×1.5 on adenoma, chips fly).
+- **Boons:** Kegel Training (Foley), Finasteride (Huggins: lobes and the Gentle Giant start 30% smaller, swelling 20%
+  slower); Tamsulosin also slows the swelling. Bestiary: The Giant TURP, Nocturia.
+- Small generic hooks: `e.special`, `e.noAim`, `def.noBar`, `drawWorld(c)`, `setNotice()`, wall wording options.
+
+**Where the build reads the spec one way:** listed at the end of Step 2 in the roadmap. The main ones: the win screen
+shows the real Qmax (20-22, not a fixed 24); the neck ring is the two collar lobes; the contracture ring follows you so it
+can always be cut; lobes are not solid and do not hurt to touch.
+
+**Verified:** headless Chromium, every block passes (328). Block O's boss-pool check was adapted to four bosses. New block
+Q is 67 checks: flow and fibers, loop ×1.5, overcut → thinning → perforation → coag plug / Foley / chronic, swelling and
+the boon rates, the valve and retention, the landmark warning levels and both injuries, scar rates → warnings →
+contracture → cap → Urethrotome / Scalpel incision, the hoser (random start, fog radius, dab vs hold, hose flush), thrust
+and pinch, both slides and `?section=`, the curse (puddles, Bovie in and through, Kegel, next room, new run), the shop and
+rep fixes, TUR, the win and its summary, the dungeon, the pool, the bestiary, skipRoom, **two full fights played by a bot
+with no god mode and the default boss loadout (about 90 s each, 13-21 damage taken)**, every tell ≥ 0.5 s, and a phone-size
+touch viewport at 60 fps. Script parses as ES2019. `UroStudyHub.html` is unchanged (no rebuild).
+**Roadmap:** Step 2 is ticked; Steps 3-4 take harness blocks R, S.
+**Next steps:** play it on the phone and tune `BPH`: tissue (`SEC[n].lobes[].hp`), `PERF_MUL` (0.6: how fast an overcut
+perforates), `HOSE_P` (bleeder rate), `SCAR` (1/400), thrust tempo (`SEC[n].slam`). Then Step 3 (the Call Room).
+**Open questions:**
+- **The curse's fixes cannot be reached in a normal run yet.** The verumontanum is in the last section of the last room, so
+  nothing comes after an injury: no shop, no rep. Everything is built and tested through the hook. Options: put a
+  verumontanum in an ordinary Benign-dungeon room (the curse would then matter for several rooms), or leave it for when
+  runs continue past a boss. Not done on my own: it would put a 35% HP trap in ordinary rooms.
+- Is the bot's 90 s the right length for a human (target 120-150 s)? Is the loop too risky to finish with (one sweep can
+  leave 20% on the capsule)?
+- Should the Giant TURP's lobes block movement (a real channel to carve) instead of only shrinking the room?
 
 ## 2026-11-11 (later still) — 🦌 Path of Pathology: the Staghorn is a mobile head-on duelist (roadmap Step 1)
 

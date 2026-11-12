@@ -4,9 +4,11 @@
   types and the window.UroCrawl test hooks keep it). A goofy dungeon-crawler roguelike set inside a diseased urinary
   tract: rooms of pathologic monsters, rock–paper–scissors instrument switching (lasers break stones, loops cut
   tumours, heat burns bugs and lobes, water flushes clots and strips biofilm), Hades-style door choices and boons,
-  and three bosses: the Staghorn Calculus (a stone stag you duel head-on: bait its antler charge into a wall to stun it and
-  snap a tine off), Fournier's Gangrene (the Hydra) and the Invader (a muscle-invasive bladder
-  tumour in a round arena whose wall can perforate: §14c is the reusable wall + perforation system, §14d the boss). No quizzes: the learning is osmosis
+  and four bosses: the Staghorn Calculus (a stone stag you duel head-on: bait its antler charge into a wall to stun it and
+  snap a tine off), Fournier's Gangrene (the Hydra), the Invader (a muscle-invasive bladder
+  tumour in a round arena whose wall can perforate: §14c is the reusable wall + perforation system, §14d the boss) and the
+  Giant TURP (BPH: the arena is the boss, you win on a flow meter by resecting three sections down to the capsule fibers:
+  §14f; its landmarks, the ureteric orifices and the verumontanum, are the generic component in §14e). No quizzes: the learning is osmosis
   plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
   body-horror gags played for laughs; everything stylized and abstract, never anatomical. Seen from a raised 3/4
   camera (far wall face, foreshortened tiles, ground shadows, back-to-front draw order). Type reads at a glance: a thin
@@ -19,15 +21,19 @@
   Standalone page: the app opens it in a frame with ?embed=1 and gets {type:'crawl:claim'} on the first input,
   {type:'crawl:exit'} from the Exit button, and {type:'crawl:result', won, rooms, kills, rvu, seconds} at run end.
 
-  URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier|mibc (start at that boss; ?boss=1 rolls one; with
-              ?room=K it only picks the run's boss and dungeon; a normal run rolls the final boss from the seed)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
+  URL params: ?seed=N  ?god=1  ?room=K  ?boss=staghorn|fournier|mibc|bph (start at that boss; ?boss=1 rolls one; with
+              ?room=K it only picks the run's boss and dungeon; a normal run rolls the final boss from the seed)
+              ?section=1|2|3 (with ?boss=bph: start the Giant TURP at that section)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
               ?mods=holmium_joules,scalpel_backstab (weapon mods at run start; grants the weapon if not carried)
               ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), giveMod(id), setAspect(weapon, aspect),
               skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... },
-              tuning: { STAG (every Staghorn number), MIBC, PERF, ... } }; state.boss is the live boss script (for the Staghorn:
-              state, face, cd, arms = the four tines, crashes, gores)
+              tuning: { STAG (every Staghorn number), MIBC, PERF, BPH (every Giant TURP number), LANDMARK, SPHINCTER, ... } };
+              state.boss is the live boss script (for the Staghorn: state, face, cd, arms = the four tines, crashes, gores; for
+              the Giant TURP: sec, q (flow), lobes, scar, bnc, valve, hoser, slide)
+              injureSphincter() (the incontinence curse, anywhere), cureSphincter(), sphincterCursed(), addLandmark({...}),
+              bph: { advance() (slide to the next section), hoser(i) (open a bleeder on lobe i), scar(v), flow(B), fogR() }
 
   Upgrade paths (Hades-style): MODS is a per-weapon table of upgrades in three branches (POWER / CONTROL / SPECIAL),
   tiers 1-3 with prerequisites, up to 6 mods + 1 capstone per weapon per run, offered by "Instrument Rep" doors
@@ -706,7 +712,7 @@ var Snd = {
   },
   setMusicMode: function (mode) { this.music.mode = mode; }
 };
-var SFX_GAP = { beam: 90, hit: 35, crit: 60, tink: 60, kill: 50, pickup: 50, coin: 35, hurt: 150, roll: 200, door: 400, click: 60, roar: 800, clear: 1000, heartbeat: 500, charge: 120, jet: 110, arc: 100, probe: 70, slash: 80, swing: 200, cauter: 120, freeze: 120, shatter: 120, shield: 150, spawn: 120, lob: 150, shot: 90, suck: 120, pop: 100, swap: 120, bossHit: 60, alarm: 1000, buy: 200, jingle: 2000, seed: 150, drip: 80 };
+var SFX_GAP = { beam: 90, hit: 35, crit: 60, tink: 60, kill: 50, pickup: 50, coin: 35, hurt: 150, roll: 200, door: 400, click: 60, roar: 800, clear: 1000, heartbeat: 500, charge: 120, jet: 110, arc: 100, probe: 70, slash: 80, swing: 200, cauter: 120, freeze: 120, shatter: 120, shield: 150, spawn: 120, lob: 150, shot: 90, suck: 120, pop: 100, swap: 120, bossHit: 60, alarm: 1000, buy: 200, jingle: 2000, seed: 150, drip: 80, warn: 50, nooo: 1500, thump: 300 };
 var SFX = {
   beam: function (S, p) { S.tone({ type: 'square', f0: 1400 + Math.random() * 300, f1: 900, dur: 0.06, vol: 0.05 }); },
   probe: function (S) { S.noise({ dur: 0.05, f: 500, q: 2, vol: 0.14 }); S.tone({ type: 'square', f0: 90, f1: 60, dur: 0.05, vol: 0.12 }); },
@@ -747,7 +753,12 @@ var SFX = {
   buy: function (S) { S.tone({ type: 'sine', f0: 1046, dur: 0.1, vol: 0.12 }); S.tone({ type: 'sine', f0: 1568, dur: 0.2, vol: 0.12, delay: 0.08 }); },
   clear: function (S) { [523, 659, 784, 1046].forEach(function (f, i) { S.tone({ type: 'triangle', f0: f, dur: 0.22, vol: 0.16, delay: i * 0.09 }); }); },
   jingle: function (S) { [523, 659, 784, 1046, 784, 1046, 1318].forEach(function (f, i) { S.tone({ type: 'triangle', f0: f, dur: 0.3, vol: 0.18, delay: i * 0.13 }); }); },
-  death: function (S) { [440, 415, 392, 311].forEach(function (f, i) { S.tone({ type: 'sawtooth', f0: f, dur: 0.4, vol: 0.14, delay: i * 0.25 }); }); }
+  death: function (S) { [440, 415, 392, 311].forEach(function (f, i) { S.tone({ type: 'sawtooth', f0: f, dur: 0.4, vol: 0.14, delay: i * 0.25 }); }); },
+  // landmark warning: one blip whose pitch (and loudness) rises with p.v 0..1; the caller plays it faster as you close in
+  warn: function (S, p) { var v = p.v || 0; S.tone({ type: 'sine', f0: 420 + 900 * v, f1: 470 + 1000 * v, dur: 0.07, vol: 0.05 + 0.08 * v }); },
+  // "NOOOO": three detuned voices sliding down a long way, then a sad little puff
+  nooo: function (S) { S.tone({ type: 'sawtooth', f0: 520, f1: 150, dur: 1.1, vol: 0.2 }); S.tone({ type: 'triangle', f0: 540, f1: 140, dur: 1.15, vol: 0.2, delay: 0.03 }); S.tone({ type: 'sine', f0: 262, f1: 70, dur: 1.2, vol: 0.14, delay: 0.05 }); S.noise({ dur: 0.4, f: 500, q: 0.6, vol: 0.08, delay: 0.9 }); },
+  thump: function (S) { S.tone({ type: 'sine', f0: 90, f1: 38, dur: 0.16, vol: 0.34 }); S.tone({ type: 'sine', f0: 80, f1: 36, dur: 0.16, vol: 0.26, delay: 0.2 }); }
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -870,8 +881,14 @@ function enemiesInArc(x, y, a, rad, half) {
   return out;
 }
 function enemiesNear(x, y, rad) { var out = [], es = G.enemies; for (var i = 0; i < es.length; i++) { var e = es[i]; if (!enemyTargetable(e)) continue; if (dist(x, y, e.x, e.y) <= rad + e.r) out.push(e); } return out; }
-function nearestEnemy(x, y, rad, filter) { var best = null, bd = rad; var es = G.enemies; for (var i = 0; i < es.length; i++) { var e = es[i]; if (!enemyTargetable(e)) continue; if (filter && !filter(e)) continue; var d = dist(x, y, e.x, e.y) - e.r; if (d < bd) { bd = d; best = e; } } return best; }
+function nearestEnemy(x, y, rad, filter) { var best = null, bd = rad; var es = G.enemies; for (var i = 0; i < es.length; i++) { var e = es[i]; if (!enemyTargetable(e) || e.noAim) continue; if (filter && !filter(e)) continue; var d = dist(x, y, e.x, e.y) - e.r; if (d < bd) { bd = d; best = e; } } return best; }
 function inHazard(x, y, kind) { var hz = G.hazards; for (var i = 0; i < hz.length; i++) { var h = hz[i]; if (h.kind !== kind) continue; if (dist(x, y, h.x, h.y) <= h.r) return h; } return null; }
+// point to segment, and point to a pie slice (apex x,y, facing a, radius rad, half-angle half): 0 when inside
+function segDist(px, py, x0, y0, x1, y1) { var dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy, t = l2 > 0 ? clamp(((px - x0) * dx + (py - y0) * dy) / l2, 0, 1) : 0; return dist(px, py, x0 + dx * t, y0 + dy * t); }
+function sectorDist(px, py, x, y, a, rad, half) {
+  var d = dist(px, py, x, y); if (d < 0.01 || Math.abs(angDiff(a, ang(x, y, px, py))) <= half) return Math.max(0, d - rad);
+  return Math.min(segDist(px, py, x, y, x + Math.cos(a - half) * rad, y + Math.sin(a - half) * rad), segDist(px, py, x, y, x + Math.cos(a + half) * rad, y + Math.sin(a + half) * rad));
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §6  WEAPONS — data + behaviour. Each row: class, kind, numbers, fire(w,dt,held), altPress(w) /
@@ -950,6 +967,12 @@ function popcornBurst(w, e, dmg) {
 }
 
 function aimPointAt(d) { return clampArena(P.x + Math.cos(P.aim) * d, P.y + Math.sin(P.aim) * d, 10); }
+// the first urine puddle (saline left by the incontinence curse, §14e) the muzzle line crosses within len, or null
+function urineAhead(m, len) {
+  var hz = G.hazards, i, any = false; for (i = 0; i < hz.length; i++) if (hz[i].urine) { any = true; break; } if (!any) return null;
+  for (var d = 10; d <= len; d += 12) { var px = m.x + Math.cos(m.a) * d, py = m.y + Math.sin(m.a) * d; for (i = 0; i < hz.length; i++) { var h = hz[i]; if (h.urine && dist(px, py, h.x, h.y) <= h.r) return h; } }
+  return null;
+}
 // CO₂ light is absorbed by water: standing in saline/water, a puddle within the first 60 px, or a FLUID jet/bolt crossing the beam
 function beamInWater() {
   if (inHazard(P.x, P.y, 'saline') || inHazard(P.x, P.y, 'water') || inHazard(P.x, P.y, 'flood')) return true;
@@ -1128,9 +1151,10 @@ var WEAPONS = {
       if (!tickReady(w, dt, 0.15 / wmod(w, 'rate'))) return;
       Snd.sfx('arc');
       var flooded = !!inHazard(P.x, P.y, 'flood');   // a perforation's flood shorts the Bovie outright; saline pools only make it fizzle
-      if ((flooded || inHazard(P.x, P.y, 'saline')) && !hasBoon('groundpad') && !wflag(w, 'groundPad') && (flooded || rnd() < 0.7)) {
+      var standing = inHazard(P.x, P.y, 'saline'), puddle = standing ? null : urineAhead(m, range);   // a urine puddle (the incontinence curse) is saline you can also fire THROUGH
+      if ((flooded || standing || puddle) && !hasBoon('groundpad') && !wflag(w, 'groundPad') && (flooded || rnd() < 0.7)) {
         burst(m.x, m.y, 4, { color: '#ffb630', speed: 140, life: 0.2, size: 2 }); w.fx = { kind: 'chain', pts: [{ x: m.x, y: m.y }, { x: m.x + Math.cos(m.a + rr(-1, 1)) * 30, y: m.y + Math.sin(m.a + rr(-1, 1)) * 30 }], t: 0.08, cls: 'ENERGY', fizzle: true };
-        if (!w.fizzT || G.time - w.fizzT > 0.9) { w.fizzT = G.time; addText(P.x, P.y - 34, flooded ? 'SHORTED (flood)' : 'FIZZLE (saline)', { color: '#8ea2b6', size: 11 }); }
+        if (!w.fizzT || G.time - w.fizzT > 0.9) { w.fizzT = G.time; addText(P.x, P.y - 34, flooded ? 'SHORTED (flood)' : puddle || (standing && standing.urine) ? 'FIZZLE (urine puddle)' : 'FIZZLE (saline)', { color: '#8ea2b6', size: 11 }); }
         return;
       }
       var cands = enemiesInArc(m.x, m.y, m.a, range, half).filter(function (e) { return raycast(m.x, m.y, ang(m.x, m.y, e.x, e.y), dist(m.x, m.y, e.x, e.y)) >= dist(m.x, m.y, e.x, e.y) - e.r - 4; });
@@ -1143,7 +1167,7 @@ var WEAPONS = {
           var node = frontier.shift(), ce = node.e, ci = G.enemies.indexOf(ce); if (ci < 0 || (counts[ci] || 0) >= 2 || !enemyTargetable(ce)) continue;
           counts[ci] = (counts[ci] || 0) + 1; left--; zap(ce, node.f); branches.push([node.from, { x: ce.x, y: ce.y }]);
           if (node.depth + 1 >= jumps) continue;
-          var near = []; for (var k = 0; k < G.enemies.length; k++) { var ne = G.enemies[k]; if (ne === ce || !enemyTargetable(ne) || (counts[k] || 0) >= 2) continue; var dn = dist(ce.x, ce.y, ne.x, ne.y); if (dn < hop) near.push([dn, ne, counts[k] || 0]); }
+          var near = []; for (var k = 0; k < G.enemies.length; k++) { var ne = G.enemies[k]; if (ne === ce || !enemyTargetable(ne) || ne.noAim || (counts[k] || 0) >= 2) continue; var dn = dist(ce.x, ce.y, ne.x, ne.y); if (dn < hop) near.push([dn, ne, counts[k] || 0]); }
           near.sort(function (p, q) { return (p[2] - q[2]) || (p[0] - q[0]); });   // fresh targets first, then nearest; re-hits only when nothing fresh is in reach
           for (var nb = 0; nb < near.length && nb < 2; nb++) frontier.push({ e: near[nb][1], from: { x: ce.x, y: ce.y }, f: node.f * 0.7, depth: node.depth + 1 });
         }
@@ -1151,12 +1175,13 @@ var WEAPONS = {
         if (branches.length >= 4) shakeIt(2);
         return;
       }
+      // (the arc never HOPS onto a landmark or a resected bed, e.noAim: it only goes there if you point at it)
       var pts = [{ x: m.x, y: m.y }], cur = cands[0], used = [], f = 1;
       for (var j = 0; j < jumps && cur; j++) {
         used.push(cur); pts.push({ x: cur.x, y: cur.y });
         zap(cur, f); f *= 0.7;
         var next = null, nd = hop;
-        for (var k2 = 0; k2 < G.enemies.length; k2++) { var e = G.enemies[k2]; if (!enemyTargetable(e) || used.indexOf(e) >= 0) continue; var d = dist(cur.x, cur.y, e.x, e.y); if (d < nd) { nd = d; next = e; } }
+        for (var k2 = 0; k2 < G.enemies.length; k2++) { var e = G.enemies[k2]; if (!enemyTargetable(e) || e.noAim || used.indexOf(e) >= 0) continue; var d = dist(cur.x, cur.y, e.x, e.y); if (d < nd) { nd = d; next = e; } }
         cur = next;
       }
       w.fx = { kind: 'chain', pts: pts, t: 0.1, cls: 'ENERGY' };
@@ -2522,7 +2547,7 @@ var ENEMIES = {
     fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 6; }, draw: function (c, e) { drawStump(c, e); }
   }
 };
-var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'esbl', 'vre', 'cre', 'cdiff', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'tumorseed', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'fatglob', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump', 'mibc', 'mibcroot', 'perfhole'];
+var ENEMY_ORDER = ['com', 'cod', 'uric', 'cystine', 'struvite', 'brushite', 'frag', 'dust', 'ecoli', 'proteus', 'pseudomonas', 'enterococcus', 'entero_link', 'candida', 'bud', 'klebsiella', 'clostridium', 'esbl', 'vre', 'cre', 'cdiff', 'abscess', 'papillary', 'cis', 'rcc', 'satellite', 'prostate', 'seminoma', 'tumorseed', 'bph', 'cyst', 'aml', 'oncocytoma', 'polyp', 'condyloma', 'fatglob', 'nocturia', 'clot', 'staghorn', 'stagarm', 'fournier', 'fourlobe', 'fourstump', 'mibc', 'mibcroot', 'perfhole', 'bphboss', 'bphlobe', 'bphflap', 'bphbleeder', 'bncring', 'landmark'];
 /* ── antibiotic collateral + resistant strains (§6c) ──
    cdiff: the broad-spectrum tax — stationary spore pods that puff toxin clouds and burst into one when killed. Never in the
    normal pool (cost 0); spawned as collateral in the room after a combat room while you hold Pip-Tazo or Meropenem. */
@@ -2603,6 +2628,58 @@ ENEMIES.perfhole = {
   coagHint: 'PLUG IT: Foley balloon over it, or coag it (Roller Ball)',
   fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 5; e.vx = e.vy = 0; }, draw: function (c, e) { drawPerfHole(c, e); }
 };
+/* ── the Benign dungeon: the Giant TURP (boss: the arena is the boss, §14f), its adenoma lobes, the median lobe's valve flap,
+   the arterial bleeder, the bladder-neck scar ring, the generic landmark (§14e) and the Nocturia droplet. Only Nocturia
+   enters a wave pool, and only in this dungeon (def.dungeon). ── */
+ENEMIES.nocturia = {
+  name: 'Nocturia', sub: 'A night-time trip to the toilet', family: 'BENIGN', hp: 18, r: 10, speed: 135, cost: 2, minRoom: 2, contact: 6, grab: true, cluster: [2, 3], dungeon: 'bph',
+  fact: 'Nocturia, waking at night to void, is one of the most bothersome symptoms of BPH. Nocturnal polyuria, sleep apnoea and evening fluids cause it too, so a voiding diary comes before any procedure.',
+  init: function (e) { e.ph = rr(0, TAU); e.napT = rr(1.6, 3.2); e.nap = 0; e.seed = rr(1, 99); },
+  // a sleepwalker: weaves toward you half asleep, stops to yawn, shuffles on
+  update: function (e, dt, d, a) {
+    e.ph += dt * 5;
+    if (e.nap > 0) { e.nap -= dt; e.vx *= 0.8; e.vy *= 0.8; return; }
+    e.napT -= dt; if (e.napT <= 0) { e.napT = rr(2.2, 3.6); e.nap = 0.45; e.sx = 0.85; e.sy = 1.2; return; }
+    var wa = a + Math.sin(e.ph * 0.6) * 0.7; e.vx = Math.cos(wa) * 135; e.vy = Math.sin(wa) * 135;
+  },
+  onDeath: function (e) { addHazard({ kind: 'water', x: e.x, y: e.y, r: 20, t: 5 }); },
+  draw: function (c, e) {   // a pale yellow droplet in a nightcap, eyes shut, mid-yawn
+    var r = e.r, sw = Math.sin((e.ph || 0)) * 0.12;
+    c.save(); c.rotate(sw);
+    c.beginPath(); c.moveTo(0, -r * 1.5); c.bezierCurveTo(r * 1.25, -r * 0.2, r * 1.05, r, 0, r); c.bezierCurveTo(-r * 1.05, r, -r * 1.25, -r * 0.2, 0, -r * 1.5); c.closePath(); body(c, e, '#ffe98a', 3);
+    c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.ellipse(-r * 0.35, -r * 0.1, r * 0.16, r * 0.32, 0.3, 0, TAU); c.fill();
+    c.fillStyle = '#6c8cff'; c.beginPath(); c.moveTo(-r * 0.62, -r * 0.62); c.quadraticCurveTo(0, -r * 1.05, r * 0.62, -r * 0.62); c.quadraticCurveTo(r * 0.9, -r * 1.7, r * 1.45, -r * 1.25); c.quadraticCurveTo(r * 0.6, -r * 1.55, -r * 0.62, -r * 0.62); c.closePath(); c.fill(); outline(c, 2.2);
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(r * 1.45, -r * 1.25, r * 0.26, 0, TAU); c.fill(); outline(c, 1.8);
+    shutEyes(c, 0, -r * 0.05, r * 0.38, r * 0.2); mouth(c, 0, r * 0.45, r * (e.nap > 0 ? 0.42 : 0.22), 'o');
+    c.restore();
+  }
+};
+ENEMIES.bphboss = {
+  name: 'The Giant TURP', sub: 'BOSS — benign prostatic hyperplasia, resected one section at a time', family: 'BENIGN', hp: 100, r: 44, speed: 0, cost: 0, minRoom: 99, contact: 0, boss: true, stationary: true, noPush: true, noGrab: true, noCollide: true, noBar: true,
+  fact: 'TURP carves a channel through the adenoma down to the circular fibers of the capsule: bladder neck and median lobe, then the lateral lobes, then the apex. The verumontanum marks the limit: resect past it and the external sphincter is injured. The other classic complications are capsular perforation, ureteric orifice injury, bladder neck contracture, bleeding and TUR syndrome from absorbed irrigant.',
+  init: function (e) { e.seed = 41; }, update: function (e, dt) { e.vx = e.vy = 0; }, draw: function (c, e) { if (G.boss && G.boss.body === e) return; drawBphIcon(c, e); }   // in the fight the arena is the boss; this is the bestiary portrait
+};
+ENEMIES.bphlobe = {
+  name: 'Adenoma Lobe', family: 'BENIGN', hp: 340, r: 40, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, adenoma: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, solid: true, noBar: true,
+  tweaks: { loop: 1.5, aquablation: 2, button: 1.2, rezum: 1.2, greenlight: 1.2, holmium: 2, thulium: 2 },   // the loop is the signature tool; HoLEP-style lasers and the waterjet work well too
+  fact: '', init: function (e) { e.seed = rr(1, 99); e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 2; e.vx = e.vy = 0; }, draw: function (c, e) { drawBphLobe(c, e); }
+};
+ENEMIES.bphflap = {
+  name: 'Median Lobe Flap', family: 'BENIGN', hp: 99999, r: 16, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, noBar: true,
+  fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 4; e.vx = e.vy = 0; }, draw: function (c, e) { drawBphFlap(c, e); }
+};
+ENEMIES.bphbleeder = {
+  name: 'Arterial Bleeder', family: 'CLOT', hp: 99999, r: 13, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, noBar: true,
+  fact: '', init: function (e) { e.ph = rr(0, TAU); }, update: function (e, dt) { e.ph += dt * 9; e.vx = e.vy = 0; }, draw: function (c, e) { drawBphBleeder(c, e); }
+};
+ENEMIES.bncring = {
+  name: 'Bladder Neck Scar', family: 'BENIGN', hp: 99999, r: 26, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, noBar: true,
+  fact: '', init: function (e) { e.ph = rr(0, TAU); e.cut = 0; }, update: function (e, dt) { e.ph += dt * 3; e.vx = e.vy = 0; }, draw: function (c, e) { drawBncRing(c, e); }
+};
+ENEMIES.landmark = {
+  name: 'Landmark', family: 'BENIGN', hp: 99999, r: 18, speed: 0, cost: 0, minRoom: 99, contact: 0, hidden: true, landmark: true, flat: true, stationary: true, noPush: true, noGrab: true, noClear: true, noCollide: true, noBar: true,
+  fact: '', init: function (e) { e.ph = rr(0, TAU); e.noRim = true; }, update: function (e, dt) { e.ph += dt * 2; e.vx = e.vy = 0; }, draw: function (c, e) { drawLandmark(c, e); }
+};
 (function () { for (var id in ENEMIES) ENEMIES[id].id = id; })();
 // pips: the class an enemy is weakest to / resists most (class-level tweaks included)
 function enemyWeakness(def) {
@@ -2648,7 +2725,7 @@ var BOONS = {
   kcitrate:    { name: 'Potassium Citrate', kind: 'med', rarity: 'common', desc: 'Uric acid stones dissolve while in any puddle. All stones take +15%.', dmg: function (e) { return e.family === 'STONE' ? 1.15 : 1; } },
   thiazide:    { name: 'Thiazide', kind: 'med', rarity: 'common', desc: 'Calcium stones take +20%. Fragments spawn with 10% less HP.', dmg: function (e) { return (e.id === 'com' || e.id === 'cod' || e.id === 'brushite') ? 1.2 : 1; } },
   allopurinol: { name: 'Allopurinol', kind: 'med', rarity: 'common', desc: 'Uric acid stones spawn with 30% less HP.' },
-  tamsulosin:  { name: 'Tamsulosin', kind: 'med', rarity: 'common', desc: 'Alpha-blocker: enemy projectiles are 10% slower and stone fragments are pushed away from you.' },
+  tamsulosin:  { name: 'Tamsulosin', kind: 'med', rarity: 'common', desc: 'Alpha-blocker: enemy projectiles are 10% slower and stone fragments are pushed away from you. The Giant TURP swells less often.' },
   hydration:   { name: 'Hydration', kind: 'med', rarity: 'common', desc: '+20 max HP and slow regeneration (0.5 HP/s).', apply: function () { P.maxHp += 20; P.hp += 20; } },
   ketorolac:   { name: 'Ketorolac', kind: 'med', rarity: 'common', desc: 'NSAID: +10% move speed, and stone contact hurts 25% less.' },
   insulin:     { name: 'Insulin', kind: 'med', rarity: 'common', desc: 'Clears the sugar crystals that feed Fournier\'s gangrene (no glycemic surges). IV bags and hearts heal 25% more.' },
@@ -2672,9 +2749,11 @@ var BOONS = {
   cbi:         { name: 'Continuous Bladder Irrigation', kind: 'gear', rarity: 'common', desc: 'FLUID hits do +15% and strip biofilm faster; you walk through slime and goo at full speed.', dmg: function (e, cls) { return cls === 'FLUID' ? 1.15 : 1; }, strip: 0.3, stripCls: 'FLUID' },
   cystoscope:  { name: 'Cystoscopy', kind: 'gear', rarity: 'uncommon', desc: 'Every enemy spawns revealed: its weakness, what it resists, and any antibiotic it ignores. +5% crit chance.' },
   obturatorblock: { name: 'Obturator Block', kind: 'med', rarity: 'common', desc: 'A nerve block before you resect the side wall: cautery on the lateral bladder wall no longer sets off the obturator jerk. Staggers on you last half as long.' },
+  kegel:       { name: 'Kegel Training', kind: 'med', rarity: 'common', desc: 'Pelvic floor training. The verumontanum\'s danger zone is 20% smaller. If the sphincter is ever injured, you leak half as often and the puddles dry twice as fast.' },
+  finasteride: { name: 'Finasteride', kind: 'med', rarity: 'common', desc: '5-alpha-reductase inhibitor: BPH lobes (the Gentle Giant, the Giant TURP\'s adenoma) start 30% smaller, and the Giant TURP swells 20% slower.' },
   grading:     { name: 'Gleason Grading', kind: 'grade', rarity: 'epic', consumable: true, desc: 'Grade one boon you hold up a tier (Grade 3 max): its bonuses grow by half of their base per grade. One use; Gleason only offers it.', consume: function () { return false; } }
 };
-var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'obturatorblock', 'grading'];
+var BOON_ORDER = ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'ceftriaxone', 'piptazo', 'cipro', 'vanco', 'meropenem', 'antibiogram', 'fosfomycin', 'kcitrate', 'thiazide', 'allopurinol', 'tamsulosin', 'hydration', 'ketorolac', 'insulin', 'txa', 'moses', 'bigfiber', 'dualfreq', 'hydrophilic', 'digiscope', 'groundpad', 'debride', 'coldlight', 'backup', 'perfectswap', 'quickhands', 'wolf', 'smokevac', 'bipolar', 'cbi', 'cystoscope', 'obturatorblock', 'kegel', 'finasteride', 'grading'];
 (function () { for (var id in BOONS) BOONS[id].id = id; })();
 var BOON_COLORS = { chemo: '#d98cff', abx: '#7ad7ff', med: '#7dffb0', gear: '#ffd166', grade: '#ffd166' };
 
@@ -2727,11 +2806,11 @@ var PATRONS = {
     blurb: 'The physicist whose electrosurgical generator (1926, with Cushing) still carries his name in every OR.',
     greet: ['Current cuts, current coagulates. Mind the ground pad.', 'Every surgeon says my name and few know my face. Fitting.', 'Physics in the operating room. You are welcome.'],
     look: { skin: '#efc7a0', hair: '#8a7a66', hairStyle: 'bald', facial: 'none', glasses: 'square', collar: 'labcoat', suit: '#e8eef5', tie: '#ffb630', acc: 'bolt', grin: 'grin' } },
-  foley:   { name: 'Foley', full: 'Frederic Foley (1891–1966)', color: '#5df07a', glyph: 'drop', pool: ['hydrophilic', 'hydration', 'cbi'],
+  foley:   { name: 'Foley', full: 'Frederic Foley (1891–1966)', color: '#5df07a', glyph: 'drop', pool: ['hydrophilic', 'hydration', 'cbi', 'kegel'],
     blurb: 'The balloon catheter that bears his name (1930s), designed to hold itself in place.',
     greet: ['Drainage, irrigation, patience. The rest is plumbing.', 'A balloon in the right place saves a great deal of trouble.', 'Keep the fluid moving, Doctor.'],
     look: { skin: '#f4d2b0', hair: '#2a1a10', hairStyle: 'slick', facial: 'mustache', glasses: 'none', collar: 'suit', suit: '#1f3a4c', tie: '#5df07a', acc: 'balloon', grin: 'grin' } },
-  huggins: { name: 'Huggins', full: 'Charles Huggins (1901–1997)', color: '#d98cff', glyph: 'medal', pool: ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'insulin'],
+  huggins: { name: 'Huggins', full: 'Charles Huggins (1901–1997)', color: '#d98cff', glyph: 'medal', pool: ['cisplatin', 'gemcitabine', 'gc', 'bcg', 'mitomycin', 'docetaxel', 'adt', 'sunitinib', 'pembro', 'bep', 'insulin', 'finasteride'],
     blurb: 'Nobel Prize 1966: showed that prostate cancer depends on hormones — cancer could be treated with chemistry.',
     greet: ['Cancer is not a stone; it listens to chemistry.', 'Take away what the tumour feeds on.', 'Stockholm was pleasant. The prostate, less so.'],
     look: { skin: '#f1c9a3', hair: '#d8d8d8', hairStyle: 'side', facial: 'none', glasses: 'none', collar: 'suit', suit: '#3a2a5a', tie: '#d98cff', acc: 'medal', grin: 'line' } },
@@ -2901,14 +2980,14 @@ var DOOR_TYPES = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   §12 BOSSES — the Staghorn and Fournier are scripted in §14b, the Invader in §14d. The rest are design stubs.
+   §12 BOSSES — the Staghorn and Fournier are scripted in §14b, the Invader in §14d, the Giant TURP in §14f. The rest are design stubs.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var BOSSES = {
   staghorn: { name: 'Staghorn Calculus', hp: 2800, phases: ['Shell', 'Infection', 'Core'], implemented: true },
-  fournier: { name: "Fournier's Gangrene", hp: 1800, phases: ['Necrosis', 'Spread', 'Sepsis'], implemented: true }
-  // giantbph: { name: 'Giant BPH', hp: 2000, phases: ['Lobes', 'Median lobe', 'Capsule'] }          — three lobes, ENERGY/aquablation phase, retention flood
+  fournier: { name: "Fournier's Gangrene", hp: 1800, phases: ['Necrosis', 'Spread', 'Sepsis'], implemented: true },
+  mibc: { name: 'The Invader', hp: 2200, phases: ['Papillary', 'Muscle-invasive', 'Through the wall'], implemented: true },
+  bph: { name: 'The Giant TURP', hp: 0, phases: ['Bladder neck', 'Lateral lobes', 'Apex'], implemented: true }   // no HP: it is beaten by flow (Qmax 20 ml/s); the tissue to resect is in BPH.SEC
   // rccthrombus: { name: 'RCC with IVC Thrombus', hp: 2200, phases: ['Mass', 'Thrombus', 'Bleed'] }  — vascular tendrils, cryo/energy, satellites
-  // mibc: { name: 'Muscle-Invasive Bladder Tumour', hp: 1900, phases: ['Papillary', 'Invasion', 'Cystectomy'] } — CUT/loop, chemo synergy, wall collapse
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -2923,7 +3002,8 @@ var G = {
   stats: null, over: false, won: false, fosfo: false, fosfoRoom: -1, killChain: [], wolfT: 0, lowHpT: 0, fps: 0, frames: 0, fpsT: 0,
   spawner: false, endT: 0, visited: [], ult: null,
   fields: [], detailT: 0, detailSlot: -1,  // damage fields (wire whip); weapon-detail card timer after a slot tap
-  dropRes: {}, abxRes: {}, boonTier: {}, favor: {}, collateral: null, culture: null, roomDebuff: null, pens: 0, revealRoom: -1   // §6c antibiotics · patrons · reps
+  dropRes: {}, abxRes: {}, boonTier: {}, favor: {}, collateral: null, culture: null, roomDebuff: null, pens: 0, revealRoom: -1,   // §6c antibiotics · patrons · reps
+  landmarks: [], incont: null, notice: null, finalQ: 0   // §14e landmarks · the incontinence curse (per run) · the one-line notice strip · the Giant TURP's closing flow
 };
 var P = null;
 var vignette = null;
@@ -3038,6 +3118,7 @@ function enemyTweak(e, cls, wid) { var tw = e.def.tweaks, m = 1; if (tw) { if (t
 function dealDamage(e, base, cls, o) {
   o = o || {};
   if (!e || e.dead || e.spawnT > 0) return 0;
+  if (e.special) { e.special(e, base, cls, o); return 0; }   // a structure with its own rules (landmark, bleeder, valve flap, scar ring, resected bed): no damage, no numbers
   if (e.def.isStump) { if ((o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'))) && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, e.def.coagHint || 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
@@ -3113,7 +3194,7 @@ function dealDamage(e, base, cls, o) {
   return dmg;
 }
 function applyStatus(e, name, dur, val, stack) {
-  if (e.dead || e.boss && name === 'stun') return;
+  if (e.dead || e.special || e.boss && name === 'stun') return;
   var st = e.st;
   if (name === 'bleed') { // `stack` (Bleed Stacking mod): each application adds a stack, +50% bleed per stack up to ×3
     var dps = val * (e.def.bleedMul || 1), old = st.bleed;
@@ -3149,6 +3230,7 @@ function spawnEnemy(id, x, y, opts) {
   if (e.elite) { e.hp = e.maxHp = Math.round(def.hp * 1.5); e.r = Math.round(def.r * 1.12); }
   if (opts.hpMul) e.hp = e.maxHp = Math.round(e.hp * opts.hpMul);
   if (id === 'uric' && hasBoon('allopurinol')) e.hp = e.maxHp = Math.round(e.hp * 0.7);
+  if (id === 'bph' && hasBoon('finasteride')) e.hp = e.maxHp = Math.round(e.hp * 0.7);
   if (!opts.free && !insideArena(e.x, e.y, e.r)) { var cp = clampArena(e.x, e.y, e.r); e.x = cp.x; e.y = cp.y; }   // opts.free: wall-mounted boss parts stay where they are put
   G.enemies.push(e); def.init(e);
   if (G.fosfoRoom === G.roomIndex && e.family === 'MICROBE' && !def.fungus) applyStatus(e, 'poison', 4, 10);
@@ -3264,6 +3346,7 @@ function hurtPlayer(dmg, src, a, ignoreInv) {
   if (cur && cur.def.absorbs && cur.def.absorbs(cur) && src !== 'pressure' && src !== 'cis' && src !== 'goo' && src !== 'burn') { WEAPONS.foley.pop(cur, 8); P.inv = Math.max(P.inv, 0.4); return; }
   if (src === 'stone' && hasBoon('ketorolac')) dmg *= 0.75;
   if (src === 'bleed') P.bleed = Math.max(P.bleed, 3);
+  if (G.incont && dmg > 0) leakPuddle();   // the incontinence curse (§14e): every hit leaks
   if (GOD) dmg = 0;
   P.hp -= dmg; G.stats.dmgTaken += dmg; P.flash = 0.18;
   if (!ignoreInv) { P.inv = 0.6; if (a !== undefined && a !== null) { P.x += Math.cos(a) * 14; P.y += Math.sin(a) * 14; resolveCircle(P, P.r); } shakeIt(5); G.flash = 0.3; Snd.sfx('hurt'); hitstop(0.03); }
@@ -3278,12 +3361,13 @@ function startRoll(mv) {
   var a = mv.mag > 0.2 ? Math.atan2(mv.y, mv.x) : P.aim, sp = 520 * (hasBoon('hydrophilic') ? 1.3 : 1);
   P.roll = 0.35; P.rollCd = 0.8 * (hasBoon('hydrophilic') ? 0.8 : 1); P.rollDx = Math.cos(a) * sp; P.rollDy = Math.sin(a) * sp; P.inv = Math.max(P.inv, 0.25); P.rollT = 0;
   G.stats.rolls++; Snd.sfx('roll'); burst(P.x, P.y, 5, { color: '#9fb6c9', speed: 80, life: 0.3, size: 3, kind: 'smoke' });
+  if (G.incont) leakPuddle();   // …and so does every roll
   if (G.tutorial) G.tutorial.rolled = true;
 }
 function bestTarget() {
   var cur = curWeapon(), cls = cur ? wcls(cur) : 'NEUTRAL', best = null, bs = -1e9, es = G.enemies;
   for (var i = 0; i < es.length; i++) {
-    var e = es[i]; if (!enemyTargetable(e)) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 430) continue;
+    var e = es[i]; if (!enemyTargetable(e) || e.noAim) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 430) continue;
     var m = MATRIX[cls][e.family] * enemyTweak(e, cls, cur ? cur.id : null), score = -d;
     if (m >= 1.5) score += 160; else if (m <= 0.6) score -= 90; if (e.def.flat) score -= 150; if (e.boss) score += G.boss && G.boss.core ? 460 : 60; if (e.isArm) score += 30; if (e.aimBias) score += e.aimBias; if (e.inv) score -= 300; if (e.id === 'dust') score -= 200;
     if (e.id === 'clot') score -= 120;
@@ -3299,7 +3383,7 @@ function computeAimRaw(mv) {
     P.aim = ang(P.x, P.y, Input.mx, Input.my);
     if (SET.aim) { // gentle desktop assist: snap to an enemy within ~9° of the cursor line
       var es = G.enemies, best = null, bd = 0.16;
-      for (var i = 0; i < es.length; i++) { var e = es[i]; if (!enemyTargetable(e) || e.def.flat) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 400 || d < 30) continue; var da = Math.abs(angDiff(P.aim, ang(P.x, P.y, e.x, e.y))); var allow = Math.min(0.16, Math.atan2(e.r, d)); if (da < allow && da < bd) { bd = da; best = e; } }
+      for (var i = 0; i < es.length; i++) { var e = es[i]; if (!enemyTargetable(e) || e.def.flat || e.noAim) continue; var d = dist(P.x, P.y, e.x, e.y); if (d > 400 || d < 30) continue; var da = Math.abs(angDiff(P.aim, ang(P.x, P.y, e.x, e.y))); var allow = Math.min(0.16, Math.atan2(e.r, d)); if (da < allow && da < bd) { bd = da; best = e; } }
       if (best) { P.aim = ang(P.x, P.y, best.x, best.y); G.aimTarget = best; }
     }
     return;
@@ -3309,7 +3393,8 @@ function computeAimRaw(mv) {
   if (mv.mag > 0.2) P.aim = Math.atan2(mv.y, mv.x);
 }
 function updatePlayer(dt) {
-  var mv = readMove(); P.mvx = mv.x; P.mvy = mv.y; P.moving = mv.mag > 0.1;
+  var mv = readMove(); if (P.tur > 0) { P.tur -= dt; mv = { x: -mv.x, y: -mv.y, mag: mv.mag }; }   // TUR syndrome (§14f): confused, the controls are reversed
+  P.mvx = mv.x; P.mvy = mv.y; P.moving = mv.mag > 0.1;
   if (P.moving && G.tutorial && !G.tutorial.moved) G.tutorial.moved = true;
   var sp = P.speed * (hasBoon('ketorolac') ? 1.1 : 1) * (G.wolfT > 0 ? 1.4 : 1);
   var cur = curWeapon(); if (cur && cur.def.slowWhile) sp *= cur.def.slowWhile(cur);
@@ -3458,7 +3543,7 @@ function endUlt(early) { var U = G.ult; if (!U.active) return; U.active = false;
 function pickArmTarget(arm, sx, sy) {
   var best = null, bs = -1e9, es = G.enemies;
   for (var i = 0; i < es.length; i++) {
-    var e = es[i]; if (!enemyTargetable(e) || e.def.flat || e.id === 'dust') continue; var d = dist(sx, sy, e.x, e.y); if (d > ULT_REACH + e.r) continue;
+    var e = es[i]; if (!enemyTargetable(e) || e.def.flat || e.noAim || e.id === 'dust') continue; var d = dist(sx, sy, e.x, e.y); if (d > ULT_REACH + e.r) continue;
     var score;
     if (e.def.isStump) score = arm.cls === 'ENERGY' ? 5 : -1e9; else score = MATRIX[arm.cls][e.family] * enemyTweak(e, arm.cls, 'davinci') - d / 600 + (e.boss ? 0.4 : 0);
     if (e.inv) score -= 100;
@@ -3595,16 +3680,19 @@ function levelProgress(xp) { var lvl = 1, need = 100; while (xp >= need && lvl <
 function weaponUnlocked(id) { var d = WEAPONS[id]; return !d.unlock || residencyLevel() >= d.unlock || (Q.weapons && Q.weapons.indexOf(id) >= 0); }
 function boonUnlocked(id) { var b = BOONS[id]; return !b.unlock || residencyLevel() >= b.unlock; }
 
-/* The final boss is rolled from the seed (or ?boss=staghorn|fournier|mibc) and sets the run's dungeon. A dungeon with `fams`
-   draws its rooms from those enemy families: Oncology is tumours, benign masses and CIS carpet all the way down. */
-var BOSS_IDS = ['staghorn', 'fournier', 'mibc'];
-var DUNGEONS = { staghorn: { name: '', fams: null }, fournier: { name: '', fams: null }, mibc: { name: 'ONCOLOGY', fams: ['MALIGNANT', 'BENIGN'] } };
-// thirds; the split keeps every seed that used to roll the Staghorn (r < 1/3) or Fournier (1/2 ≤ r < 5/6) on that boss
-function rollBossId(seed) { var r = mulberry32((seed === undefined ? SEED : seed) ^ 0x51ab)(); return r < 1 / 3 ? 'staghorn' : r < 0.5 ? 'mibc' : r < 5 / 6 ? 'fournier' : 'mibc'; }
+/* The final boss is rolled from the seed (or ?boss=staghorn|fournier|mibc|bph) and sets the run's dungeon. A dungeon with `fams`
+   draws its rooms from those enemy families: Oncology is tumours, benign masses and CIS carpet all the way down; Benign is
+   lobes, cysts, polyps and warts, plus the Nocturia droplets that only live there (def.dungeon). */
+var BOSS_IDS = ['staghorn', 'fournier', 'mibc', 'bph'];
+var DUNGEONS = { staghorn: { name: '', fams: null }, fournier: { name: '', fams: null }, mibc: { name: 'ONCOLOGY', fams: ['MALIGNANT', 'BENIGN'] }, bph: { name: 'BENIGN', fams: ['BENIGN'] } };
+// quarters. The Giant TURP took a twelfth out of the top of each older boss's range, so a seed either keeps the boss it
+// used to roll or moves to the new one: staghorn [0, 1/4) · mibc [1/3, 1/2) + [5/6, 11/12) · fournier [1/2, 3/4) · bph the rest
+function rollBossId(seed) { var r = mulberry32((seed === undefined ? SEED : seed) ^ 0x51ab)(); return r < 1 / 4 ? 'staghorn' : r < 1 / 3 ? 'bph' : r < 1 / 2 ? 'mibc' : r < 3 / 4 ? 'fournier' : r < 5 / 6 ? 'bph' : r < 11 / 12 ? 'mibc' : 'bph'; }
 function startRun() {
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
   G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.detailT = 0; G.detailSlot = -1;
   G.dropRes = {}; G.abxRes = {}; G.boonTier = {}; G.favor = {}; G.collateral = null; G.culture = null; G.roomDebuff = null; G.pens = 0; G.revealRoom = -1;
+  G.landmarks = []; G.incont = null; G.notice = null; G.finalQ = 0; G.hidePlayer = false;
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
@@ -3662,10 +3750,10 @@ function findSpawnPos(r, preferRight, tries) {
 function freeSpot(x, y, r) { var p = { x: x, y: y }; for (var i = 0; i < 30; i++) { if (!pointInObstacle(p.x, p.y) && insideArena(p.x, p.y, r)) { var ok = true; for (var k = 0; k < G.obstacles.length; k++) { var ob = G.obstacles[k]; if (ob.dead) continue; if (ob.type === 'rect' ? (p.x > ob.x - r && p.x < ob.x + ob.w + r && p.y > ob.y - r && p.y < ob.y + ob.h + r) : dist(p.x, p.y, ob.x, ob.y) < ob.r + r) { ok = false; break; } } if (ok) return p; } p = { x: x + rr(-120, 120), y: y + rr(-100, 100) }; } return { x: x, y: y }; }
 
 function enterRoom(plan) {
-  G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null; G.arena = null; G.wall = null;
+  G.roomIndex = plan.index; G.room = plan; G.visited.push(plan); G.cleared = false; G.lastTemplate = plan.template; G.boss = null; G.introT = 0; G.aimTarget = null; G.arena = null; G.wall = null; G.landmarks = []; G.notice = null; G.hidePlayer = false;
   G.enemies = []; G.bullets = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.dropRes = {};
   for (var i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.bal = null; w.swing = null; w.lunge = 0; w.fx = null; w.fx2 = null; w.charge = 0; }
-  P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0; P.jerk = null; P.stag = 0;
+  P.x = 80; P.y = 270; P.roll = 0; P.after = []; P.burn = 0; P.bleed = 0; P.jerk = null; P.stag = 0; P.tur = 0;
   var t = ROOM_TEMPLATES[plan.template].build();
   for (var o = 0; o < t.obstacles.length; o++) { var ob = t.obstacles[o]; G.obstacles.push({ type: ob.type, x: ob.x, y: ob.y, w: ob.w, h: ob.h, r: ob.r, stricture: !!ob.stricture, regrowT: 0 }); }
   for (var h = 0; h < t.hazards.length; h++) addHazard({ kind: t.hazards[h].kind, x: t.hazards[h].x, y: t.hazards[h].y, r: t.hazards[h].r });
@@ -3687,8 +3775,9 @@ function enterRoom(plan) {
   var collateral = G.collateral; G.collateral = null; if (collateral && G.waves) spawnCollateral(collateral);               // the broad-spectrum tax rolled in the last room
   if (plan.kind === 'tutorial') G.tutorial = { step: 0, moved: false, fired: false, rolled: false, swapped: false, t: 0 }; else G.tutorial = null;
   if (plan.kind === 'boss') spawnBoss(G.bossId || 'staghorn');
-  // rest room. Before the Invader: the crate is a Roller Ball unless you already carry something that plugs a perforation, and a chemo pole offers the neoadjuvant infusion
-  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: G.bossId === 'mibc' && !carriedWeapon('roller') && !carriedWeapon('foley') ? { id: 'roller', rarity: 'common' } : rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); if (G.bossId === 'mibc' && !G.neoadj) G.rewards.push({ kind: 'neoadj', x: 240, y: 340 }); }
+  // rest room. Before the Invader: the crate is a Roller Ball unless you already carry something that plugs a perforation, and a chemo pole offers the neoadjuvant infusion.
+  // Before the Giant TURP: the crate is a Resectoscope Loop unless you carry one (it cuts, and its ROLLER attachment coagulates bleeders and plugs the capsule)
+  if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: G.bossId === 'mibc' && !carriedWeapon('roller') && !carriedWeapon('foley') ? { id: 'roller', rarity: 'common' } : G.bossId === 'bph' && !carriedWeapon('loop') ? { id: 'loop', rarity: 'common' } : rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); if (G.bossId === 'mibc' && !G.neoadj) G.rewards.push({ kind: 'neoadj', x: 240, y: 340 }); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
   if (!G.waves) roomCleared(true);
@@ -3740,7 +3829,7 @@ function buildWaves(plan) {
   if (kind === 'shop' || kind === 'rest' || kind === 'boss') return null;
   var budget = kind === 'tutorial' ? 8 : 10 + 5 * idx; if (kind === 'elite') budget *= 1.5; if (kind === 'heal') budget *= 0.6;
   var fams = pickFamilies(idx, kind), pool = [];
-  for (var id in ENEMIES) { var d = ENEMIES[id]; if (d.hidden || d.boss || d.isArm || d.cost <= 0 || d.minRoom > idx || fams.indexOf(d.family) < 0) continue; if (d.miniBoss) continue; pool.push(d); }
+  for (var id in ENEMIES) { var d = ENEMIES[id]; if (d.hidden || d.boss || d.isArm || d.cost <= 0 || d.minRoom > idx || fams.indexOf(d.family) < 0) continue; if (d.miniBoss) continue; if (d.dungeon && d.dungeon !== G.bossId) continue; pool.push(d); }
   if (kind === 'tutorial') pool = [ENEMIES.uric, ENEMIES.frag, ENEMIES.cod, ENEMIES.polyp];
   if (!pool.length) pool = [ENEMIES.frag, ENEMIES.ecoli];
   var nW = idx <= 2 ? 2 : (rnd() < 0.5 ? 2 : 3), shares = nW === 2 ? [0.45, 0.55] : [0.3, 0.35, 0.35], waves = [];
@@ -3837,6 +3926,7 @@ function updateDoors(dt) {
 function goThroughDoor(door) { if (G.transition) return; G.transition = { t: 0, dur: 0.55, plan: makeRoomPlan(G.roomIndex + 1, door.type, door), done: false }; Snd.sfx('door'); }
 function updateTransition(dt) { var tr = G.transition; if (!tr) return; tr.t += dt; if (!tr.done && tr.t >= tr.dur * 0.5) { tr.done = true; enterRoom(tr.plan); } if (tr.t >= tr.dur) G.transition = null; }
 function setBanner(text, sub, dur) { G.banner = { text: text, sub: sub, t: 0, dur: dur || 1.5 }; }
+function setNotice(text, color, dur) { G.notice = { text: text, color: color || '#ffd166', t: 0, dur: dur || 2.4 }; }
 /* ── rewards: crates, altars, shop pedestals ── */
 function rollWeaponDrop() {
   var pool = [], idx = G.roomIndex;
@@ -3885,8 +3975,16 @@ function die() { if (G.over) return; G.over = true; G.won = false; G.timeScale =
 var WIN_TEXT = {
   staghorn: ['STONE FREE!', 'The Staghorn is rubble. Stone-free, no stent, no complications. Go eat something.'],
   fournier: ['SOURCE CONTROLLED!', 'Debrided to healthy tissue, cultures sent, antibiotics running. Go eat something.'],
-  mibc: ['EN BLOC!', 'Muscle present in specimen: Muscle-invasive disease confirmed. Pathology report filed.']
+  mibc: ['EN BLOC!', 'Muscle present in specimen: Muscle-invasive disease confirmed. Pathology report filed.'],
+  bph: ['FLOW RESTORED!', 'Qmax 20 ml/s: flow restored. Specimen sent to pathology.']   // winLine() writes the real Qmax in
 };
+// the summary's line: the Giant TURP reports its closing flow, and any run that lost the sphincter says so
+function winLine() {
+  var s = (WIN_TEXT[G.bossId] || WIN_TEXT.staghorn)[1];
+  if (G.bossId === 'bph') s = 'Qmax ' + Math.round(G.finalQ || BPH.WIN) + ' ml/s: flow restored. Specimen sent to pathology.';
+  if (G.incont) s += G.incont.fixed ? ' Continence: restored (artificial sphincter).' : ' Continence: lost.';
+  return s;
+}
 function win() { if (G.over) return; G.over = true; G.won = true; G.timeScale = 0.25; G.endT = 3.2; Snd.sfx('jingle'); setBanner((WIN_TEXT[G.bossId] || WIN_TEXT.staghorn)[0], '', 3); addXPLive(120); }
 function addXPLive(n) { G.xpGained = (G.xpGained || 0) + n; }
 function finishRun() {
@@ -3909,7 +4007,7 @@ function skipRoom() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
-   §14b BOSSES — the final room rolls one of three (or ?boss=staghorn|fournier|mibc). The Invader is in §14d.
+   §14b BOSSES — the final room rolls one of four (or ?boss=staghorn|fournier|mibc|bph). The Invader is in §14d, the Giant TURP in §14f.
    STAGHORN CALCULUS (a mobile duel, Minotaur-style): a stone stag that walks you down and charges in a straight line.
    Roll through the charge and it hits the wall: stunned, +50% damage, a tine snapped off. Phase 1 "Shell": the body
    takes 25% until 2 of its 4 antler tines are gone (shoot them or let the wall take them). Phase 2 "Infection": biofilm
@@ -3923,13 +4021,13 @@ function skipRoom() {
    into fans, polymicrobial adds, sugar crystals that feed its regeneration (Insulin clears them). Phase 3 "Sepsis":
    a 45 s clock; hit the migrating SOURCE weak point or go into septic shock. ~90–120 s.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else if (kind === 'mibc') spawnMibc(); else spawnStaghorn(); }
+function spawnBoss(kind) { if (kind === 'fournier') spawnFournier(); else if (kind === 'mibc') spawnMibc(); else if (kind === 'bph') spawnBph(); else spawnStaghorn(); }
 function microbesAlive() { var n = 0; for (var i = 0; i < G.enemies.length; i++) { var e = G.enemies[i]; if (!e.dead && e.family === 'MICROBE' && !e.boss && !e.def.isLobe && !e.def.isStump) n++; } return n; }
 function bossQueue(delay, fn) { G.boss.queue.push({ t: delay, fn: fn }); }
 function runQueue(B, dt) { for (var q = B.queue.length - 1; q >= 0; q--) { B.queue[q].t -= dt; if (B.queue[q].t <= 0) { var fn = B.queue[q].fn; B.queue.splice(q, 1); fn(); } } }
-function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else if (B.kind === 'mibc') updateMibc(dt); else updateStaghorn(dt); }
-function bossColor(B) { return B.kind === 'fournier' ? '#ff4d6d' : B.kind === 'mibc' ? '#ff6b8a' : '#38e8ff'; }
-function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else if (B.kind === 'staghorn') drawStagUnder(c); }
+function updateBoss(dt) { var B = G.boss; if (!B || B.dead || B.body.dead) return; if (B.kind === 'fournier') updateFournier(dt); else if (B.kind === 'mibc') updateMibc(dt); else if (B.kind === 'bph') updateBph(dt); else updateStaghorn(dt); }
+function bossColor(B) { return B.kind === 'fournier' ? '#ff4d6d' : B.kind === 'mibc' ? '#ff6b8a' : B.kind === 'bph' ? '#ffd93b' : '#38e8ff'; }
+function drawBossUnder(c) { var B = G.boss; if (!B) return; if (B.kind === 'fournier') drawFournierUnder(c); else if (B.kind === 'staghorn') drawStagUnder(c); else if (B.kind === 'bph') drawBphUnder(c); }
 function bossPartDied(e) {
   var B = G.boss; if (!B) return;
   if (e.boss) { bossDefeated(e); return; }
@@ -3938,9 +4036,10 @@ function bossPartDied(e) {
 }
 function bossDefeated(e) {
   var B = G.boss; B.dead = true; G.cleared = true; B.sepsis = false;
+  if (B.kind === 'bph') { G.finalQ = Math.max(BPH.WIN, B.q || 0); G.landmarks = []; B.hoser = null; }   // the flow it closed on (skipRoom ends it at the win line)
   for (var k = 0; k < G.enemies.length; k++) { var o = G.enemies[k]; if (!o.dead && o !== e) { o.silent = true; o.hp = 0; killEnemy(o, 'NEUTRAL', null); } }
   if (B.kind === 'staghorn') stagShards(e); else for (var c = 0; c < 40; c++) spawnPickup('coin', e.x + rr(-40, 40), e.y + rr(-40, 40), { value: 2 });
-  var col = B.kind === 'fournier' ? '#b86a78' : B.kind === 'mibc' ? '#c2415c' : '#d8c7a4';
+  var col = B.kind === 'fournier' ? '#b86a78' : B.kind === 'mibc' ? '#c2415c' : B.kind === 'bph' ? '#ffd0c4' : '#d8c7a4';
   burst(e.x, e.y, 120, { color: col, speed: 420, life: 1.4, size: 5, kind: B.kind === 'staghorn' ? 'frag' : 'goo', g: 300 }); burst(e.x, e.y, 60, { color: '#38e8ff', speed: 300, life: 1, size: 4 }); burst(e.x, e.y, 60, { color: '#ffd166', speed: 300, life: 1.2, size: 4, kind: 'confetti' });
   G.fxRings.push({ x: e.x, y: e.y, r: 20, r1: 400, t: 1, dur: 1, color: '#38e8ff' }); shakeIt(16); G.punch = 0.4; hitstop(0.18);
   G.stats.rooms = Math.max(G.stats.rooms, 9); win();
@@ -4435,7 +4534,7 @@ function drawStump(c, e) {
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §14c WALL + PERFORATION — generic. A round room whose boundary is a ring of segments, each with an
    integrity meter. Any boss or room can use it:
-     makeWall({ cx, cy, rx, ry, n, tagOf, live, seedId, onPerforate, onSealed })   builds G.wall and G.arena
+     makeWall({ cx, cy, rx, ry, n, tagOf, live, seedId, onPerforate, onSealed, labels, thinText, distText })   builds G.wall and G.arena
      wallSegAt(x, y) / wallPoint(seg, inset)                                         look a segment up / a point on it
      wallHit(seg, amount, src)      a deep hit landed on that segment: `amount` is in damage; PERF.FILL of it perforates
      wallPerforate(seg)             the event: hole + flood + seed wave + damage by the segment's kind (PERF_KINDS[tag])
@@ -4447,14 +4546,19 @@ var PERF = { FILL: 120, WINDOW: 5.5, PLUG_TIME: 0.7, DISTEND_AT: 0.6, DISTEND_MU
 var PERF_KINDS = {
   LATERAL:   { label: 'EXTRAPERITONEAL PERFORATION', sub: 'side wall: minor. Plug it: Foley balloon, or coag (Roller Ball)', severe: false, dmg: 8, flood: 90, seeds: 3, leak: 7, enrage: 0, color: '#ffb630' },
   POSTERIOR: { label: 'EXTRAPERITONEAL PERFORATION', sub: 'back wall: minor. Plug it: Foley balloon, or coag (Roller Ball)', severe: false, dmg: 10, flood: 100, seeds: 3, leak: 7, enrage: 0, color: '#ffb630' },
-  DOME:      { label: 'INTRAPERITONEAL PERFORATION', sub: 'the dome: severe. Plug it NOW', severe: true, dmg: 22, flood: 150, seeds: 6, leak: 5, enrage: 15, color: '#ff4d6d' }
+  DOME:      { label: 'INTRAPERITONEAL PERFORATION', sub: 'the dome: severe. Plug it NOW', severe: true, dmg: 22, flood: 150, seeds: 6, leak: 5, enrage: 15, color: '#ff4d6d' },
+  // the prostatic capsule (the Giant TURP, §14f): one name per section
+  NECK:      { label: 'BLADDER NECK UNDERMINED', sub: 'irrigant tracks under the trigone. Plug it: Foley balloon, or coag', severe: false, dmg: 8, flood: 90, seeds: 2, leak: 7, enrage: 0, color: '#ffb630' },
+  CAPSULE:   { label: 'CAPSULE PERFORATION', sub: 'irrigant leaks out through the capsule. Plug it: Foley balloon, or coag', severe: false, dmg: 8, flood: 90, seeds: 2, leak: 7, enrage: 0, color: '#ffb630' },
+  SINUS:     { label: 'VENOUS SINUS OPENED', sub: 'the apex: irrigant pours into the circulation. Plug it NOW', severe: true, dmg: 14, flood: 110, seeds: 3, leak: 5, enrage: 0, color: '#ff4d6d' }
 };
 function wallTag(mid) { var d = mid * 180 / Math.PI; return d > -150 && d < -30 ? 'DOME' : d > 30 && d < 150 ? 'POSTERIOR' : 'LATERAL'; }
 function makeWall(o) {
   var n = o.n || 12, segs = [];
   for (var i = 0; i < n; i++) { var a0 = -Math.PI + i / n * TAU, a1 = a0 + TAU / n, mid = (a0 + a1) / 2; segs.push({ i: i, a0: a0, a1: a1, mid: mid, tag: (o.tagOf || wallTag)(mid, i), perf: 0, open: false, sealed: false, chronic: false, broken: false, warned: false, plugT: 0, leakT: 0, plug: 0, flash: 0, hole: null, flood: null }); }
   G.arena = { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry };
-  G.wall = { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry, segs: segs, thick: o.thick || 26, distension: 0, distWarn: false, live: o.live !== false, alert: null, seedId: o.seedId || 'tumorseed', onPerforate: o.onPerforate || null, onSealed: o.onSealed || null, perforations: 0, plugs: 0, t: 0 };
+  G.wall = { cx: o.cx, cy: o.cy, rx: o.rx, ry: o.ry, segs: segs, thick: o.thick || 26, distension: 0, distWarn: false, live: o.live !== false, alert: null, seedId: o.seedId || 'tumorseed', onPerforate: o.onPerforate || null, onSealed: o.onSealed || null, perforations: 0, plugs: 0, t: 0,
+    labels: o.labels || null, thinText: o.thinText || 'WALL THINNING', distText: o.distText || ['BLADDER DISTENDED', 'thin wall: it perforates 50% faster'], tint: o.tint || '200,80,105' };   // wording and paint: the bladder's unless the caller says otherwise
   return G.wall;
 }
 function wallPoint(seg, inset) { var Wl = G.wall; inset = inset || 0; return { x: Wl.cx + Math.cos(seg.mid) * (Wl.rx - inset), y: Wl.cy + Math.sin(seg.mid) * (Wl.ry - inset) }; }
@@ -4464,7 +4568,7 @@ function wallHit(seg, amount, src) {
   var Wl = G.wall; if (!Wl || !Wl.live || !seg || seg.open || seg.broken || !(amount > 0)) return 0;
   var add = amount / PERF.FILL * (Wl.distension >= PERF.DISTEND_AT ? PERF.DISTEND_MUL : 1);
   seg.perf = Math.min(1, seg.perf + add); seg.flash = 0.3;
-  if (seg.perf >= 0.6 && seg.perf < 1 && !seg.warned) { seg.warned = true; var wp = wallPoint(seg, 46); addText(wp.x, wp.y, 'WALL THINNING', { color: '#ffd166', size: 12, sub: seg.tag, subColor: PERF_KINDS[seg.tag].color }); Snd.sfx('tink'); }
+  if (seg.perf >= 0.6 && seg.perf < 1 && !seg.warned) { seg.warned = true; var wp = wallPoint(seg, 46); addText(wp.x, wp.y, Wl.thinText, { color: '#ffd166', size: 12, sub: seg.tag, subColor: (PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL).color }); Snd.sfx('tink'); }
   if (seg.perf >= 1) wallPerforate(seg);
   return add;
 }
@@ -4503,7 +4607,7 @@ function updateWall(dt) {
   var Wl = G.wall; if (!Wl) return; Wl.t += dt; if (Wl.alert) { Wl.alert.t -= dt; if (Wl.alert.t <= 0) Wl.alert = null; }
   var cur = curWeapon(), filling = !!(cur && cur.id === 'irrigation' && cur.fx && cur.fx.style === 'jet' && fireHeld());
   Wl.distension = clamp(Wl.distension + (filling ? PERF.DISTEND_UP : -PERF.DISTEND_DOWN) * dt, 0, 1);
-  if (Wl.distension >= PERF.DISTEND_AT && !Wl.distWarn) { Wl.distWarn = true; addText(P.x, P.y - 48, 'BLADDER DISTENDED', { color: '#7ad7ff', size: 13, sub: 'thin wall: it perforates 50% faster', subColor: '#ffd166' }); Snd.sfx('tink'); }
+  if (Wl.distension >= PERF.DISTEND_AT && !Wl.distWarn) { Wl.distWarn = true; addText(P.x, P.y - 48, Wl.distText[0], { color: '#7ad7ff', size: 13, sub: Wl.distText[1], subColor: '#ffd166' }); Snd.sfx('tink'); }
   else if (Wl.distension < PERF.DISTEND_AT - 0.1) Wl.distWarn = false;
   var bal = cur && cur.id === 'foley' && cur.bal && cur.bal.on ? cur.bal : null;
   for (var i = 0; i < Wl.segs.length; i++) {
@@ -4523,7 +4627,7 @@ function updateWall(dt) {
 function drawWallUnder(c) {
   var Wl = G.wall; if (!Wl) return; var th = Wl.thick, t = G.realTime, i;
   c.fillStyle = '#070b10'; c.beginPath(); c.rect(0, 0, W, H); c.ellipse(Wl.cx, Wl.cy, Wl.rx + th * 0.4, Wl.ry + th * 0.4, 0, 0, TAU, true); c.fill('evenodd');
-  c.fillStyle = 'rgba(200,80,105,' + (0.07 + 0.05 * Wl.distension) + ')'; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx, Wl.ry, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(' + Wl.tint + ',' + (0.07 + 0.05 * Wl.distension) + ')'; c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx, Wl.ry, 0, 0, TAU); c.fill();
   c.lineCap = 'butt';
   for (i = 0; i < Wl.segs.length; i++) {
     var seg = Wl.segs[i], K = PERF_KINDS[seg.tag] || PERF_KINDS.LATERAL, g = 0.018, tw = (seg.tag === 'DOME' ? th * 0.72 : th) * (1 - 0.4 * seg.perf), rx = Wl.rx + tw * 0.5, ry = Wl.ry + tw * 0.5, a0 = seg.a0 + g, a1 = seg.a1 - g;
@@ -4547,7 +4651,7 @@ function drawWallUnder(c) {
     c.globalAlpha = 1; c.lineCap = 'butt';
   }
   // which wall is which
-  var labs = [['DOME', Wl.cx, Wl.cy - Wl.ry + 26, PERF_KINDS.DOME.color], ['LATERAL', Wl.cx - Wl.rx + 50, Wl.cy - 30, PERF_KINDS.LATERAL.color], ['POSTERIOR', Wl.cx, Wl.cy + Wl.ry - 24, PERF_KINDS.POSTERIOR.color]];
+  var labs = Wl.labels || [['DOME', Wl.cx, Wl.cy - Wl.ry + 26, PERF_KINDS.DOME.color], ['LATERAL', Wl.cx - Wl.rx + 50, Wl.cy - 30, PERF_KINDS.LATERAL.color], ['POSTERIOR', Wl.cx, Wl.cy + Wl.ry - 24, PERF_KINDS.POSTERIOR.color]];
   c.globalAlpha = Wl.live ? 0.8 : 0.4; for (i = 0; i < labs.length; i++) text(c, labs[i][0], labs[i][1], labs[i][2], 9, labs[i][3], 'center', 900); c.globalAlpha = 1;
 }
 function drawPerfHole(c, e) {
@@ -4810,6 +4914,624 @@ function drawMibcPanel(c, B) {   // top-left corner (a round room leaves it empt
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §14e LANDMARKS — generic "look, don't touch" structures: the ureteric orifices and the verumontanum of §14f now, the
+   Peds wing's ports later. One component:
+     addLandmark({ id, name, x, y, r, banner, color, onInjury(L, cls, o), draw(c, e, L) })   → L (also kept in G.landmarks)
+   A landmark is a floor structure that auto-aim never picks (e.noAim) but every weapon's hit area still reaches. LITHO and
+   FLUID hits pass over it; a CUT or ENERGY hit calls onInjury (at most once per LANDMARK.CD seconds). It warns first: the
+   ring pulses red and a rising tone plays as the surgeon closes in (LANDMARK.NEAR px), or as a CUT / ENERGY hit area (the
+   weapon's own fx shape, a loop swing still winding up, a bullet, a brachy seed, a burn zone) comes within LANDMARK.WARN px,
+   with a one-line notice ("Ureteric orifice: stay back").
+   SPHINCTER INJURY (the verumontanum's onInjury, or UroCrawl.injureSphincter()): 35% of max HP (never the last point) and
+   the incontinence curse for the rest of the run: every roll and every hit leaves a urine puddle, which is a saline puddle
+   (the Bovie fizzles standing in one or firing through one). Kegel Training halves it; the Artificial Sphincter (a shop
+   item that only exists while cursed, and the next Instrument Rep's discount offer) removes it.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var LANDMARK = { WARN: 40, NEAR: 110, CD: 2.5 };
+var SPHINCTER = { DMG: 0.35, URETER_DMG: 0.15, PUDDLE_R: 24, PUDDLE_T: 10, GAP: 0.35, PRICE: 150, REP_PRICE: 75, SHOP_CHANCE: 0.5, KEGEL_R: 0.8 };
+function addLandmark(o) {
+  var e = spawnEnemy('landmark', o.x, o.y, { instant: true, force: true, free: true }); if (!e) return null;
+  e.r = o.r || 18; e.noAim = true; e.noPush = true; e.special = landmarkHit;
+  var L = { e: e, id: o.id || 'landmark', name: o.name || 'Landmark', banner: o.banner || 'Landmark: stay back', color: o.color || '#ffd166', warn: 0, hot: false, cd: 0, noteT: 0, toneT: 0, hits: 0, onInjury: o.onInjury || null, draw: o.draw || null, wa: o.wa, inset: o.inset };
+  e.lm = L; G.landmarks.push(L); return L;
+}
+function landmarkHit(e, base, cls, o) {
+  var L = e.lm; if (!L || (cls !== 'CUT' && cls !== 'ENERGY')) return;   // stone lasers and water pass over it; steel and heat do not
+  if (L.cd > 0 || G.over || (G.boss && G.boss.slide)) return;
+  L.cd = LANDMARK.CD; L.hits++; e.flash = 0.25;
+  if (L.onInjury) L.onInjury(L, cls, o || {});
+}
+// how far (px) a point is from where a weapon is hitting right now: its fx shape, or a loop swing still winding up.
+// Infinity while it is idle. The Bovie counts as its whole cone: the arc goes to the nearest thing in it.
+function hitAreaDist(w, px, py) {
+  var d = Infinity, fx = w.fx, i;
+  if (w.swing && w.swing.phase < 2) d = sectorDist(px, py, P.x, P.y, w.swing.a, 110 * wmod(w, 'range'), 1.6);
+  if (!fx) return d;
+  if (fx.kind === 'beam' || fx.kind === 'probe') d = Math.min(d, segDist(px, py, fx.x0, fx.y0, fx.x1, fx.y1) - (fx.hw || 0));
+  else if (fx.kind === 'cone' || fx.kind === 'arc') d = Math.min(d, sectorDist(px, py, fx.x, fx.y, fx.a, fx.rad, fx.half));
+  else if (fx.kind === 'lens') d = Math.min(d, dist(px, py, fx.x, fx.y) - (fx.rad || 0));
+  else if (fx.kind === 'chain') { var m = muzzle(), spray = wflag(w, 'spray'); d = Math.min(d, sectorDist(px, py, m.x, m.y, m.a, 170 * wmod(w, 'range') * (spray ? 0.7 : 1), spray ? 1.22 : 0.75)); if (fx.pts) for (i = 1; i < fx.pts.length; i++) d = Math.min(d, segDist(px, py, fx.pts[i - 1].x, fx.pts[i - 1].y, fx.pts[i].x, fx.pts[i].y)); }
+  return d;
+}
+function updateLandmarks(dt) {
+  var Ls = G.landmarks; if (!Ls || !Ls.length || !P) return;
+  var cur = curWeapon(), cls = cur ? wcls(cur) : null, sharp = cls === 'CUT' || cls === 'ENERGY', i, j;
+  for (i = Ls.length - 1; i >= 0; i--) {
+    var L = Ls[i], e = L.e; if (e.dead) { Ls.splice(i, 1); continue; }
+    L.cd = Math.max(0, L.cd - dt); L.noteT -= dt;
+    var near = clamp(1 - (dist(P.x, P.y, e.x, e.y) - e.r - P.r) / LANDMARK.NEAR, 0, 1), da = Infinity;
+    if (sharp && G.introT <= 0) da = hitAreaDist(cur, e.x, e.y);
+    for (j = 0; j < G.bullets.length; j++) { var b = G.bullets[j]; if (b.hostile || b.dead || (b.cls !== 'CUT' && b.cls !== 'ENERGY')) continue; da = Math.min(da, b.kind === 'lob' ? dist(b.tx, b.ty, e.x, e.y) - 55 : dist(b.x, b.y, e.x, e.y) - b.r); }
+    for (j = 0; j < G.seeds.length; j++) da = Math.min(da, dist(G.seeds[j].x, G.seeds[j].y, e.x, e.y) - 70);
+    for (j = 0; j < G.hazards.length; j++) if (G.hazards[j].kind === 'burn') da = Math.min(da, dist(G.hazards[j].x, G.hazards[j].y, e.x, e.y) - G.hazards[j].r);
+    for (j = 0; j < G.fields.length; j++) { var f = G.fields[j]; if (f.kind === 'wire') da = Math.min(da, sectorDist(e.x, e.y, f.x, f.y, f.a, f.rad + 16, f.half)); }
+    da -= e.r;
+    var hot = da <= LANDMARK.WARN ? clamp(1 - Math.max(0, da) / LANDMARK.WARN, 0.25, 1) : 0;
+    L.hot = hot > 0; L.warn = G.over ? 0 : Math.max(hot, near * (sharp ? 0.7 : 0.35));
+    if (L.warn > 0.05) { L.toneT -= dt; if (L.toneT <= 0) { L.toneT = lerp(0.45, 0.1, L.warn); Snd.sfx('warn', { v: L.warn }); } } else L.toneT = 0;
+    if ((L.hot || near > 0.55) && L.noteT <= 0 && L.cd <= 0 && !G.over) { L.noteT = 4; setNotice(L.banner, L.hot ? '#ff6b8a' : '#ffd166', 2.2); }
+  }
+}
+function drawLandmark(c, e) {
+  var L = e.lm, t = G.realTime, w = L ? L.warn : 0, r = e.r, pulse = 0.5 + 0.5 * Math.sin(t * (4 + 14 * w)), col = L ? L.color : '#ffd166';
+  c.fillStyle = hexA(col, 0.14 + 0.08 * Math.sin(t * 3)); c.beginPath(); c.arc(0, 0, r + 12, 0, TAU); c.fill();   // it glows
+  if (L && L.draw) L.draw(c, e, L); else { c.fillStyle = hexA(col, 0.9); c.beginPath(); c.arc(0, 0, r * 0.7, 0, TAU); c.fill(); outline(c, 2.5); }
+  c.strokeStyle = 'rgba(255,' + Math.round(214 - 150 * w) + ',' + Math.round(110 - 30 * w) + ',' + (0.5 + 0.45 * w * pulse) + ')'; c.lineWidth = 2.5 + 3 * w * pulse; c.beginPath(); c.arc(0, 0, r + 4 + 3 * w * pulse, 0, TAU); c.stroke();
+  if (w > 0.05) { c.strokeStyle = 'rgba(255,90,110,' + (0.2 + 0.5 * w) + ')'; c.lineWidth = 1.5; c.setLineDash([6, 7]); c.lineDashOffset = -t * 24; c.beginPath(); c.arc(0, 0, r + LANDMARK.WARN, 0, TAU); c.stroke(); c.setLineDash([]); }
+}
+// a pale little port in the floor with a round opening that puffs a jet now and then: a landmark, drawn as plumbing
+function drawUretericOrifice(c, e) {
+  var r = e.r, t = G.realTime, puff = Math.max(0, Math.sin(t * 1.3 + (e.ph || 0)));
+  c.fillStyle = '#e8ddd0'; c.beginPath(); c.arc(0, 0, r * 0.92, 0, TAU); c.fill(); outline(c, 2.5);
+  c.strokeStyle = 'rgba(120,150,170,0.7)'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, r * 0.62, 0, TAU); c.stroke();
+  c.fillStyle = '#16303c'; c.beginPath(); c.arc(0, 0, r * (0.26 + 0.1 * puff), 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.ellipse(-r * 0.4, -r * 0.42, r * 0.22, r * 0.1, -0.5, 0, TAU); c.fill();
+  if (puff > 0.7) { c.strokeStyle = 'rgba(159,230,255,' + (puff - 0.4) + ')'; c.lineWidth = 1.8; c.lineCap = 'round'; c.beginPath(); for (var i = -1; i <= 1; i++) { c.moveTo(i * r * 0.14, -r * 0.3); c.lineTo(i * r * 0.5, -r * (0.9 + 0.6 * puff)); } c.stroke(); }
+}
+// a glowing mound wearing a ring: this far and no further
+function drawVeru(c, e) {
+  var r = e.r, t = G.realTime;
+  c.fillStyle = '#ffcf8a'; c.beginPath(); c.ellipse(0, 0, r * 0.92, r * 0.7, 0, 0, TAU); c.fill(); outline(c, 3);
+  c.fillStyle = '#fff3c4'; c.beginPath(); c.ellipse(0, -r * 0.14, r * 0.5, r * 0.3, 0, 0, TAU); c.fill();
+  c.fillStyle = '#fff'; c.save(); c.translate(r * 0.3, -r * 0.36); starPath(c, r * 0.24 * (0.8 + 0.2 * Math.sin(t * 5)), r * 0.09, 4, t); c.fill(); c.restore();
+  text(c, 'LIMIT', 0, r + 15, 8, '#ffe9a8', 'center', 900);
+}
+/* ── the sphincter ── */
+function sphincterCursed() { return !!(G.incont && !G.incont.fixed); }
+function landmarkPenalty(frac) {   // a share of max HP that never takes the last point
+  var dmg = GOD ? 0 : Math.max(0, Math.min(Math.round(P.maxHp * frac), Math.floor(P.hp - 1)));
+  P.hp -= dmg; G.stats.dmgTaken += dmg; P.flash = 0.3; if (dmg > 0) addText(P.x, P.y - 24, '-' + dmg, { color: '#ff4d6d', size: 20 });
+  return dmg;
+}
+function injureSphincter(src) {
+  if (!P || G.over) return false;
+  var was = sphincterCursed(), times = G.incont ? G.incont.times : 0;
+  landmarkPenalty(SPHINCTER.DMG);
+  if (!was) G.incont = { leaks: 0, n: 0, lastT: -9, room: G.roomIndex, fixed: null, rep: false, times: times, src: src || 'veru' };
+  G.incont.times++; G.stats.sphincter = G.incont.times;
+  G.flash = 1; shakeIt(12); G.punch = Math.max(G.punch, 0.3); hitstop(0.12); Snd.sfx('nooo'); P.inv = Math.max(P.inv, 0.8);
+  addText(P.x, P.y - 58, 'NOOOO', { color: '#ff4d6d', size: 30, dur: 1.6, vy: -20 });
+  setBanner('SPHINCTER INJURY', was ? 'again. It was already gone' : 'incontinence for the rest of the run: every roll and every hit leaks', 3.2);
+  burst(P.x, P.y, 26, { color: '#ffe14a', speed: 220, life: 0.6, size: 3, kind: 'goo', g: 300 });
+  leakPuddle(true);
+  return true;
+}
+// one puddle at the surgeon's feet. Rolls and hits call it; Kegel Training skips every other one and halves how long it lasts.
+function leakPuddle(force) {
+  var I = G.incont; if (!I || I.fixed || !P || G.over) return false;
+  if (!force) { if (G.time - I.lastT < SPHINCTER.GAP) return false; I.n++; if (hasBoon('kegel') && I.n % 2 === 0) return false; }
+  I.lastT = G.time; I.leaks++;
+  addHazard({ kind: 'saline', urine: true, x: P.x, y: P.y + 8, r: SPHINCTER.PUDDLE_R, t: SPHINCTER.PUDDLE_T * (hasBoon('kegel') ? 0.5 : 1) });
+  burst(P.x, P.y + 10, 5, { color: '#ffe14a', speed: 70, life: 0.35, size: 2, kind: 'goo', g: 300 }); Snd.sfx('drip');
+  return true;
+}
+function cureSphincter(how) {
+  if (!sphincterCursed()) return false; G.incont.fixed = how || 'aus';
+  for (var i = 0; i < G.hazards.length; i++) if (G.hazards[i].urine) G.hazards[i].t = Math.min(G.hazards[i].t, 1);
+  if (P) { addText(P.x, P.y - 50, 'ARTIFICIAL SPHINCTER', { color: '#7dffb0', size: 16, sub: 'cuff, pump, reservoir: dry again', subColor: '#7dffb0', dur: 1.6 }); burst(P.x, P.y, 16, { color: '#7dffb0', speed: 140, life: 0.5, size: 3 }); }
+  Snd.sfx('jingle'); return true;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §14f THE GIANT TURP — benign prostatic hyperplasia, boss of the Benign dungeon (?boss=bph, ?section=1|2|3).
+   Not a duel: the boss is the arena, and the verb is carving a channel while managing risk. No health bar: you win on
+   FLOW. Qmax starts at BPH.Q0 (4 ml/s) and every lobe adds its share: 40% of it while it is being resected, all of it once
+   the CAPSULE FIBERS show (the lobe is done). 20 ml/s wins; a perfect resection is 24.
+   Three sections, each its own round arena (§14c wall = the capsule). Finishing a section's lobes slides the scope on:
+     1 BLADDER NECK  the median lobe is a ball valve (a flap shuts, a retention meter rises and the adenoma swells faster:
+                     hit the flap with a cut or cautery). Two collar lobes sit on the bladder-neck ring; the ureteric
+                     orifices are landmarks at the bottom (§14e).
+     2 LATERAL LOBES a long narrow tube: six lobules that thrust inward (pinches), Nocturia droplets from the ends.
+     3 APEX          a tight room, more bleeders, and the verumontanum (§14e): touch it with steel or heat and the
+                     sphincter is gone for the run.
+   Risks that travel with you:
+     capsule      a done lobe is a bed. CUT / ENERGY on a bed, or overkill on the last of a lobe, goes into that wall
+                  segment (wallHit). A perforation stops that lobe counting until it is plugged (Foley / coag).
+     the hoser    resecting can open an arterial bleeder (0.7 s thump first): red fog, you see ~120 px. Hold ENERGY on it
+                  for 1.5 s, or flush with the Irrigation Hose (6 s of view; it keeps bleeding).
+     neck scar    ENERGY on the collar lobes (and coagulating a bleeder there) scars the bladder neck; lasers ×0.3, cold
+                  steel none. At 100% a contracture ring caps flow at 60% until it is incised (Urethrotome ×1, Scalpel ×3).
+                  The ring follows you: in sections 2 and 3 it sits behind you at the west end.
+     swelling     every ~10 s the adenoma swells and the arena shrinks; resecting pushes it back.
+     TUR syndrome the Irrigation Hose held 6 s in a row reverses your controls for 4 s.
+   Every attack is telegraphed for at least 0.5 s. Every number is in BPH. ~120–150 s.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var LASERS = { holmium: 1, thulium: 1, greenlight: 1, co2: 1 };
+var BPH = {
+  Q0: 4, WIN: 20, TOP: 24, PARTIAL: 0.4, CAP: 0.6,                                   // ml/s: obstructed · the win line · a perfect resection · credit while resecting · the contracture's cap (× WIN)
+  SHRINK: 0.18, SWELL_EVERY: 10, SWELL_TELE: 1, SWELL_STEP: 0.25, SWELL_BACK: 0.3, SWELL_HP: 1400,   // arena shrink at full swell · pulse · each done lobe / this much resected undoes it
+  SLIDE: 1.2, ADV_DELAY: 0.9, PERF_MUL: 0.6, FIBERS: 0.55,                           // section slide · overcut → wall damage · the fibers start to show at this progress
+  RET_FILL: 10, RET_DRAIN: 0.5, VALVE_OPEN: [7, 9], VALVE_TELE: 0.8, RET_DMG: 8,
+  SCAR: 1 / 400, LASER: 0.3, SCAR_COAG: 0.06, SCAR_WARN: 0.5, SCAR_RED: 0.8, SCAR_AFTER: 0.5, BNC_HP: 60,
+  HOSE_P: 0.0013, HOSE_CD: 14, HOSE_TELE: 0.7, HOSE_COAG: 1.5, HOSE_FLUSH: 6, HOSE_R: 120, HOSE_R_LIGHT: 180,
+  TUR_HOLD: 6, TUR_T: 4, VERU_R: 20, URETERS: [62, 118],
+  // a: where on the wall (degrees, 0 = east = ahead) · hp: tissue · q: ml/s it is worth
+  SEC: [null,
+    { name: 'BLADDER NECK', sub: 'the median lobe is a ball valve', cx: 494, cy: 282, rx: 382, ry: 190, n: 9, tag: 'NECK', start: [190, 282], slam: [4.6, 5.6], thrustR: 84, thrustDmg: 13, hose: 1, adds: null,
+      lobes: [{ a: 0, r: 56, hp: 620, q: 2.6, kind: 'median' }, { a: -40, r: 40, hp: 310, q: 1.3, kind: 'collar', neck: true }, { a: 40, r: 40, hp: 310, q: 1.3, kind: 'collar', neck: true }] },
+    { name: 'LATERAL LOBES', sub: 'the main resection', cx: 490, cy: 278, rx: 420, ry: 132, n: 10, tag: 'CAPSULE', start: [150, 278], slam: [2.8, 3.6], thrustR: 70, thrustDmg: 13, hose: 1, adds: [6.5, 2, 5],
+      lobes: [{ a: -126, r: 42, hp: 340, q: 1.2, kind: 'lateral' }, { a: -90, r: 42, hp: 340, q: 1.2, kind: 'lateral' }, { a: -54, r: 42, hp: 340, q: 1.2, kind: 'lateral' }, { a: 54, r: 42, hp: 340, q: 1.2, kind: 'lateral' }, { a: 90, r: 42, hp: 340, q: 1.2, kind: 'lateral' }, { a: 126, r: 42, hp: 340, q: 1.2, kind: 'lateral' }] },
+    { name: 'APEX', sub: 'the verumontanum is the limit', cx: 480, cy: 278, rx: 215, ry: 150, n: 10, tag: 'SINUS', start: [330, 278], slam: [4.4, 5.4], thrustR: 64, thrustDmg: 12, hose: 1.8, adds: [9, 1, 2],
+      lobes: [{ a: -126, r: 34, hp: 270, q: 1.4, kind: 'apical' }, { a: 126, r: 34, hp: 270, q: 1.4, kind: 'apical' }, { a: -54, r: 34, hp: 270, q: 2.4, kind: 'apical' }, { a: 54, r: 34, hp: 270, q: 2.4, kind: 'apical' }] }]
+};
+function bphWallPos(a, inset) { var Wl = G.wall; return { x: Wl.cx + Math.cos(a) * (Wl.rx - inset), y: Wl.cy + Math.sin(a) * (Wl.ry - inset) }; }
+function bphLobeProg(L) { var e = L.e; return L.done ? 1 : clamp(1 - (e.hp - 1) / Math.max(1, e.maxHp - 1), 0, 1); }
+function bphRemove(e) { if (e && !e.dead) { e.silent = true; e.special = null; e.minHp = 0; e.hp = 0; killEnemy(e, 'NEUTRAL', null); } }
+function bphSecQ(s) { var t = 0, ls = BPH.SEC[s].lobes; for (var i = 0; i < ls.length; i++) t += ls[i].q; return t; }
+// flow right now: what the finished sections gave, plus each lobe of this one (blocked by an open perforation = nothing)
+function bphFlow(B) {
+  var got = 0, tot = 0, done = true, i;
+  for (i = 0; i < B.lobes.length; i++) { var L = B.lobes[i], cr = L.blocked ? 0 : L.done ? 1 : BPH.PARTIAL * bphLobeProg(L); got += L.q * cr; tot += L.q; if (!L.done || L.blocked) done = false; }
+  B.secProg = tot > 0 ? got / tot : 1; B.secDone = done; B.qRaw = BPH.Q0 + B.qBase + got;
+  return B.bnc ? Math.min(B.qRaw, BPH.WIN * BPH.CAP) : B.qRaw;
+}
+function spawnBph() {
+  var s = clamp(parseInt(Q.section, 10) || 1, 1, 3), sec = BPH.SEC[s];
+  var body = spawnEnemy('bphboss', sec.cx, sec.cy, { instant: true, force: true, free: true });
+  body.noClear = false; body.noHit = true; body.special = function () {}; body.shield = 0; body.shieldMax = 0;   // nothing hits the gland itself: it has no health, only flow
+  var B = G.boss = { kind: 'bph', body: body, arms: [], lobes: [], sec: s, phase: s, t: 0, qBase: 0, q: BPH.Q0, qRaw: BPH.Q0, qShown: BPH.Q0, secProg: 0, secDone: false, advT: 0, advSaid: 0,
+    swell: 0, swellVis: 0, swellT: BPH.SWELL_EVERY, swells: 0, slamT: 3, thrusts: 0, dripT: 3, addT: 5, ret: 0, valve: null, flap: null, scar: 0, bnc: false, bncN: 0, bncE: null, tickT: 0,
+    hoser: null, hoserCd: 5, hosers: 0, sealed: 0, fogA: 0, hoseT: 0, turs: 0, turWarn: false, ureters: 0, lobesDone: 0, slide: null, won: false, queue: [], dead: false, sepsis: false,
+    name: 'THE GIANT TURP', sub: 'BOSS · benign prostatic hyperplasia', phases: ['BLADDER NECK', 'LATERAL LOBES', 'APEX'], hint: '' };
+  for (var k = 1; k < s; k++) B.qBase += bphSecQ(k);   // ?section=N: the sections behind you count as done
+  bphBuild(B, s);
+  G.introT = 2.6; Snd.sfx('roar'); shakeIt(10); G.punch = 0.25;
+}
+// (re)build the room for section s: a fresh capsule wall, its lobes on it, its landmarks, the surgeon at the west end
+function bphBuild(B, s) {
+  var sec = BPH.SEC[s], prev = G.wall, i, fin = hasBoon('finasteride');
+  for (i = 0; i < G.enemies.length; i++) { var o = G.enemies[i]; if (o !== B.body) { o.dead = true; if (o.obs) o.obs.dead = true; } }
+  G.enemies = [B.body]; G.bullets = []; G.hazards = []; G.teles = []; G.landmarks = []; G.fxRings = []; G.fxLines = []; G.seeds = []; G.turrets = []; G.fields = []; G.pickups = [];
+  for (i = 0; i < G.weapons.length; i++) { var w = G.weapons[i]; w.held = null; w.wire = null; w.swing = null; w.bal = null; w.fx = null; w.fx2 = null; w.charge = 0; w.lunge = 0; }
+  var Wl = makeWall({ cx: sec.cx, cy: sec.cy, rx: sec.rx, ry: sec.ry, n: sec.n, live: true, seedId: 'nocturia', tagOf: function () { return sec.tag; }, onPerforate: bphPerforated, onSealed: bphSealed, labels: [], thinText: 'CAPSULE THINNING', distText: ['IRRIGANT PRESSURE HIGH', 'the capsule perforates 50% faster'], tint: '255,150,150' });
+  if (prev) { Wl.perforations = prev.perforations; Wl.plugs = prev.plugs; }
+  B.sec = B.phase = s; B.lobes = []; B.queue = []; B.swell = 0; B.swellVis = 0; B.swellT = BPH.SWELL_EVERY; B.slamT = rr(2.6, 3.4); B.dripT = rr(3, 4); B.addT = sec.adds ? sec.adds[0] * 0.7 : 0; B.ret = 0; B.valve = null; B.flap = null; B.hoser = null; B.hoserCd = Math.max(B.hoserCd, 4); B.fogA = 0; B.advT = 0; B.bncE = null; B.secProg = 0; B.secDone = false; B.hint = '';
+  for (i = 0; i < sec.lobes.length; i++) {
+    var sp = sec.lobes[i], a = sp.a * Math.PI / 180, r0 = sp.r * (fin ? 0.85 : 1), e = spawnEnemy('bphlobe', sec.cx, sec.cy, { instant: true, force: true, free: true });
+    e.hp = e.maxHp = Math.round(sp.hp * (fin ? 0.7 : 1)); e.r = r0; e.minHp = 1; e.noPush = true; e.onDamaged = bphLobeHit; e.seed = 3 + i * 7 + s * 13;
+    var L = { e: e, a: a, r0: r0, q: sp.q, kind: sp.kind, neck: !!sp.neck, seg: null, done: false, blocked: false, fib: 0, thrust: 0, wind: 0, i: i };
+    var wp = bphWallPos(a, r0 * 0.25); e.x = wp.x; e.y = wp.y; L.seg = wallSegAt(wp.x, wp.y); e.lobe = L; B.lobes.push(L);
+  }
+  if (s === 1) {
+    var med = B.lobes[0].e, fl = spawnEnemy('bphflap', med.x - med.r, med.y, { instant: true, force: true, free: true }); fl.special = bphFlapHit; fl.noPush = true; fl.noAim = true; B.flap = fl;
+    B.valve = { shut: false, t: rr(5, 6.5), tele: false, shuts: 0, clears: 0 };
+    for (i = 0; i < BPH.URETERS.length; i++) { var ua = BPH.URETERS[i] * Math.PI / 180, up = bphWallPos(ua, 40); addLandmark({ id: 'ureter', name: 'Ureteric orifice', x: up.x, y: up.y, r: 15, color: '#9fe6ff', banner: 'Ureteric orifice: stay back', onInjury: bphUreterInjury, draw: drawUretericOrifice, wa: ua, inset: 40 }); }
+  }
+  if (s === 3) { var vp = bphWallPos(0, 52); addLandmark({ id: 'veru', name: 'Verumontanum', x: vp.x, y: vp.y, r: Math.round(BPH.VERU_R * (hasBoon('kegel') && !G.incont ? SPHINCTER.KEGEL_R : 1)), color: '#ffd166', banner: 'Verumontanum: the limit. Stay proximal', onInjury: function () { injureSphincter('veru'); }, draw: drawVeru, wa: 0, inset: 52 }); }
+  if (B.bnc) bphSpawnBnc(B);   // an uncut contracture is behind you now: the ring waits at the west end
+  P.x = sec.start[0]; P.y = sec.start[1]; P.roll = 0; P.after = []; B.body.x = sec.cx; B.body.y = sec.cy;
+}
+/* swelling sets the arena; everything fixed to the wall rides it */
+function bphPlace(B, dt) {
+  var sec = BPH.SEC[B.sec], Wl = G.wall, A = G.arena, i, cur = curWeapon(), cls = cur ? wcls(cur) : null;
+  B.swellVis += clamp(B.swell - B.swellVis, -dt * 0.8, dt * 0.8);
+  var k = 1 - BPH.SHRINK * B.swellVis; Wl.rx = A.rx = sec.rx * k; Wl.ry = A.ry = sec.ry * k;
+  for (i = 0; i < B.lobes.length; i++) {
+    var L = B.lobes[i], e = L.e, frac = 1 - bphLobeProg(L), want = L.r0 * (L.done ? 0.5 : 0.56 + 0.44 * frac) * (1 + 0.14 * B.swellVis);
+    e.r += (want - e.r) * Math.min(1, dt * 8);
+    var th = L.thrust > 0 ? Math.sin(L.thrust * Math.PI) * 34 : L.wind > 0 ? -8 * Math.sin((1 - L.wind / 0.7) * Math.PI / 2) : 0, wp = bphWallPos(L.a, e.r * 0.25 + th);
+    e.x = wp.x; e.y = wp.y; e.vx = e.vy = 0; e.kx = e.ky = 0;
+    L.blocked = !!(L.seg.open && !L.seg.chronic); e.inv = !L.done && L.blocked; e.invText = 'PERFORATED: PLUG THE CAPSULE FIRST';
+    L.fib = L.done ? 1 : clamp((bphLobeProg(L) - BPH.FIBERS) / (1 - BPH.FIBERS), 0, 1);
+  }
+  for (i = 0; i < G.landmarks.length; i++) { var lm = G.landmarks[i]; if (lm.wa !== undefined) { var lp = bphWallPos(lm.wa, lm.inset); lm.e.x = lp.x; lm.e.y = lp.y; } }
+  if (B.flap && !B.flap.dead) { var med = B.lobes[0].e, shut = !!(B.valve && B.valve.shut); B.flap.x = med.x - med.r - 2; B.flap.y = med.y; B.flap.noAim = !shut; B.flap.noHit = !shut; B.flap.aimBias = cls === 'CUT' || cls === 'ENERGY' ? 240 : -200; }
+  if (B.bncE && !B.bncE.dead) { var np = bphBncPos(B); B.bncE.x = np.x; B.bncE.y = np.y; B.bncE.aimBias = cls === 'CUT' ? 240 : cur && LASERS[cur.id] ? 60 : -150; }
+  var hz = B.hoser; if (hz && hz.e && !hz.e.dead) hz.e.aimBias = cls === 'ENERGY' || (cur && cur.id === 'irrigation') ? 280 : -400;
+}
+function bphBncPos(B) { var Wl = G.wall; return B.sec === 1 ? { x: Wl.cx + Wl.rx * 0.67, y: Wl.cy } : { x: Wl.cx - Wl.rx + 54, y: Wl.cy }; }
+/* ── resecting ── */
+function bphLobeHit(e, dmg, cls, o) {
+  var B = G.boss, L = e.lobe; if (!B || B.kind !== 'bph' || !L || L.done) return;
+  var Wl = G.wall;
+  B.swell = Math.max(0, B.swell - dmg / BPH.SWELL_HP);
+  if (L.neck) bphScarHit(B, dmg, cls, o);
+  if (o && o.wid === 'loop' && cls === 'CUT') { var ia = Math.atan2(Wl.cy - e.y, Wl.cx - e.x); burst(e.x + Math.cos(ia) * e.r * 0.7, e.y + Math.sin(ia) * e.r * 0.7, 7, { color: '#ffd0c4', speed: 190, life: 0.6, size: 4, kind: 'confetti', dir: ia, spread: 0.9 }); }   // chips fly off the loop
+  if (e.hp <= 1) { bphLobeDone(B, L, cls === 'CUT' || cls === 'ENERGY' ? 1 - e.hp : 0); return; }
+  var prog = bphLobeProg(L);
+  if (!B.hoser && B.hoserCd <= 0 && prog > 0.12 && rnd() < dmg * BPH.HOSE_P * (0.5 + 1.5 * prog) * BPH.SEC[B.sec].hose) bphStartHoser(B, L);   // likelier the nearer the capsule
+}
+// the fibers show: the lobe is done and the flow jumps. Whatever the last stroke had left over went into the capsule.
+function bphLobeDone(B, L, over) {
+  var e = L.e; L.done = true; e.hp = 1; e.st = {}; e.special = bphBedHit; e.noAim = true; e.atk = null; e.inv = false; L.wind = 0; L.thrust = 0;
+  B.swell = Math.max(0, B.swell - BPH.SWELL_BACK); B.lobesDone++;
+  addText(e.x, e.y - e.r - 26, 'CAPSULE FIBERS', { color: '#ffe9a8', size: 15, sub: '+' + (L.q * (1 - BPH.PARTIAL)).toFixed(1) + ' ml/s: this lobe is done, stop here', subColor: '#7dffb0', dur: 1.5 });
+  G.fxRings.push({ x: e.x, y: e.y, r: 10, r1: L.r0 + 30, t: 0.4, dur: 0.4, color: '#ffe9a8' }); burst(e.x, e.y, 16, { color: '#ffd0c4', speed: 200, life: 0.6, size: 4, kind: 'confetti' }); Snd.sfx('buy'); hitstop(0.05); addRVU(3, e.x, e.y);
+  for (var i = 0; i < 4; i++) spawnPickup('coin', e.x, e.y, { value: 1 });
+  if (over > 0 && !L.seg.open) wallHit(L.seg, over * BPH.PERF_MUL, 'overcut');
+}
+// steel or heat on a finished bed is steel or heat on the capsule
+function bphBedHit(e, base, cls, o) {
+  var L = e.lobe, B = G.boss; if (!L || !B || B.kind !== 'bph') return; e.flash = 0.06;
+  if ((cls !== 'CUT' && cls !== 'ENERGY') || L.seg.open || L.seg.chronic) return;
+  wallHit(L.seg, base * BPH.PERF_MUL, cls);
+  if (!e.deepT || G.time - e.deepT > 0.9) { e.deepT = G.time; addText(e.x, e.y - e.r - 18, 'TOO DEEP', { color: '#ffb630', size: 12, sub: 'that is capsule', subColor: '#ffd166' }); Snd.sfx('tink'); }
+}
+function bphPerforated(seg, K) {
+  var B = G.boss; if (!B || B.kind !== 'bph') return;
+  for (var i = 0; i < B.lobes.length; i++) { var L = B.lobes[i]; if (L.seg !== seg) continue; L.blocked = true; addText(L.e.x, L.e.y - L.e.r - 44, 'PROGRESS STOPPED', { color: K.color, size: 12, sub: 'plug the capsule first', subColor: '#ffd166', dur: 1.6 }); }
+}
+function bphSealed(seg, how) {
+  var B = G.boss; if (!B || B.kind !== 'bph') return;
+  for (var i = 0; i < B.lobes.length; i++) { var L = B.lobes[i]; if (L.seg !== seg) continue; L.blocked = false; addText(L.e.x, L.e.y - L.e.r - 44, 'PROGRESS RESUMES', { color: '#5df07a', size: 12 }); }
+}
+/* ── the adenoma fights back: swelling, thrusts, the ball valve, droplets ── */
+function bphSwell(B, live) {
+  for (var i = 0; i < live.length; i++) { var e = live[i].e; G.teles.push({ kind: 'flash', e: e, x: e.x, y: e.y, t: BPH.SWELL_TELE, dur: BPH.SWELL_TELE, r: e.r + 12 }); }
+  if (!B.swells) setNotice('The adenoma swells: resect it to push it back', '#ffd93b', 2.6);
+  Snd.sfx('thump');
+  bossQueue(BPH.SWELL_TELE, function () {
+    if (G.boss !== B || B.dead || B.slide) return; var n = 0;
+    for (var k = 0; k < B.lobes.length; k++) if (!B.lobes[k].done) { n++; B.lobes[k].e.sx = 1.25; B.lobes[k].e.sy = 1.25; }
+    if (!n) return; B.swell = Math.min(1, B.swell + BPH.SWELL_STEP * (0.4 + 0.6 * n / B.lobes.length)); B.swells++; shakeIt(2); Snd.sfx('lob');
+  });
+}
+function bphThrustOne(B, L, delay) {
+  var sec = BPH.SEC[B.sec];
+  bossQueue(delay, function () {
+    if (G.boss !== B || B.slide || L.done || L.blocked || L.e.dead) return;
+    var e = L.e, Wl = G.wall, ia = Math.atan2(Wl.cy - e.y, Wl.cx - e.x), T = { x: e.x + Math.cos(ia) * (e.r + 30), y: e.y + Math.sin(ia) * (e.r + 30) };
+    L.wind = 0.7; G.teles.push({ kind: 'circle', x: T.x, y: T.y, r: sec.thrustR, r2: sec.thrustR + 30, t: 0.7, dur: 0.7 });
+    bossQueue(0.7, function () {
+      if (G.boss !== B || B.slide || L.done || L.blocked || L.e.dead) return;
+      L.thrust = 1; L.e.sx = 1.3; L.e.sy = 0.8; groundSlam(T, sec.thrustR, sec.thrustDmg, { tremor: 30, color: '#ffd0c4', dust: 10 });
+    });
+  });
+}
+function bphThrust(B, live) {
+  var best = live[0], bd = 1e9, i; for (i = 0; i < live.length; i++) { var d = dist(live[i].e.x, live[i].e.y, P.x, P.y); if (d < bd) { bd = d; best = live[i]; } }
+  var L = rnd() < 0.65 ? best : live[ri(live.length)]; B.thrusts++;
+  bphThrustOne(B, L, 0);
+  if (B.sec === 2 && B.thrusts % 3 === 0) for (i = 0; i < live.length; i++) if (live[i] !== L && Math.abs(live[i].a + L.a) < 0.01) bphThrustOne(B, live[i], 0.35);   // the pinch: the lobule across the tube follows
+}
+function bphValve(B, dt) {
+  var v = B.valve, med = B.lobes[0], fl = B.flap;
+  if (!v) { B.ret = Math.max(0, B.ret - BPH.RET_DRAIN * dt); return; }
+  if (med.done) { B.valve = null; bphRemove(fl); B.flap = null; addText(med.e.x - 40, med.e.y - 50, 'BALL VALVE GONE', { color: '#5df07a', size: 13 }); return; }
+  if (!v.shut) {
+    B.ret = Math.max(0, B.ret - BPH.RET_DRAIN * dt); v.t -= dt;
+    if (v.t <= BPH.VALVE_TELE && !v.tele) { v.tele = true; G.teles.push({ kind: 'flash', e: fl, x: fl.x, y: fl.y, t: BPH.VALVE_TELE, dur: BPH.VALVE_TELE, r: fl.r + 10 }); addText(fl.x, fl.y - 34, 'VALVE CLOSING', { color: '#ff8fa3', size: 12 }); Snd.sfx('tink'); }
+    if (v.t <= 0) { v.shut = true; v.tele = false; v.shuts++; fl.noHit = false; fl.noAim = false; fl.sx = 1.4; fl.sy = 1.4; Snd.sfx('clang'); if (v.shuts === 1) setNotice('Ball valve: the median lobe plugs the outlet. Hit its flap with a cut or cautery', '#ff8fa3', 3.4); }
+    return;
+  }
+  B.ret = Math.min(1, B.ret + dt / BPH.RET_FILL);
+  if (B.ret >= 1 && !v.burst) {   // acute retention: the pressure lets go as a ring of drops with a gap toward you
+    v.burst = true; G.teles.push({ kind: 'flash', e: fl, x: fl.x, y: fl.y, t: 0.6, dur: 0.6, r: 46 }); setNotice('ACUTE RETENTION', '#ff4d6d', 2); Snd.sfx('alarm');
+    bossQueue(0.6, function () {
+      if (G.boss !== B || B.slide || !B.valve) return; var gap = ang(fl.x, fl.y, P.x, P.y) + rr(-0.5, 0.5);
+      for (var q = 0; q < 16; q++) { var ra = q / 16 * TAU; if (Math.cos(ra) > 0.35 || Math.abs(angDiff(ra, gap)) < 0.42) continue; enemyShot(fl.x, fl.y, ra, 185, BPH.RET_DMG, { color: '#ffe98a', r: 7, shape: 'drop' }); }
+      B.ret = 0.45; B.swell = Math.min(1, B.swell + 0.3); v.burst = false; Snd.sfx('shock'); shakeIt(4);
+    });
+  }
+}
+function bphFlapHit(e, base, cls, o) {
+  var B = G.boss, v = B && B.valve; if (!v) return; e.flash = 0.08;
+  if (!v.shut) return;
+  if (cls !== 'CUT' && cls !== 'ENERGY') { if (!e.hintT || G.time - e.hintT > 1.4) { e.hintT = G.time; addText(e.x, e.y - 30, 'CUT or CAUTERIZE the flap', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } return; }
+  v.shut = false; v.tele = false; v.t = rr(BPH.VALVE_OPEN[0], BPH.VALVE_OPEN[1]); v.clears++; e.noHit = true; e.noAim = true; e.sx = 0.7; e.sy = 1.3;
+  addText(e.x, e.y - 30, 'VALVE CLEARED', { color: '#5df07a', size: 14, sub: 'retention drains', subColor: '#5df07a' }); burst(e.x, e.y, 10, { color: '#ffd0c4', speed: 160, life: 0.4, size: 3, kind: 'goo', g: 300 }); Snd.sfx('buy'); addRVU(1, e.x, e.y);
+}
+function bphDrips(B) {   // the median lobe dribbles a fan at you (0.55 s line first)
+  var fl = B.flap; if (!fl || fl.dead) return; var a = ang(fl.x, fl.y, P.x, P.y);
+  G.teles.push({ kind: 'line', x: fl.x, y: fl.y, a: a, len: 340, t: 0.55, dur: 0.55, thick: 28 });
+  bossQueue(0.55, function () { if (G.boss !== B || B.slide || !B.flap || B.flap.dead) return; fanBurst(fl.x, fl.y, ang(fl.x, fl.y, P.x, P.y), 5, 0.9, 190, 7, { color: '#ffe98a', r: 6, shape: 'drop' }); Snd.sfx('shot'); });
+}
+/* ── the hoser: one arterial bleeder at a time ── */
+function bphHoserPos(hz) { var e = hz.L.e, Wl = G.wall, a = Math.atan2(Wl.cy - e.y, Wl.cx - e.x); return { x: e.x + Math.cos(a) * e.r * 0.6, y: e.y + Math.sin(a) * e.r * 0.6 }; }
+function bphStartHoser(B, L, force) {
+  if (!L || B.hoser || (!force && B.hoserCd > 0)) return null;
+  var hz = B.hoser = { L: L, state: 'tele', t: BPH.HOSE_TELE, e: null, coag: 0, clearT: 0, fog: 0, sprayT: 0 }, p = bphHoserPos(hz);
+  G.teles.push({ kind: 'flash', x: p.x, y: p.y, t: BPH.HOSE_TELE, dur: BPH.HOSE_TELE, r: 18 }); Snd.sfx('thump'); addText(p.x, p.y - 24, 'thump…', { color: '#ff8fa3', size: 11, dur: BPH.HOSE_TELE });
+  return hz;
+}
+function bphFogR() { return hasBoon('coldlight') ? BPH.HOSE_R_LIGHT : BPH.HOSE_R; }
+function bphHoser(B, dt) {
+  B.hoserCd = Math.max(0, B.hoserCd - dt);
+  var hz = B.hoser, want = 0;
+  if (hz) {
+    var p = bphHoserPos(hz);
+    if (hz.state === 'tele') {
+      hz.t -= dt;
+      if (hz.t <= 0) {
+        hz.state = 'open'; var e = spawnEnemy('bphbleeder', p.x, p.y, { instant: true, force: true, free: true }); e.special = bphBleederHit; e.noPush = true; e.hoser = hz; e.neck = hz.L.neck; e.coagT = -9; hz.e = e; B.hosers++;
+        setNotice('ARTERIAL BLEEDER: hold ENERGY on it for ' + BPH.HOSE_COAG + ' s, or flush it with the hose', '#ff6b8a', 3.6); Snd.sfx('alarm'); shakeIt(4);
+      }
+    } else {
+      var e2 = hz.e; e2.x = p.x; e2.y = p.y; hz.fog = Math.min(1, hz.fog + dt * 3); hz.clearT = Math.max(0, hz.clearT - dt);
+      if (G.time - e2.coagT < 0.3) { hz.coag += dt; if (e2.neck) bphScarAdd(B, dt * BPH.SCAR_COAG); } else hz.coag = Math.max(0, hz.coag - dt * 0.6);   // coagulating at the neck scars it a little: be brief
+      hz.sprayT -= dt; if (hz.sprayT <= 0) { hz.sprayT = 0.09; burst(p.x, p.y, 2, { color: '#e03a3a', speed: 260, life: 0.5, size: 3, kind: 'goo', g: 200 }); }
+      want = hz.fog * (hz.clearT > 0 ? 0.12 : 1);
+      if (hz.coag >= BPH.HOSE_COAG) bphSealHoser(B);
+    }
+  }
+  B.fogA += clamp(want - B.fogA, -dt * 4, dt * 4);
+}
+function bphSealHoser(B) {
+  var hz = B.hoser; if (!hz) return; var e = hz.e; B.hoser = null; B.hoserCd = BPH.HOSE_CD; B.sealed++;
+  if (e) { addText(e.x, e.y - 26, 'HEMOSTASIS', { color: '#5df07a', size: 15, sub: 'bleeder coagulated', subColor: '#5df07a' }); burst(e.x, e.y, 10, { color: '#ffd8a8', speed: 110, life: 0.5, size: 4, kind: 'smoke' }); addRVU(2, e.x, e.y); bphRemove(e); }
+  Snd.sfx('cauter'); Snd.sfx('buy');
+}
+function bphBleederHit(e, base, cls, o) {
+  var hz = e.hoser; if (!hz) return; e.flash = 0.06;
+  if (cls === 'ENERGY') { e.coagT = G.time; return; }
+  if (o && o.wid === 'irrigation') { if (hz.clearT <= 0) { addText(e.x, e.y - 26, 'FLUSHED', { color: '#5df07a', size: 13, sub: 'view clear for ' + BPH.HOSE_FLUSH + ' s: it still bleeds', subColor: '#ffd166', dur: 1.4 }); Snd.sfx('jet'); } hz.clearT = BPH.HOSE_FLUSH; return; }
+  if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 26, 'COAGULATE IT (energy) or FLUSH IT (hose)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); }
+}
+/* ── bladder neck: scar, contracture, incision ── */
+function bphScarAdd(B, amt) {
+  if (B.bnc || !(amt > 0)) return; var before = B.scar; B.scar = Math.min(1, B.scar + amt);
+  if (before < BPH.SCAR_WARN && B.scar >= BPH.SCAR_WARN) { setNotice('Heavy cautery at the bladder neck: contracture risk', '#ffd166', 3.4); Snd.sfx('tink'); }
+  if (before < BPH.SCAR_RED && B.scar >= BPH.SCAR_RED) { setNotice('BLADDER NECK SCARRING: stop the cautery, cut cold', '#ff4d6d', 3.4); Snd.sfx('alarm'); }
+  if (B.scar >= 1) bphBnc(B);
+}
+function bphScarSet(B, v) { if (v > B.scar) bphScarAdd(B, v - B.scar); else if (!B.bnc) B.scar = Math.max(0, v); }
+function bphScarHit(B, dmg, cls, o) { var wid = o && o.wid, k = LASERS[wid] ? BPH.LASER : cls === 'ENERGY' ? 1 : 0; if (k) bphScarAdd(B, dmg * BPH.SCAR * k); }   // cautery full, lasers ×0.3, cold steel and water none
+function bphBnc(B) {
+  B.bnc = true; B.bncN++; B.scar = 1; bphSpawnBnc(B);
+  setBanner('BLADDER NECK CONTRACTURE', 'a scar ring: flow capped at ' + Math.round(BPH.CAP * 100) + '% until you incise it', 3.2); Snd.sfx('alarm'); shakeIt(6); G.flash = Math.max(G.flash, 0.4);
+}
+function bphSpawnBnc(B) { var p = bphBncPos(B), e = spawnEnemy('bncring', p.x, p.y, { instant: true, force: true, free: true }); e.special = bphBncHit; e.noPush = true; e.cut = 0; B.bncE = e; return e; }
+// bladder-neck incision: one Urethrotome pass, three Scalpel cuts, any other blade two; a laser can do it slowly; cautery cannot
+function bphBncHit(e, base, cls, o) {
+  var B = G.boss; if (!B || !B.bnc) return; var wid = o && o.wid, N = BPH.BNC_HP;
+  var pts = wid === 'urethrotome' ? N : wid === 'scalpel' ? N / 3 + 0.01 : cls === 'CUT' ? Math.max(N / 2, base) : LASERS[wid] ? base * 0.5 : base * 0.1;
+  e.cut += pts; e.flash = 0.1;
+  if (cls === 'ENERGY' && !LASERS[wid]) { if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 50, 'CAUTERY MADE THIS: cut it cold', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } }
+  else if (e.cut < N && (!e.cutT || G.time - e.cutT > 0.25)) { e.cutT = G.time; addText(e.x, e.y - 50, 'INCISING ' + Math.round(e.cut / N * 100) + '%', { color: '#ff8fa3', size: 12 }); Snd.sfx('slash'); }
+  if (e.cut < N) return;
+  B.bnc = false; B.scar = BPH.SCAR_AFTER; B.bncE = null;
+  addText(e.x, e.y - 50, 'BLADDER NECK INCISED', { color: '#5df07a', size: 16, sub: 'flow uncapped', subColor: '#5df07a', dur: 1.5 }); burst(e.x, e.y, 14, { color: '#f2ead8', speed: 180, life: 0.5, size: 3 }); Snd.sfx('buy'); addRVU(3, e.x, e.y);
+  bphRemove(e);
+}
+function bphUreterInjury(L) {
+  var B = G.boss; landmarkPenalty(SPHINCTER.URETER_DMG); if (B && B.kind === 'bph') B.ureters++; G.stats.ureters = (G.stats.ureters || 0) + 1;
+  G.flash = Math.max(G.flash, 0.6); shakeIt(7); hitstop(0.06); Snd.sfx('hurt'); Snd.sfx('alarm'); P.inv = Math.max(P.inv, 0.5);
+  setBanner('URETERIC INJURY', 'that was the ureteric orifice: −' + Math.round(SPHINCTER.URETER_DMG * 100) + '% max HP', 2.4); burst(L.e.x, L.e.y, 12, { color: '#9fe6ff', speed: 160, life: 0.4, size: 3 });
+}
+/* ── sections ── */
+function snapWorld() {   // the room as it stands, without the surgeon: the section slide scrolls it away
+  try { var cv = document.createElement('canvas'), k = clamp(view.scale * view.dpr, 1, 2); cv.width = Math.round(W * k); cv.height = Math.round(H * k); var c2 = cv.getContext('2d'); c2.scale(k, k); G.hidePlayer = true; drawWorld(c2); G.hidePlayer = false; return cv; }
+  catch (err) { G.hidePlayer = false; return null; }
+}
+function bphSlide(B) {
+  var from = B.sec; if (from >= 3 || B.slide) return;
+  B.qBase += bphSecQ(from);
+  var sl = { t: 0, dur: BPH.SLIDE, from: from, to: from + 1, px: P.x, py: P.y, snap: snapWorld() };
+  bphBuild(B, from + 1); B.slide = sl;
+  G.introT = Math.max(G.introT, 0.05); P.inv = Math.max(P.inv, BPH.SLIDE + 0.3); P.stag = 0; Snd.sfx('door'); Snd.sfx('swing');
+}
+function bphWin(B) {
+  var cur = curWeapon(); B.won = true; B.qShown = B.q;
+  addText(G.wall.cx, G.wall.cy - 60, 'Qmax ' + Math.round(B.q) + ' ml/s', { color: '#7dffb0', size: 26, dur: 2, vy: -14 });
+  B.body.hp = 0; killEnemy(B.body, 'CUT', cur ? cur.id : null);
+}
+function bphHint(B) {
+  var hz = B.hoser, i;
+  if (hz && hz.state === 'open') return 'ARTERIAL BLEEDER|hold ENERGY on it, or flush it with the hose';
+  for (i = 0; i < B.lobes.length; i++) if (B.lobes[i].blocked) return 'CAPSULE OPEN: that lobe stopped counting|plug it: Foley balloon, or coag';
+  if (B.bnc) return 'CONTRACTURE: flow capped at ' + Math.round(BPH.CAP * BPH.WIN) + ' ml/s|incise the scar ring: Urethrotome, or 3 Scalpel cuts';
+  if (B.valve && B.valve.shut) return 'BALL VALVE SHUT: retention rising|hit the flap with a cut or cautery';
+  if (B.sec === 1 && B.scar >= BPH.SCAR_WARN) return 'NECK SCAR ' + Math.round(B.scar * 100) + '%|cut the collar cold; coagulate briefly';
+  if (B.sec === 3) return 'resect to ' + BPH.WIN + ' ml/s|the verumontanum is the limit';
+  return 'resect each lobe down to the capsule fibers|then stop: deeper perforates';
+}
+function updateBph(dt) {
+  var B = G.boss, sec = BPH.SEC[B.sec], i, L, cur = curWeapon();
+  B.t += dt;
+  if (B.slide) {   // the scope advances: nothing acts until the next section is in
+    B.slide.t += dt; G.introT = Math.max(G.introT, 0.05); P.inv = Math.max(P.inv, 0.4); bphPlace(B, dt);
+    if (B.slide.t >= B.slide.dur) { B.slide = null; G.introT = 0; setBanner('SECTION ' + B.sec + ' / 3', sec.name + ': ' + sec.sub, 1.8); }
+    return;
+  }
+  runQueue(B, dt); bphPlace(B, dt);
+  if (G.introT > 0) return;
+  var live = [];
+  for (i = 0; i < B.lobes.length; i++) { L = B.lobes[i]; if (!L.done && L.e.hp <= 1.001) bphLobeDone(B, L, 0); if (!L.done && !L.blocked) live.push(L); L.wind = Math.max(0, L.wind - dt); L.thrust = Math.max(0, L.thrust - dt * 2.2); }
+  // flow: the win line, or the scope moves on
+  B.q = bphFlow(B); B.qShown += clamp(B.q - B.qShown, -dt * 6, dt * 3);
+  if (B.q >= BPH.WIN) { bphWin(B); return; }
+  if (B.secDone && B.sec < 3) {
+    if (B.advSaid !== B.sec) { B.advSaid = B.sec; setBanner(sec.name + ' OPEN', 'the scope advances', 1.4); Snd.sfx('clear'); }
+    B.advT += dt; if (B.advT >= BPH.ADV_DELAY) { bphSlide(B); return; }
+  } else B.advT = 0;
+  // swelling: faster in retention, slower on finasteride or tamsulosin
+  if (live.length) { B.swellT -= dt * (1 + 1.5 * B.ret) / ((hasBoon('finasteride') ? 1.2 : 1) * (hasBoon('tamsulosin') ? 1.15 : 1)); if (B.swellT <= 0) { B.swellT = BPH.SWELL_EVERY; bphSwell(B, live); } }
+  B.slamT -= dt; if (B.slamT <= 0 && live.length) { B.slamT = rr(sec.slam[0], sec.slam[1]); bphThrust(B, live); }
+  if (B.sec === 1) { bphValve(B, dt); B.dripT -= dt; if (B.dripT <= 0) { B.dripT = rr(3.4, 4.2); bphDrips(B); } }
+  if (sec.adds) {
+    B.addT -= dt;
+    if (B.addT <= 0) {
+      B.addT = sec.adds[0]; var have = countId('nocturia');
+      for (i = 0; i < sec.adds[1] && have < sec.adds[2]; i++, have++) { var side = rnd() < 0.5 ? -1 : 1, ax = G.wall.cx + side * (G.wall.rx - 34); if (Math.abs(ax - P.x) < 120) ax = G.wall.cx - side * (G.wall.rx - 34); var ap = clampArena(ax, G.wall.cy + rr(-26, 26), 14), ne = spawnEnemy('nocturia', ap.x, ap.y, {}); if (ne) ne.noClear = true; }
+    }
+  }
+  bphHoser(B, dt);
+  if (!B.bnc && B.scar >= BPH.SCAR_RED) { B.tickT -= dt; if (B.tickT <= 0) { B.tickT = 0.55; Snd.sfx('tink'); } }
+  // TUR syndrome: the hose held too long
+  var hosing = !!(cur && cur.id === 'irrigation' && cur.fx && cur.fx.style === 'jet' && fireHeld());
+  B.hoseT = hosing ? B.hoseT + dt : Math.max(0, B.hoseT - dt * 2);
+  if (B.hoseT >= BPH.TUR_HOLD) { B.hoseT = 0; B.turWarn = false; P.tur = BPH.TUR_T; B.turs++; setNotice('TUR SYNDROME: irrigant absorbed. Controls reversed for ' + BPH.TUR_T + ' s', '#7ad7ff', 3); Snd.sfx('alarm'); }
+  else if (hosing && B.hoseT >= BPH.TUR_HOLD * 0.6 && !B.turWarn) { B.turWarn = true; addText(P.x, P.y - 48, 'IRRIGANT ABSORBING…', { color: '#7ad7ff', size: 12, sub: 'let go of the hose', subColor: '#ffd166' }); Snd.sfx('tink'); }
+  else if (B.hoseT < 1) B.turWarn = false;
+  B.hint = bphHint(B);
+}
+/* ── art: Isaac-abstract. Pale pink-white lobules bulging off the wall; resected beds ringed like tree rings. ── */
+function drawBphLobe(c, e) {
+  var L = e.lobe, r = e.r, t = G.realTime, sd = e.seed || 3, i, a0, Wl = G.wall, into = L && Wl ? Math.atan2(Wl.cy - e.y, Wl.cx - e.x) : Math.PI / 2;
+  if (L && L.done) {   // the bed: flat, raw and clean, ringed by the capsule fibers drawn under it
+    c.fillStyle = '#6b2434'; blobPath(c, r * 0.92, sd, 5, 0.07); c.fill(); c.strokeStyle = 'rgba(250,232,205,0.85)'; c.lineWidth = 2.2; c.stroke();
+    c.strokeStyle = 'rgba(250,232,205,0.5)'; c.lineWidth = 1.6; c.beginPath(); c.arc(0, 0, r * 0.58, 0, TAU); c.stroke(); c.beginPath(); c.arc(0, 0, r * 0.26, 0, TAU); c.stroke();
+    c.strokeStyle = '#7dffb0'; c.lineWidth = 3.4; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(-r * 0.3, 0); c.lineTo(-r * 0.05, r * 0.25); c.lineTo(r * 0.36, -r * 0.28); c.stroke();
+    return;
+  }
+  var prog = L ? bphLobeProg(L) : 0, N = 6, lob = [], wind = L ? L.wind : 0;
+  for (i = 0; i < N; i++) { a0 = i / N * TAU + sd; lob.push([Math.cos(a0) * r * 0.5, Math.sin(a0) * r * 0.5, r * (0.46 + 0.1 * hsh(sd, i)) * (1 + 0.03 * Math.sin(t * 2 + i))]); }
+  for (i = 0; i < N; i++) { c.beginPath(); c.arc(lob[i][0], lob[i][1], lob[i][2], 0, TAU); rim(c, e, 4); }
+  for (i = 0; i < N; i++) { c.beginPath(); c.arc(lob[i][0], lob[i][1], lob[i][2], 0, TAU); c.fillStyle = i % 2 ? '#ffe3da' : '#ffd0c4'; c.fill(); outline(c, 4); }
+  c.fillStyle = '#ffdcd2'; c.beginPath(); c.arc(0, 0, r * 0.62, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.4)'; for (i = 0; i < N; i += 2) { c.beginPath(); c.arc(lob[i][0] - lob[i][2] * 0.3, lob[i][1] - lob[i][2] * 0.35, lob[i][2] * 0.2, 0, TAU); c.fill(); }
+  veins(c, r * 0.8, 4, sd, 'rgba(200,90,110,0.38)');
+  if (prog > 0.04) {   // the cut face, toward the room: raw furrows that spread as the loop works
+    c.save(); c.rotate(into); c.fillStyle = 'rgba(196,64,88,' + (0.4 + 0.4 * prog) + ')'; c.beginPath(); c.ellipse(r * 0.45, 0, r * (0.16 + 0.3 * prog), r * (0.3 + 0.5 * prog), 0, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(110,26,46,0.6)'; c.lineWidth = 1.8; c.lineCap = 'round'; for (i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(r * 0.34, i * r * 0.22); c.lineTo(r * (0.5 + 0.2 * prog), i * r * 0.25); c.stroke(); } c.restore();
+  }
+  // the face: the median lobe wears the big sleepy one, the rest doze until they wind up
+  if (L && L.kind === 'median') { c.__lidColor = '#b3604a'; eyes(c, -r * 0.14, -r * 0.2, r * 0.3, r * 0.2, e.look, e.blink, wind > 0 ? 'angry' : 'sleepy', { bags: true, asym: 0.8 }); mouth(c, -r * 0.14, r * 0.24, r * 0.24, wind > 0 ? 'o' : 'wavy'); drool(c, -r * 0.04, r * 0.34, 2, 'rgba(255,240,220,0.8)', sd); }
+  else if (wind > 0) { eyes(c, 0, -r * 0.12, r * 0.3, r * 0.2, e.look, 1, 'angry', {}); mouth(c, 0, r * 0.32, r * 0.2, 'o'); }
+  else { shutEyes(c, 0, -r * 0.1, r * 0.3, r * 0.17); mouth(c, 0, r * 0.3, r * 0.18, 'wavy'); }
+  if (L) {   // the progress ring: how much of this lobe is out. Gold once the fibers show: you are nearly at the capsule.
+    c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 6; c.beginPath(); c.arc(0, 0, r + 9, 0, TAU); c.stroke();
+    c.strokeStyle = L.blocked ? '#ff4d6d' : prog >= BPH.FIBERS ? '#ffd166' : '#7dffb0'; c.lineWidth = 3.5; c.lineCap = 'round'; c.beginPath(); c.arc(0, 0, r + 9, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.003, prog)); c.stroke();
+  }
+}
+function drawBphFlap(c, e) {
+  var B = G.boss && G.boss.kind === 'bph' ? G.boss : null, shut = !!(B && B.valve && B.valve.shut), r = e.r, t = G.realTime;
+  c.save(); c.rotate(Math.sin(e.ph || 0) * (shut ? 0.05 : 0.22) + (shut ? 0 : 0.9));   // open: it droops out of the way
+  if (shut) { c.fillStyle = 'rgba(255,60,90,' + (0.22 + 0.2 * Math.sin(t * 9)) + ')'; c.beginPath(); c.arc(-r * 0.2, 0, r * 1.5, 0, TAU); c.fill(); }
+  c.beginPath(); c.ellipse(-r * 0.2, 0, r * (shut ? 1.15 : 0.9), r * (shut ? 0.95 : 0.5), 0, 0, TAU); body(c, e, shut ? '#ff9db2' : '#ffd0c4', 3);
+  c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(-r * 0.5, -r * 0.2, r * 0.3, r * 0.14, -0.4, 0, TAU); c.fill();
+  c.restore();
+  if (shut) text(c, 'VALVE SHUT', 0, -r - 16, 9, Math.floor(t * 6) % 2 ? '#fff' : '#ff6b8a', 'center', 900);
+}
+function drawBphBleeder(c, e) {
+  var hz = e.hoser, t = G.realTime, r = e.r, i, k = hz ? clamp(hz.coag / BPH.HOSE_COAG, 0, 1) : 0;
+  c.strokeStyle = '#e03a3a'; c.lineWidth = 3; c.lineCap = 'round';
+  for (i = 0; i < 5; i++) { var a = i * 1.26 + Math.sin(t * 7 + i) * 0.4, l = r * (1.6 + 0.9 * Math.abs(Math.sin(t * 11 + i * 2))); c.beginPath(); c.moveTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5); c.quadraticCurveTo(Math.cos(a) * l, Math.sin(a) * l - 6, Math.cos(a + 0.3) * l * 1.2, Math.sin(a + 0.3) * l * 1.2 + 6); c.stroke(); }
+  c.beginPath(); c.arc(0, 0, r * 0.62, 0, TAU); c.fillStyle = '#8f1020'; c.fill(); outline(c, 2.5); c.fillStyle = '#ff5a6e'; c.beginPath(); c.arc(0, 0, r * 0.3 * (1 + 0.3 * Math.sin(t * 14)), 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 6; c.beginPath(); c.arc(0, 0, r + 9, 0, TAU); c.stroke();
+  c.strokeStyle = '#ffb630'; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, r + 9, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.003, k)); c.stroke();
+  text(c, 'COAG', 0, -r - 20, 9, '#ffb630', 'center', 900);
+}
+function drawBncRing(c, e) {
+  var r = e.r, t = G.realTime, k = clamp((e.cut || 0) / BPH.BNC_HP, 0, 1), i;
+  c.beginPath(); c.ellipse(0, 0, r * 0.62, r * 1.5, 0, 0, TAU); c.strokeStyle = OUTLINE; c.lineWidth = 12; c.stroke(); c.strokeStyle = '#f2ead8'; c.lineWidth = 8; c.stroke();
+  c.strokeStyle = 'rgba(150,130,110,0.85)'; c.lineWidth = 1.4; for (i = 0; i < 10; i++) { var a = i / 10 * TAU; c.beginPath(); c.moveTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 1.3); c.lineTo(Math.cos(a) * r * 0.74, Math.sin(a) * r * 1.7); c.stroke(); }   // puckered
+  c.strokeStyle = '#ff4d6d'; c.lineWidth = 3; c.lineCap = 'round'; for (i = 0; i < 3; i++) if (k > i / 3 + 0.01) { c.beginPath(); c.moveTo((i - 1) * r * 0.3, r * 1.15); c.lineTo((i - 1) * r * 0.38, r * 1.85); c.stroke(); }   // the incisions so far
+  text(c, 'SCAR: INCISE', 0, -r * 1.5 - 14, 9, Math.floor(t * 4) % 2 ? '#fff' : '#ffd166', 'center', 900);
+}
+function drawBphIcon(c, e) {   // the bestiary portrait: three dozing lobes round a resected channel, and the loop that made it
+  var r = e.r, R = r * 0.62, i, Lb = [[-R * 0.82, -R * 0.1, R], [R * 0.82, -R * 0.1, R], [0, R * 0.78, R * 0.8]];
+  for (i = 0; i < 3; i++) { c.beginPath(); c.arc(Lb[i][0], Lb[i][1], Lb[i][2], 0, TAU); rim(c, e, 4.5); }
+  for (i = 0; i < 3; i++) { c.beginPath(); c.arc(Lb[i][0], Lb[i][1], Lb[i][2], 0, TAU); c.fillStyle = i === 2 ? '#ffd0c4' : '#ffe3da'; c.fill(); outline(c, 4.5); }
+  c.fillStyle = '#5a1c2a'; c.beginPath(); c.ellipse(0, -R * 0.15, R * 0.34, R * 0.8, 0, 0, TAU); c.fill(); outline(c, 3);
+  c.strokeStyle = 'rgba(250,232,205,0.8)'; c.lineWidth = 1.8; for (i = 1; i <= 2; i++) { c.beginPath(); c.ellipse(0, -R * 0.15, R * 0.34 * i / 3, R * 0.8 * i / 3, 0, 0, TAU); c.stroke(); }
+  shutEyes(c, -R * 1.05, -R * 0.25, R * 0.24, R * 0.14); mouth(c, -R * 1.05, R * 0.12, R * 0.16, 'wavy'); shutEyes(c, R * 1.05, -R * 0.25, R * 0.24, R * 0.14); mouth(c, R * 1.05, R * 0.12, R * 0.16, 'wavy');
+  c.strokeStyle = OUTLINE; c.lineWidth = 4.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(R * 0.05, R * 1.9); c.lineTo(R * 0.05, R * 1.2); c.stroke(); c.strokeStyle = '#ff4d6d'; c.lineWidth = 2.4; c.beginPath(); c.arc(R * 0.05, R * 1.0, R * 0.2, 0, TAU); c.stroke();
+}
+/* under everything in the room: what is behind you (the bladder, then the channel you cleaned), what is ahead, the bladder-neck
+   ring, and the capsule fibers that show through each lobe as it goes */
+function drawBphUnder(c) {
+  var B = G.boss, Wl = G.wall; if (!B || !Wl) return; var t = G.realTime, i, j, g, wx = Wl.cx - Wl.rx, ex = Wl.cx + Wl.rx;
+  c.save(); c.beginPath(); c.ellipse(Wl.cx, Wl.cy, Wl.rx, Wl.ry, 0, 0, TAU); c.clip();
+  if (B.sec === 1) {   // the bladder, behind you
+    g = c.createRadialGradient(wx + 10, Wl.cy, 10, wx + 10, Wl.cy, 190); g.addColorStop(0, 'rgba(34,52,104,0.7)'); g.addColorStop(1, 'rgba(34,52,104,0)'); c.fillStyle = g; c.fillRect(wx, Wl.cy - 200, 220, 400);
+    c.globalAlpha = 0.5; text(c, 'BLADDER', wx + 50, Wl.cy - 62, 9, '#9fb6e8', 'center', 900); c.globalAlpha = 1;
+  } else {   // the section you finished: a darker, cleaned strip
+    c.fillStyle = 'rgba(36,8,16,0.62)'; c.beginPath(); c.ellipse(wx, Wl.cy, 104, Wl.ry * 0.94, 0, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(250,232,205,0.28)'; c.lineWidth = 3; for (i = 1; i <= 3; i++) { c.beginPath(); c.ellipse(wx - 6, Wl.cy, 26 * i, Wl.ry * 0.26 * i, 0, 0, TAU); c.stroke(); }
+    c.globalAlpha = 0.6; text(c, BPH.SEC[B.sec - 1].name + ' ✓', wx + 30, Wl.cy - Wl.ry * 0.3, 8, '#7dffb0', 'left', 900); c.globalAlpha = 1;
+  }
+  if (B.sec === 3) {   // ahead: the way out narrows to a dark closed ring. The verumontanum stands in front of it.
+    c.fillStyle = 'rgba(20,6,12,0.6)'; c.beginPath(); c.ellipse(ex, Wl.cy, 44, Wl.ry * 0.5, 0, 0, TAU); c.fill();
+    c.strokeStyle = 'rgba(170,70,95,0.55)'; c.lineWidth = 3; for (i = 1; i <= 3; i++) { c.beginPath(); c.ellipse(ex, Wl.cy, 13 * i, Wl.ry * 0.15 * i, 0, 0, TAU); c.stroke(); }
+    c.globalAlpha = 0.7; text(c, 'SPHINCTER', ex - 40, Wl.cy - 48, 7, '#ff9db2', 'center', 900); c.globalAlpha = 1;
+  }
+  if (B.sec === 1) {   // the bladder-neck ring through both collar lobes; cautery whitens it into scar
+    var nx = Wl.cx + Wl.rx * 0.69, s = B.bnc ? 1 : B.scar, hot = !B.bnc && s >= BPH.SCAR_WARN, pul = 0.5 + 0.5 * Math.sin(t * (s >= BPH.SCAR_RED ? 11 : 6));
+    c.strokeStyle = 'rgba(250,232,205,0.3)'; c.lineWidth = 5; c.beginPath(); c.ellipse(nx, Wl.cy, 46, Wl.ry * 0.66, 0, 0, TAU); c.stroke();
+    if (s > 0.02) { c.strokeStyle = 'rgba(255,255,255,' + (0.15 + 0.6 * s) + ')'; c.lineWidth = 3 + 5 * s; c.stroke(); }
+    if (hot) { c.strokeStyle = (s >= BPH.SCAR_RED ? 'rgba(255,77,109,' : 'rgba(255,209,102,') + (0.3 + 0.6 * pul) + ')'; c.lineWidth = 2.5; c.setLineDash([8, 7]); c.lineDashOffset = -t * 26; c.beginPath(); c.ellipse(nx, Wl.cy, 58, Wl.ry * 0.74, 0, 0, TAU); c.stroke(); c.setLineDash([]); }
+  }
+  for (i = 0; i < B.lobes.length; i++) {   // capsule fibers: concentric pale arcs, like tree rings, revealed from the outside in
+    var L = B.lobes[i]; if (L.fib <= 0.01) continue; var p = bphWallPos(L.a, -2), thin = L.seg.perf;
+    for (j = 0; j < 4; j++) { var al = clamp(L.fib * 4 - j, 0, 1) * (L.done ? 0.9 : 0.6); if (al <= 0.01) continue; c.strokeStyle = thin > 0.6 ? 'rgba(255,170,150,' + al + ')' : 'rgba(250,232,205,' + al + ')'; c.lineWidth = 3; c.beginPath(); c.arc(p.x, p.y, L.r0 * (1.16 - 0.24 * j), 0, TAU); c.stroke(); }
+  }
+  c.restore();
+}
+/* the hoser's red-out: everything past ~120 px of the surgeon goes red. Telegraphs and the bleeder itself stay readable. */
+function drawBphFog(c) {
+  var B = G.boss; if (!B || B.dead || !(B.fogA > 0.01) || !P) return;
+  var rad = bphFogR(), g = c.createRadialGradient(P.x, P.y, rad * 0.72, P.x, P.y, rad * 1.08), hz = B.hoser;
+  g.addColorStop(0, 'rgba(120,6,22,0)'); g.addColorStop(1, 'rgba(120,6,22,' + (0.97 * B.fogA) + ')'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.save(); c.beginPath(); c.rect(0, 0, W, H); c.arc(P.x, P.y, rad, 0, TAU, true); c.clip('evenodd'); drawTeles(c); c.restore();
+  if (hz && hz.e && !hz.e.dead) { var e = hz.e, pul = 0.5 + 0.5 * Math.sin(G.realTime * 10); c.strokeStyle = 'rgba(255,255,255,' + (0.5 + 0.4 * pul) + ')'; c.lineWidth = 2.5; c.beginPath(); c.arc(e.x, e.y, 20 + 5 * pul, 0, TAU); c.stroke(); c.globalAlpha = B.fogA; text(c, 'BLEEDER', e.x, e.y + 34, 9, '#fff', 'center', 900); c.globalAlpha = 1; }
+}
+/* the section slide: the finished room scrolls away to the left behind you (a snapshot, darkening), the next one comes in
+   from the right, and the surgeon walks across to where the scope now sits */
+function drawBphSlide(c, sl) {
+  var k = clamp(sl.t / sl.dur, 0, 1), es = k * k * (3 - 2 * k), dx = W * es, px = P.x, py = P.y;
+  c.fillStyle = '#070b10'; c.fillRect(-30, -30, W + 60, H + 60);
+  if (sl.snap) { c.drawImage(sl.snap, -dx, 0, W, H); c.fillStyle = 'rgba(10,4,8,' + (0.6 * es) + ')'; c.fillRect(-dx, 0, W, H); }
+  c.save(); c.translate(W - dx, 0); G.hidePlayer = true; drawWorld(c); G.hidePlayer = false; c.restore();
+  P.x = lerp(sl.px, px, es); P.y = lerp(sl.py, py, es); c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(P.x, P.y + 17.5, 14, 4.6, 0, 0, TAU); c.fill(); drawPlayer(c); P.x = px; P.y = py;
+}
+/* HUD: the corner panel (name, section, the Qmax gauge with its 20 ml/s line and a stream that thickens, the hint, the
+   retention / scar / irrigant meters) and the vertical strip on the right (the urethra in three segments, a scope marker,
+   a progress ring per section) */
+function drawBphStream(c, x, y, q) {
+  var k = clamp((q - BPH.Q0) / (BPH.WIN - BPH.Q0), 0, 1), t = G.realTime, w = 1.2 + 5.5 * k, len = 12 + 24 * k, i;
+  c.lineCap = 'round'; c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + len * 0.65, y - 3 - 5 * k, x + len, y + 13);
+  if (k < 0.3) { c.setLineDash([3, 6]); c.lineDashOffset = -t * 22; } else { c.strokeStyle = OUTLINE; c.lineWidth = w + 2.5; c.stroke(); }
+  c.strokeStyle = '#ffe98a'; c.lineWidth = w; c.stroke(); c.setLineDash([]);
+  if (k >= 0.3) { c.fillStyle = '#ffe98a'; for (i = 0; i < 3; i++) { var ph = (t * 3 + i / 3) % 1; c.globalAlpha = 1 - ph; c.beginPath(); c.arc(x + len + (i - 1) * 5 * ph * 2, y + 13 - 6 * Math.sin(ph * Math.PI), 1.2 + k, 0, TAU); c.fill(); } c.globalAlpha = 1; }
+  c.fillStyle = '#9fb6c9'; roundRect(c, x - 8, y - 3.5, 9, 7, 2); c.fill(); outline(c, 1.5);
+}
+function drawBphPanel(c, B) {
+  var x = 18, y = 66, bw = 126, sec = BPH.SEC[B.sec], q = B.qShown, t = G.realTime, Wl = G.wall, i;
+  text(c, B.name, x, y, 13, '#ffd93b', 'left', 900); text(c, 'SECTION ' + B.sec + ' / 3 · ' + sec.name, x, y + 13, 9, '#ffe9a8', 'left', 800);
+  y += 25;
+  c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, x - 1, y - 1, bw + 2, 11, 4); c.fill();
+  c.fillStyle = B.bnc ? '#cfcabd' : '#6fd3ff'; roundRect(c, x, y, Math.max(3, bw * clamp(q / BPH.TOP, 0, 1)), 9, 3); c.fill();
+  c.fillStyle = '#7dffb0'; c.fillRect(x + bw * BPH.WIN / BPH.TOP - 1, y - 3, 2, 15);                                                     // the win line
+  if (B.bnc) { c.fillStyle = Math.floor(t * 6) % 2 ? '#fff' : '#ff4d6d'; c.fillRect(x + bw * BPH.WIN * BPH.CAP / BPH.TOP - 1.5, y - 3, 3, 15); }   // the contracture's cap
+  text(c, 'Qmax ' + q.toFixed(1) + ' / ' + BPH.WIN + ' ml/s', x + bw + 8, y + 5, 10, B.bnc ? '#ff8fa3' : '#bfefff', 'left', 900);
+  drawBphStream(c, x + bw + 124, y, q);
+  y += 19;
+  var al = Wl && Wl.alert, lines = (al ? al.text + '|' + al.sub : B.hint || '').split('|'), hc = al ? al.color : '#ffd166';
+  for (i = 0; i < lines.length && i < 2; i++) if (lines[i]) text(c, lines[i], x, y + i * 11, i === 0 ? 10 : 9, i === 0 ? hc : '#e8d9a8', 'left', i === 0 ? 900 : 700);
+  y += 23;
+  var rows = [];
+  if (B.sec === 1 && B.valve) rows.push(['RETENTION', B.ret, B.ret > 0.8 ? (Math.floor(t * 6) % 2 ? '#fff' : '#ff4d6d') : '#7ad7ff']);
+  if (B.bnc || B.scar > 0.02) rows.push([B.bnc ? 'CONTRACTURE' : 'NECK SCAR', B.bnc ? 1 : B.scar, B.bnc || B.scar >= BPH.SCAR_RED ? '#ff4d6d' : B.scar >= BPH.SCAR_WARN ? '#ffd166' : '#cfcabd']);
+  if (Wl && Wl.distension > 0.03) rows.push(['IRRIGANT', Wl.distension, Wl.distension >= PERF.DISTEND_AT ? '#ff8f6b' : '#7ad7ff']);
+  for (i = 0; i < rows.length; i++) { c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, x - 1, y - 1, 72, 8, 3); c.fill(); c.fillStyle = rows[i][2]; c.fillRect(x, y, 70 * clamp(rows[i][1], 0, 1), 6); text(c, rows[i][0], x + 78, y + 3, 8, rows[i][2], 'left', 900); y += 11; }
+}
+function drawBphStrip(c, B) {
+  var x = W - 30, y0 = 112, h = 40, i, t = G.realTime, sl = B.slide, pos = sl ? sl.from + (function (k) { return k * k * (3 - 2 * k); })(clamp(sl.t / sl.dur, 0, 1)) : B.sec;
+  text(c, 'BLADDER', x, y0 - 9, 7, '#8fa6b8', 'center', 800);
+  for (i = 1; i <= 3; i++) {
+    var yy = y0 + (i - 1) * h, done = i < B.sec, cur = i === B.sec, prog = done ? 1 : cur ? B.secProg : 0, cy = yy + h / 2 - 2;
+    c.fillStyle = done ? '#4a1a26' : cur ? '#ffd0c4' : '#b08a86'; roundRect(c, x - 9, yy, 18, h - 4, 6); c.fill(); outline(c, 2.5);
+    if (done) { c.strokeStyle = 'rgba(250,232,205,0.7)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - 5, cy - 6); c.lineTo(x + 5, cy - 6); c.moveTo(x - 5, cy); c.lineTo(x + 5, cy); c.moveTo(x - 5, cy + 6); c.lineTo(x + 5, cy + 6); c.stroke(); }
+    c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 5; c.beginPath(); c.arc(x - 25, cy, 8, 0, TAU); c.stroke();
+    c.strokeStyle = done ? '#7dffb0' : '#ffd166'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.arc(x - 25, cy, 8, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0.003, prog)); c.stroke();
+    text(c, String(i), x - 25, cy, 8, cur ? '#fff' : '#8fa6b8', 'center', 900);
+  }
+  var my = y0 + (pos - 1) * h + h / 2 - 2; c.fillStyle = '#38e8ff'; c.beginPath(); c.moveTo(x + 11, my); c.lineTo(x + 21, my - 6); c.lineTo(x + 21, my + 6); c.closePath(); c.fill(); outline(c, 2);   // the scope
+  text(c, 'APEX', x, y0 + 3 * h + 5, 7, '#8fa6b8', 'center', 800);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §15 RENDERING — dark clinical teal arena, saturated monsters, class-coloured player weapons
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var PAL = { wallOuter: '#070e14', wall: '#172836', wallEdge: '#2a4152', floor: '#0f1d27', tile: 'rgba(255,255,255,0.03)', tileDark: 'rgba(0,0,0,0.14)' };
@@ -4965,12 +5687,12 @@ function drawObstacle(c, o) {
     if (o.r < 12) { c.fillStyle = '#5a7a90'; c.beginPath(); c.arc(o.x, o.y - hh, o.r * 0.5, 0, TAU); c.fill(); }
   }
 }
-var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'], flood: ['rgba(255,214,120,0.26)', 'rgba(255,236,170,0.6)'], toxin: ['rgba(120,170,60,0.32)', 'rgba(184,255,90,0.6)'] };
+var HAZ_COL = { saline: ['rgba(90,170,220,0.22)', 'rgba(120,200,255,0.5)'], slime: ['rgba(140,90,210,0.24)', 'rgba(190,140,255,0.45)'], goo: ['rgba(80,200,110,0.32)', 'rgba(124,242,154,0.6)'], sticky: ['rgba(240,170,70,0.3)', 'rgba(255,210,120,0.5)'], water: ['rgba(120,190,240,0.2)', 'rgba(170,220,255,0.45)'], blood: ['rgba(170,30,50,0.4)', 'rgba(200,50,70,0.5)'], burn: ['rgba(255,120,40,0.3)', 'rgba(255,180,80,0.7)'], biofilm: ['rgba(60,170,120,0.25)', 'rgba(110,230,170,0.5)'], cloud: ['rgba(170,90,230,0.3)', 'rgba(210,150,255,0.6)'], pus: ['rgba(212,255,90,0.3)', 'rgba(235,255,150,0.6)'], flood: ['rgba(255,214,120,0.26)', 'rgba(255,236,170,0.6)'], toxin: ['rgba(120,170,60,0.32)', 'rgba(184,255,90,0.6)'], urine: ['rgba(240,214,70,0.34)', 'rgba(255,238,130,0.65)'] };
 function drawHazards(c) {
   for (var i = 0; i < G.decals.length; i++) { var d = G.decals[i]; c.globalAlpha = Math.min(1, d.t / 3); c.fillStyle = d.color; c.beginPath(); c.ellipse(d.x, d.y, d.r, d.r * 0.7, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
   for (var k = 0; k < G.hazards.length; k++) {
-    var h = G.hazards[k], col = HAZ_COL[h.kind] || HAZ_COL.goo, fade = h.t === Infinity ? 1 : Math.min(1, h.t / 0.8);
+    var h = G.hazards[k], col = (h.urine ? HAZ_COL.urine : HAZ_COL[h.kind]) || HAZ_COL.goo, fade = h.t === Infinity ? 1 : Math.min(1, h.t / 0.8);
     c.save(); c.translate(h.x, h.y); c.globalAlpha = fade * 0.9; c.scale(1, 0.72);
     c.fillStyle = col[0]; blobPath(c, h.r, h.ph, 3, 0.05); c.fill(); c.globalAlpha = fade * 0.45; c.strokeStyle = col[1]; c.lineWidth = 1.5; c.stroke(); c.globalAlpha = fade * 0.9;
     if (h.kind === 'saline') { c.fillStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.ellipse(-h.r * 0.3, -h.r * 0.3, h.r * 0.25, h.r * 0.12, -0.5, 0, TAU); c.fill(); }
@@ -5079,7 +5801,7 @@ function drawEnemy(c, e) {
   // Dropper resistance pip: this microbe type has learned to shrug off the vial (10% per drop, max 60%, this room only)
   var dres = e.family === 'MICROBE' && G.dropRes ? (G.dropRes[e.id] || 0) : 0;
   if (dres > 0) { c.save(); c.translate(e.x + e.r * 0.85 + 6, top - 12); c.fillStyle = '#4a1f6e'; regPoly(c, 6.5, 6, G.realTime * 0.6); c.fill(); c.strokeStyle = '#c45cff'; c.lineWidth = 1.5; c.stroke(); c.fillStyle = '#fff'; c.font = '900 8px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('R', 0, 0.5); c.strokeStyle = '#ff6bff'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, 9.5, -Math.PI / 2, -Math.PI / 2 + TAU * (dres / 0.6)); c.stroke(); c.restore(); }
-  if (!e.boss && !e.def.flat && !e.def.isStump && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
+  if (!e.boss && !e.def.flat && !e.def.isStump && !e.def.noBar && (e.hp < e.maxHp || e.isArm || e.elite || e.def.miniBoss || e.r >= 14)) {
     var bw = Math.max(30, e.r * 1.7), bx = e.x - bw / 2, by = top - 3, wk = e.wk || (e.wk = enemyWeakness(e.def));
     c.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(c, bx - 1, by - 1, bw + 2, 6, 3); c.fill();
     c.fillStyle = e.hp / e.maxHp > 0.5 ? '#7dffb0' : e.hp / e.maxHp > 0.25 ? '#ffd166' : '#ff6b8a'; c.fillRect(bx, by, bw * clamp(e.hp / e.maxHp, 0, 1), 4);
@@ -5155,6 +5877,8 @@ function drawPlayer(c) {
   // near arm: a white sleeve reaching to the hand on the tool (drawn below, in room space)
   if (!rolling) { c.beginPath(); c.moveTo(f * 6.5, -3.5); c.lineTo(Math.cos(P.aim) * 12 / PLAYER_SCALE, (Math.sin(P.aim) * 12 - bob * 0.5) / PLAYER_SCALE); tube(c, null, 4.2, COAT, 1.5); }
   if (stag) { c.fillStyle = '#ffe066'; for (i = 0; i < 3; i++) { var sa = G.realTime * 7 + i * 2.1; c.save(); c.translate(hx + Math.cos(sa) * 12, hy - 15 + Math.sin(sa) * 3.5); starPath(c, 3.4, 1.4, 5, sa); c.fill(); outline(c, 1.2); c.restore(); } }
+  if (P.tur > 0) { c.fillStyle = '#7ad7ff'; c.font = '900 11px ' + FONT; c.textAlign = 'center'; for (i = 0; i < 2; i++) c.fillText('?', hx + Math.cos(G.realTime * 6 + i * 3.1) * 11, hy - 16 + Math.sin(G.realTime * 6 + i * 3.1) * 3); }   // TUR syndrome: confused
+  if (G.incont && !G.incont.fixed && !rolling) { c.fillStyle = '#ffe14a'; for (i = 0; i < 2; i++) { var dk = (G.realTime * 1.6 + i * 0.5) % 1; c.globalAlpha = 1 - dk * 0.6; c.beginPath(); c.arc(-2 + i * 4, 4 + dk * 12, 1.8 - dk * 0.5, 0, TAU); c.fill(); } c.globalAlpha = 1; }   // the incontinence curse: a visible drip
   c.restore();
   // hand + tool
   if (cur && !rolling) {
@@ -5428,9 +6152,10 @@ function drawHUD(c) {
   var ds = detailSlot(); if (ds >= 0 && G.weapons[ds]) drawWeaponDetail(c, G.weapons[ds], rs[ds]);
   drawUltMeter(c, rs);
   // boss bar
-  if (G.boss && !G.boss.dead && G.introT <= 0) {
+  if (G.boss && !G.boss.dead && (G.introT <= 0 || G.boss.slide)) {
     var B = G.boss, bw = 420, bx2 = W / 2 - bw / 2, by2 = 72, bf = clamp(B.body.hp / B.body.maxHp, 0, 1);
     if (B.kind === 'mibc') drawMibcPanel(c, B);   // its own corner panel: three wall layers, top to bottom
+    else if (B.kind === 'bph') { drawBphPanel(c, B); drawBphStrip(c, B); }   // a flow meter, not a health bar, and the three-section strip
     else {
       text(c, B.name + ' — ' + B.phases[B.phase - 1], bx2, by2 - 11, 11, B.kind === 'staghorn' ? '#38e8ff' : '#ff8fa3', 'left', 900);
       c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 - 2, by2 - 2, bw + 4, 16, 6); c.fill();
@@ -5438,7 +6163,7 @@ function drawHUD(c) {
       if (B.body.shield > 0) { c.fillStyle = 'rgba(124,242,154,0.6)'; roundRect(c, bx2, by2 + 13, bw * B.body.shield, 3, 1.5); c.fill(); }
       c.fillStyle = '#fff'; c.fillRect(bx2 + bw * 0.66 - 1, by2 - 4, 2, 20); c.fillRect(bx2 + bw * 0.33 - 1, by2 - 4, 2, 20);
     }
-    if (B.hint && B.kind !== 'mibc') text(c, B.hint, W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
+    if (B.hint && B.kind !== 'mibc' && B.kind !== 'bph') text(c, B.hint, W / 2, by2 + 26, 10, '#ffd166', 'center', 800);
     if (B.sepsis) { var sk = clamp(B.sepsisT / B.sepsisMax, 0, 1); c.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(c, bx2 + 80, by2 + 36, bw - 160, 10, 4); c.fill(); c.fillStyle = sk > 0.3 ? '#ff4d6d' : (Math.floor(G.realTime * 6) % 2 ? '#fff' : '#ff4d6d'); roundRect(c, bx2 + 80, by2 + 36, (bw - 160) * sk, 10, 4); c.fill(); text(c, 'SEPSIS — source control in ' + fmtTime(Math.max(0, B.sepsisT)), W / 2, by2 + 56, 12, '#ff6b8a', 'center', 900); }
   }
   // tutorial prompts
@@ -5451,10 +6176,12 @@ function drawHUD(c) {
     else msg = 'Match the bright pip over a monster to your weapon class. Clear the room!';
     c.fillStyle = 'rgba(0,0,0,0.55)'; roundRect(c, W / 2 - 230, 398, 460, 30, 10); c.fill(); text(c, msg, W / 2, 413, 13, '#fff', 'center', 800, false);
   }
+  // notice: a one-line strip (landmark warnings, the Giant TURP's cautery and bleeder calls). Quieter than a banner.
+  if (G.notice) { var nt = G.notice, nk = nt.t / nt.dur, na = nk < 0.08 ? nk / 0.08 : nk > 0.8 ? (1 - nk) / 0.2 : 1; c.globalAlpha = na; c.font = '900 13px ' + FONT; var nw = c.measureText(nt.text).width + 28; c.fillStyle = 'rgba(6,12,18,0.85)'; roundRect(c, W / 2 - nw / 2, 106, nw, 24, 9); c.fill(); c.strokeStyle = nt.color; c.lineWidth = 2; c.stroke(); text(c, nt.text, W / 2, 118, 13, nt.color, 'center', 900, false); c.globalAlpha = 1; }
   // banner
   if (G.banner) { var bn2 = G.banner, k = bn2.t / bn2.dur, a = k < 0.15 ? k / 0.15 : k > 0.8 ? (1 - k) / 0.2 : 1, pop = k < 0.15 ? 1.4 - 0.4 * (k / 0.15) : 1; c.globalAlpha = a; text(c, bn2.text, W / 2, 150, Math.round(44 * pop), '#fff', 'center', 900); if (bn2.sub) text(c, bn2.sub, W / 2, 186, 16, '#ffd166', 'center', 800); c.globalAlpha = 1; }
   // boss intro card
-  if (G.introT > 0 && G.boss) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = bossColor(G.boss); c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, G.boss.name, W / 2, H / 2 - 12, Math.round((G.boss.name.length > 18 ? 42 : 50) * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, G.boss.sub, W / 2, H / 2 + 34, 16, G.boss.kind === 'staghorn' ? '#38e8ff' : '#ff8fa3', 'center', 800); c.globalAlpha = 1; }
+  if (G.introT > 0 && G.boss && !G.boss.slide) { var ik = 1 - G.introT / 2.6, ia = ik < 0.1 ? ik / 0.1 : ik > 0.85 ? (1 - ik) / 0.15 : 1; c.globalAlpha = ia * 0.85; c.fillStyle = '#07111a'; c.fillRect(0, H / 2 - 70, W, 140); c.globalAlpha = ia; c.fillStyle = bossColor(G.boss); c.fillRect(0, H / 2 - 70, W, 4); c.fillRect(0, H / 2 + 66, W, 4); text(c, G.boss.name, W / 2, H / 2 - 12, Math.round((G.boss.name.length > 18 ? 42 : 50) * (1 + (1 - Math.min(1, ik * 3)) * 0.5)), '#fff', 'center', 900); text(c, G.boss.sub, W / 2, H / 2 + 34, 16, G.boss.kind === 'staghorn' ? '#38e8ff' : G.boss.kind === 'bph' ? '#ffe9a8' : '#ff8fa3', 'center', 800); c.globalAlpha = 1; }
   // input mode hint (desktop) / fps
   if (DEBUG) { text(c, 'FPS ' + G.fps + ' · E ' + G.enemies.length + ' · B ' + G.bullets.length + ' · P ' + G.parts.length + ' · seed ' + SEED + (G.spawner ? ' · SPAWNER: 1-9,0 → ' + SPAWN_KEYS.join(',') : ' · ` spawner'), 16, H - 10, 10, '#0f0', 'left', 800); }
 }
@@ -5491,16 +6218,12 @@ var DEPTH = [];
 function depthCmp(p, q) { return p._dy - q._dy; }
 function drawShadows(c) {
   var es = G.enemies, i; c.fillStyle = 'rgba(0,0,0,0.3)';
-  for (i = 0; i < es.length; i++) { var e = es[i]; if (e.dead || e.spawnT > 0 || e.def.flat || (e.boss && !e.def.depth) || e.isArm || e.def.isLobe || e.def.isStump) continue; var k = 1 - Math.min(0.5, enemyLift(e) / 70); c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95 * k, e.r * 0.3 * k, 0, 0, TAU); c.fill(); }
-  c.beginPath(); c.ellipse(P.x, P.y + 17.5, P.roll > 0 ? 11 : 14, 4.6, 0, 0, TAU); c.fill();
+  for (i = 0; i < es.length; i++) { var e = es[i]; if (e.dead || e.spawnT > 0 || e.def.flat || e.special || (e.boss && !e.def.depth) || e.isArm || e.def.isLobe || e.def.isStump) continue; var k = 1 - Math.min(0.5, enemyLift(e) / 70); c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.86, e.r * 0.95 * k, e.r * 0.3 * k, 0, 0, TAU); c.fill(); }
+  if (!G.hidePlayer) { c.beginPath(); c.ellipse(P.x, P.y + 17.5, P.roll > 0 ? 11 : 14, 4.6, 0, 0, TAU); c.fill(); }
   for (i = 0; i < G.pickups.length; i++) { var pk = G.pickups[i]; c.beginPath(); c.ellipse(pk.x, pk.y + 9, 6, 2.2, 0, 0, TAU); c.fill(); }
 }
-function render(dtReal) {
-  var c = ctx; c.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
-  if (!G.running || !P) { drawTitleBg(c, dtReal); return; }
-  c.save();
-  c.translate(G.shakeX, G.shakeY);
-  if (G.punch > 0) { var k = 1 + G.punch * 0.08; c.translate(W / 2, H / 2); c.scale(k, k); c.translate(-W / 2, -H / 2); }
+// everything in room space (no camera shake, no HUD). G.hidePlayer leaves the surgeon out (the section slide draws them itself).
+function drawWorld(c) {
   drawFloor(c); drawHazards(c); drawHeadlamp(c); drawTeles(c); if (G.wall) drawWallUnder(c); drawObstacles(c); drawRewards(c); drawDoors(c); drawSeedsTurrets(c); drawPickups(c);
   if (G.boss) drawBossUnder(c);
   var es = G.enemies, i;
@@ -5516,10 +6239,19 @@ function render(dtReal) {
   var obs = G.obstacles; for (i = 0; i < obs.length; i++) { var ob = obs[i]; if (ob.clot || ob.stricture || ob.dead) continue; ob._dy = ob.type === 'rect' ? ob.y + ob.h : ob.y + ob.r; dl.push(ob); }
   P._dy = P.y + 14; dl.push(P);
   dl.sort(depthCmp);
-  for (i = 0; i < dl.length; i++) { var it = dl[i]; if (it === P) drawPlayer(c); else if (it.def) drawEnemy(c, it); else drawObstacle(c, it); }
-  drawUltArms(c); drawFields(c); drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
+  for (i = 0; i < dl.length; i++) { var it = dl[i]; if (it === P) { if (!G.hidePlayer) drawPlayer(c); } else if (it.def) drawEnemy(c, it); else drawObstacle(c, it); }
+  drawUltArms(c); drawFields(c); if (!G.hidePlayer) drawWeaponFx(c); drawBullets(c); drawParticles(c); drawTexts(c);
   if (DEBUG) { c.strokeStyle = 'rgba(0,255,0,0.6)'; c.lineWidth = 1; for (i = 0; i < es.length; i++) { c.beginPath(); c.arc(es[i].x, es[i].y, es[i].r, 0, TAU); c.stroke(); } c.strokeStyle = 'rgba(255,0,0,0.6)'; for (i = 0; i < G.bullets.length; i++) { c.beginPath(); c.arc(G.bullets[i].x, G.bullets[i].y, G.bullets[i].r, 0, TAU); c.stroke(); } }
+}
+function render(dtReal) {
+  var c = ctx; c.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
+  if (!G.running || !P) { drawTitleBg(c, dtReal); return; }
+  c.save();
+  c.translate(G.shakeX, G.shakeY);
+  if (G.punch > 0) { var k = 1 + G.punch * 0.08; c.translate(W / 2, H / 2); c.scale(k, k); c.translate(-W / 2, -H / 2); }
+  if (G.boss && G.boss.slide) drawBphSlide(c, G.boss.slide); else drawWorld(c);
   c.restore();
+  if (G.boss && G.boss.kind === 'bph') drawBphFog(c);   // the hoser's red-out sits over the room, under the HUD
   drawVignette(c); drawHUD(c); drawTouch(c);
   if (G.transition) { var tr = G.transition, h = tr.dur / 2, a = tr.t < h ? tr.t / h : 1 - (tr.t - h) / h; c.fillStyle = 'rgba(4,10,16,' + clamp(a, 0, 1) + ')'; c.fillRect(0, 0, W, H); }
 }
@@ -5704,6 +6436,7 @@ function openRepScreen(reward) {
       if (extra.length) reward.sample = { id: extra[0], drawback: rnd() < 0.5 ? 'hp' : 'heat', taken: false };
     }
   }
+  if (sphincterCursed() && !G.incont.rep) { G.incont.rep = true; reward.aus = true; reward.pitched = false; reward.pitch = 'I’ve got just the thing for that. Artificial sphincter: a cuff, a pump, a little reservoir. For you? ' + SPHINCTER.REP_PRICE + ' RVU. Half off.'; }   // the first rep you meet while cursed
   if (!reward.pitch) reward.pitch = pick(repById(reward.rep).pitches);
   openOverlay('mod'); renderRepHeader();
   if (reward.pitched) showModChoice(); else showPitch();
@@ -5737,6 +6470,14 @@ function renderModCards() {
   if (smd && smw && modAvailable(smw, smd)) { // the free sample: an extra mod now (maybe for another instrument), a one-room drawback
     var sm = repRef.sample, sc = modCard(sm.id, function (id) { giveMod(id); applySampleDrawback(sm.drawback); sm.taken = true; renderModCards(); }, 'TAKE THE FREE SAMPLE');
     sc.className += ' sample'; sc.insertBefore(el('div', '', '<span class="tag capstone">FREE SAMPLE</span> <span class="tag">' + esc(WEAPONS[smd.weapon].name) + '</span> <span class="tag">this room: ' + (sm.drawback === 'hp' ? '−10% max HP' : '+10% heat generation') + '</span>'), sc.children[sc.children.length - 1]); wrap.appendChild(sc);
+  }
+  if (repRef.aus && sphincterCursed()) {   // the discount Artificial Sphincter: its own purchase, it does not use up the mod pick
+    var ap = SPHINCTER.REP_PRICE, ac = el('button', 'card sample'); ac.type = 'button'; ac.id = 'ausCard';
+    ac.appendChild(el('h4', '', 'Artificial Sphincter')); ac.appendChild(el('div', '', '<span class="tag capstone">REP DISCOUNT</span> <span class="tag">' + ap + ' RVU</span>'));
+    ac.appendChild(el('div', 'desc', 'A cuff, a pump and a reservoir. Removes the incontinence curse. It does not use up your mod pick.'));
+    ac.appendChild(el('div', '', '<span class="btn small primary" style="width:100%">' + (G.rvu >= ap ? 'BUY · ' + ap + ' RVU' : 'NOT ENOUGH RVU') + '</span>'));
+    ac.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (G.rvu < ap || !sphincterCursed()) { Snd.sfx('tink'); return; } G.rvu -= ap; cureSphincter('rep'); renderModCards(); });
+    wrap.appendChild(ac);
   }
   $('btnFreePen').textContent = G.pens ? 'FREE SWAG: ' + G.pens : 'TAKE A FREE PEN';
   var tgt = repRerollTarget();
@@ -5776,7 +6517,8 @@ var shopRef = null;
 function openShop(reward) {
   shopRef = reward;
   if (!reward.stock) { var mul = 1 + G.roomIndex * 0.08, bn = rollBoons(1); reward.stock = []; if (bn.length) reward.stock.push({ kind: 'boon', id: bn[0], price: Math.round(45 * mul), name: BOONS[bn[0]].name, sub: BOONS[bn[0]].desc }); reward.stock.push({ kind: 'iv', price: Math.round(30 * mul), name: 'IV bag', sub: 'Heal 25 HP.' }); reward.stock.push({ kind: 'heart', price: Math.round(60 * mul), name: 'Heart container', sub: '+10 max HP.' }); var wd = rollWeaponDrop(); reward.stock.push({ kind: 'weapon', item: wd, price: Math.round(50 * mul), name: WEAPONS[wd.id].name + ' (' + wd.rarity + ')', sub: WEAPONS[wd.id].desc });
-    var rw2 = pickRepWeapon(); if (rw2) { var mo = rollModOffer(rw2, 1, null, true); if (mo.length) reward.stock.push({ kind: 'mod', id: mo[0], price: Math.round(55 * mul), name: 'Rep sample: ' + MODS[mo[0]].name, sub: WEAPONS[rw2.id].name + ' mod (' + BRANCHES[MODS[mo[0]].branch].name + ') · ' + MODS[mo[0]].desc }); } }
+    var rw2 = pickRepWeapon(); if (rw2) { var mo = rollModOffer(rw2, 1, null, true); if (mo.length) reward.stock.push({ kind: 'mod', id: mo[0], price: Math.round(55 * mul), name: 'Rep sample: ' + MODS[mo[0]].name, sub: WEAPONS[rw2.id].name + ' mod (' + BRANCHES[MODS[mo[0]].branch].name + ') · ' + MODS[mo[0]].desc }); }
+    if (sphincterCursed() && rnd() < SPHINCTER.SHOP_CHANCE) reward.stock.push({ kind: 'aus', price: Math.round(SPHINCTER.PRICE * mul), name: 'Artificial Sphincter', sub: 'RARE. A cuff, a pump and a reservoir: removes the incontinence curse.' }); }   // rare, dear, and only stocked while you leak
   openOverlay('shop'); $('shopTalk').textContent = SHOP_TALK[Math.floor(vr() * SHOP_TALK.length)]; renderShop();
 }
 function renderShop() {
@@ -5788,6 +6530,7 @@ function renderShop() {
     b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (it.sold || G.rvu < it.price) return; G.rvu -= it.price; it.sold = true; Snd.sfx('buy');
       if (it.kind === 'boon') { if (abxCapBlocks(it.id) || it.id === 'grading') { tryTakeBoon(it.id, function () { openOverlay('shop'); renderShop(); }, function () { G.rvu += it.price; it.sold = false; openOverlay('shop'); renderShop(); }); return; } giveBoon(it.id); }
       else if (it.kind === 'iv') healPlayer(25); else if (it.kind === 'heart') { P.maxHp += 10; healPlayer(10); }
+      else if (it.kind === 'aus') cureSphincter('shop');
       else if (it.kind === 'mod') { if (!giveMod(it.id)) { G.rvu += it.price; it.sold = false; Snd.sfx('tink'); } }
       else if (it.kind === 'weapon') { var owned = false; for (var k = 0; k < G.weapons.length; k++) if (G.weapons[k].id === it.item.id) owned = true; if (owned || WEAPONS[it.item.id].ultimate || G.weapons.length < G.maxWeapons) { giveWeapon(it.item.id, it.item.rarity); } else { openWeaponScreen({ item: it.item, paid: true }); return; } }
       renderShop(); });
@@ -5798,9 +6541,11 @@ function renderShop() {
 function openSummary(won, xp, newLevel, isBest) {
   var st = G.stats; openOverlay('summary');
   $('sumTitle').textContent = won ? 'DISCHARGED!' : 'CODE BLUE'; $('sumTitle').style.color = won ? '#5df07a' : '#ff4d6d';
-  $('sumSub').textContent = won ? (WIN_TEXT[G.bossId] || WIN_TEXT.staghorn)[1] : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
+  $('sumSub').textContent = won ? winLine() : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
   var tiles = [['Rooms cleared', st.rooms + ' / 9'], ['Kills', st.kills], ['RVU earned', st.rvu], ['Time', fmtTime(G.time)], ['Super-effective hits', st.superHits], ['Swaps / rolls', st.swaps + ' / ' + st.rolls], ['Damage taken', Math.round(st.dmgTaken)]];
   if (G.wall) tiles.push(['Perforations / plugged', G.wall.perforations + ' / ' + G.wall.plugs]);
+  if (G.bossId === 'bph' && won) tiles.push(['Qmax', Math.round(G.finalQ || BPH.WIN) + ' ml/s']);
+  if (G.incont) tiles.push(['Continence', G.incont.fixed ? 'restored' : 'lost']);
   if (G.pens) tiles.push(['Free swag (does nothing)', G.pens]); if (st.grades) tiles.push(['Gleason grades', st.grades]); if (st.collateral) tiles.push(['Collateral rooms', st.collateral]); if (st.deesc) tiles.push(['De-escalations', st.deesc]);
   var html = ''; for (var i = 0; i < tiles.length; i++) html += '<div><small>' + tiles[i][0] + '</small><b>' + tiles[i][1] + '</b></div>';
   for (var c = 0; c < CLASS_LIST.length; c++) html += '<div style="border-left:4px solid ' + CLASSES[CLASS_LIST[c]].color + '"><small>' + CLASSES[CLASS_LIST[c]].name + ' damage</small><b>' + Math.round(st.dmg[CLASS_LIST[c]] || 0) + '</b></div>';
@@ -5821,11 +6566,12 @@ function update(dt) {
   if (G.transition) { updateTransition(dt); clearEdges(); return; }
   G.introT = Math.max(0, G.introT - dt);
   if (G.banner) { G.banner.t += dt; if (G.banner.t >= G.banner.dur) G.banner = null; }
+  if (G.notice) { G.notice.t += dt; if (G.notice.t >= G.notice.dur) G.notice = null; }
   if (DEBUG) { if (takeEdge('spawnerToggle')) G.spawner = !G.spawner; if (G.spawner) for (var sk = 0; sk < 10; sk++) if (takeEdge('slot' + ((sk + 1) % 10))) spawnEnemy(SPAWN_KEYS[sk], Input.mode === 'kb' ? Input.mx : rr(300, 800), Input.mode === 'kb' ? Input.my : rr(100, 440), {}); }
   updatePlayer(dt); updateWeapons(dt); updateUlt(dt);
   var es = G.enemies; for (var i = 0; i < es.length; i++) if (!es[i].dead) updateEnemy(es[i], dt);
   for (var j = es.length - 1; j >= 0; j--) if (es[j].dead) es.splice(j, 1);
-  updateBoss(dt); updateWall(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateFields(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
+  updateBoss(dt); updateLandmarks(dt); updateWall(dt); updateBullets(dt); updateParticles(dt); updateTexts(dt); updateHazards(dt); updateFields(dt); updateSeeds(dt); updatePickups(dt); updateRewards(dt); updateDirector(dt); updateDoors(dt);
   G.detailT = Math.max(0, G.detailT - dt);
   clearEdges();
 }
@@ -5905,8 +6651,10 @@ window.UroCrawl = {
   step: function (n) { n = n || 1; if (!G.running) return; for (var i = 0; i < n; i++) { if (G.over) { G.endT -= STEP; if (G.endT <= 0 && G.overlay !== 'summary') { G.timeScale = 1; finishRun(); } continue; } update(STEP); } },
   startRun: function () { if (!G.running) { META.helpSeen = true; beginRun(); } },
   selectWeapon: selectWeapon, dealDamage: dealDamage, hurtPlayer: hurtPlayer, seed: function () { return SEED; },
-  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC, STAG: STAG },
+  enemyLift: enemyLift, groundSlam: groundSlam, tuning: { BPH_SLAM: BPH_SLAM, BPH_TREMOR: BPH_TREMOR, LUNGE_GRACE: LUNGE_GRACE, LUNGE_STUN: LUNGE_STUN, STAGGER_SLOW: STAGGER_SLOW, PERF: PERF, PERF_KINDS: PERF_KINDS, MIBC: MIBC, STAG: STAG, BPH: BPH, LANDMARK: LANDMARK, SPHINCTER: SPHINCTER },
   makeWall: makeWall, wallHit: wallHit, wallPerforate: wallPerforate, wallPlug: wallPlug, wallSegAt: wallSegAt, wallPoint: wallPoint, insideArena: insideArena, rollBossId: rollBossId,
+  addLandmark: addLandmark, hitAreaDist: hitAreaDist, injureSphincter: function () { return G.running ? injureSphincter('hook') : false; }, cureSphincter: cureSphincter, sphincterCursed: sphincterCursed, leakPuddle: leakPuddle, openShop: openShop, openRepScreen: openRepScreen, winLine: winLine,
+  bph: { flow: bphFlow, fogR: bphFogR, advance: function () { var B = G.boss; if (B && B.kind === 'bph' && B.sec < 3 && !B.slide) bphSlide(B); }, hoser: function (i) { var B = G.boss; return B && B.kind === 'bph' ? bphStartHoser(B, B.lobes[i || 0], true) : null; }, scar: function (v) { var B = G.boss; if (B && B.kind === 'bph') bphScarSet(B, v); } },
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };
