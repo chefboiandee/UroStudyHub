@@ -7,6 +7,8 @@
   Standalone page: the app opens it in a frame with ?embed=1 and gets coins/XP back by postMessage
   ({type:'rush:claim', coins, xp} / {type:'rush:exit'}). Harness: tools/uro-rush.drive.mjs.
   Params: ?seed=N  ?debug (shows the keyed answer on the chart)  ?touch (force the touch UI)  ?embed=1
+  Saved:  uroRush_best (best score) · uroRush_block (the furthest of the shift's 4 blocks reached: from block 2 on, the
+          title and the debrief offer "Continue — Block N", which starts the shift at that block, at its pace, its orders unlocked)
   Keys:   WASD / arrows walk · 1-9 0 - = order · P / Esc pause · M mute · Enter / Space continue
   Touch:  drag anywhere on the map: a joystick appears under the thumb (it follows if you drag past the rim).
 -->
@@ -120,6 +122,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .alt{padding:12px 18px;border-radius:12px;border:1px solid var(--line);background:#182533;font-weight:700}
 .big:active,.alt:active{transform:translateY(2px)}
 .tiny{font-size:12px;color:var(--mute);margin-top:8px}
+/* the title's and the debrief's buttons stay pinned to the bottom of the card when its text is taller than the screen */
+.foot{position:sticky;bottom:-18px;margin:0 -22px -18px;padding:6px 22px 14px;background:linear-gradient(rgba(18,28,39,0),#121c27 16px);z-index:1}
 .pager{width:184px;margin:4px auto 14px;padding:12px;border-radius:16px;background:linear-gradient(#3d4452,#222833);box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 8px 18px rgba(0,0,0,.5);animation:buzz .12s linear 12}
 .pager .lcd{background:#a3c58f;color:#13210e;font:700 15px/1.3 ui-monospace,Menlo,monospace;border-radius:6px;padding:8px 6px;letter-spacing:.06em;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}
 .pager .lcd span{animation:blink 1s steps(1) infinite}
@@ -449,8 +453,10 @@ const G = {
   tier: 1, seen: 0, total: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, time: 0, runs: 0, pid: 0,
   rooms: [], queue: [], signT: 0, signLog: [], spawnT: 0, doc: { x: 400, y: 300, vx: 0, vy: 0, a: -Math.PI / 2, ph: 0, moving: false },
   leavers: [], parts: [], floats: [], log: [], decks: {}, deckTier: {}, used: {}, shownTier: {},
-  shake: 0, claimed: false, card: null, frozen: false, autoJoy: null, best: +(store.get('uroRush_best') || 0),
+  shake: 0, claimed: false, card: null, frozen: false, autoJoy: null, best: +(store.get('uroRush_best') || 0), startBi: 0,
 };
+// the furthest block of a shift you have reached (1..4), remembered across visits; Continue starts the next shift there
+const furthestBlock = () => Math.max(1, Math.min(TIER_OF_BLOCK.length, Math.floor(+store.get('uroRush_block')) || 1));
 const ACC = () => MODES[G.mode || 'clinic'].acc;
 const visActs = () => G.mode ? MODES[G.mode].acts.filter(a => a.wave <= G.tier) : [];
 
@@ -461,13 +467,14 @@ function planShift() {   // 4 blocks, 2+2 or 3+1 of the two settings, shuffled u
   do { seq = shuffle(base.slice()); sw = 0; for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) sw++; } while (sw < 2);
   return seq.map((m, i) => ({ mode: m, n: BLOCK_N[ri(BLOCK_N.length)], tier: TIER_OF_BLOCK[i] }));
 }
-function startShift() {
+function startShift(from) {   // from = the block to start at (1 = the whole shift, the default; Continue passes the furthest reached)
   audioInit();
   rnd = mulberry32(SEED + G.runs * 7919); G.runs++;
-  Object.assign(G, { blocks: planShift(), bi: -1, seen: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, log: [], leavers: [], parts: [], floats: [],
+  from = Math.max(1, Math.min(TIER_OF_BLOCK.length, Math.floor(+from) || 1));
+  Object.assign(G, { blocks: planShift(), bi: from - 2, startBi: from - 1, seen: 0, score: 0, streak: 0, bestStreak: 0, lives: LIVES, log: [], leavers: [], parts: [], floats: [],
     used: { clinic: new Set(), consult: new Set() }, decks: { clinic: [], consult: [] }, deckTier: { clinic: 0, consult: 0 }, shownTier: { clinic: 0, consult: 0 },
     claimed: false, mode: null, endT: 0, blockEndT: 0, time: 0, queue: [], signT: 0, signLog: [] });
-  G.total = G.blocks.reduce((s, b) => s + b.n, 0);
+  G.total = G.blocks.slice(from - 1).reduce((s, b) => s + b.n, 0);   // only the blocks this shift will play
   nextBlock();
 }
 function setMode(m) {
@@ -484,6 +491,7 @@ function setMode(m) {
 function nextBlock() {
   G.bi++; G.blockEndT = 0;
   if (G.bi >= G.blocks.length) { endShift(true); return; }
+  if (G.bi + 1 > furthestBlock()) store.set('uroRush_block', String(G.bi + 1));   // reaching a block is what counts, win or lose
   const b = G.blocks[G.bi], prev = G.mode;
   G.tier = b.tier; G.blockSpawned = 0;
   const switching = b.mode !== prev;
@@ -1153,7 +1161,7 @@ function updateHud() {
   let h = ''; for (let k = 0; k < LIVES; k++) h += k < G.lives ? '♥' : '<span class="lost">♥</span>';
   $('hearts').innerHTML = h;
   $('prog').textContent = G.seen + '/' + G.total;
-  $('blocks').innerHTML = G.blocks.map((b, i) => i < G.bi ? '<i class="done">' + MODES[b.mode].icon + '</i>' : i === G.bi ? '<i class="cur">' + MODES[b.mode].icon + '</i>' : '<i>?</i>').join('');
+  $('blocks').innerHTML = G.blocks.map((b, i) => i < G.startBi ? '<i class="done" title="Skipped (Continue)">–</i>' : i < G.bi ? '<i class="done">' + MODES[b.mode].icon + '</i>' : i === G.bi ? '<i class="cur">' + MODES[b.mode].icon + '</i>' : '<i>?</i>').join('');
   $('ordMode').textContent = G.mode ? M.name.toUpperCase() + ' ORDERS' : '';
   $('muteBtn').textContent = AUD.muted ? '🔇' : '🔊';
 }
@@ -1231,9 +1239,13 @@ function showTitle() {
     + '<li><b>Clinic and consults have different orders</b>, and you won\'t know which one comes next.</li>'
     + '<li>' + LIVES + ' ♥: a wrong order or a patient who gives up costs one.</li></ul>'
     + (G.best ? '<div class="tiny">Best shift: ' + G.best + '</div>' : '')
-    + '<div class="btns"><button class="big" id="goBtn">Start shift ▸</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>',
-    () => { on('goBtn', startShift); on('exitBtn', exitGame); });
+    + '<div class="foot"><div class="btns"><button class="big" id="goBtn">Start shift ▸</button>' + contBtn() + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>'
+    + (furthestBlock() > 1 ? '<div class="tiny">Continue starts at the furthest block you have reached, at its pace, with its orders unlocked.</div>' : '') + '</div>',
+    () => { on('goBtn', () => startShift(1)); wireCont(); on('exitBtn', exitGame); });
 }
+// "Continue — Block N": shown once you have reached block 2 of a shift
+function contBtn() { const n = furthestBlock(); return n > 1 ? '<button class="alt" id="contBtn">Continue — Block ' + n + ' of ' + TIER_OF_BLOCK.length + ' ▸</button>' : ''; }
+function wireCont() { on('contBtn', () => { hideScr(); startShift(furthestBlock()); }); }
 function showCard(cd) {
   G.state = 'card'; G.card = cd;
   const M = MODES[cd.mode];
@@ -1261,7 +1273,7 @@ function togglePause() {
     G.state = 'paused'; joyReset();
     showScr('<h2>⏸ Paused</h2><p class="sub">' + MODES[G.mode].icon + ' ' + MODES[G.mode].name + ' · ' + G.score + ' pts · ' + G.seen + '/' + G.total + ' patients</p>'
       + '<div class="btns"><button class="big" id="resBtn">Resume ▸</button></div><div class="btns"><button class="alt" id="sndBtn">Sound: ' + (AUD.muted ? 'Off' : 'On') + '</button><button class="alt" id="rstBtn">Restart shift</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>',
-      () => { on('resBtn', togglePause); on('sndBtn', () => { toggleMute(); $('sndBtn').textContent = 'Sound: ' + (AUD.muted ? 'Off' : 'On'); }); on('rstBtn', () => { hideScr(); startShift(); }); on('exitBtn', exitGame); });
+      () => { on('resBtn', togglePause); on('sndBtn', () => { toggleMute(); $('sndBtn').textContent = 'Sound: ' + (AUD.muted ? 'Off' : 'On'); }); on('rstBtn', () => { hideScr(); startShift(G.startBi + 1); }); on('exitBtn', exitGame); });
   } else if (G.state === 'paused') { hideScr(); G.state = 'play'; }
 }
 function showOver() {
@@ -1278,9 +1290,9 @@ function showOver() {
     + '<div class="stats"><span>🏥 Clinic ' + c[0] + '/' + c[1] + '</span><span>📟 Consults ' + k[0] + '/' + k[1] + '</span><span>🔥 Best streak ' + G.bestStreak + '</span></div>'
     + (EMBED ? '<div class="reward">+' + r.coins + ' 💰 · +' + r.xp + ' XP</div>' : '')
     + missHtml
-    + '<div class="btns">' + (EMBED ? '<button class="big" id="claimBtn">Claim ▸</button>' : '') + '<button class="' + (EMBED ? 'alt' : 'big') + '" id="againBtn">Play again</button>' + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>'
-    + (EMBED ? '' : '<div class="tiny">Coins and XP are claimed when you play from the UroStudyHub arcade.</div>'),
-    () => { on('claimBtn', () => { claim(); $('claimBtn').disabled = true; $('claimBtn').textContent = 'Claimed ✓'; }); on('againBtn', () => { hideScr(); startShift(); }); on('exitBtn', exitGame); });
+    + '<div class="foot"><div class="btns">' + (EMBED ? '<button class="big" id="claimBtn">Claim ▸</button>' : '') + '<button class="' + (EMBED ? 'alt' : 'big') + '" id="againBtn">Play again</button>' + contBtn() + (EMBED ? '<button class="alt" id="exitBtn">Back to arcade</button>' : '') + '</div>'
+    + (EMBED ? '' : '<div class="tiny">Coins and XP are claimed when you play from the UroStudyHub arcade.</div>') + '</div>',
+    () => { on('claimBtn', () => { claim(); $('claimBtn').disabled = true; $('claimBtn').textContent = 'Claimed ✓'; }); on('againBtn', () => { hideScr(); startShift(1); }); wireCont(); on('exitBtn', exitGame); });
 }
 
 // ── input ─────────────────────────────────────────────────────────
@@ -1327,7 +1339,7 @@ addEventListener('keydown', e => {
   else if (e.code === 'KeyM') toggleMute();
   else if (e.code === 'Enter' || e.code === 'Space') {
     if (G.state === 'card') { contCard(); e.preventDefault(); }
-    else if (G.state === 'title') { startShift(); e.preventDefault(); }
+    else if (G.state === 'title') { hideScr(); startShift(1); e.preventDefault(); }
   }
 });
 addEventListener('keyup', e => { if (KMAP[e.code]) keys[KMAP[e.code]] = false; });
@@ -1398,7 +1410,7 @@ function frame(now) {
 }
 // test hooks for tools/uro-rush.drive.mjs
 window.__rush = {
-  G, MODES, LAYOUTS, SEED, EMBED, TOUCH, selfTest, rewards, claim, order, activeRoom, startShift, contCard, togglePause, visActs,
+  G, MODES, LAYOUTS, SEED, EMBED, TOUCH, selfTest, rewards, claim, order, activeRoom, startShift, contCard, togglePause, visActs, furthestBlock,
   freeze(v) { G.frozen = v !== false; },
   step(sec, h) { h = h || 1 / 60; for (let t = 0; t < sec - 1e-9; t += h) { if (G.state === 'play') update(h); } render(); renderPanel(); return G.state; },
   teleport(i) { const r = G.L.rooms[i]; Object.assign(G.doc, { x: r.x + r.w / 2 + 40, y: r.back === 'N' ? r.bed.y + r.bed.h + 34 : r.bed.y - 34, vx: 0, vy: 0 }); },

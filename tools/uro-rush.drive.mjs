@@ -54,6 +54,7 @@ try {
   const st = await evaluate('__rush.selfTest()');
   check(st.length === 0, `selfTest: ${st.length} problems ${st.slice(0, 3).join(' | ')}`);
   check(await S(`R.TOUCH`), 'touch UI detected');
+  check(await S(`!document.getElementById('contBtn') && R.furthestBlock() === 1`), 'first visit: no Continue button (no block reached yet)');
   await shot('01-title-ipad');
 
   log('\n— iPad landscape: real taps + the joystick');
@@ -167,6 +168,31 @@ try {
   check(plans.size >= 4, `the order is random (${plans.size} different plans over 8 seeds)`);
   await pause(300); await shot('07-debrief');
 
+  log('\n— continue from the furthest block');
+  await viewport(1180, 820); await load(); await evaluate(`localStorage.removeItem('uroRush_block')`); await load();
+  let k = await S(`(()=>{R.freeze();R.startShift();R.contCard();const b1=localStorage.getItem('uroRush_block');R.forceBlock(G.blocks[1].mode,2);R.contCard();const b2=localStorage.getItem('uroRush_block');
+    G.lives=0;G.endT=.05;R.step(.2);const b=document.getElementById('contBtn');return {b1,b2,state:G.state,done:G.done,btn:b?b.textContent:''};})()`);
+  check(k.b1 === null && k.b2 === '2' && k.state === 'over' && !k.done && k.btn.includes('Continue — Block 2 of 4'), `reaching block 2 is saved, even in a lost shift, and the debrief offers "${k.btn}"`);
+  await evaluate(`localStorage.setItem('uroRush_block','3')`); await load();
+  k = await S(`(()=>{const b=document.getElementById('contBtn');return b?b.textContent:''})()`);
+  check(k.includes('Continue — Block 3 of 4'), `a new visit's title offers "${k}" next to Start shift`);
+  await shot('08-title-continue');
+  await tap('#contBtn');
+  k = await S(`({bi:G.bi,start:G.startBi,tier:G.tier,state:G.state,kind:G.card&&G.card.kind,fresh:G.card&&G.card.fresh,chips:document.querySelectorAll('.newacts .chip').length,all:R.MODES[G.mode].acts.length,vis:R.visActs().length,total:G.total,want:G.blocks[2].n+G.blocks[3].n,hud:[...document.querySelectorAll('#blocks i')].map(i=>i.textContent).join(''),prog:document.getElementById('prog').textContent})`);
+  check(k.bi === 2 && k.start === 2 && k.tier === 3 && k.state === 'card' && k.kind === 'first' && k.fresh, 'Continue starts the shift at block 3, at block 3\'s pace (tier 3), on its opening card');
+  check(k.vis === k.all && k.chips === k.vis, `the opening card lists every order unlocked by then (${k.chips} of ${k.all})`);
+  check(k.total === k.want && k.prog === '0/' + k.want && k.hud.startsWith('––'), `the shift counts only blocks 3 and 4 (${k.prog} patients); the skipped blocks show as "–" in the strip`);
+  await shot('09-continue-card');
+  k = await S(`(()=>{R.freeze();let guard=0;while(G.state!=='over'&&guard++<6000){if(G.state==='card')R.contCard();const o=R.undecided();if(o.length){R.teleport(o[0]);R.order(R.answer(o[0]));}
+    if(R.pended().length>=3||(!o.length&&R.pended().length))R.signAll();R.step(.25);}const b=document.getElementById('contBtn');
+    return {state:G.state,done:G.done,n:G.log.length,ok:G.log.filter(l=>l.kind==='ok').length,total:G.total,saved:localStorage.getItem('uroRush_block'),btn:b?b.textContent:''};})()`);
+  check(k.state === 'over' && k.done && k.n === k.total && k.ok === k.total && k.saved === '4' && k.btn.includes('Block 4 of 4'), `a continued shift plays blocks 3–4 to the end (${k.ok}/${k.total}); block 4 is now the furthest`);
+  k = await S(`(()=>{document.getElementById('againBtn').click();const full={bi:G.bi,start:G.startBi,total:G.total,all:G.blocks.reduce((s,b)=>s+b.n,0)};R.contCard();R.togglePause();document.getElementById('rstBtn').click();const rst1=G.bi;
+    R.contCard();R.togglePause();R.togglePause();G.lives=0;G.endT=.05;R.step(.2);document.getElementById('contBtn').click();const c4={bi:G.bi,start:G.startBi};R.contCard();R.togglePause();document.getElementById('rstBtn').click();
+    return {full,rst1,c4,rst4:G.bi,saved:localStorage.getItem('uroRush_block')};})()`);
+  check(k.full.bi === 0 && k.full.start === 0 && k.full.total === k.full.all && k.rst1 === 0, 'Play again (and Start shift) still plays the whole shift from block 1; Restart restarts it from block 1');
+  check(k.c4.bi === 3 && k.c4.start === 3 && k.rst4 === 3 && k.saved === '4', 'Restart on a continued shift restarts at the block it continued from; playing block 1 again never lowers the saved block');
+
   log('\n— embed contract (same-origin frame)');
   await send('Page.navigate', { url: ROOT + '/games/' }); await pause(400);
   const msgs = await evaluate(`new Promise(res=>{const got=[];addEventListener('message',e=>got.push(e.data));const f=document.createElement('iframe');f.src='uro-rush.html?embed=1&seed=4';f.style.cssText='width:1000px;height:700px';document.body.appendChild(f);
@@ -177,6 +203,8 @@ try {
   log('\n— phones');
   for (const [w, h, name] of [[390, 664, 'iphone-portrait-safari'], [390, 844, 'iphone-portrait-tall'], [844, 390, 'iphone-landscape']]) {
     await viewport(w, h); await load();
+    const btnsIn = await evaluate(`['goBtn','contBtn'].every(id=>{const e=document.getElementById(id);if(!e)return false;const r=e.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+.5&&r.right<=innerWidth+.5;})`);
+    check(btnsIn, `${name}: the title shows Start shift and Continue without scrolling`);
     await evaluate(`(()=>{const R=__rush;R.freeze();R.startShift();R.contCard();R.forceBlock('consult',3);R.contCard();R.step(9);R.teleport(R.undecided()[0]);R.step(.1);})()`);
     const lay = await evaluate(`(()=>{const o=[...document.querySelectorAll('.ord')].map(b=>b.getBoundingClientRect());const V=__rush._view();
       return {n:o.length, inView:o.every(r=>r.bottom<=innerHeight+.5&&r.right<=innerWidth+.5&&r.top>=0), minH:Math.min(...o.map(r=>r.height)), minW:Math.min(...o.map(r=>r.width)), mapW:Math.round(800*V.s), mapH:Math.round(600*V.s),

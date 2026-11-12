@@ -3,6 +3,31 @@
 **Updated:** 2026-11-12
 **Tool:** Claude Code
 
+## 2026-11-12 (later 4) — ⏭️ Uro Rush: Continue from the furthest block
+
+Andrew, answering the open question below: "yes add that option". Uro Rush has no waves: a shift is 4 blocks that switch
+between clinic and consults, with new orders at blocks 2 and 3. So the block is what it remembers.
+
+**Done (`games/uro-rush.html`):**
+- The furthest block reached is saved (`localStorage` `uroRush_block`, 1–4), on reaching it, win or lose. It never goes down.
+- From block 2 on, the title and the debrief offer **Continue — Block N of 4** next to Start shift / Play again.
+  `startShift(from)` plans the usual 4 blocks and starts at block N: that block's pace (tier), its opening card listing
+  every order unlocked by then, the patient count covering only the blocks played, skipped blocks shown as "–" in the
+  HUD strip. Score, best score and arcade rewards work as before, so a shorter shift pays less.
+- Start shift, Play again and Enter still play the whole shift. Restart (pause menu) restarts from the block the shift
+  started at.
+- The title's and the debrief's buttons are pinned to the bottom of the card (`.foot`). On a 390×664 phone the second
+  button would otherwise sit below the screen edge; the instructions or the missed-cases list now scroll behind them.
+  Nothing moves on screens where everything fits.
+
+**Verified:** `tools/uro-rush.drive.mjs` 50 / 50 in headless Chrome (38 before, +12): no Continue on a first visit;
+block 2 saved in a lost shift and offered on the debrief; a new visit offers block 3; Continue starts at block 3 / tier 3
+with all 12 orders on the card and only blocks 3–4 counted; a continued shift plays to the end and saves block 4; Play
+again and Restart behave as above; on three phone sizes both title buttons are on screen without scrolling.
+No rebuild: the change is in the game's own page.
+**Next steps:** none.
+**Open questions:** none new.
+
 ## 2026-11-12 (later 3) — 🗞️ Pre-Op, Please: Continue from the furthest day (the unmerged Oct 25 branch)
 
 Andrew: "merge everything that's not live on the app". Two branches had work that was not on `main`. The Call Room
