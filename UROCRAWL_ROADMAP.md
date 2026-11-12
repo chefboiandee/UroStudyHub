@@ -1,6 +1,6 @@
 # Path of Pathology (Uro Crawl) — roadmap for the next sessions
 
-`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~5.9k lines, no dependencies so far) that
+`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~6.7k lines, no dependencies so far) that
 the Arcade hosts in a frame. Players see the name **Path of Pathology**; the file, `window.UroCrawl`, the `crawl:*`
 messages and the storage key keep the working name Uro Crawl on purpose. This file is the build plan. **How to use it:** the owner tells a session
 *"read UROCRAWL_ROADMAP.md and do Step N"* or *"…and do the next step"* (= the first unchecked box below).
@@ -8,7 +8,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 ## Progress (tick the box and add the date when a step is merged to `main`)
 
 - [x] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style). Done 2026-11-11 (as built: the note at the end of Step 1)
-- [ ] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon
+- [x] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon. Done 2026-11-12 (as built: the note at the end of Step 2)
 - [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
 - [ ] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
@@ -36,7 +36,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–P, 261 checks: O is the Invader, P is Step 1's Staghorn duel; the steps below add blocks Q, R and S). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–Q, 328 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP; the steps below add blocks R and S). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -177,6 +177,43 @@ table is `DUNGEONS` / `BOSS_IDS` / `rollBossId` (add the Benign dungeon and `bph
 **Done when:** `?boss=bph&section=1|2|3` all work; harness block (Q) covers the flow meter win, capsule fibers, a
 perforation and its plug, the verumontanum curse and its fixes, ureteric and BNC warnings (including the cap and the
 urethrotome fix), the hoser red-out and both fixes, section transitions; earlier blocks pass.
+
+**As built (2026-11-12):** every number is in the `BPH` table (`UroCrawl.tuning.BPH`), the script is the `bph*` functions in
+§14f, the art is `drawBph*`. The landmark component and the sphincter curse are §14e (`addLandmark`, `LANDMARK`,
+`SPHINCTER`). Where the build reads the spec one way or adds to it:
+- **Flow.** Qmax starts at 4. Every lobe is worth a share: 40% of it while it is being resected, the rest when its fibers
+  show. The sections are worth 5.2 / 7.2 / 7.6, so a perfect resection is 24 and the fight ends the moment the meter
+  crosses 20. The win screen prints the real number (20 to 22 in practice), not a fixed 24. Sections 1 and 2 must be fully
+  resected to advance; the apex is won with both proximal lobes plus most of a distal one, the pair beside the verumontanum.
+- **Layout.** The scope travels west to east. Section 1's bladder is behind you at the west end; the median lobe sits on
+  the outlet at the east end with its flap facing you, between the two collar lobes that make the bladder-neck ring.
+- **Neck scar.** "The bladder-neck ring" is the two collar lobes and any bleeder on them; the median lobe does not scar.
+  Scar is damage / 400; GreenLight counts as a laser (×0.3); coagulating a neck bleeder for the full 1.5 s adds 9%.
+- **Contracture.** The scar ring follows the scope (the neck at first, the west end in sections 2 and 3), so it can always
+  be incised and the 12 ml/s cap is visible. Any other blade takes two cuts, a laser is slow, everything else works at
+  ×0.1 so no loadout is ever stuck. Cutting it leaves the scar meter at 50%.
+- **Capsule.** As with the Invader, only CUT and ENERGY go into the wall: the overkill of the finishing stroke (×0.6) and
+  every hit on a finished bed. Lasers and water never do, so a laser is the safe finisher. Segment names: NECK, CAPSULE,
+  SINUS (the apex, severe). What leaks is Nocturia droplets. A hole that goes chronic lets its lobe count again.
+- **Threats.** Lobes are not solid and do not hurt to touch. What hurts: thrusts (a 0.7 s circle; every third one in
+  section 2 is a pinch), the median lobe's drip fan, the acute-retention ring, Nocturia droplets. Swelling shrinks the room
+  by up to 18%.
+- **The hoser.** Chance per point of resection, about 2 to 4 a fight, ×1.8 at the apex. The bleeder stays findable through
+  the fog (a ring and a label) and telegraphs are redrawn above it.
+- **The slide.** The finished room is a snapshot that scrolls out; "stays visible as a darker cleaned strip" is the dark,
+  fibered strip drawn at the west end of the next room, plus the HUD strip on the right.
+- **The curse is reachable only at the very end.** It starts at the verumontanum (the last room's last section) or from
+  `UroCrawl.injureSphincter()`, so in a normal run no shop or rep comes after it. The Artificial Sphincter (shop: 50% of
+  shops while cursed, 150 RVU × markup; the next rep: 75 RVU) is built and covered by block Q through the hook, but a player
+  cannot reach it yet. See the open question in STATUS (2026-11-12).
+- **Also built:** TUR syndrome (the optional one); Nocturia as a Benign-dungeon wave enemy so those rooms have something
+  that comes at you; the rest-room crate before this boss is a Resectoscope Loop if you carry none; Finasteride shrinks the
+  Gentle Giant too; the boss roll is now quarters (`rollBossId`: a seed keeps its boss or moves to this one).
+- Tissue is 620 / 310 / 310, then 6 × 340, then 4 × 270. The bot with the default boss loadout takes about 90 s (the
+  Staghorn's bot takes 70 s against its 90-120 s target).
+- Generic hooks added: `e.special` (a structure with its own hit rules: no damage, no numbers), `e.noAim` (auto-aim, the
+  Bovie's hops, turrets and the console skip it), `def.noBar`, `drawWorld(c)`, `setNotice()`, `hitAreaDist()`, and
+  `makeWall`'s `labels` / `thinText` / `distText` / `tint`.
 
 ---------------------------------------------------------------------------------------------------
 
