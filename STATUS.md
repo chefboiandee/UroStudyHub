@@ -3,6 +3,21 @@
 **Updated:** 2026-11-12
 **Tool:** Claude Code
 
+## 2026-11-12 (later) — 💊 Path of Pathology: Finasteride also reduces bleeders in the Giant TURP
+
+Andrew: Finasteride should also cut the bleeders during the fight by a mild percentage.
+
+**Done (`games/uro-crawl.html`; `tools/uro-crawl.drive.mjs` 329 checks):** with the Finasteride boon the chance that a
+stroke opens an arterial bleeder is 25% lower (`BPH.HOSE_FIN` 0.75, in the new `bphHoseChance`; hook
+`UroCrawl.bph.hoseChance(lobe, dmg)`). The boon card says so. Its other effects are unchanged (lobes and the Gentle Giant
+30% smaller, swelling 20% slower).
+**Verified:** headless Chromium, every block passes (329); one new check in block Q (the ratio is exactly 0.75 and goes
+back without the boon). Of two full runs, the first failed one older check in block P (the Staghorn's "shards pop into
+coins", which waits 2.2 s of wall time with some forty pages still open); the rerun passed. It is load-sensitive, not
+related to this change.
+**Next steps:** tune `HOSE_FIN` after playing if 25% is not the right size. Then Step 3 (the Call Room).
+**Open questions:** none new (the ones in the entry below still stand).
+
 ## 2026-11-12 — 🚿 Path of Pathology: the Giant TURP (fourth boss), landmarks, the sphincter curse, the Benign dungeon (roadmap Step 2)
 
 Andrew: "read `UROCRAWL_ROADMAP.md` and do Step 2". A fourth boss that is not a duel: the arena is the boss, there is no
