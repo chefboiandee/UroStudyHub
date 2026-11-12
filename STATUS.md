@@ -3,6 +3,73 @@
 **Updated:** 2026-11-12
 **Tool:** Claude Code
 
+## 2026-11-12 (later 2) — 🛋️ Path of Pathology: the Call Room, a walkable hub between runs (roadmap Step 3)
+
+Andrew: "read urocrawl roadmap and do step 3". PLAY no longer starts a run: it puts the surgeon in a call room you walk
+around, with a station for everything a run starts with and things to buy with a new between-runs currency. The OR door
+starts the run. QUICK START on the title skips the room. A save with nothing bought or picked plays exactly as before.
+
+**Done (`games/uro-crawl.html`, one file / ES2019 / no deps, now ~7.6k lines; `tools/uro-crawl.drive.mjs` 387 checks):**
+- **§17b The Call Room** (`G.screen === 'hub'`, `?hub=1`): one room in the game's own look and 3/4 depth order, the run's
+  movement, roll and touch stick, no combat. The station you stand by gets a ring and a marker; **E, Enter or a click**
+  uses it, on touch **one big INTERACT button** (plus ROLL and a menu button). Its own music mode (slow, swung, a walking
+  bass). The far wall is taller than a dungeon room's so things can hang on it, under a HUD strip (PGY, loadout, CME, menu).
+- **CME credits**: paid at the end of every run and listed on the summary (2 per room cleared, 15 for the boss, 60 more
+  for a first kill of that boss, 5 per first-time bestiary chart, 10 per patron-favor milestone). Spent only in the room.
+  RVUs stay run-only.
+- **Stations** (each opens the same panel):
+  - **OR door**: a scrub-in sheet of what comes with you, then SCRUB IN. Walking into the door asks the same question.
+  - **Case board**: Stones → Infection → Benign → Oncology, each locked until the boss above it is beaten; Peds Wing is a
+    locked row for Step 4. The pick sets the run's boss and dungeon.
+  - **Instrument locker**: the two starting instruments from everything your PGY has unlocked (locked ones are silhouettes
+    with their level), and a button to the aspects screen. The shelves in the room light up as tools unlock.
+  - **Pharmacy cart**: one free starter boon out of three commons, drawn from patrons you have met; restocks every run.
+  - **Lanyard pins**: a pin per patron met, one worn per run, a small perk that levels up at 3 and 8 runs worn.
+  - **Whiteboard**: four permanent perks bought in small steps (max HP, starting RVUs, a free altar reroll, swap speed).
+  - **Chart rack** (the bestiary), **trophy wall** (boss kills, best run, patron portraits that fill in as you meet them).
+  - **Coffee machine**: a cup for the first room (drip; espresso once you buy the machine; decaf is a trap).
+  - **Pager + scrub cabinet**: scrub colours (by PGY as before, or early for 15 CME) and a pager with opinions.
+  - **Decor catalog**: nine items into six slots: Greg the ficus, the fish tank with fish in scrubs, fake diplomas, the
+    "Hang in there" poster, framed patron portraits, the Wet Floor sign, a plush kidney, a paperweight collection that
+    grows with the stone types you have beaten, the espresso machine.
+  - **Rep table**: the four reps and a pen jar that fills with the free pens you took on runs.
+  - A small gold dot floats over any station that has something for you right now: a perk or decor item you can afford,
+    a boon on the cart nobody packed, a pin nobody wears, a newly opened case.
+- **The cast**: the four reps (their existing caricatures, 8 new lines each), a weary attending (10 lines, two of them
+  name today's case) and a janitor who walks a round with his mop and gives real gameplay hints (12). Lines go round in
+  order, so nobody repeats back to back, and each speaker's place is saved.
+- **Title and summary**: PLAY → the room; QUICK START → a run. The summary's main button (and Enter) is CALL ROOM;
+  TRY AGAIN and TITLE are still there. The embed contract (`crawl:claim` / `crawl:result` / `crawl:exit`) is unchanged.
+- **Hooks and params**: `?hub=1`, `?cme=N`; `UroCrawl.hub.state / enter() / addCme(n) / buy(id)` as asked, plus `step`,
+  `goto`, `use`, `place`, `talk`, `scrubIn`, `meet`, `tables` and a few more (listed in the file header).
+
+**Where the build reads the spec one way:** listed at the end of Step 3 in the roadmap. The main ones: permanent things
+(loadout, aspects, pin, perks) apply to QUICK START and TRY AGAIN too, per-visit things (case, cart boon, coffee) only
+through the door; the door asks before it starts; a sixth decor slot (the counter) holds the espresso machine; the cart is
+empty until you have met a patron at an altar.
+
+**Verified:** headless Chrome, every block passes (387). Blocks D and E now start their runs with QUICK START (PLAY goes
+to the room). New block R is 58 checks: the title, PLAY → room, `?hub=1` / `?cme=N`, walking and walls, E / Enter / click,
+every station's panel and its rules, the unlock chain on the case board, CME spending and refusals, decor slots and swaps,
+line rotation for all six speakers, the janitor's round, the scrub-in sheet, a run that carries the instruments, aspect,
+boon, pin (+4% exactly), perks, coffee (+6% speed in room 1, gone in room 2) and case, the free reroll, what a won, a
+re-won and a lost run pay, the summary's way back, persistence across a reload, a fresh save unchanged (LITHO × stone
+still 17.5), and a phone-size touch viewport (stick, INTERACT, ROLL, menu) at 60 fps. Script parses as ES2019.
+`UroStudyHub.html` is unchanged (no rebuild).
+**One harness fix outside block R:** block P's ending ("shards pop into coins", then the summary) runs on the real clock
+and is the check the entry below calls load-sensitive. It timed out in every full run here, before any change of mine.
+Block P now closes the other pages before that ending, the way block Q already does, and it passes in a full run.
+**Roadmap:** Step 3 is ticked; Step 4 takes harness block S and has a note on where its hub tie-ins plug in.
+**Next steps:** walk the room on the phone and tune the tables: `HUB_CME` (how fast things unlock: about 840 CME buys
+everything), perk and decor prices, pin values. The roadmap's module split comes next, as its own task, before Step 4.
+**Open questions:**
+- Should QUICK START and TRY AGAIN carry the permanent picks (as built), or be the bare run?
+- Should the OR door start the run the moment you walk into it, or keep the scrub-in sheet?
+- Stones and Infection are cases on the board now, but their runs still draw mixed rooms. Give them themed room pools
+  like Benign and Oncology have?
+- Coffee is free every run. Should a cup cost something, or is the first-room buff small enough to stay free?
+- Still open from Step 2: the incontinence curse's fixes cannot be reached in a normal run.
+
 ## 2026-11-12 (later) — 💊 Path of Pathology: Finasteride also reduces bleeders in the Giant TURP
 
 Andrew: Finasteride should also cut the bleeders during the fight by a mild percentage.

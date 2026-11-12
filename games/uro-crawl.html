@@ -8,7 +8,10 @@
   snap a tine off), Fournier's Gangrene (the Hydra), the Invader (a muscle-invasive bladder
   tumour in a round arena whose wall can perforate: §14c is the reusable wall + perforation system, §14d the boss) and the
   Giant TURP (BPH: the arena is the boss, you win on a flow meter by resecting three sections down to the capsule fibers:
-  §14f; its landmarks, the ureteric orifices and the verumontanum, are the generic component in §14e). No quizzes: the learning is osmosis
+  §14f; its landmarks, the ureteric orifices and the verumontanum, are the generic component in §14e). Between runs there is
+  the Call Room (§17b): a walkable hub where PLAY lands you, with a station for every choice a run starts with (the two
+  starting instruments and their aspects, a starter boon, a lanyard pin, permanent perks, today's case) and things to buy
+  with CME credits, which every run pays. QUICK START on the title skips it. No quizzes: the learning is osmosis
   plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
   body-horror gags played for laughs; everything stylized and abstract, never anatomical. Seen from a raised 3/4
   camera (far wall face, foreshortened tiles, ground shadows, back-to-front draw order). Type reads at a glance: a thin
@@ -26,6 +29,7 @@
               ?section=1|2|3 (with ?boss=bph: start the Giant TURP at that section)  ?weapons=holmium,bovie,loop  ?boons=cisplatin,moses
               ?mods=holmium_joules,scalpel_backstab (weapon mods at run start; grants the weapon if not carried)
               ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
+              ?hub=1 (boot straight into the Call Room)  ?cme=N (set the CME credit balance)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), giveMod(id), setAspect(weapon, aspect),
               skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... },
@@ -34,6 +38,10 @@
               the Giant TURP: sec, q (flow), lobes, scar, bnc, valve, hoser, slide)
               injureSphincter() (the incontinence curse, anywhere), cureSphincter(), sphincterCursed(), addLandmark({...}),
               bph: { advance() (slide to the next section), hoser(i) (open a bleeder on lobe i), scar(v), flow(B), fogR() }
+              hub: { state (a summary: on, near, panel, cup, bubble, meta = META.hub, loadout, dungeon, hints, stations, npcs),
+                     enter(), leave(), step(n), addCme(n), buy(id) (a perk, a decor item or 'scrub1'..'scrub5'),
+                     place(slot, id), goto(stationId), use(stationId), talk(who), scrubIn(), meet(patronId),
+                     loadout(), rx() (the pharmacy cart's offer), pinLevel(id), caseUnlocked(i), award(won), tables }
 
   Upgrade paths (Hades-style): MODS is a per-weapon table of upgrades in three branches (POWER / CONTROL / SPECIAL),
   tiers 1-3 with prerequisites, up to 6 mods + 1 capstone per weapon per run, offered by "Instrument Rep" doors
@@ -48,7 +56,9 @@
   that reveals the next room and pays a De-escalation bonus. The Antibiotic Dropper (FLUID) fires those vials.
 
   Keys:  WASD / arrows move · mouse aims · LMB fire · RMB or Space alt · Shift roll · 1-5 slots · Q/E or wheel cycle · R ultimate · Esc/P pause
+         in the Call Room: WASD / arrows walk · E, Enter or a click uses the station you stand by · Shift roll · Esc/P menu
   Touch: left thumb floating stick · FIRE (hold, auto-aim) · SWAP · ALT · ROLL · ULT (once you hold the da Vinci console) · tap weapon slots
+         in the Call Room: the same stick · one big INTERACT button · ROLL
 -->
 <html lang="en">
 <head>
@@ -197,6 +207,15 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 .bubble{background:#fff;color:#0b1a24;border-radius:16px;padding:10px 14px;font-weight:700;position:relative;margin:8px 0 2px}
 .bubble:after{content:"";position:absolute;left:28px;bottom:-10px;border:10px solid transparent;border-top-color:#fff;border-bottom:0}
 
+/* the call room: the stations' panel */
+#hubCme{color:#7dffb0}
+.bentry.pick{cursor:pointer;color:var(--ink);font:inherit}
+.bentry.pick:active{transform:scale(.97)}
+.bentry.sel{border-color:#45c66e;box-shadow:0 0 16px rgba(69,198,110,.28)}
+.card.picked{border-color:#45c66e;box-shadow:0 0 18px rgba(69,198,110,.3)}
+.swatch{height:44px;border-radius:12px;border:3px solid rgba(0,0,0,.35)}
+#hubExtra{margin:0}
+
 /* misc */
 .xpbar{height:10px;background:#0b1a24;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
 .xpbar i{display:block;height:100%;background:linear-gradient(90deg,#38e8ff,#5df07a);border-radius:999px}
@@ -220,6 +239,7 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
     <p class="hint" id="titleBlurb">Lasers break stones. Loops cut tumours. Heat burns bugs. Water flushes clots.</p>
     <div class="menu">
       <button class="btn primary" id="btnPlay">PLAY</button>
+      <button class="btn" id="btnQuick">QUICK START <span class="hint" style="font-weight:700">· skip the call room</span></button>
       <div class="row center">
         <button class="btn" id="btnHelp">HOW TO PLAY</button>
         <button class="btn" id="btnBestiary">BESTIARY</button>
@@ -379,10 +399,23 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
     <div class="stat" id="sumStats"></div>
     <div id="sumLoad" class="row"></div>
     <p class="hint" id="sumXp"></p>
+    <p class="hint" id="sumCme" style="color:#7dffb0"></p>
     <div class="row center" style="margin-top:12px">
-      <button class="btn primary" id="btnAgain">TRY AGAIN</button>
+      <button class="btn primary" id="btnSumHub">CALL ROOM</button>
+      <button class="btn" id="btnAgain">TRY AGAIN</button>
       <button class="btn" id="btnSumTitle">TITLE</button>
     </div>
+  </div>
+</div>
+
+<!-- THE CALL ROOM: one panel, filled by whichever station you used (§17b) -->
+<div class="ov" id="ov-hub">
+  <div class="panel wide">
+    <span class="price right" id="hubCme"></span>
+    <h2 id="hubTitle">The call room</h2>
+    <p class="hint" id="hubSub"></p>
+    <div id="hubBody"></div>
+    <div class="row center" style="margin-top:14px"><span class="row center" id="hubExtra"></span><button class="btn" id="btnHubBack">BACK</button></div>
   </div>
 </div>
 
@@ -431,10 +464,11 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 
 // localStorage behind try/catch: the game must run with storage unavailable.
 var STORE_KEY = 'urocrawl.v1';
-var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, aspects: {}, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
+var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, aspects: {}, hub: null, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
 function loadMeta() {
   try { var raw = localStorage.getItem(STORE_KEY); if (raw) { var o = JSON.parse(raw); if (o && typeof o === 'object') { for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) META[k] = o[k]; } } } catch (e) {}
   META.settings = META.settings || {}; META.bestiary = META.bestiary || {}; META.seen = META.seen || {}; META.aspects = META.aspects || {};
+  META.hub = hubDefaults(META.hub);   // the Call Room's saved state (§17b)
   var d = { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 };
   for (var s in d) if (META.settings[s] === undefined) META.settings[s] = d[s];
   if (META.settings.shake === null) {
@@ -497,7 +531,7 @@ window.addEventListener('keydown', function (ev) {
   if (c === 'Escape' || c === 'KeyP') edge('pause');
   if (c === 'ShiftLeft' || c === 'ShiftRight') edge('roll');
   if (c === 'Space') edge('alt');
-  if (c === 'KeyQ') edge('swapPrev'); if (c === 'KeyE') edge('swapNext');
+  if (c === 'KeyQ') edge('swapPrev'); if (c === 'KeyE') { edge('swapNext'); edge('interact'); }   // E also uses a station in the Call Room
   if (c === 'Digit1') edge('slot1'); if (c === 'Digit2') edge('slot2'); if (c === 'Digit3') edge('slot3'); if (c === 'Digit4') edge('slot4'); if (c === 'Digit5') edge('slot5');
   if (c === 'Digit6') edge('slot6'); if (c === 'Digit7') edge('slot7'); if (c === 'Digit8') edge('slot8'); if (c === 'Digit9') edge('slot9'); if (c === 'Digit0') edge('slot0');
   if (c === 'Backquote') edge('spawnerToggle');
@@ -529,6 +563,7 @@ function pointerDown(ev) {
   var p = toLogical(ev.clientX, ev.clientY);
   if (ev.pointerType === 'touch' || ev.pointerType === 'pen') {
     Input.mode = 'touch';
+    if (G.screen === 'hub' && !G.overlay) { hubTouchDown(ev, p); return; }   // the Call Room: stick, INTERACT, ROLL, menu
     if (G.screen !== 'run' || G.overlay) { Input.pointers[ev.pointerId] = { kind: 'none' }; return; }
     var TL = touchLayout();
     // HUD weapon slots first
@@ -555,6 +590,7 @@ function pointerDown(ev) {
     var s2 = hudSlotAt(p.x, p.y); if (s2 >= 0 && ev.button === 0) { edge('slot' + (s2 + 1)); G.detailSlot = s2; G.detailT = 3; return; }
     if (ev.button === 0 && hudPauseAt(p.x, p.y)) { edge('pause'); return; }
   }
+  if (G.screen === 'hub' && !G.overlay && ev.button === 0 && hubMenuAt(p.x, p.y)) { edge('pause'); return; }
   if (ev.button === 0) { Input.mouseFire = true; edge('fire'); }
   else if (ev.button === 2) { Input.mouseAlt = true; edge('alt'); }
   else if (ev.button === 1) { ev.preventDefault(); edge('swapNext'); }
@@ -694,8 +730,9 @@ var Snd = {
   scheduleMusic: function () {
     if (!this.ok) return; var c = this.ctx, m = this.music;
     if (!SET.music || SET.mute || document.hidden) { m.nextT = Math.max(m.nextT, c.currentTime + 0.1); return; }
-    var mode = m.mode, bpm = mode === 'boss' ? 148 : mode === 'title' ? 78 : 104, beat = 60 / bpm;
+    var mode = m.mode, bpm = mode === 'boss' ? 148 : mode === 'title' ? 78 : mode === 'hub' ? 84 : 104, beat = 60 / bpm;
     while (m.nextT < c.currentTime + 0.25) {
+      if (mode === 'hub') { this.hubBeat(m.beat, beat, m.nextT - c.currentTime); m.nextT += beat; m.beat++; continue; }
       var b = m.beat, bar = b % 16, root = (mode === 'boss') ? [55, 55, 58.27, 65.41][Math.floor(b / 8) % 4] : [65.41, 65.41, 58.27, 73.42][Math.floor(b / 16) % 4];
       // low pulse
       if (bar % 2 === 0 || mode === 'boss') this.tone({ type: 'sine', f0: root, f1: root * 0.98, dur: beat * 0.9, vol: mode === 'boss' ? 0.3 : 0.22, delay: m.nextT - c.currentTime, music: true });
@@ -709,6 +746,16 @@ var Snd = {
       if (mode === 'boss' && bar % 8 === 6) this.tone({ type: 'sawtooth', f0: root * 2, f1: root * 1.5, dur: beat * 1.2, vol: 0.07, delay: m.nextT - c.currentTime, music: true });
       m.nextT += beat; m.beat++;
     }
+  },
+  // the Call Room: slower and jazzy. A walking bass over ii–V–I–VI (four beats a chord), a swung ride, lazy off-beat
+  // chord stabs, now and then a stray high note
+  hubBeat: function (b, beat, d) {
+    var CH = [[73.42, 1.2, 1.5, 1.78], [98.0, 1.26, 1.5, 1.78], [65.41, 1.26, 1.5, 1.89], [55.0, 1.26, 1.5, 1.78]], ch = CH[Math.floor(b / 4) % 4], q = b % 4, r = ch[0], tones = [1, ch[1], ch[2], ch[3]];
+    this.tone({ type: 'sine', f0: r * tones[q], dur: beat * 0.9, vol: 0.24, delay: d, music: true });
+    this.noise({ dur: 0.04, f: 7000, ftype: 'highpass', vol: 0.018, delay: d });
+    if (q % 2 === 1) this.noise({ dur: 0.03, f: 7000, ftype: 'highpass', vol: 0.012, delay: d + beat * 0.67 });
+    if (q === 1 || (q === 3 && Math.random() < 0.5)) { this.tone({ type: 'triangle', f0: r * 4 * ch[1], dur: beat * 0.7, vol: 0.045, delay: d + beat * 0.67, music: true }); this.tone({ type: 'triangle', f0: r * 4 * ch[3], dur: beat * 0.7, vol: 0.045, delay: d + beat * 0.67, music: true }); }
+    if (Math.random() < 0.22) this.tone({ type: 'sine', f0: r * 8 * tones[Math.floor(Math.random() * 4)], dur: beat * 0.9, vol: 0.05, delay: d + (Math.random() < 0.5 ? 0 : beat * 0.67), music: true });
   },
   setMusicMode: function (mode) { this.music.mode = mode; }
 };
@@ -3044,7 +3091,7 @@ function replaceWeapon(slot, id, rarity) { if (slot < 0 || slot >= G.weapons.len
 function selectWeapon(i) {
   if (i < 0 || i >= G.weapons.length || i === G.wIndex) return;
   var old = curWeapon(); if (old) { old.tick = 0; old.charge = 0; old.full = false; old.swing = null; old.active = false; old.suck = false; if (old.bal) { old.bal.on = false; } }
-  G.wIndex = i; G.swapT = 0.25 * (hasBoon('quickhands') ? 0.5 : 1); G.swapBonusT = 1.0 + G.swapT; G.stats.swaps++; Snd.sfx('swap');
+  G.wIndex = i; G.swapT = 0.25 * (hasBoon('quickhands') ? 0.5 : 1) * (G.swapMul || 1); G.swapBonusT = 1.0 + G.swapT; G.stats.swaps++; Snd.sfx('swap');
   if (G.tutorial && !G.tutorial.swapped) G.tutorial.swapped = true;
 }
 function cycleWeapon(d) { var n = G.weapons.length; if (n < 2) return; selectWeapon((G.wIndex + d + n) % n); }
@@ -3122,7 +3169,7 @@ function dealDamage(e, base, cls, o) {
   if (e.def.isStump) { if ((o.cauterize || (cls === 'ENERGY' && hasBoon('bipolar'))) && e.st.bleed) { delete e.st.bleed; if (e.onCauterized) e.onCauterized(e); } else if (!e.hintT || G.time - e.hintT > 1.5) { e.hintT = G.time; addText(e.x, e.y - 34, e.def.coagHint || 'COAG THE STUMP (energy, coag mode)', { color: '#ffb630', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   if (e.inv) { if (!e.armT || G.time - e.armT > 0.8) { e.armT = G.time; addText(e.x, e.y - e.r - 14, e.invText || 'ARMORED', { color: '#8fa6b8', size: 11 }); Snd.sfx('tink'); } e.flash = 0.05; return 0; }
   var fam = e.family, mBase = MATRIX[cls] ? MATRIX[cls][fam] : 1, m = mBase;
-  m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid);
+  m *= enemyTweak(e, cls, o.wid) * boonMult(e, cls, o.wid) * hubDmgMul(e, cls);   // hubDmgMul: the Call Room's pin and coffee (§17b), 1 without them
   var wpCrit = false, wp = e.wp, wpLabel = wp ? wp.critLabel : null;
   if (wp) {
     var hx = o.hx, hy = o.hy; if (hx === undefined || hx === null) { var da = ang(P.x, P.y, e.x, e.y); hx = e.x - Math.cos(da) * e.r * 0.7; hy = e.y - Math.sin(da) * e.r * 0.7; }
@@ -3396,7 +3443,7 @@ function updatePlayer(dt) {
   var mv = readMove(); if (P.tur > 0) { P.tur -= dt; mv = { x: -mv.x, y: -mv.y, mag: mv.mag }; }   // TUR syndrome (§14f): confused, the controls are reversed
   P.mvx = mv.x; P.mvy = mv.y; P.moving = mv.mag > 0.1;
   if (P.moving && G.tutorial && !G.tutorial.moved) G.tutorial.moved = true;
-  var sp = P.speed * (hasBoon('ketorolac') ? 1.1 : 1) * (G.wolfT > 0 ? 1.4 : 1);
+  var sp = P.speed * (hasBoon('ketorolac') ? 1.1 : 1) * (G.wolfT > 0 ? 1.4 : 1) * (G.cup && G.roomIndex === G.cup.room ? G.cup.spd : 1);   // G.cup: the Call Room's coffee, first room only
   var cur = curWeapon(); if (cur && cur.def.slowWhile) sp *= cur.def.slowWhile(cur);
   if (!hasBoon('cbi') && (inHazard(P.x, P.y, 'slime') || inHazard(P.x, P.y, 'sticky') || inHazard(P.x, P.y, 'biofilm'))) sp *= 0.62;   // Foley's CBI: full speed through slime and goo
   var goo = inHazard(P.x, P.y, 'goo'); if (goo) { if (!hasBoon('cbi')) sp *= 0.7; P.gooT = (P.gooT || 0) - dt; if (P.gooT <= 0) { P.gooT = 0.5; hurtPlayer(1.5, 'goo', 0, true); } }
@@ -3689,6 +3736,7 @@ var DUNGEONS = { staghorn: { name: '', fams: null }, fournier: { name: '', fams:
 // used to roll or moves to the new one: staghorn [0, 1/4) · mibc [1/3, 1/2) + [5/6, 11/12) · fournier [1/2, 3/4) · bph the rest
 function rollBossId(seed) { var r = mulberry32((seed === undefined ? SEED : seed) ^ 0x51ab)(); return r < 1 / 4 ? 'staghorn' : r < 1 / 3 ? 'bph' : r < 1 / 2 ? 'mibc' : r < 3 / 4 ? 'fournier' : r < 5 / 6 ? 'bph' : r < 11 / 12 ? 'mibc' : 'bph'; }
 function startRun() {
+  var opt = RUNOPT; RUNOPT = null;   // what the Call Room's OR door packed for this run (§17b); null for QUICK START, TRY AGAIN and the test hooks
   rng = mulberry32(SEED); vrng = mulberry32(SEED ^ 0x9e3779b9);
   G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.obstacles = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.detailT = 0; G.detailSlot = -1;
   G.dropRes = {}; G.abxRes = {}; G.boonTier = {}; G.favor = {}; G.collateral = null; G.culture = null; G.roomDebuff = null; G.pens = 0; G.revealRoom = -1;
@@ -3696,8 +3744,8 @@ function startRun() {
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
-  G.bossId = BOSS_IDS.indexOf(Q.boss) >= 0 ? Q.boss : rollBossId(); G.dungeon = DUNGEONS[G.bossId]; G.neoadj = false; G.neoadjLoss = 0; G.arena = null; G.wall = null;
-  var ws = Q.weapons ? Q.weapons.split(',') : ['holmium', 'scalpel'];
+  G.bossId = BOSS_IDS.indexOf(Q.boss) >= 0 ? Q.boss : opt && BOSS_IDS.indexOf(opt.boss) >= 0 ? opt.boss : rollBossId(); G.dungeon = DUNGEONS[G.bossId];   // ?boss= wins, then the case board's pick, then the seed G.neoadj = false; G.neoadjLoss = 0; G.arena = null; G.wall = null;
+  var ws = Q.weapons ? Q.weapons.split(',') : hubLoadout();   // the instrument locker's two picks (holmium + scalpel until you change them)
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
   if (!G.weapons.length) giveWeapon('holmium');
   if (Q.boons) { var bs = Q.boons.split(','); for (var j = 0; j < bs.length; j++) giveBoon(bs[j], true); }
@@ -3705,8 +3753,11 @@ function startRun() {
     var qm = Q.mods.split(',');
     for (var mi = 0; mi < qm.length; mi++) { var md = MODS[qm[mi]]; if (!md) continue; var have = false; for (var ci = 0; ci < G.weapons.length; ci++) if (G.weapons[ci].id === md.weapon) have = true; if (!have) giveWeapon(md.weapon); giveMod(qm[mi], true); }
   }
+  G.best0 = {}; for (var bid in META.bestiary) if (META.bestiary[bid] && META.bestiary[bid].kills > 0) G.best0[bid] = 1;   // what was already charted: the run's new charts pay CME
+  hubApplyRun(opt);   // perks, the pin, and (through the OR door only) the starter boon and the coffee
   G.screen = 'run'; G.running = true; hideScreens(); Snd.setMusicMode('calm'); META.runs = (META.runs || 0) + 1; saveMeta();
   var start = clamp(parseInt(Q.room, 10) || (Q.boss ? 9 : 1), 1, 9);   // ?boss=… alone starts at the boss; with ?room=K it only picks which boss (and dungeon) the run has
+  if (G.cup) G.cup.room = start;
   if (start > 1 && !Q.weapons) { giveWeapon('bovie'); if (start >= 4) giveWeapon('irrigation'); }
   var kind = start === 9 ? 'boss' : start === 8 ? 'rest' : start === 1 ? 'tutorial' : 'combat';
   enterRoom(makeRoomPlan(start, kind));
@@ -3780,6 +3831,10 @@ function enterRoom(plan) {
   if (plan.kind === 'rest') { G.rewards.push({ kind: 'altar', x: 480, y: 360, patron: pickPatron() }); G.rewards.push({ kind: 'crate', x: 600, y: 200, item: G.bossId === 'mibc' && !carriedWeapon('roller') && !carriedWeapon('foley') ? { id: 'roller', rarity: 'common' } : G.bossId === 'bph' && !carriedWeapon('loop') ? { id: 'loop', rarity: 'common' } : rollWeaponDrop() }); G.rewards.push({ kind: 'shop', x: 360, y: 200 }); spawnPickup('iv', 480, 180); spawnPickup('vent', 480, 240); var restRep = pickRepWeapon(); if (restRep) G.rewards.push({ kind: 'rep', x: 720, y: 360, weapon: restRep.id }); if (G.bossId === 'mibc' && !G.neoadj) G.rewards.push({ kind: 'neoadj', x: 240, y: 340 }); }
   if (plan.kind === 'shop') { G.rewards.push({ kind: 'shop', x: 480, y: 270 }); }
   if (G.fosfo) { G.fosfo = false; G.fosfoRoom = plan.index; addText(P.x, P.y - 50, 'FOSFOMYCIN KICKS IN', { color: '#7ad7ff', size: 14 }); }
+  if (G.cup) {   // the Call Room's coffee lasts one room
+    if (plan.index === G.cup.room && !G.cup.told) { G.cup.told = true; addText(P.x, P.y - 66, HUB_CUPS[G.cup.kind].tell, { color: G.cup.kind === 'decaf' ? '#9fb6c9' : '#ffd166', size: 13, dur: 2.6 }); }
+    else if (plan.index !== G.cup.room && !G.cup.done) { G.cup.done = true; addText(P.x, P.y - 66, G.cup.kind === 'decaf' ? 'THE DECAF WEARS OFF. NOBODY NOTICES.' : 'THE COFFEE WEARS OFF', { color: '#9fb6c9', size: 12, dur: 2 }); }
+  }
   if (!G.waves) roomCleared(true);
   else setBanner('ROOM ' + plan.index + (plan.kind === 'elite' ? ' · ELITE' : ''), plan.name, 1.6);
   if (collateral && G.waves) setBanner('COLLATERAL DAMAGE', collateral === 'cdiff' ? 'C. difficile — the broad-spectrum tax' : 'Candida overgrowth — the broad-spectrum tax', 2.6);
@@ -3994,9 +4049,10 @@ function finishRun() {
   var score = st.rooms * 1000 + st.kills * 10 + st.rvu + (won ? 5000 : 0);
   var rec = { won: won, rooms: st.rooms, kills: st.kills, rvu: st.rvu, time: secs, score: score, date: Date.now() };
   var isBest = !META.best || score > META.best.score; if (isBest) META.best = rec;
+  var cme = hubAward(won);   // CME credits for the Call Room (§17b)
   META.wins = (META.wins || 0) + (won ? 1 : 0); saveMeta();
   if (EMBED) { try { window.parent.postMessage({ type: 'crawl:result', won: !!won, rooms: st.rooms, kills: st.kills, rvu: st.rvu, seconds: secs }, '*'); } catch (e) {} }
-  openSummary(won, xp, lvlAfter > lvlBefore ? lvlAfter : 0, isBest);
+  openSummary(won, xp, lvlAfter > lvlBefore ? lvlAfter : 0, isBest, cme);
 }
 function skipRoom() {
   if (!G.running) return;
@@ -5540,7 +5596,10 @@ function drawBphStrip(c, B) {
 var PAL = { wallOuter: '#070e14', wall: '#172836', wallEdge: '#2a4152', floor: '#0f1d27', tile: 'rgba(255,255,255,0.03)', tileDark: 'rgba(0,0,0,0.14)' };
 var SCRUBS = ['#2fa38a', '#3b5bdb', '#a3335b', '#e07a9a', '#6c6f9c', '#d9a441'];
 var SCRUB_NAMES = ['TEAL', 'NAVY', 'WINE', 'PINK', 'SLATE', 'MUSTARD'];
-function scrubColor() { var i = SET.scrub || 0; var lvl = residencyLevel(); var max = lvl >= 6 ? 6 : lvl >= 4 ? 4 : lvl >= 2 ? 3 : 1; if (i >= max) i = 0; return SCRUBS[i]; }
+var SCRUB_COST = 15;   // CME, to wear a colour before its residency level (the Call Room's scrub cabinet)
+function scrubNeed(i) { return i < 1 ? 1 : i < 3 ? 2 : i < 4 ? 4 : 6; }
+function scrubUnlocked(i) { return i >= 0 && i < SCRUBS.length && (residencyLevel() >= scrubNeed(i) || !!(META.hub && META.hub.owned['scrub' + i])); }
+function scrubColor() { var i = SET.scrub || 0; if (!scrubUnlocked(i)) i = 0; return SCRUBS[i]; }
 
 function drawGlyph(c, cls, x, y, s, dim) {
   var col = dim ? '#5e7080' : (CLASSES[cls] ? CLASSES[cls].color : '#fff');
@@ -6248,6 +6307,7 @@ function drawWorld(c) {
 }
 function render(dtReal) {
   var c = ctx; c.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
+  if (G.screen === 'hub' && P && !G.running) { drawHub(c); return; }   // the Call Room (§17b)
   if (!G.running || !P) { drawTitleBg(c, dtReal); return; }
   c.save();
   c.translate(G.shakeX, G.shakeY);
@@ -6263,19 +6323,19 @@ function render(dtReal) {
    §17 SCREENS (HTML overlays) — title, help, bestiary, settings, pause, boon altar, crate, shop, summary
    Every overlay has a way out; the sim is frozen while one is open.
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary', 'mod', 'aspects', 'steward', 'grade'];
+var OVERLAYS = ['title', 'help', 'bestiary', 'settings', 'pause', 'boon', 'weapon', 'shop', 'summary', 'mod', 'aspects', 'steward', 'grade', 'hub'];
 function hideScreens() { for (var i = 0; i < OVERLAYS.length; i++) $('ov-' + OVERLAYS[i]).classList.remove('show'); G.overlay = null; clearEdges(); }
 function openOverlay(id) { hideScreens(); $('ov-' + id).classList.add('show'); G.overlay = id; Snd.sfx('click'); }
 var settingsFrom = 'title', pendingStart = false, offerCache = null;
 function onTap(id, fn) { var e = $(id); if (!e) return; e.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); fn(ev); }); }
 
 function showTitle() {
-  G.running = false; G.screen = 'title'; G.over = false; G.boss = null; G.enemies = []; G.bullets = []; G.parts = []; G.texts = [];
+  G.running = false; G.screen = 'title'; G.over = false; G.boss = null; G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; HUB.panel = '';
   openOverlay('title'); Snd.setMusicMode('title'); updateTitle();
 }
 function updateTitle() {
   var lp = levelProgress(META.xp);
-  $('resLevel').textContent = 'Residency: PGY-' + lp.lvl + (lp.lvl >= 6 ? ' (attending)' : ''); $('resXp').textContent = lp.cur + ' / ' + lp.need + ' XP'; $('resBar').style.width = Math.round(lp.cur / lp.need * 100) + '%';
+  $('resLevel').textContent = 'Residency: PGY-' + lp.lvl + (lp.lvl >= 6 ? ' (attending)' : ''); $('resXp').textContent = lp.cur + ' / ' + lp.need + ' XP' + (META.hub.cme ? ' · ' + META.hub.cme + ' CME' : ''); $('resBar').style.width = Math.round(lp.cur / lp.need * 100) + '%';
   var b = META.best; $('bestRun').textContent = b ? ('Best run: ' + (b.won ? 'DISCHARGED · ' : '') + b.rooms + ' rooms · ' + b.kills + ' kills · ' + b.rvu + ' RVU · ' + fmtTime(b.time)) : 'No runs yet. Scrub in.';
   var unl = []; for (var i = 0; i < WEAPON_ORDER.length; i++) { var wid = WEAPON_ORDER[i]; if (WEAPONS[wid].unlock && WEAPONS[wid].unlock === lp.lvl) unl.push(WEAPONS[wid].name); }
   if (lp.lvl === 2) unl.push('Aspect II of every instrument'); if (lp.lvl === 4) unl.push('Aspect III of every instrument');
@@ -6348,7 +6408,7 @@ function refreshSettings() {
   $('setParts').textContent = ['LOW', 'MEDIUM', 'HIGH'][SET.parts]; $('setLeft').textContent = SET.left ? 'ON' : 'OFF'; $('setLeft').className = 'btn small toggle' + (SET.left ? ' on' : ''); $('setScrub').textContent = SCRUB_NAMES[SET.scrub || 0];
 }
 function openSettings(from) { settingsFrom = from; openOverlay('settings'); refreshSettings(); }
-function closeSettings() { saveMeta(); if (settingsFrom === 'pause') openOverlay('pause'); else showTitle(); }
+function closeSettings() { saveMeta(); if (settingsFrom === 'pause') openOverlay('pause'); else if (G.screen === 'hub') hubClose(); else showTitle(); }
 /* pause */
 function openPause() { if (!G.running || G.over) return; openOverlay('pause'); $('pauseInfo').textContent = 'Room ' + G.roomIndex + ' · ' + G.stats.kills + ' kills · ' + G.rvu + ' RVU · seed ' + SEED; $('btnPauseExit').style.display = EMBED ? '' : 'none'; }
 function resumeGame() { hideScreens(); Snd.sfx('click'); }
@@ -6373,6 +6433,7 @@ var altarRef = null;
 function openBoonScreen(reward) {
   altarRef = reward;
   if (reward.patron && !patronPool(reward.patron).length) reward.patron = pickPatron();   // the patron ran out of boons since the door was made: another steps in
+  if (reward.patron) hubMeet(reward.patron);   // met: their pin and their common boons wait in the Call Room
   if (!reward.offer) { reward.offer = rollBoons(3, null, reward.patron); reward.rerolled = false; if (reward.patron) reward.greet = pick(PATRONS[reward.patron].greet); }
   openOverlay('boon'); renderBoonCards();
 }
@@ -6388,7 +6449,7 @@ function renderBoonCards() {
   for (var i = 0; i < offer.length; i++) wrap.appendChild(boonCard(offer[i], function (id) {
     tryTakeBoon(id, function () { if (altarRef && altarRef.patron) G.favor[altarRef.patron] = (G.favor[altarRef.patron] || 0) + 1; if (altarRef) altarRef.used = true; altarRef = null; hideScreens(); }, function () { openOverlay('boon'); renderBoonCards(); });
   }));
-  $('btnReroll').disabled = altarRef.rerolled || G.rvu < 25; $('btnReroll').textContent = altarRef.rerolled ? 'REROLLED' : 'REROLL (25 RVU)';
+  var rc = rerollCost(); $('btnReroll').disabled = altarRef.rerolled || G.rvu < rc; $('btnReroll').textContent = altarRef.rerolled ? 'REROLLED' : rc ? 'REROLL (' + rc + ' RVU)' : 'REROLL (FREE: Second Opinion)';
   $('boonSub').textContent = 'You have ' + G.rvu + ' RVU. Pick one — it lasts the whole run.' + (pt ? ' Taking a boon here earns ' + pt.name + '’s favor.' : '');
 }
 /* weapon crate / starter pick / shop weapon */
@@ -6541,7 +6602,7 @@ function renderShop() {
   })(shopRef.stock[i]);
 }
 /* summary */
-function openSummary(won, xp, newLevel, isBest) {
+function openSummary(won, xp, newLevel, isBest, cme) {
   var st = G.stats; openOverlay('summary');
   $('sumTitle').textContent = won ? 'DISCHARGED!' : 'CODE BLUE'; $('sumTitle').style.color = won ? '#5df07a' : '#ff4d6d';
   $('sumSub').textContent = won ? winLine() : 'Room ' + G.roomIndex + ' got you. The attending is “not mad, just disappointed.”';
@@ -6558,6 +6619,875 @@ function openSummary(won, xp, newLevel, isBest) {
   var ml = []; for (var mw = 0; mw < G.weapons.length; mw++) { var ww = G.weapons[mw], ids = ww.modIds.concat(ww.capstone ? [ww.capstone] : []); for (var mi = 0; mi < ids.length; mi++) ml.push('<span class="tag ' + (MODS[ids[mi]].capstone ? 'capstone' : 'br-' + MODS[ids[mi]].branch) + '">' + esc(MODS[ids[mi]].name) + '</span>'); }
   $('sumLoad').innerHTML = '<div><h3>Instruments</h3>' + wl.join(' ') + '</div><div style="margin-top:8px"><h3>Boons</h3>' + (bl.length ? bl.join(' ') : '<span class="hint">none</span>') + '</div>' + (ml.length ? '<div style="margin-top:8px"><h3>Mods</h3>' + ml.join(' ') + '</div>' : '');
   $('sumXp').textContent = '+' + xp + ' XP' + (newLevel ? ' · LEVEL UP → PGY-' + newLevel + '!' : '') + (isBest ? ' · NEW BEST RUN' : '');
+  $('sumCme').textContent = cme && cme.total ? '+' + cme.total + ' CME for the call room (' + cme.parts.join(' · ') + ') · ' + META.hub.cme + ' in all' : 'No CME this time: clear a room and the call room gets paid.';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §17b THE CALL ROOM — a walkable hub between runs (G.screen === 'hub'; roadmap Step 3). No combat.
+   The surgeon walks one lounge-sized room with the run's own movement, roll and touch stick. The station you stand by
+   lights up; E / Enter / a click / the touch INTERACT button uses it. Every station opens the same panel (#ov-hub).
+     What persists is META.hub (hubDefaults): CME credits, perks, decor (slot → item), owned items, the worn pin, patrons
+   met, boss kills, the two starting instruments, today's case, where each speaker is in their lines.
+     CME is paid at the end of every run (hubAward, numbers in HUB_CME) and spent only in this room.
+     A run picks its setup up in startRun: hubLoadout() gives the two starting instruments, hubApplyRun() the perks and
+   the pin. The case, the pharmacy cart's boon and the cup of coffee come only through the OR door (RUNOPT), so QUICK
+   START and TRY AGAIN are the run you had before, plus whatever is permanent.
+     Tables: HUB_PERKS, HUB_PINS, HUB_DECOR, HUB_CUPS, HUB_CASES, HUB_LINES (every speaker's lines), HUB_CME.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var HUB_Y = 126;   // the floor starts lower than in a dungeon room, so the far wall has a face to hang things on (and the HUD a strip above them)
+var HUB_MENU = { x: W - 32, y: 30, r: 20 };
+var HUB_CME = { ROOM: 2, BOSS: 15, FIRST_BOSS: 60, CHART: 5, FAVOR: 10, FAVOR_AT: [2, 4] };
+var HUB_PERKS = {
+  hp:     { name: 'Power Nap', desc: '+10 max HP per level.', max: 3, cost: [30, 60, 100] },
+  rvu:    { name: 'Moonlighting', desc: '+25 starting RVUs per level.', max: 3, cost: [20, 45, 80] },
+  reroll: { name: 'Second Opinion', desc: 'The first altar reroll of every run is free.', max: 1, cost: [60] },
+  swap:   { name: 'Instrument Count', desc: 'Swapping instruments is 5% faster per level.', max: 2, cost: [40, 80] }
+};
+var HUB_PERK_ORDER = ['hp', 'rvu', 'reroll', 'swap'];
+var PIN_USE = [0, 3, 8];   // runs worn to reach level 1 / 2 / 3
+var HUB_PINS = {
+  civiale: { name: 'Lithotrite pin', cls: 'LITHO', v: [0.04, 0.06, 0.08] },
+  young:   { name: 'Scalpel pin', cls: 'CUT', v: [0.04, 0.06, 0.08] },
+  bovie:   { name: 'Spark pin', cls: 'ENERGY', v: [0.04, 0.06, 0.08] },
+  foley:   { name: 'Balloon pin', cls: 'FLUID', v: [0.04, 0.06, 0.08] },
+  huggins: { name: 'Medal pin', fam: 'MALIGNANT', v: [0.05, 0.08, 0.11] },
+  gleason: { name: 'Grade pin', rvu: true, v: [15, 25, 35] },
+  nitze:   { name: 'Cold-light pin', speed: true, v: [0.03, 0.05, 0.07] },
+  fleming: { name: 'Petri pin', fam: 'MICROBE', v: [0.05, 0.08, 0.11] }
+};
+var HUB_SLOTS = ['wall', 'window', 'counter', 'desk', 'floor', 'corner'];
+var HUB_SLOT_NAMES = { wall: 'Wall', window: 'Window', counter: 'Counter', desk: 'Desk', floor: 'Floor', corner: 'Corner' };
+var HUB_DECOR = {
+  diplomas: { slot: 'wall', name: 'Fake diplomas', cost: 20, desc: 'Three framed degrees from institutions that do not exist. Very official.' },
+  poster:   { slot: 'wall', name: '“Hang in there” poster', cost: 15, desc: 'A small stone clinging to a string. Motivational, allegedly.' },
+  portraits: { slot: 'wall', name: 'Framed patron portraits', cost: 35, desc: 'A gallery wall: every patron you have met, properly framed. The empty frames are aspirational.' },
+  tank:     { slot: 'window', name: 'Fish tank', cost: 45, desc: 'Three fish in tiny scrubs. One of them is clearly the attending.' },
+  espresso: { slot: 'counter', name: 'Espresso machine', cost: 50, desc: 'Upgrades the coffee: a real boost for the first room. The decaf button is still there.' },
+  plush:    { slot: 'desk', name: 'Plush kidney', cost: 20, desc: 'Soft, bean-shaped, free of judgment.' },
+  weights:  { slot: 'desk', name: 'Paperweight collection', cost: 30, desc: 'One specimen for every kind of stone you have beaten. It grows.' },
+  wetfloor: { slot: 'floor', name: '“Wet Floor” sign', cost: 10, desc: 'In this department it is less a warning than a forecast.' },
+  greg:     { slot: 'corner', name: 'Greg', cost: 25, desc: 'A ficus named Greg. Greg has seen things. Greg says nothing.' }
+};
+var HUB_CUPS = {
+  drip:     { name: 'Drip coffee', spd: 1.06, dmg: 1, desc: '+6% move speed in the first room.', tell: 'COFFEE: +6% SPEED THIS ROOM' },
+  decaf:    { name: 'Decaf', spd: 0.95, dmg: 1, desc: 'All of the taste. None of the jitters.', tell: 'DECAF: −5% SPEED THIS ROOM. WHY.' },
+  espresso: { name: 'Espresso', spd: 1.1, dmg: 1.1, desc: '+10% move speed and +10% damage in the first room.', tell: 'ESPRESSO: +10% SPEED AND DAMAGE THIS ROOM' }
+};
+// the case board, top to bottom. A case opens once the boss of the one above it has been beaten.
+var HUB_CASES = [
+  { boss: 'staghorn', def: 'staghorn', name: 'STONES', what: 'Staghorn Calculus', color: '#38e8ff' },
+  { boss: 'fournier', def: 'fournier', name: 'INFECTION', what: 'Fournier’s Gangrene', color: '#ff4d6d' },
+  { boss: 'bph', def: 'bphboss', name: 'BENIGN', what: 'The Giant TURP', color: '#ffd93b' },
+  { boss: 'mibc', def: 'mibc', name: 'ONCOLOGY', what: 'The Invader', color: '#ff6b8a' },
+  { boss: '', def: '', name: 'PEDS WING', what: 'Under construction', color: '#8fa6b8' }
+];
+var ATTENDING_LOOK = { skin: '#e9c29c', hair: '#b9bec6', hairStyle: 'side', facial: 'none', glasses: 'square', collar: 'labcoat', suit: '#e8eef5', tie: '#6c6f9c', acc: 'none', grin: 'line', mood: 'sleepy', look: 0.3 };
+var JANITOR_LOOK = { skin: '#c99872', hair: '#5a5148', hairStyle: 'bald', facial: 'mustache', glasses: 'none', collar: 'polo', suit: '#4f6a52', tie: '#3d5440', acc: 'none', grin: 'line', look: -0.2 };
+// Lines rotate in order and wrap, so nobody repeats themselves back to back. All invented people, no real brands.
+var HUB_LINES = {
+  attending: [
+    'Your case is on the board: {case}. I picked it by throwing a dart. The dart was also tired.',
+    'When I was a resident we sharpened our own lasers. Uphill. Both ways.',
+    'I am not mad about the last one. I am not anything. I have been awake since Tuesday.',
+    'The enemy of good is better. The enemy of better is the consent form.',
+    'Somebody labelled the coffee “decaf” as a joke. Nobody is laughing. Nobody can.',
+    'You will do fine. Statistically, someone has to.',
+    'If it bleeds, cauterize it. If it is a stone, break it. If it is a rep, do not make eye contact.',
+    'I read your last note. Bold of you to chart “tolerated the procedure well” in the future tense.',
+    '{case} today. Residents these days want sleep AND feedback. Pick one.',
+    'Go on. The door is that way. It is always that way.'
+  ],
+  janitor: [
+    'Bright pip over its head: that tool hurts it. Crossed pip: save your breath. Nobody reads the chart. I read the chart.',
+    'That stone stag? Do not fight the charge. Step aside and let the wall do the surgery.',
+    'Green slime on a bug is biofilm. Water or cautery first, then whatever you like.',
+    'Swap tools, then swing. The first hit with the right tool lands harder. I have watched through that window for years.',
+    'The big prostate one: stop cutting when you see the rings. Rings mean capsule. Past the capsule is my problem.',
+    'Two antibiotics at a time, tops. Use the broad stuff in every room and something worse moves in. I mop it. I know.',
+    'Cutting makes them bleed. Heat seals it and hurts extra. Cut, then burn. That is not medicine, that is kitchens.',
+    'Freeze a stone, then hit it. Shatters like a dropped specimen cup. Do not ask.',
+    'The bladder tumour’s wall is thin where you have been cutting. A laser will not poke through. Steel will.',
+    'Roll through the red circle, not away from it. Away is where everyone goes. Through is where nobody is aiming.',
+    'Decaf is the button on the end. I am not saying it is a trap. I am saying I have never seen anyone press it twice.',
+    'The old-timers at the altars remember you. Take from the same one twice and the offers get better.'
+  ],
+  brax: [
+    'Doc. DOC. I am not here to sell you anything. I am here to let you buy something.',
+    'I had a pen for you. I gave it to the last resident. He does not even operate. That is how generous I am.',
+    'Our new fiber is thirty percent more. I do not have the noun in front of me.',
+    'I am in this call room more than you are. I have a parking spot. You do not.',
+    'Think of me as part of the team. The part with the catering budget.',
+    'My numbers this quarter are incredible. Unrelated: are you busy? Could you be?',
+    'I do not do pressure. I do reminders. Constant, laminated reminders.',
+    'You scrub in, I will be right here. I am always right here. Legally it is called presence.'
+  ],
+  kiki: [
+    'Hi!! I brought bagels. They are from yesterday, but so is my enthusiasm, and that is still great!',
+    'I made you a laminated card. It is the same as last week’s card, but laminated.',
+    'Did you know a stone basket has four wires? I know that. I know SO many things like that.',
+    'I love this call room. I love the fridge. I love that nobody has cleaned the fridge. It has history!',
+    'Stickers! This one says “I heart lithotripsy.” This one just says “kidney.” Take both.',
+    'I remembered your birthday! It is not today? That is okay. I will remember it again later.',
+    'You look tired. That is the look of someone making a difference! Bagel?',
+    'If you ever need anything, I am here Mondays, Wednesdays, and whenever you least expect it!'
+  ],
+  rex: [
+    'I cannot tell you what it is for. I can tell you what it is near.',
+    'Legal makes me say this is not medical advice. Legal makes me say a lot of things. Hi, Legal.',
+    'My badge opens every door in this hospital except the one with the good coffee.',
+    'I have watched four thousand cases. I have learned nothing. I have memorised the playlist.',
+    'The generator has two settings: cut and coag. There is a third. We do not talk about the third.',
+    'Not a doctor. My mother introduces me as “in medicine.” I let her.',
+    'If anyone asks, I was never in the room. If the case goes well, I was in the room.',
+    'Free pen. It is out of ink. It is more of a pointer.'
+  ],
+  sunny: [
+    'New and improved! I say that to everything. I said it to my reflection this morning.',
+    'The old model is discontinued. The new model is back-ordered. I am selling the concept.',
+    'We changed the colour of the box. Outcomes are, I assume, better.',
+    'It has an app now. Nobody asked. It has an app.',
+    'Version four fixes everything version three fixed in version two.',
+    'Our irrigation pump is whisper-quiet. You will hear everyone’s opinions clearly.',
+    'The pizza is Tuesday. It is always Tuesday. Even on the days when it is not.',
+    'I put a NEW sticker on the pen jar. The pens are from years ago. The sticker is new.'
+  ],
+  coffee: [
+    'Brewed fresh at some point.',
+    'The pot is older than the fellow.',
+    'Tastes like a deadline.',
+    'Someone wrote DO NOT on the filter. Just DO NOT.',
+    'Hot, brown, and legally coffee.',
+    'The machine makes a noise like a pager. That is not a coincidence. That is a design decision.',
+    'There is a sign: “Your mother does not work here.” Underneath, in pen: “She would be an improvement.”',
+    'The sugar is in a specimen cup. A clean one. Probably.'
+  ],
+  pager: [
+    'Bed 4 wants to know if the stone can be emailed.',
+    'Pharmacy: “Did you mean to order 400 catheters?”',
+    'Nurse: “The bladder scanner says 999. Either the machine is broken or the patient is.”',
+    'Attending: “Call me if you need me.” (Do not call.)',
+    'Cafeteria closed four minutes ago.',
+    'Parking: your car is being towed. You do not own a car. Somebody’s car is being towed.',
+    'OR 3: “We are ready for you.” (They are not ready for you.)',
+    'Unknown number: “Sorry, wrong urologist.”',
+    'ED: “He says it is probably nothing.” It is 2 a.m. It is never nothing.'
+  ]
+};
+var HUB = { t: 0, near: null, bg: null, dirty: true, solids: [], stations: [], props: [], npcs: [], bubble: null, toast: null, cup: '', panel: '', doorAway: true, acc: 0, coffeeLine: '', pagerLine: '', lastRun: null };
+
+/* ── saved state ── */
+function hubDefaults(h) {
+  if (!h || typeof h !== 'object') h = {};
+  var objs = ['decor', 'owned', 'perks', 'met', 'lines', 'bosses', 'pinUse', 'fav'];
+  for (var i = 0; i < objs.length; i++) if (!h[objs[i]] || typeof h[objs[i]] !== 'object') h[objs[i]] = {};
+  h.cme = Math.max(0, Math.floor(+h.cme || 0)); h.pens = Math.max(0, Math.floor(+h.pens || 0)); h.visits = Math.max(0, Math.floor(+h.visits || 0));
+  if (typeof h.pin !== 'string') h.pin = '';
+  if (!h.load || !h.load.length) h.load = ['holmium', 'scalpel'];
+  if (typeof h.dungeon !== 'string') h.dungeon = 'staghorn';
+  if (!h.rx || typeof h.rx !== 'object') h.rx = null;
+  return h;
+}
+function hubPerk(id) { var d = HUB_PERKS[id]; return d ? Math.min(d.max, Math.max(0, Math.floor(META.hub.perks[id] || 0))) : 0; }
+function pinLevel(pid) { var u = META.hub.pinUse[pid] || 0; return u >= PIN_USE[2] ? 3 : u >= PIN_USE[1] ? 2 : 1; }
+function pinText(pid, lvl) {
+  var d = HUB_PINS[pid], v = d.v[lvl - 1];
+  return d.cls ? '+' + Math.round(v * 100) + '% ' + CLASSES[d.cls].name + ' damage' : d.fam ? '+' + Math.round(v * 100) + '% damage to ' + FAMILIES[d.fam].name.toLowerCase() + ' enemies' : d.rvu ? '+' + v + ' starting RVUs' : '+' + Math.round(v * 100) + '% move speed';
+}
+function hubLockerIds() { var out = []; for (var i = 0; i < WEAPON_ORDER.length; i++) if (!WEAPONS[WEAPON_ORDER[i]].ultimate) out.push(WEAPON_ORDER[i]); return out; }
+// the two instruments a run starts with: the locker's picks, as long as they are still valid and unlocked
+function hubLoadout() {
+  var h = META.hub, out = [], def = ['holmium', 'scalpel'], i;
+  for (i = 0; i < h.load.length && out.length < 2; i++) { var id = h.load[i]; if (WEAPONS[id] && !WEAPONS[id].ultimate && weaponUnlocked(id) && out.indexOf(id) < 0) out.push(id); }
+  for (i = 0; i < def.length && out.length < 2; i++) if (out.indexOf(def[i]) < 0) out.push(def[i]);
+  return out;
+}
+function caseUnlocked(i) { var cs = HUB_CASES[i]; if (!cs || !cs.boss) return false; return i === 0 || (META.hub.bosses[HUB_CASES[i - 1].boss] || 0) > 0; }
+function hubCase() { var idx = 0; for (var i = 0; i < HUB_CASES.length; i++) if (HUB_CASES[i].boss && HUB_CASES[i].boss === META.hub.dungeon && caseUnlocked(i)) idx = i; return HUB_CASES[idx]; }
+function hubCharted() { var n = 0; for (var id in META.bestiary) if (META.bestiary[id] && META.bestiary[id].kills > 0) n++; return n; }
+function hubStoneKinds() { var n = 0; for (var id in META.bestiary) if (META.bestiary[id] && META.bestiary[id].kills > 0 && ENEMIES[id] && ENEMIES[id].family === 'STONE' && !ENEMIES[id].hidden && !ENEMIES[id].boss) n++; return n; }
+function hubMetCount() { var n = 0; for (var i = 0; i < PATRON_ORDER.length; i++) if (META.hub.met[PATRON_ORDER[i]]) n++; return n; }
+// meeting a patron at an altar leaves their pin (and their common boons on the pharmacy cart) in the call room
+function hubMeet(pid) {
+  var h = META.hub; if (!PATRONS[pid] || h.met[pid]) return false;
+  h.met[pid] = 1; HUB.dirty = true; saveMeta();
+  if (P && G.running) addText(P.x, P.y - 62, PATRONS[pid].name.toUpperCase() + ' LEFT A PIN IN THE CALL ROOM', { color: PATRONS[pid].color, size: 11 });
+  return true;
+}
+function hubLine(who) { var L = HUB_LINES[who], h = META.hub; if (!L) return ''; var i = ((h.lines[who] === undefined ? -1 : h.lines[who]) + 1) % L.length; h.lines[who] = i; return L[i]; }
+
+/* ── what a run takes with it, and what it pays ── */
+var RUNOPT = null;   // set by the OR door for exactly one startRun: { boss, boon, cup }
+function hubApplyRun(opt) {
+  var h = META.hub, lv;
+  G.pin = null; G.cup = null; G.freeReroll = 0; G.swapMul = 1; G.fromHub = !!opt;
+  lv = hubPerk('hp'); if (lv) { P.maxHp += 10 * lv; P.hp = P.maxHp; }
+  lv = hubPerk('rvu'); if (lv) G.rvu += 25 * lv;
+  if (hubPerk('reroll')) G.freeReroll = 1;
+  lv = hubPerk('swap'); if (lv) G.swapMul = 1 - 0.05 * lv;
+  if (h.pin && h.met[h.pin] && HUB_PINS[h.pin]) { var pd = HUB_PINS[h.pin], pl = pinLevel(h.pin); G.pin = { id: h.pin, lvl: pl }; if (pd.rvu) G.rvu += pd.v[pl - 1]; if (pd.speed) P.speed *= 1 + pd.v[pl - 1]; }
+  if (opt && opt.boon && BOONS[opt.boon]) giveBoon(opt.boon, true);
+  if (opt && opt.cup && HUB_CUPS[opt.cup]) { var cd = HUB_CUPS[opt.cup]; G.cup = { kind: opt.cup, room: 1, spd: cd.spd, dmg: cd.dmg, told: false }; }
+}
+function hubDmgMul(e, cls) {
+  var m = 1, pn = G.pin;
+  if (pn) { var d = HUB_PINS[pn.id]; if (d && ((d.cls && d.cls === cls) || (d.fam && e.family === d.fam))) m *= 1 + d.v[pn.lvl - 1]; }
+  if (G.cup && G.cup.dmg !== 1 && G.roomIndex === G.cup.room) m *= G.cup.dmg;
+  return m;
+}
+function rerollCost() { return G.freeReroll > 0 ? 0 : 25; }
+// paid by finishRun: rooms cleared, the boss (a first kill pays extra), first-time bestiary charts, patron favor milestones
+function hubAward(won) {
+  var h = META.hub, st = G.stats, parts = [], total = 0, id;
+  function add(label, n) { if (n > 0) { parts.push(label + ' ' + n); total += n; } }
+  add('rooms', st.rooms * HUB_CME.ROOM);
+  if (won && G.bossId) { var first = !(h.bosses[G.bossId] > 0); h.bosses[G.bossId] = (h.bosses[G.bossId] || 0) + 1; add('boss', HUB_CME.BOSS); if (first) add('first kill', HUB_CME.FIRST_BOSS); }
+  var charts = 0, b0 = G.best0 || {}; for (id in META.bestiary) if (META.bestiary[id] && META.bestiary[id].kills > 0 && !b0[id]) charts++;
+  add(charts + ' new chart' + (charts === 1 ? '' : 's'), charts * HUB_CME.CHART);
+  var fav = 0; for (id in (G.favor || {})) { var v = G.favor[id], prev = h.fav[id] || 0; if (v > prev) { for (var m = 0; m < HUB_CME.FAVOR_AT.length; m++) if (prev < HUB_CME.FAVOR_AT[m] && v >= HUB_CME.FAVOR_AT[m]) fav += HUB_CME.FAVOR; h.fav[id] = v; } }
+  add('patron favor', fav);
+  if (G.pin) h.pinUse[G.pin.id] = (h.pinUse[G.pin.id] || 0) + 1;
+  h.pens += G.pens || 0; h.cme += total; HUB.dirty = true;
+  HUB.lastRun = { total: total, parts: parts };
+  return HUB.lastRun;
+}
+
+/* ── the room: solids, stations, props, the cast ── */
+function hubStation(id) { for (var i = 0; i < HUB.stations.length; i++) if (HUB.stations[i].id === id) return HUB.stations[i]; return null; }
+function hubNpc(id) { for (var i = 0; i < HUB.npcs.length; i++) if (HUB.npcs[i].id === id) return HUB.npcs[i]; return null; }
+function hubBuild() {
+  var h = META.hub, so = [], st = [], pr = [], np = [], i, old = hubNpc('janitor');
+  function station(id, name, x, y, r, use) { var s = { id: id, name: name, x: x, y: y, r: r, use: use }; st.push(s); return s; }
+  function prop(dy, draw) { pr.push({ _dy: dy, draw: draw }); }
+  // solids that stand against a wall reach on through it, so a circle pushed out of one never ends up wedged in the wall
+  so.push({ type: 'rect', x: -40, y: -40, w: W + 80, h: HUB_Y + 40 });
+  // along the far wall, left to right
+  station('trophy', 'TROPHY WALL', 155, HUB_Y + 14, 52, openTrophy);
+  station('pins', 'LANYARD PINS', 269, HUB_Y + 14, 50, openPins);
+  station('perks', 'WHITEBOARD · RESIDENT PERKS', 393, HUB_Y + 14, 56, openPerks);
+  station('coffee', h.decor.counter === 'espresso' ? 'ESPRESSO MACHINE' : 'COFFEE MACHINE', 632, HUB_Y + 36, 54, function () { openCoffee(); });
+  so.push({ type: 'rect', x: 584, y: HUB_Y - 60, w: 96, h: 82 }); prop(HUB_Y + 22, drawHubCounter);
+  station('board', 'CASE BOARD', 844, HUB_Y + 14, 56, openCaseBoard);
+  station('door', 'OR DOOR · SCRUB IN', 906, 270, 46, openScrubIn);
+  // west wall
+  station('locker', 'INSTRUMENT LOCKER', 86, 176, 54, openLocker); so.push({ type: 'rect', x: -40, y: HUB_Y - 60, w: 114, h: 274 - HUB_Y }); prop(214, drawHubLocker);
+  station('charts', 'CHART RACK · BESTIARY', 86, 366, 54, openBestiary); so.push({ type: 'rect', x: -40, y: 334, w: 108, h: 64 }); prop(398, drawHubCharts);
+  // east wall, below the door
+  station('scrubs', 'PAGER + SCRUB CABINET', 874, 392, 54, function () { openScrubs(); }); so.push({ type: 'rect', x: 892, y: 352, w: 110, h: 76 }); prop(428, drawHubScrubs);
+  // on the floor
+  station('cart', 'PHARMACY CART', 330, 250, 52, openCart); so.push({ type: 'circle', x: 330, y: 250, r: 20 }); prop(262, drawHubCart);
+  station('decor', 'DECOR CATALOG', 255, 424, 72, openDecor); so.push({ type: 'rect', x: 200, y: 408, w: 110, h: 34 }); prop(442, drawHubDesk);
+  station('reps', 'REP TABLE', 660, 408, 82, hubRepTalk); so.push({ type: 'circle', x: 660, y: 408, r: 28 }); prop(424, drawHubRepTable);
+  // decor that stands on the floor
+  if (h.decor.window === 'tank') { so.push({ type: 'rect', x: 484, y: HUB_Y - 60, w: 74, h: 78 }); prop(HUB_Y + 18, drawHubTank); }
+  if (h.decor.corner === 'greg') { so.push({ type: 'circle', x: 60, y: 484, r: 14 }); prop(494, drawHubGreg); }
+  if (h.decor.floor === 'wetfloor') prop(458, drawHubWetFloor);
+  // the cast: the attending by the case board, the four reps round their table, the janitor on his round
+  np.push({ id: 'attending', name: 'THE ATTENDING', x: 778, y: 210, look: ATTENDING_LOOK, color: '#eef4f8', pants: '#3b4a6b' });
+  var rp = [[604, 396], [716, 398], [630, 458], [694, 460]];
+  for (i = 0; i < REPS.length && i < rp.length; i++) np.push({ id: REPS[i].id, name: REPS[i].name.toUpperCase(), x: rp[i][0], y: rp[i][1], look: REPS[i].look, color: REPS[i].color, rep: true, pants: '#1f2733' });
+  for (i = 0; i < np.length; i++) so.push({ type: 'circle', x: np[i].x, y: np[i].y + 5, r: 9 });
+  var jan = old || { id: 'janitor', name: 'THE JANITOR', x: 170, y: 470, look: JANITOR_LOOK, color: '#9fe6a8', pants: '#3d5440', mop: true, leg: 0, wait: 1.5, walk: false, face: 1 };
+  jan.path = [[170, 470], [430, 486], [540, 330], [470, 206], [200, 240]]; np.push(jan);
+  station('attending', 'THE ATTENDING', 778, 210, 46, function () { hubTalk('attending'); });
+  station('janitor', 'THE JANITOR', jan.x, jan.y, 46, function () { hubTalk('janitor'); }).npc = jan;
+  HUB.solids = so; HUB.stations = st; HUB.props = pr; HUB.npcs = np; HUB.dirty = true;
+  if (G.screen === 'hub') G.obstacles = so;
+}
+function enterHub() {
+  G.running = false; G.screen = 'hub'; G.over = false; G.boss = null; G.transition = null; G.banner = null; G.notice = null; G.arena = null; G.wall = null; G.incont = null; G.hidePlayer = false;
+  G.enemies = []; G.bullets = []; G.parts = []; G.texts = []; G.pickups = []; G.hazards = []; G.doors = []; G.teles = []; G.decals = []; G.seeds = []; G.turrets = []; G.fxLines = []; G.fxRings = []; G.rewards = []; G.fields = []; G.landmarks = [];
+  G.boons = []; G.wolfT = 0; G.swapT = 0; G.swapBonusT = 0; G.timeScale = 1; G.shake = 0; G.flash = 0; G.hitstopT = 0; G.pin = null; G.cup = null;
+  P = newPlayer(); P.x = 84; P.y = 270; P.aim = 0;
+  HUB.near = null; HUB.bubble = null; HUB.panel = ''; HUB.doorAway = true; HUB.acc = 0; RUNOPT = null;
+  hubBuild(); hubHoldTool(); hideScreens(); Snd.setMusicMode('hub');
+  if (HUB.lastRun && HUB.lastRun.total && !HUB.lastRun.seen) { HUB.lastRun.seen = true; hubToast('+' + HUB.lastRun.total + ' CME FROM THAT RUN'); }
+  META.hub.visits = (META.hub.visits || 0) + 1; saveMeta();
+}
+// the surgeon carries the first instrument of the loadout around the room: the locker's choice, visible
+function hubHoldTool() { G.weapons = []; G.wIndex = 0; var l = hubLoadout(); try { G.weapons.push(makeWeapon(l[0], 'common')); } catch (e) { G.weapons = []; } }
+function hubTalk(who) {
+  var n = hubNpc(who); if (!n) return '';
+  var line = hubLine(who).replace('{case}', hubCase().name.charAt(0) + hubCase().name.slice(1).toLowerCase());
+  HUB.bubble = { who: who, text: line, t: 2.6 + line.length * 0.05, dur: 2.6 + line.length * 0.05 };
+  Snd.sfx('pickup'); saveMeta(); return line;
+}
+// the rep table: whichever rep stands nearest does the talking
+function hubRepTalk() { var best = null, bd = 1e9; for (var i = 0; i < HUB.npcs.length; i++) { var n = HUB.npcs[i]; if (!n.rep) continue; var d = dist(P.x, P.y, n.x, n.y); if (d < bd) { bd = d; best = n; } } return best ? hubTalk(best.id) : ''; }
+// a station has something for you right now: a perk or a decor item you can afford, a boon on the cart nobody packed, a pin
+// nobody wears, a case that is open and not yet beaten or picked. Drawn as a small gold dot over the station.
+function hubHint(id) {
+  var h = META.hub, k;
+  if (id === 'perks') { for (k = 0; k < HUB_PERK_ORDER.length; k++) { var d = HUB_PERKS[HUB_PERK_ORDER[k]], lv = hubPerk(HUB_PERK_ORDER[k]); if (lv < d.max && h.cme >= d.cost[lv]) return true; } return false; }
+  if (id === 'decor') { for (k in HUB_DECOR) if (!h.owned[k] && h.cme >= HUB_DECOR[k].cost) return true; return false; }
+  if (id === 'cart') return hubMetCount() > 0 && !(h.rx && h.rx.run === (META.runs || 0) && h.rx.pick);
+  if (id === 'pins') return hubMetCount() > 0 && !(h.pin && h.met[h.pin]);
+  if (id === 'board') { for (k = 0; k < HUB_CASES.length; k++) if (caseUnlocked(k) && !(h.bosses[HUB_CASES[k].boss] > 0) && hubCase() !== HUB_CASES[k]) return true; return false; }
+  return false;
+}
+// where a station's marker floats: over a person's head, on the skirting board under something on the wall, above furniture
+function hubMarkY(s) { return s.npc || s.id === 'attending' ? s.y - 46 : s.id === 'coffee' ? HUB_Y - 62 : s.id === 'door' ? s.y - 86 : s.y < HUB_Y + 30 ? HUB_Y - 9 : s.y - 56; }
+function hubToast(t, color) { HUB.toast = { text: t, color: color || '#7dffb0', t: 2.6, dur: 2.6 }; }
+
+/* ── one step of the room (1/60 s): walk, roll, the janitor's round, which station is in reach, interact ── */
+function hubStep(dt) {
+  var i, mv = readMove();
+  HUB.t += dt;
+  P.mvx = mv.x; P.mvy = mv.y; P.moving = mv.mag > 0.1;
+  if (P.roll > 0) { P.roll -= dt; P.x += P.rollDx * dt; P.y += P.rollDy * dt; P.rollT = (P.rollT || 0) + dt; if (P.rollT > 0.04) { P.rollT = 0; P.after.push({ x: P.x, y: P.y, t: 0.25, a: P.aim }); } }
+  else { P.x += mv.x * P.speed * dt; P.y += mv.y * P.speed * dt; if (P.moving) P.aim = Math.atan2(mv.y, mv.x); }
+  for (i = P.after.length - 1; i >= 0; i--) { P.after[i].t -= dt; if (P.after[i].t <= 0) P.after.splice(i, 1); }
+  P.rollCd -= dt;
+  if (takeEdge('roll') && P.rollCd <= 0 && P.roll <= 0) { var ra = mv.mag > 0.2 ? Math.atan2(mv.y, mv.x) : P.aim; P.roll = 0.35; P.rollCd = 0.8; P.rollDx = Math.cos(ra) * 520; P.rollDy = Math.sin(ra) * 520; P.rollT = 0; Snd.sfx('roll'); }
+  hubKeepIn();
+  P.anim += dt * (P.moving ? 11 : 2.5);
+  // the janitor mops his way round a loop, stops at each corner, and stands still while he talks
+  var jn = hubNpc('janitor');
+  if (jn) {
+    var talking = HUB.bubble && HUB.bubble.who === 'janitor';
+    if (talking) jn.walk = false;
+    else if (jn.wait > 0) { jn.wait -= dt; jn.walk = false; }
+    else { var tg = jn.path[jn.leg % jn.path.length], d = dist(jn.x, jn.y, tg[0], tg[1]), sp = 34 * dt; jn.walk = true; if (Math.abs(tg[0] - jn.x) > 1) jn.face = tg[0] > jn.x ? 1 : -1; if (d <= sp) { jn.x = tg[0]; jn.y = tg[1]; jn.leg = (jn.leg + 1) % jn.path.length; jn.wait = 2.6; } else { jn.x += (tg[0] - jn.x) / d * sp; jn.y += (tg[1] - jn.y) / d * sp; } }
+  }
+  if (HUB.bubble) { HUB.bubble.t -= dt; if (HUB.bubble.t <= 0) HUB.bubble = null; }
+  if (HUB.toast) { HUB.toast.t -= dt; if (HUB.toast.t <= 0) HUB.toast = null; }
+  var best = null, bd = 1e9;
+  for (i = 0; i < HUB.stations.length; i++) { var s = HUB.stations[i]; if (s.npc) { s.x = s.npc.x; s.y = s.npc.y; } var sd = dist(P.x, P.y, s.x, s.y); if (sd <= s.r && sd < bd) { bd = sd; best = s; } }
+  HUB.near = best;
+  var go = takeEdge('interact'); if (takeEdge('fire') && Input.mode !== 'touch') go = true;
+  // walking into the OR door asks the same question as using it
+  var dp = DOOR_POS.E, atDoor = P.x > dp.x - P.r - 4 && Math.abs(P.y - (dp.y + dp.h / 2)) < dp.h / 2 - 4;
+  if (!atDoor) HUB.doorAway = true;
+  clearEdges();
+  if (atDoor && HUB.doorAway) { HUB.doorAway = false; openScrubIn(); }
+  else if (go && best) { if (best.id === 'door') HUB.doorAway = false; best.use(best); }
+}
+// the room's bounds first (its floor starts at HUB_Y), then the furniture and the cast
+function hubKeepIn() { P.x = clamp(P.x, ARENA.x + P.r, ARENA.x + ARENA.w - P.r); P.y = clamp(P.y, HUB_Y + P.r, ARENA.y + ARENA.h - P.r); resolveCircle(P, P.r); }
+function hubMenuAt(x, y) { return dist(x, y, HUB_MENU.x, HUB_MENU.y) <= HUB_MENU.r + 8; }
+function hubTouchDown(ev, p) {
+  var TL = touchLayout(), id = ev.pointerId;
+  if (hubMenuAt(p.x, p.y)) { Input.pointers[id] = { kind: 'none' }; edge('pause'); return; }
+  if (hitCircle(p.x, p.y, TL.fire)) { Input.pointers[id] = { kind: 'btn', name: 'fire' }; Input.buttons.fire = id; edge('interact'); return; }
+  if (hitCircle(p.x, p.y, TL.roll)) { Input.pointers[id] = { kind: 'btn', name: 'roll' }; Input.buttons.roll = id; edge('roll'); return; }
+  if (!Input.stick && p.x >= TL.stickZone.x && p.x <= TL.stickZone.x + TL.stickZone.w && p.y >= TL.stickZone.y) {
+    var bx = clamp(p.x, 70, W - 70), by = clamp(p.y, 110, H - 70);
+    Input.stick = { id: id, bx: bx, by: by, kx: bx, ky: by }; Input.pointers[id] = { kind: 'stick' }; return;
+  }
+  Input.pointers[id] = { kind: 'none' };
+}
+
+/* ── drawing: a cached backdrop (floor, walls and everything that hangs on them), then props, cast and surgeon back to front ── */
+function hubRenderBg() {
+  if (!HUB.bg) { HUB.bg = document.createElement('canvas'); HUB.bg.width = W * 2; HUB.bg.height = H * 2; }
+  var c = HUB.bg.getContext('2d'); c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, W, H);
+  try { hubPaintBg(c); } catch (e) { if (DEBUG) throw e; }
+}
+function hubPaintBg(c) {
+  var h = META.hub, gr, i, x, y, TW = 48, TH = 36, fy = HUB_Y, fh = ARENA.y + ARENA.h - HUB_Y, k;
+  c.fillStyle = PAL.wallOuter; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#1c2a36'; roundRect(c, 6, 6, W - 12, H - 12, 18); c.fill();
+  gr = c.createLinearGradient(0, 8, 0, fy); gr.addColorStop(0, '#3d566b'); gr.addColorStop(1, '#2b4053'); c.fillStyle = gr; roundRect(c, ARENA.x - 6, 8, ARENA.w + 12, fy - 8, 8); c.fill();   // the far wall's face
+  c.fillStyle = '#213240'; c.fillRect(ARENA.x - 6, fy - 14, ARENA.w + 12, 14);                                     // skirting board
+  c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(ARENA.x - 4, 9, ARENA.w + 8, 3); c.fillRect(ARENA.x - 6, fy - 15, ARENA.w + 12, 2);
+  c.fillStyle = '#0c161e'; roundRect(c, 12, ARENA.y + ARENA.h + 2, W - 24, 16, 8); c.fill();                        // the near wall: only its top edge
+  // floor: worn lino in two tones, warmer than a dungeon
+  c.fillStyle = '#18272d'; roundRect(c, ARENA.x, fy, ARENA.w, fh, 14); c.fill();
+  c.save(); roundRect(c, ARENA.x, fy, ARENA.w, fh, 14); c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.03)'; for (y = 0; y * TH < fh; y++) for (x = 0; x * TW < ARENA.w; x++) if ((x + y) % 2 === 0) c.fillRect(ARENA.x + x * TW, fy + y * TH, TW, TH);
+  for (k = 0; k < 7; k++) { c.fillStyle = k % 3 === 0 ? 'rgba(90,60,30,0.2)' : 'rgba(0,0,0,0.14)'; c.save(); c.translate(ARENA.x + hsh(23, k) * ARENA.w, fy + hsh(29, k) * fh); c.scale(1, 0.7); blobPath(c, 14 + hsh(31, k) * 26, k, 4, 0.2); c.fill(); c.restore(); }
+  // the rug, with a worn path toward the OR
+  c.fillStyle = '#3a2f4a'; roundRect(c, 388, 226, 200, 120, 12); c.fill(); c.strokeStyle = '#5a4a72'; c.lineWidth = 3; roundRect(c, 396, 234, 184, 104, 8); c.stroke(); c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1; for (i = 0; i < 6; i++) { c.beginPath(); c.moveTo(404, 246 + i * 16); c.lineTo(572, 246 + i * 16); c.stroke(); }
+  gr = c.createLinearGradient(0, fy, 0, fy + 44); gr.addColorStop(0, 'rgba(0,0,0,0.42)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(ARENA.x, fy, ARENA.w, 44);
+  gr = c.createLinearGradient(ARENA.x, 0, ARENA.x + 18, 0); gr.addColorStop(0, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(ARENA.x, fy, 18, fh);
+  gr = c.createLinearGradient(ARENA.x + ARENA.w, 0, ARENA.x + ARENA.w - 18, 0); gr.addColorStop(0, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(ARENA.x + ARENA.w - 18, fy, 18, fh);
+  c.restore();
+  c.strokeStyle = PAL.wallEdge; c.lineWidth = 3; roundRect(c, ARENA.x - 1.5, fy - 1.5, ARENA.w + 3, fh + 3, 15); c.stroke();
+  // doors: the way in (west, shut behind you) and the OR (east)
+  var wd = DOOR_POS.W, ed = DOOR_POS.E; c.fillStyle = '#0d1a24'; c.fillRect(wd.x, wd.y, wd.w, wd.h); c.fillRect(ed.x, ed.y, ed.w, ed.h);
+  c.fillStyle = PAL.wallEdge; for (i = 0; i < 4; i++) c.fillRect(wd.x + 4 + i * 7, wd.y + 6, 3, wd.h - 12);
+  c.save(); c.translate(0, HUB_Y - 104);   // everything that hangs on the far wall is laid out against a floor line at y = 104
+  // ── trophy wall: a plaque per boss (its head, once beaten) over a row of patron portraits that fill in as you meet them ──
+  c.fillStyle = '#4a3626'; roundRect(c, 100, 14, 110, 74, 5); c.fill(); outline(c, 2.5); c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(104, 17, 102, 2);
+  for (i = 0; i < 4; i++) {
+    var cs = HUB_CASES[i], won = (h.bosses[cs.boss] || 0) > 0, px = 116 + i * 26, py = 34;
+    c.beginPath(); c.moveTo(px - 10, py - 12); c.lineTo(px + 10, py - 12); c.lineTo(px + 10, py + 2); c.quadraticCurveTo(px, py + 16, px - 10, py + 2); c.closePath(); c.fillStyle = won ? '#c9a24a' : '#2a2018'; c.fill(); outline(c, 2);
+    if (won && ENEMIES[cs.def]) { try { c.drawImage(enemyThumb(ENEMIES[cs.def], 40, false), px - 10, py - 12, 20, 20); } catch (e1) {} c.fillStyle = cs.color; c.fillRect(px - 8, py + 3, 16, 2); }
+    else { c.fillStyle = 'rgba(255,255,255,0.14)'; c.font = '900 10px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', px, py - 3); }
+  }
+  for (i = 0; i < PATRON_ORDER.length; i++) {
+    var pt = PATRONS[PATRON_ORDER[i]], met = !!h.met[PATRON_ORDER[i]], fx = 105 + i * 12.7, fyy = 60;
+    c.fillStyle = met ? '#e9dfc6' : '#2a2018'; c.fillRect(fx, fyy, 10.5, 20); c.strokeStyle = met ? pt.color : '#1a1218'; c.lineWidth = 1.6; c.strokeRect(fx, fyy, 10.5, 20);
+    if (met) { c.save(); c.beginPath(); c.rect(fx + 0.8, fyy + 0.8, 8.9, 18.4); c.clip(); c.translate(fx + 5.25, fyy + 9); drawCaricature(c, pt.look, 0.16); c.restore(); }
+  }
+  // ── lanyard pins: a cork board, one hook per patron ──
+  c.fillStyle = '#6b4a32'; roundRect(c, 228, 20, 82, 66, 4); c.fill(); outline(c, 2.5); c.fillStyle = '#b08a5a'; c.fillRect(232, 24, 74, 58);
+  for (i = 0; i < PATRON_ORDER.length; i++) {
+    var pid = PATRON_ORDER[i], qx = 244 + (i % 4) * 17, qy = 40 + Math.floor(i / 4) * 26;
+    if (h.met[pid]) { if (h.pin === pid) { c.strokeStyle = '#ffd166'; c.lineWidth = 2; c.beginPath(); c.arc(qx, qy, 9, 0, TAU); c.stroke(); } c.fillStyle = '#10202c'; c.beginPath(); c.arc(qx, qy, 6.6, 0, TAU); c.fill(); c.strokeStyle = PATRONS[pid].color; c.lineWidth = 1.6; c.stroke(); drawPatronGlyph(c, pid, qx, qy, 3.8); }
+    else { c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.arc(qx, qy, 1.6, 0, TAU); c.fill(); }
+  }
+  // ── whiteboard: the perks and how many levels of each are ticked ──
+  c.fillStyle = '#f4f7fb'; roundRect(c, 328, 14, 130, 70, 4); c.fill(); outline(c, 3); c.fillStyle = '#9fb0bf'; c.fillRect(336, 84, 114, 4);
+  c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = '900 8px ' + FONT; c.fillStyle = '#3b5bdb'; c.fillText('RESIDENT PERKS', 336, 24);
+  for (i = 0; i < HUB_PERK_ORDER.length; i++) {
+    var pk = HUB_PERKS[HUB_PERK_ORDER[i]], lv = hubPerk(HUB_PERK_ORDER[i]), ry = 36 + i * 11.5;
+    c.font = '800 6.5px ' + FONT; c.fillStyle = '#2a3440'; c.fillText(pk.name, 336, ry);
+    for (k = 0; k < pk.max; k++) { c.strokeStyle = '#2a3440'; c.lineWidth = 1; c.strokeRect(412 + k * 12, ry - 4, 8, 8); if (k < lv) { c.strokeStyle = '#e0485c'; c.lineWidth = 2; c.beginPath(); c.moveTo(413 + k * 12, ry); c.lineTo(416 + k * 12, ry + 3); c.lineTo(421 + k * 12, ry - 5); c.stroke(); } }
+  }
+  c.font = '800 5.5px ' + FONT; c.fillStyle = '#e0485c'; c.fillText('DO NOT ERASE', 404, 79);
+  // ── the window: 3 a.m., as always ──
+  c.fillStyle = '#0c1420'; roundRect(c, 476, 16, 90, 60, 4); c.fill(); outline(c, 3);
+  c.fillStyle = '#f4efc9'; c.beginPath(); c.arc(548, 30, 6.5, 0, TAU); c.fill(); c.fillStyle = '#0c1420'; c.beginPath(); c.arc(545, 28, 5.5, 0, TAU); c.fill();
+  for (i = 0; i < 6; i++) { var bh = 14 + hsh(41, i) * 22, bx = 480 + i * 14; c.fillStyle = '#16222f'; c.fillRect(bx, 76 - bh, 12, bh); c.fillStyle = '#ffd166'; for (k = 0; k < 3; k++) if (hsh(43, i * 3 + k) > 0.55) c.fillRect(bx + 2 + (k % 2) * 5, 76 - bh + 3 + k * 5, 3, 3); }
+  c.strokeStyle = '#4a6478'; c.lineWidth = 3; c.beginPath(); c.moveTo(521, 16); c.lineTo(521, 76); c.moveTo(476, 46); c.lineTo(566, 46); c.stroke(); c.fillStyle = '#5a7386'; c.fillRect(472, 76, 98, 5);
+  // ── the wall clock over the coffee ──
+  c.fillStyle = '#f4f7fb'; c.beginPath(); c.arc(632, 36, 12, 0, TAU); c.fill(); outline(c, 2.5); c.strokeStyle = '#1a1218'; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); c.moveTo(632, 36); c.lineTo(639, 36); c.moveTo(632, 36); c.lineTo(634, 27); c.stroke();
+  // ── the wall decor slot ──
+  if (h.decor.wall === 'diplomas') {
+    var fr = [[700, 24, 20, 26], [724, 18, 24, 32], [752, 26, 18, 24]];
+    for (i = 0; i < fr.length; i++) { c.fillStyle = '#8a6a3a'; c.fillRect(fr[i][0] - 2, fr[i][1] - 2, fr[i][2] + 4, fr[i][3] + 4); c.fillStyle = '#f7f1dc'; c.fillRect(fr[i][0], fr[i][1], fr[i][2], fr[i][3]); c.fillStyle = '#9a8f78'; for (k = 0; k < 4; k++) c.fillRect(fr[i][0] + 3, fr[i][1] + 5 + k * 4, fr[i][2] - 6, 1); c.fillStyle = '#e0485c'; c.beginPath(); c.arc(fr[i][0] + fr[i][2] - 5, fr[i][1] + fr[i][3] - 5, 2.4, 0, TAU); c.fill(); }
+  } else if (h.decor.wall === 'poster') {
+    c.fillStyle = '#ffe9a8'; c.fillRect(706, 14, 56, 72); c.strokeStyle = OUTLINE; c.lineWidth = 2; c.strokeRect(706, 14, 56, 72);
+    c.strokeStyle = '#6b4a32'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(734, 14); c.lineTo(734, 34); c.stroke();
+    c.save(); c.translate(734, 44); c.fillStyle = '#d8c7a4'; blobPath(c, 10, 2, 6, 0.16); c.fill(); outline(c, 1.8); c.fillStyle = '#fff'; c.beginPath(); c.arc(-3.5, -1, 2.6, 0, TAU); c.arc(3.5, -1, 2.6, 0, TAU); c.fill(); c.fillStyle = '#1a1218'; c.beginPath(); c.arc(-3.5, -2, 1.1, 0, TAU); c.arc(3.5, -2, 1.1, 0, TAU); c.fill(); c.strokeStyle = '#d8c7a4'; c.lineWidth = 2.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(-6, -7); c.lineTo(-1, -12); c.moveTo(6, -7); c.lineTo(1, -12); c.stroke(); c.restore();
+    c.fillStyle = '#5a3b22'; c.font = '900 7px ' + FONT; c.textAlign = 'center'; c.fillText('HANG IN', 734, 68); c.fillText('THERE', 734, 77);
+  } else if (h.decor.wall === 'portraits') {
+    for (i = 0; i < PATRON_ORDER.length; i++) {
+      var gp = PATRONS[PATRON_ORDER[i]], gm = !!h.met[PATRON_ORDER[i]], gx = 699 + (i % 4) * 18.5, gy = 17 + Math.floor(i / 4) * 35;
+      c.fillStyle = '#8a6a3a'; c.fillRect(gx - 1.5, gy - 1.5, 17, 31); c.fillStyle = gm ? '#e9dfc6' : '#3a3026'; c.fillRect(gx, gy, 14, 28);
+      if (gm) { c.save(); c.beginPath(); c.rect(gx, gy, 14, 28); c.clip(); c.translate(gx + 7, gy + 12); drawCaricature(c, gp.look, 0.22); c.restore(); c.fillStyle = gp.color; c.fillRect(gx, gy + 25.5, 14, 2.5); }
+    }
+  } else { c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1.5; c.strokeRect(708, 22, 52, 56); c.fillStyle = '#1a1218'; c.beginPath(); c.arc(734, 20, 1.6, 0, TAU); c.fill(); }
+  // ── the case board ──
+  var cur = hubCase();
+  c.fillStyle = '#16242f'; roundRect(c, 786, 14, 116, 74, 4); c.fill(); outline(c, 3);
+  c.textAlign = 'left'; c.font = '900 6px ' + FONT; c.fillStyle = '#8fa6b8'; c.fillText('TODAY’S CASE', 792, 22);
+  for (i = 0; i < HUB_CASES.length; i++) {
+    var cb = HUB_CASES[i], open = caseUnlocked(i), sel = cb === cur, by = 33 + i * 11;
+    if (sel) { c.fillStyle = hexA(cb.color, 0.22); c.fillRect(789, by - 5, 110, 10); c.fillStyle = cb.color; c.beginPath(); c.moveTo(791, by - 3.5); c.lineTo(796, by); c.lineTo(791, by + 3.5); c.closePath(); c.fill(); }
+    c.font = '900 7.5px ' + FONT; c.fillStyle = sel ? '#fff' : open ? '#c9d6e0' : '#6b8194'; c.fillText(cb.name, 800, by);
+    if (cb.boss && (h.bosses[cb.boss] || 0) > 0) { c.strokeStyle = '#ffd166'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(887, by); c.lineTo(890, by + 3); c.lineTo(895, by - 4); c.stroke(); }
+    else if (!open) { c.fillStyle = '#6b8194'; c.fillRect(887, by - 1, 7, 5); c.strokeStyle = '#6b8194'; c.lineWidth = 1.2; c.beginPath(); c.arc(890.5, by - 1, 2.4, Math.PI, 0); c.stroke(); }
+  }
+  c.restore();
+}
+function drawHubLocker(c) {
+  var x = 28, y = 110, w = 48, hh = 104, ids = hubLockerIds(), load = hubLoadout(), cols = 3, cw = (w - 8) / cols, rh = (hh - 14) / 8, i;
+  roundRect(c, x, y, w, hh, 6); c.fillStyle = '#31475a'; c.fill(); outline(c, 3);
+  c.fillStyle = '#131f29'; roundRect(c, x + 4, y + 5, w - 8, hh - 10, 4); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.08)'; for (i = 1; i < 8; i++) c.fillRect(x + 4, y + 6 + i * rh, w - 8, 1);
+  c.lineCap = 'round';
+  for (i = 0; i < ids.length; i++) {   // one cell per instrument: lit in its class colour once your residency level unlocks it, boxed if it is in the loadout
+    var cx = x + 4 + (i % cols + 0.5) * cw, cy = y + 6 + (Math.floor(i / cols) + 0.5) * rh, on = weaponUnlocked(ids[i]);
+    c.strokeStyle = on ? CLASSES[WEAPONS[ids[i]].cls].color : 'rgba(255,255,255,0.13)'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(cx - 4, cy + 2); c.lineTo(cx + 4, cy - 2); c.stroke();
+    if (load.indexOf(ids[i]) >= 0) { c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.strokeRect(cx - 6.5, cy - 5, 13, 10); }
+  }
+  c.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(c, x + 3, y + 2, w - 6, 3, 1.5); c.fill();
+}
+function drawHubCharts(c) {
+  var x = 28, y = 306, w = 42, hh = 92, tot = 0, on, i, r, cols = ['#38e8ff', '#5df07a', '#ff6b8a', '#ffd93b', '#c79bff'];
+  for (i = 0; i < ENEMY_ORDER.length; i++) if (!ENEMIES[ENEMY_ORDER[i]].hidden) tot++;
+  on = Math.round(15 * hubCharted() / Math.max(1, tot)); if (hubCharted() > 0 && on < 1) on = 1;
+  roundRect(c, x, y, w, hh, 5); c.fillStyle = '#5a4634'; c.fill(); outline(c, 3);
+  for (r = 0; r < 3; r++) { var sy = y + 6 + r * 28; c.fillStyle = '#2a2018'; c.fillRect(x + 4, sy, w - 8, 24); for (i = 0; i < 5; i++) { var k = r * 5 + i; c.fillStyle = k < on ? cols[k % 5] : '#4a4f55'; c.fillRect(x + 6 + i * 6.4, sy + 3 + (k % 3), 5, 21 - (k % 3)); } }
+}
+function drawHubCart(c) {
+  var rx = META.hub.rx, live = rx && rx.run === (META.runs || 0) ? rx : null, i;
+  c.save(); c.translate(330, 250);
+  c.fillStyle = '#1a1218'; c.beginPath(); c.arc(-14, 11, 3.6, 0, TAU); c.arc(14, 11, 3.6, 0, TAU); c.fill();
+  roundRect(c, -20, -20, 40, 30, 5); c.fillStyle = '#d9e2ea'; c.fill(); outline(c, 3);
+  c.strokeStyle = 'rgba(26,18,24,0.35)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-17, -9); c.lineTo(17, -9); c.moveTo(-17, 1); c.lineTo(17, 1); c.stroke();
+  c.fillStyle = '#2fa38a'; c.fillRect(-2, -8, 4, 12); c.fillRect(-6, -4, 12, 4);
+  roundRect(c, -22, -27, 44, 9, 3); c.fillStyle = '#e0485c'; c.fill(); outline(c, 2.5);
+  for (i = 0; i < 3; i++) {   // what is on the cart: one bottle per boon on offer, a ring round the one you packed
+    var id = live && live.offer[i], b = id ? BOONS[id] : null, bx = -12 + i * 12;
+    roundRect(c, bx - 3.5, -38, 7, 11, 2); c.fillStyle = b ? BOON_COLORS[b.kind] : '#7f8b96'; c.fill(); outline(c, 1.6); c.fillStyle = '#f4f8ff'; c.fillRect(bx - 2.5, -41, 5, 3.5);
+    if (b && live.pick === id) { c.strokeStyle = '#7dffb0'; c.lineWidth = 2; c.beginPath(); c.arc(bx, -33, 8, 0, TAU); c.stroke(); }
+  }
+  c.restore();
+}
+function drawHubCounter(c) {
+  var x = 584, y = HUB_Y - 20, w = 96, esp = META.hub.decor.counter === 'espresso', t = HUB.t, i, mx, my;
+  roundRect(c, x, y + 6, w, 36, 5); c.fillStyle = '#3a4a56'; c.fill(); outline(c, 3);
+  c.strokeStyle = 'rgba(26,18,24,0.4)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + w / 2, y + 22); c.lineTo(x + w / 2, y + 40); c.stroke();
+  roundRect(c, x - 3, y, w + 6, 18, 4); c.fillStyle = '#c9b79a'; c.fill(); outline(c, 2.5);
+  if (esp) {
+    mx = x + 30; my = y - 2;
+    roundRect(c, x + 10, y - 22, 42, 26, 4); c.fillStyle = '#cfd8e3'; c.fill(); outline(c, 2.5); c.fillStyle = '#44546a'; c.fillRect(x + 14, y - 6, 34, 5);
+    c.fillStyle = '#ff4d6d'; c.beginPath(); c.arc(x + 44, y - 15, 2.2, 0, TAU); c.fill(); c.fillStyle = '#1a1218'; c.fillRect(x + 22, y - 18, 3, 9); c.fillRect(x + 34, y - 18, 3, 9);
+    c.fillStyle = '#f4f8ff'; roundRect(c, x + 19, y - 2, 9, 7, 2); c.fill(); outline(c, 1.5); roundRect(c, x + 31, y - 2, 9, 7, 2); c.fill(); outline(c, 1.5);
+  } else {
+    mx = x + 28; my = y - 4;
+    roundRect(c, x + 12, y - 20, 32, 24, 4); c.fillStyle = '#22262c'; c.fill(); outline(c, 2.5);
+    c.fillStyle = 'rgba(190,225,255,0.35)'; roundRect(c, x + 19, y - 10, 18, 14, 4); c.fill(); outline(c, 1.8); c.fillStyle = '#5a3418'; c.fillRect(x + 20.5, y - 4, 15, 7);
+    c.fillStyle = '#ff4d6d'; c.beginPath(); c.arc(x + 40, y - 15, 1.8, 0, TAU); c.fill();
+  }
+  for (i = 0; i < 2; i++) { c.fillStyle = i ? '#7dffb0' : '#f4f8ff'; roundRect(c, x + 60 + i * 13, y + 1, 9, 9, 2.5); c.fill(); outline(c, 1.6); }
+  if (HUB.cup) { c.fillStyle = '#ffd166'; roundRect(c, x + 86, y - 1, 9, 10, 2.5); c.fill(); outline(c, 1.6); }
+  c.fillStyle = '#fff'; for (i = 0; i < 3; i++) { var k = (t * 0.55 + i / 3) % 1; c.globalAlpha = (1 - k) * 0.45; c.beginPath(); c.arc(mx + Math.sin((k + i) * 6) * 3, my - 20 - k * 16, 2 + k * 2.6, 0, TAU); c.fill(); }
+  c.globalAlpha = 1;
+}
+function drawHubScrubs(c) {
+  var x = 890, y = 322, w = 46, hh = 106, i, cur = SET.scrub || 0, blink = (HUB.t % 1.4) < 0.25;
+  roundRect(c, x, y, w, hh, 6); c.fillStyle = '#31475a'; c.fill(); outline(c, 3);
+  c.fillStyle = '#131f29'; roundRect(c, x + 4, y + 18, w - 8, hh - 24, 4); c.fill();
+  for (i = 0; i < SCRUBS.length; i++) {   // one folded stack per colour: grey until you can wear it, boxed if you are
+    var sx = x + 7 + (i % 2) * 17, sy = y + 23 + Math.floor(i / 2) * 27, on = scrubUnlocked(i);
+    c.fillStyle = on ? SCRUBS[i] : '#4a4f55'; roundRect(c, sx, sy, 15, 20, 3); c.fill(); outline(c, 1.6); c.strokeStyle = 'rgba(26,18,24,0.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(sx + 1, sy + 7); c.lineTo(sx + 14, sy + 7); c.moveTo(sx + 1, sy + 13); c.lineTo(sx + 14, sy + 13); c.stroke();
+    if (on && i === cur) { c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.strokeRect(sx - 1.5, sy - 1.5, 18, 23); }
+  }
+  roundRect(c, x + 13, y + 4, 20, 11, 3); c.fillStyle = '#1a1e24'; c.fill(); outline(c, 2); c.fillStyle = '#7ad7ff'; c.fillRect(x + 16, y + 7, 9, 5);   // the pager, never quiet for long
+  c.fillStyle = blink ? '#ff4d6d' : '#5a1a26'; c.beginPath(); c.arc(x + 29, y + 9.5, 1.8, 0, TAU); c.fill();
+  if (blink) { c.strokeStyle = 'rgba(255,77,109,0.6)'; c.lineWidth = 1.4; c.beginPath(); c.arc(x + 29, y + 9.5, 5, -1.2, 0.2); c.stroke(); c.beginPath(); c.arc(x + 29, y + 9.5, 8, -1.2, 0.2); c.stroke(); }
+}
+function drawHubDesk(c) {
+  var h = META.hub, i;
+  roundRect(c, 198, 394, 114, 48, 6); c.fillStyle = '#5e4029'; c.fill(); outline(c, 3);
+  roundRect(c, 198, 394, 114, 32, 6); c.fillStyle = '#8a6242'; c.fill(); c.strokeStyle = 'rgba(26,18,24,0.5)'; c.lineWidth = 1.5; c.stroke();
+  c.fillStyle = 'rgba(255,255,255,0.1)'; roundRect(c, 203, 398, 104, 4, 2); c.fill();
+  // the catalog, open
+  c.save(); c.translate(236, 409); c.rotate(-0.08); c.fillStyle = '#f7f1dc'; c.fillRect(-17, -9, 17, 18); c.fillRect(0, -9, 17, 18); c.strokeStyle = OUTLINE; c.lineWidth = 1.6; c.strokeRect(-17, -9, 34, 18); c.beginPath(); c.moveTo(0, -9); c.lineTo(0, 9); c.stroke();
+  c.fillStyle = '#7dffb0'; c.fillRect(-14, -6, 11, 6); c.fillStyle = '#ffd166'; c.fillRect(3, -6, 11, 6); c.fillStyle = '#9a8f78'; for (i = 0; i < 2; i++) { c.fillRect(-14, 3 + i * 3, 11, 1); c.fillRect(3, 3 + i * 3, 11, 1); } c.restore();
+  if (h.decor.desk === 'plush') {
+    c.save(); c.translate(284, 408); c.rotate(0.25); c.fillStyle = '#e88aa0'; c.beginPath(); c.moveTo(-6, -11); c.bezierCurveTo(10, -14, 12, 12, -6, 11); c.bezierCurveTo(-12, 10, -3, 3, -3, 0); c.bezierCurveTo(-3, -3, -12, -10, -6, -11); c.closePath(); c.fill(); outline(c, 2);
+    c.fillStyle = '#1a1218'; c.beginPath(); c.arc(2, -3, 1.3, 0, TAU); c.arc(6, 1, 1.3, 0, TAU); c.fill(); c.strokeStyle = '#1a1218'; c.lineWidth = 1.2; c.beginPath(); c.arc(2.5, 2, 2.4, 0.3, 1.9); c.stroke(); c.restore();
+  } else if (h.decor.desk === 'weights') {
+    var n = Math.max(1, Math.min(6, hubStoneKinds())), sc = ['#d8c7a4', '#c9b08a', '#e6d27a', '#9fd8c8', '#d9a0a0', '#b8b0c8'];
+    for (i = 0; i < n; i++) { c.save(); c.translate(268 + (i % 3) * 13, 404 + Math.floor(i / 3) * 11); c.fillStyle = sc[i]; blobPath(c, 4.6, i * 3, 5, 0.2); c.fill(); outline(c, 1.6); c.restore(); }
+  }
+}
+function drawHubRepTable(c) {
+  var pens = Math.min(12, META.hub.pens || 0), i;
+  c.save(); c.translate(660, 408);
+  c.fillStyle = '#2a3440'; c.beginPath(); c.ellipse(0, 6, 30, 17, 0, 0, TAU); c.fill(); outline(c, 3);
+  c.fillStyle = '#e8eef5'; c.beginPath(); c.ellipse(0, -5, 31, 17, 0, 0, TAU); c.fill(); outline(c, 3);
+  for (i = 0; i < REPS.length; i++) { c.save(); c.translate(-17 + i * 9, -4 + (i % 2) * 5); c.rotate(-0.5 + i * 0.35); c.fillStyle = REPS[i].color; c.fillRect(-4, -5.5, 8, 11); c.strokeStyle = OUTLINE; c.lineWidth = 1.2; c.strokeRect(-4, -5.5, 8, 11); c.restore(); }   // brochures, one per company
+  c.fillStyle = '#c9a26a'; c.fillRect(-26, -14, 13, 11); c.strokeStyle = OUTLINE; c.lineWidth = 1.4; c.strokeRect(-26, -14, 13, 11);   // the pizza box (it is Tuesday)
+  // the pen jar: one pen for every free pen you took on a run
+  for (i = 0; i < pens; i++) { var a = -1.95 + (i / Math.max(1, pens - 1)) * 0.75 + (pens === 1 ? 0.35 : 0); c.strokeStyle = ['#38e8ff', '#ffd166', '#ffb630', '#5df07a'][i % 4]; c.lineWidth = 1.8; c.lineCap = 'round'; c.beginPath(); c.moveTo(18, -12); c.lineTo(18 + Math.cos(a) * 13, -12 + Math.sin(a) * 13); c.stroke(); }
+  roundRect(c, 13, -15, 10, 11, 2.5); c.fillStyle = '#7ad7ff'; c.fill(); outline(c, 1.8);
+  c.restore();
+}
+function drawHubTank(c) {
+  var t = HUB.t, i;
+  c.save(); c.translate(0, HUB_Y - 104);
+  roundRect(c, 484, 102, 74, 22, 4); c.fillStyle = '#3a4a56'; c.fill(); outline(c, 3);
+  roundRect(c, 488, 66, 66, 38, 4); c.fillStyle = '#184e66'; c.fill(); outline(c, 3);
+  c.save(); roundRect(c, 489.5, 67.5, 63, 35, 3); c.clip();
+  c.fillStyle = 'rgba(160,230,255,0.16)'; c.fillRect(488, 66, 66, 7); c.fillStyle = '#c9b08a'; c.fillRect(488, 98, 66, 6);
+  c.strokeStyle = '#3fae5a'; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); c.moveTo(498, 99); c.quadraticCurveTo(495 + Math.sin(t) * 2, 88, 499, 80); c.moveTo(503, 99); c.quadraticCurveTo(506 + Math.sin(t + 1) * 2, 90, 502, 84); c.stroke();
+  for (i = 0; i < 3; i++) {   // three fish in tiny scrubs; the grey one with the glasses is the attending
+    var ph = t * (0.5 + i * 0.13) + i * 2.1, fx = 521 + Math.sin(ph) * 22, fyy = 78 + i * 8 + Math.sin(ph * 1.7) * 1.5, dir = Math.cos(ph) >= 0 ? 1 : -1, col = i === 2 ? '#b9bec6' : SCRUBS[i * 3 % SCRUBS.length];
+    c.save(); c.translate(fx, fyy); c.scale(dir, 1);
+    c.fillStyle = col; c.beginPath(); c.moveTo(-6, 0); c.lineTo(-10.5, -3.4); c.lineTo(-10.5, 3.4); c.closePath(); c.fill(); c.beginPath(); c.ellipse(0, 0, 6.6, 3.9, 0, 0, TAU); c.fill(); outline(c, 1.3);
+    c.fillStyle = i === 2 ? '#f4f8ff' : shade(col, -0.3); c.beginPath(); c.ellipse(2.4, -2, 4.2, 2.1, 0, Math.PI, 0); c.fill();   // the scrub cap
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(3.2, 0, 1.5, 0, TAU); c.fill(); c.fillStyle = '#1a1218'; c.beginPath(); c.arc(3.6, 0, 0.75, 0, TAU); c.fill();
+    if (i === 2) { c.strokeStyle = '#1a1218'; c.lineWidth = 0.8; c.strokeRect(1.4, -1.8, 3.6, 3.6); }
+    c.restore();
+  }
+  c.fillStyle = 'rgba(255,255,255,0.5)'; for (i = 0; i < 3; i++) { var bk = (t * 0.4 + i / 3) % 1; c.beginPath(); c.arc(544 + Math.sin(bk * 9 + i) * 2, 98 - bk * 30, 1 + bk, 0, TAU); c.fill(); }
+  c.restore();
+  highlight(c, 500, 74, 7);
+  c.restore();
+}
+function drawHubGreg(c) {
+  var sw = Math.sin(HUB.t * 1.1) * 0.05, i;
+  c.save(); c.translate(60, 484);
+  c.strokeStyle = '#6b4a32'; c.lineWidth = 3.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, -4); c.quadraticCurveTo(2, -18, 0, -30); c.stroke();
+  c.save(); c.translate(0, -34); c.rotate(sw);
+  for (i = 0; i < 9; i++) { var a = i / 9 * TAU, r = 11 + (i % 3) * 2.5; c.save(); c.translate(Math.cos(a) * r * 0.9, Math.sin(a) * r * 0.75 - 2); c.rotate(a); c.fillStyle = i % 2 ? '#2e8a47' : '#3fae5a'; c.beginPath(); c.ellipse(0, 0, 8, 4.6, 0, 0, TAU); c.fill(); outline(c, 1.6); c.restore(); }
+  c.fillStyle = '#4cc46a'; c.beginPath(); c.ellipse(0, -2, 8, 6, 0, 0, TAU); c.fill(); outline(c, 1.6);
+  c.restore();
+  c.beginPath(); c.moveTo(-12, -6); c.lineTo(12, -6); c.lineTo(9, 10); c.lineTo(-9, 10); c.closePath(); c.fillStyle = '#b5653c'; c.fill(); outline(c, 2.6);
+  c.fillStyle = '#f4f8ff'; c.fillRect(-8, -1, 16, 6.5); c.fillStyle = '#1a1218'; c.font = '900 5.5px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('GREG', 0, 2.6);
+  c.restore();
+}
+function drawHubWetFloor(c) {
+  c.save(); c.translate(476, 452);
+  c.fillStyle = 'rgba(120,200,255,0.22)'; c.beginPath(); c.ellipse(4, 7, 24, 8, 0, 0, TAU); c.fill();
+  c.beginPath(); c.moveTo(-10, 6); c.lineTo(10, 6); c.lineTo(5.5, -24); c.lineTo(-5.5, -24); c.closePath(); c.fillStyle = '#ffd93b'; c.fill(); outline(c, 2.4);
+  c.fillStyle = '#1a1218'; c.fillRect(-1.3, -19, 2.6, 11); c.beginPath(); c.arc(0, -3.5, 1.7, 0, TAU); c.fill();
+  c.restore();
+}
+function drawHubNpc(c, n) {
+  var L = n.look, talking = !!(HUB.bubble && HUB.bubble.who === n.id), bob = Math.sin(HUB.t * 2.2 + n.x * 0.05) * 0.7, step = n.walk ? Math.sin(HUB.t * 9) : 0, f = n.face || 1, s;
+  c.save(); c.translate(n.x, n.y + bob);
+  if (n.mop) {   // the mop leads the way
+    var sweep = n.walk ? 0 : Math.sin(HUB.t * 3.4) * 5;
+    c.strokeStyle = OUTLINE; c.lineWidth = 4; c.lineCap = 'round'; c.beginPath(); c.moveTo(f * 7, -4); c.lineTo(f * 19 + sweep, 13); c.stroke(); c.strokeStyle = '#c9a26a'; c.lineWidth = 2; c.stroke();
+    c.fillStyle = '#dfe6ee'; c.beginPath(); c.ellipse(f * 20 + sweep, 14.5, 7, 3.2, 0, 0, TAU); c.fill(); outline(c, 1.6);
+  }
+  for (s = -1; s <= 1; s += 2) {
+    var sw = step * s * 2.6; c.beginPath(); c.moveTo(s * 3.2, 5); c.lineTo(s * 3.4 + sw, 12.6); tube(c, null, 4.2, n.pants || '#2a3440', 1.5);
+    c.beginPath(); c.ellipse(s * 3.4 + sw + f, 14.2, 3.8, 2.3, 0, 0, TAU); c.fillStyle = '#1a1218'; c.fill();
+  }
+  roundRect(c, -8.5, -8, 17, 16.5, 5); c.fillStyle = L.collar === 'labcoat' ? '#f4f8ff' : (L.suit || '#23324a'); c.fill(); outline(c, 2);
+  c.translate(0, -15 + (talking ? Math.sin(HUB.t * 14) * 0.7 : 0)); drawCaricature(c, L, 0.4);
+  c.restore();
+}
+function drawHubBubble(c) {
+  var b = HUB.bubble, n = b ? hubNpc(b.who) : null; if (!n) return;
+  var lines = wrapLines(c, b.text, 250, 11), bw = 0, i; c.font = '800 11px ' + FONT;
+  for (i = 0; i < lines.length; i++) bw = Math.max(bw, c.measureText(lines[i]).width);
+  c.font = '900 9px ' + FONT; bw = Math.max(bw, c.measureText(n.name).width) + 22;
+  var bh = lines.length * 14 + 26, x = clamp(n.x - bw / 2, 10, W - bw - 10), y = n.y - 50 - bh, k = Math.min(1, (b.dur - b.t) / 0.15, b.t / 0.2);
+  if (y < 8) y = 8;
+  c.globalAlpha = clamp(k, 0, 1);
+  c.fillStyle = '#fff'; roundRect(c, x, y, bw, bh, 10); c.fill(); outline(c, 2.5);
+  c.beginPath(); c.moveTo(clamp(n.x - 7, x + 10, x + bw - 24), y + bh - 1); c.lineTo(n.x, Math.min(y + bh + 12, n.y - 30)); c.lineTo(clamp(n.x + 7, x + 24, x + bw - 10), y + bh - 1); c.closePath(); c.fillStyle = '#fff'; c.fill();
+  text(c, n.name, x + 11, y + 12, 9, shade(n.color.length === 7 ? n.color : '#38e8ff', -0.45), 'left', 900, false);
+  for (i = 0; i < lines.length; i++) text(c, lines[i], x + 11, y + 27 + i * 14, 11, '#10202c', 'left', 800, false);
+  c.globalAlpha = 1;
+}
+var HUB_DEPTH = [];
+function drawHub(c) {
+  var h = META.hub, i, near = HUB.near, cs = hubCase(), touch = Input.mode === 'touch', pulse = 0.5 + 0.5 * Math.sin(G.realTime * 5);
+  if (!HUB.bg || HUB.dirty) { hubRenderBg(); HUB.dirty = false; }
+  c.drawImage(HUB.bg, 0, 0, W, H);
+  // the OR door: lit in the colour of today's case, with its sign
+  var ed = DOOR_POS.E, glow = 0.3 + 0.18 * Math.sin(G.realTime * 3);
+  c.fillStyle = hexA(cs.color, glow); c.fillRect(ed.x, ed.y, ed.w, ed.h); c.fillStyle = hexA(cs.color, 0.1); c.fillRect(ed.x - 64, ed.y - 18, 64, ed.h + 36);
+  c.fillStyle = '#0b1620'; roundRect(c, 852, 204, 74, 20, 6); c.fill(); c.strokeStyle = cs.color; c.lineWidth = 2; c.stroke(); text(c, 'OR · SCRUB IN', 889, 214.5, 9, '#fff', 'center', 900, false);
+  // the station in reach
+  if (near) { c.strokeStyle = hexA('#7dffb0', 0.35 + 0.45 * pulse); c.lineWidth = 3; c.setLineDash([7, 6]); c.beginPath(); c.ellipse(near.x, near.y + (near.npc || near.id === 'attending' ? 14 : 4), Math.min(near.r, 40), Math.min(near.r, 40) * 0.38, 0, 0, TAU); c.stroke(); c.setLineDash([]); }
+  // ground shadows
+  c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(P.x, P.y + 17.5, P.roll > 0 ? 11 : 14, 4.6, 0, 0, TAU); c.fill();
+  for (i = 0; i < HUB.npcs.length; i++) { c.beginPath(); c.ellipse(HUB.npcs[i].x, HUB.npcs[i].y + 15.5, 12, 4, 0, 0, TAU); c.fill(); }
+  c.beginPath(); c.ellipse(330, 263, 24, 6, 0, 0, TAU); c.fill(); c.beginPath(); c.ellipse(660, 424, 34, 9, 0, 0, TAU); c.fill();
+  // back to front
+  var dl = HUB_DEPTH; dl.length = 0;
+  for (i = 0; i < HUB.props.length; i++) dl.push(HUB.props[i]);
+  for (i = 0; i < HUB.npcs.length; i++) { HUB.npcs[i]._dy = HUB.npcs[i].y + 14; dl.push(HUB.npcs[i]); }
+  P._dy = P.y + 14; dl.push(P); dl.sort(depthCmp);
+  for (i = 0; i < dl.length; i++) { var it = dl[i]; if (it === P) drawPlayer(c); else if (it.draw) it.draw(c); else drawHubNpc(c, it); }
+  // a marker over the station in reach (not while its own speech bubble is up)
+  for (i = 0; i < HUB.stations.length; i++) { var hs = HUB.stations[i]; if (hs === near || !hubHint(hs.id)) continue; var hy = hubMarkY(hs) + Math.sin(G.realTime * 3 + i) * 2; c.fillStyle = hexA('#ffd166', 0.25); c.beginPath(); c.arc(hs.x, hy, 8.5, 0, TAU); c.fill(); c.fillStyle = '#ffd166'; c.beginPath(); c.arc(hs.x, hy, 4.6, 0, TAU); c.fill(); outline(c, 2); }
+  if (near && !(HUB.bubble && (near.id === 'reps' || near.id === HUB.bubble.who))) { var my = hubMarkY(near) + Math.sin(G.realTime * 5) * 2.5, mx = clamp(near.x, 30, W - 30); c.fillStyle = '#7dffb0'; c.beginPath(); c.arc(mx, my, 11, 0, TAU); c.fill(); outline(c, 2.5); text(c, touch ? '!' : 'E', mx, my + 0.5, 12, '#04202a', 'center', 900, false); }
+  drawHubBubble(c);
+  drawVignette(c);
+  // HUD: where you are, what you have, what comes with you
+  var lp = levelProgress(META.xp);
+  c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, 14, 10, 208, 22, 8); c.fill(); text(c, 'THE CALL ROOM · PGY-' + lp.lvl, 24, 21.5, 12, '#fff', 'left', 900, false);
+  c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, W - 184, 10, 122, 22, 8); c.fill(); c.fillStyle = '#7dffb0'; c.beginPath(); c.arc(W - 170, 21, 6.5, 0, TAU); c.fill(); outline(c, 2); text(c, h.cme + ' CME', W - 158, 21.5, 13, '#7dffb0', 'left', 900, false);
+  c.fillStyle = 'rgba(0,0,0,0.45)'; c.beginPath(); c.arc(HUB_MENU.x, HUB_MENU.y, HUB_MENU.r, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#fff'; for (i = 0; i < 3; i++) c.fillRect(HUB_MENU.x - 8, HUB_MENU.y - 7 + i * 6, 16, 2.5);
+  // the loadout strip: the two instruments, the pin, the boon, the cup
+  var load = hubLoadout(), rx = h.rx && h.rx.run === (META.runs || 0) && h.rx.pick && BOONS[h.rx.pick] ? h.rx.pick : '', sx = W / 2 - 96, sy = 11;
+  c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, sx - 8, sy - 1, 208, 22, 8); c.fill();
+  for (i = 0; i < load.length; i++) { c.save(); c.translate(sx + 8 + i * 30, sy + 12); c.rotate(-0.5); drawTool(c, load[i], 15, CLASSES[WEAPONS[load[i]].cls].color); c.restore(); }
+  if (h.pin && h.met[h.pin]) { c.fillStyle = '#10202c'; c.beginPath(); c.arc(sx + 74, sy + 10, 8, 0, TAU); c.fill(); c.strokeStyle = PATRONS[h.pin].color; c.lineWidth = 1.6; c.stroke(); drawPatronGlyph(c, h.pin, sx + 74, sy + 10, 4.4); } else { c.strokeStyle = 'rgba(255,255,255,0.2)'; c.lineWidth = 1.5; c.beginPath(); c.arc(sx + 74, sy + 10, 7, 0, TAU); c.stroke(); }
+  if (rx) { c.fillStyle = BOON_COLORS[BOONS[rx].kind]; roundRect(c, sx + 91, sy + 2, 14, 16, 5); c.fill(); outline(c, 2); text(c, BOONS[rx].name.charAt(0), sx + 98, sy + 11, 9, '#10202c', 'center', 900, false); } else { c.strokeStyle = 'rgba(255,255,255,0.2)'; c.lineWidth = 1.5; roundRect(c, sx + 92, sy + 3, 12, 14, 4); c.stroke(); }
+  if (HUB.cup) { c.fillStyle = HUB.cup === 'decaf' ? '#9fb6c9' : '#ffd166'; roundRect(c, sx + 113, sy + 4, 11, 12, 3); c.fill(); outline(c, 1.8); } else { c.strokeStyle = 'rgba(255,255,255,0.2)'; c.lineWidth = 1.5; roundRect(c, sx + 114, sy + 5, 9, 10, 3); c.stroke(); }
+  text(c, cs.name, sx + 192, sy + 10.5, 10, cs.color, 'right', 900, false);
+  // the prompt
+  var msg = near ? (touch ? 'INTERACT · ' : 'E · ') + near.name : (h.visits <= 1 && HUB.t < 14 ? (touch ? 'Walk up to anything and tap INTERACT. The OR is the door on the right.' : 'Walk up to anything and press E. The OR is the door on the right.') : '');
+  if (msg) { c.font = '900 12px ' + FONT; var mw = c.measureText(msg).width + 28; c.fillStyle = 'rgba(6,12,18,0.82)'; roundRect(c, W / 2 - mw / 2, H - 44, mw, 26, 10); c.fill(); if (near) { c.strokeStyle = '#7dffb0'; c.lineWidth = 2; c.stroke(); } text(c, msg, W / 2, H - 30.5, 12, near ? '#7dffb0' : '#c9d6e0', 'center', 900, false); }
+  if (HUB.toast) { var tk = HUB.toast.t / HUB.toast.dur; c.globalAlpha = tk > 0.85 ? (1 - tk) / 0.15 : tk < 0.25 ? tk / 0.25 : 1; text(c, HUB.toast.text, W / 2, HUB_Y + 34 - (1 - tk) * 8, 15, HUB.toast.color, 'center', 900); c.globalAlpha = 1; }
+  // touch: the stick, one big INTERACT button, ROLL
+  if (touch) {
+    var TL = touchLayout(), fb = TL.fire, rb = TL.roll, held = Input.buttons.fire !== undefined;
+    c.fillStyle = held ? 'rgba(125,255,176,0.4)' : near ? 'rgba(125,255,176,0.22)' : 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(fb.x, fb.y, fb.r, 0, TAU); c.fill(); c.strokeStyle = near ? 'rgba(125,255,176,0.9)' : 'rgba(255,255,255,0.4)'; c.lineWidth = 2.5; c.stroke(); text(c, 'INTERACT', fb.x, fb.y, 13, 'rgba(255,255,255,0.92)', 'center', 900, false);
+    c.fillStyle = Input.buttons.roll !== undefined ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'; c.beginPath(); c.arc(rb.x, rb.y, rb.r, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 2.5; c.stroke(); text(c, 'ROLL', rb.x, rb.y, 12, 'rgba(255,255,255,0.9)', 'center', 900, false);
+    if (Input.stick) { var st = Input.stick; c.fillStyle = 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(st.bx, st.by, 52, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 2; c.stroke(); c.fillStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.arc(st.kx, st.ky, 24, 0, TAU); c.fill(); }
+  }
+  if (DEBUG) text(c, 'FPS ' + G.fps + ' · near ' + (near ? near.id : '—'), 16, H - 10, 10, '#0f0', 'left', 800);
+}
+
+/* ── the stations' panel (one overlay, #ov-hub, filled by whichever station you used) ── */
+function hubPanel(id, title, sub) {
+  var fresh = HUB.panel !== id;   // a station just opened (not a re-render after a tap): start at the top
+  HUB.panel = id; openOverlay('hub');
+  $('hubTitle').textContent = title; $('hubSub').textContent = sub || ''; $('hubCme').textContent = META.hub.cme + ' CME';
+  $('hubBody').innerHTML = ''; $('hubExtra').innerHTML = ''; $('btnHubBack').textContent = id === 'door' ? 'NOT YET' : 'BACK';
+  if (fresh) { try { $('ov-hub').scrollTop = 0; $('ov-hub').firstElementChild.scrollTop = 0; } catch (e) {} }
+  return $('hubBody');
+}
+function hubClose() { HUB.panel = ''; saveMeta(); if (G.screen === 'hub') hideScreens(); else showTitle(); }
+function hubBtn(label, cls, fn) { var b = el('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); fn(ev); }); return b; }
+function hubPips(n, max) { var s = ''; for (var i = 0; i < max; i++) s += i < n ? '●' : '○'; return s; }
+function hubSpend(cost) { var h = META.hub; if (!(cost >= 0) || h.cme < cost) { Snd.sfx('tink'); return false; } h.cme -= cost; Snd.sfx('buy'); return true; }
+// buy with CME: a perk level, a decor item (it goes straight on display), or a scrub colour ahead of its residency level
+function hubBuy(id) {
+  var h = META.hub, d, lv;
+  if (HUB_PERKS[id]) { d = HUB_PERKS[id]; lv = hubPerk(id); if (lv >= d.max || !hubSpend(d.cost[lv])) return false; h.perks[id] = lv + 1; hubToast(d.name.toUpperCase() + ' · LEVEL ' + (lv + 1)); }
+  else if (HUB_DECOR[id]) { d = HUB_DECOR[id]; if (h.owned[id] || !hubSpend(d.cost)) return false; h.owned[id] = 1; h.decor[d.slot] = id; hubToast(d.name.toUpperCase() + ' DELIVERED'); if (G.screen === 'hub') hubBuild(); }
+  else if (/^scrub[1-5]$/.test(id)) { var si = +id.charAt(5); if (scrubUnlocked(si) || !hubSpend(SCRUB_COST)) return false; h.owned[id] = 1; SET.scrub = si; hubToast(SCRUB_NAMES[si] + ' SCRUBS'); }
+  else return false;
+  HUB.dirty = true; saveMeta(); return true;
+}
+// put an owned item on display in its slot, or clear the slot (id = '')
+function hubPlace(slot, id) {
+  var h = META.hub; if (HUB_SLOTS.indexOf(slot) < 0) return false;
+  if (id && (!HUB_DECOR[id] || HUB_DECOR[id].slot !== slot || !h.owned[id])) return false;
+  if (id) h.decor[slot] = id; else delete h.decor[slot];
+  HUB.dirty = true; saveMeta(); if (G.screen === 'hub') hubBuild(); return true;
+}
+function openLocker() {
+  var body = hubPanel('locker', 'Instrument locker', ''), h = META.hub, load = hubLoadout(), ids = hubLockerIds(), grid = el('div', 'bgrid'), n = 0;
+  for (var i = 0; i < ids.length; i++) (function (id) {
+    var d = WEAPONS[id], on = weaponUnlocked(id), slot = load.indexOf(id); if (on) n++;
+    var card = el('button', 'bentry pick' + (slot >= 0 ? ' sel' : '') + (on ? '' : ' locked')); card.type = 'button'; card.setAttribute('data-w', id);
+    var cv = document.createElement('canvas'); cv.width = 128; cv.height = 128; var c = cv.getContext('2d'); c.scale(2, 2); c.translate(20, 38); c.rotate(-0.5); drawTool(c, id, 34, CLASSES[d.cls].color);
+    if (!on) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-atop'; c.fillStyle = '#5a7386'; c.fillRect(0, 0, 128, 128); }   // a silhouette until it is unlocked
+    card.appendChild(cv); card.appendChild(el('b', '', on ? esc(d.name) : '???'));
+    card.appendChild(el('small', 'fam', on ? '<span class="tag ' + d.cls + '">' + CLASSES[d.cls].name + '</span>' : 'LOCKED · PGY-' + d.unlock));
+    if (on) card.appendChild(el('small', '', esc(d.desc.split('. ')[0].replace(/\.$/, '')) + '.'));   // what it does, in its first sentence
+    if (on) card.appendChild(el('small', '', slot >= 0 ? '<span class="tag sel">STARTING · SLOT ' + (slot + 1) + '</span>' : '<span class="tag">tap to pick</span>'));
+    card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (!on) { Snd.sfx('tink'); return; } if (slot >= 0) return; h.load = [load[1], id]; saveMeta(); hubHoldTool(); Snd.sfx('swap'); openLocker(); });
+    grid.appendChild(card);
+  })(ids[i]);
+  $('hubSub').textContent = 'Pick the two instruments you scrub in with: tap one and it takes the place of the older pick. ' + n + ' of ' + ids.length + ' are unlocked at PGY-' + residencyLevel() + '; the rest come with residency level.';
+  body.appendChild(grid);
+  $('hubExtra').appendChild(hubBtn('ASPECTS <span class="hint" style="font-weight:700">· instrument variants</span>', '', openAspects));
+}
+// the pharmacy cart's offer for the next run: three common boons from the pools of the patrons you have met, fixed until that run is over
+function hubRx() {
+  var h = META.hub, rx = h.rx, run = META.runs || 0, pool = [], i;
+  if (rx && rx.run === run && rx.offer && rx.offer.length) { var ok = true; for (i = 0; i < rx.offer.length; i++) if (!BOONS[rx.offer[i]]) ok = false; if (ok) return rx; }
+  for (i = 0; i < PATRON_ORDER.length; i++) { var p = PATRONS[PATRON_ORDER[i]]; if (!h.met[PATRON_ORDER[i]]) continue; for (var k = 0; k < p.pool.length; k++) { var id = p.pool[k], b = BOONS[id]; if (!b || b.rarity !== 'common' || b.requires || b.consumable || !boonUnlocked(id) || pool.indexOf(id) >= 0) continue; pool.push(id); } }
+  for (i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+  h.rx = { run: run, offer: pool.slice(0, 3), pick: '' }; saveMeta(); return h.rx;
+}
+function openCart() {
+  var h = META.hub, body, rx, cards;
+  if (!hubMetCount()) { hubPanel('cart', 'Pharmacy cart', 'The cart is empty. Pharmacy stocks it from the patrons you have met: find a boon altar on a run, meet whoever keeps it, and their common boons turn up here.'); return; }
+  rx = hubRx(); body = hubPanel('cart', 'Pharmacy cart', 'One starter boon for the next run, free: it lasts the whole run. Tap to pack it, tap again to put it back. The cart restocks after every run.');
+  cards = el('div', 'cards');
+  for (var i = 0; i < rx.offer.length; i++) (function (id) {
+    var sel = rx.pick === id, pt = PATRONS[patronOf(id)], card = boonCard(id, function () { rx.pick = sel ? '' : id; saveMeta(); Snd.sfx(sel ? 'click' : 'pickup'); openCart(); });
+    card.setAttribute('data-boon', id); if (sel) card.className += ' picked';
+    card.appendChild(el('div', '', (sel ? '<span class="tag sel">PACKED FOR THE NEXT RUN</span> ' : '') + (pt ? '<span class="tag" style="color:' + pt.color + '">from ' + esc(pt.name) + '</span>' : '')));
+    cards.appendChild(card);
+  })(rx.offer[i]);
+  if (!rx.offer.length) body.appendChild(el('p', 'hint', 'Nothing common is left on the cart at your level.'));
+  body.appendChild(cards);
+}
+function openPins() {
+  var h = META.hub, body = hubPanel('pins', 'Lanyard pins', 'Every patron you meet at an altar leaves a pin. Wear one per run. Its perk is small, and it levels up with use: level 2 after ' + PIN_USE[1] + ' runs worn, level 3 after ' + PIN_USE[2] + '.'), cards = el('div', 'cards');
+  for (var i = 0; i < PATRON_ORDER.length; i++) (function (pid) {
+    var p = PATRONS[pid], d = HUB_PINS[pid], met = !!h.met[pid], sel = met && h.pin === pid, lvl = pinLevel(pid), use = h.pinUse[pid] || 0, left = lvl < 3 ? PIN_USE[lvl] - use : 0;
+    var card = el('button', 'card asp' + (sel ? ' sel' : '') + (met ? '' : ' locked')); card.type = 'button'; card.setAttribute('data-pin', pid);
+    var cv = document.createElement('canvas'); cv.width = 128; cv.height = 128; var c = cv.getContext('2d'); c.scale(2, 2); c.translate(32, 26);
+    if (met) drawCaricature(c, p.look, 0.62); else { c.fillStyle = '#1b2a36'; c.beginPath(); c.arc(0, 6, 24, 0, TAU); c.fill(); c.fillStyle = '#5e7080'; c.font = '900 30px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', 0, 8); }
+    card.appendChild(cv); card.appendChild(el('h4', '', met ? esc(d.name) : '???'));
+    card.appendChild(el('div', '', met ? (sel ? '<span class="tag sel">WORN</span>' : '<span class="tag">tap to wear</span>') + ' <span class="tag capstone">LEVEL ' + lvl + '</span>' : '<span class="tag locked">NOT MET</span>'));
+    card.appendChild(el('div', 'desc', met ? '<b style="color:' + p.color + '">' + esc(p.name) + '</b>: ' + esc(pinText(pid, lvl)) + '.' + (lvl < 3 ? ' <span class="hint">Level ' + (lvl + 1) + ' (' + esc(pinText(pid, lvl + 1)) + ') in ' + left + ' more run' + (left === 1 ? '' : 's') + '.</span>' : ' <span class="hint">Top level.</span>') : 'Meet this patron at a boon altar.'));
+    card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (!met) { Snd.sfx('tink'); return; } h.pin = sel ? '' : pid; HUB.dirty = true; saveMeta(); Snd.sfx(sel ? 'click' : 'buy'); openPins(); });
+    cards.appendChild(card);
+  })(PATRON_ORDER[i]);
+  body.appendChild(cards);
+}
+function openPerks() {
+  var h = META.hub, body = hubPanel('perks', 'Whiteboard · resident perks', 'Small permanent upgrades, bought with CME credits. They come with you on every run.');
+  for (var i = 0; i < HUB_PERK_ORDER.length; i++) (function (id) {
+    var d = HUB_PERKS[id], lv = hubPerk(id), maxed = lv >= d.max, cost = maxed ? 0 : d.cost[lv], line = el('div', 'shopline');
+    line.appendChild(el('div', 'nm', '<b>' + esc(d.name) + ' <span class="hint">' + hubPips(lv, d.max) + '</span></b><small>' + esc(d.desc) + '</small>'));
+    line.appendChild(el('span', 'price', maxed ? 'DONE' : cost + ' CME'));
+    var b = el('button', 'btn small' + (!maxed && h.cme >= cost ? ' primary' : ''), maxed ? '—' : 'BUY'); b.type = 'button'; b.disabled = maxed || h.cme < cost; b.setAttribute('data-buy', id);
+    b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); hubBuy(id); openPerks(); });
+    line.appendChild(b); body.appendChild(line);
+  })(HUB_PERK_ORDER[i]);
+}
+function openDecor() {
+  var h = META.hub, body = hubPanel('decor', 'Decor catalog', 'Furnish the call room with CME credits. Each spot holds one thing at a time; what you own can be put away and brought back for free.');
+  for (var si = 0; si < HUB_SLOTS.length; si++) {
+    var slot = HUB_SLOTS[si], head = el('h3', '', HUB_SLOT_NAMES[slot]); head.style.margin = '14px 0 0'; body.appendChild(head);
+    for (var key in HUB_DECOR) if (HUB_DECOR[key].slot === slot) (function (id, slot) {
+      var d = HUB_DECOR[id], own = !!h.owned[id], shown = h.decor[slot] === id, line = el('div', 'shopline');
+      line.appendChild(el('div', 'nm', '<b>' + esc(d.name) + '</b><small>' + esc(d.desc) + '</small>'));
+      line.appendChild(el('span', 'price', own ? (shown ? 'ON DISPLAY' : 'IN STORAGE') : d.cost + ' CME'));
+      var b = el('button', 'btn small' + (own ? '' : h.cme >= d.cost ? ' primary' : ''), own ? (shown ? 'PUT AWAY' : 'DISPLAY') : 'BUY'); b.type = 'button'; b.disabled = !own && h.cme < d.cost; b.setAttribute('data-decor', id);
+      b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (!own) hubBuy(id); else { hubPlace(slot, shown ? '' : id); Snd.sfx('click'); } openDecor(); });
+      line.appendChild(b); body.appendChild(line);
+    })(key, slot);
+  }
+}
+function openTrophy() {
+  var h = META.hub, body = hubPanel('trophy', 'Trophy wall', 'Boss kills, your best run, and a portrait of every patron you have met.'), html = '', b = META.best, i, grid = el('div', 'bgrid');
+  for (i = 0; i < 4; i++) { var cs = HUB_CASES[i], n = h.bosses[cs.boss] || 0; html += '<div style="border-left:4px solid ' + cs.color + '"><small>' + esc(cs.what) + '</small><b>' + (n ? n + (n === 1 ? ' kill' : ' kills') : '—') + '</b></div>'; }
+  html += '<div><small>Runs / wins</small><b>' + (META.runs || 0) + ' / ' + (META.wins || 0) + '</b></div>';
+  html += '<div><small>Best run</small><b>' + (b ? b.rooms + ' rooms' + (b.won ? ' · won' : '') : '—') + '</b></div>';
+  html += '<div><small>Charts filed</small><b>' + hubCharted() + '</b></div><div><small>Free pens</small><b>' + (h.pens || 0) + '</b></div>';
+  body.appendChild(el('div', 'stat', html));
+  var head = el('h3', '', 'Patrons met · ' + hubMetCount() + ' / ' + PATRON_ORDER.length); head.style.margin = '14px 0 0'; body.appendChild(head);
+  for (i = 0; i < PATRON_ORDER.length; i++) {
+    var p = PATRONS[PATRON_ORDER[i]], met = !!h.met[PATRON_ORDER[i]], d = el('div', 'bentry' + (met ? '' : ' locked')), cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
+    var c = cv.getContext('2d'); c.scale(2, 2); c.translate(32, 26); if (met) drawCaricature(c, p.look, 0.62); else { c.fillStyle = '#1b2a36'; c.beginPath(); c.arc(0, 6, 24, 0, TAU); c.fill(); }
+    d.appendChild(cv); d.appendChild(el('b', '', met ? esc(p.name) : '???')); d.appendChild(el('small', '', met ? esc(p.full) : 'Not met yet.')); grid.appendChild(d);
+  }
+  body.appendChild(grid);
+}
+function openCoffee(keep) {
+  var h = META.hub, esp = h.decor.counter === 'espresso', ids = esp ? ['espresso', 'drip', 'decaf'] : ['drip', 'decaf'], cards = el('div', 'cards'), body;
+  if (!keep) HUB.coffeeLine = hubLine('coffee');
+  body = hubPanel('coffee', esp ? 'Espresso machine' : 'Coffee machine', 'One cup comes with you into the first room of the next run.');
+  body.appendChild(el('div', 'bubble', esc(HUB.coffeeLine)));
+  for (var i = 0; i < ids.length; i++) (function (id) {
+    var d = HUB_CUPS[id], sel = HUB.cup === id, card = el('button', 'card' + (sel ? ' picked' : '')); card.type = 'button'; card.setAttribute('data-cup', id);
+    card.appendChild(el('h4', '', esc(d.name))); card.appendChild(el('div', 'desc', esc(d.desc)));
+    card.appendChild(el('div', '', sel ? '<span class="tag sel">IN YOUR HAND</span>' : '<span class="tag">tap to pour</span>'));
+    card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); HUB.cup = sel ? '' : id; Snd.sfx(sel ? 'click' : 'drip'); openCoffee(true); });
+    cards.appendChild(card);
+  })(ids[i]);
+  body.appendChild(cards);
+  if (!esp) body.appendChild(el('p', 'hint', 'The decor catalog sells an espresso machine. It would do better than this.'));
+}
+function openScrubs(keep) {
+  var body, cards = el('div', 'cards');
+  if (!keep) HUB.pagerLine = hubLine('pager');
+  body = hubPanel('scrubs', 'Pager + scrub cabinet', 'Scrub colours are cosmetic. New ones come with residency level, or early for ' + SCRUB_COST + ' CME each.');
+  body.appendChild(el('div', 'bubble', '<b>PAGER:</b> ' + esc(HUB.pagerLine)));
+  for (var i = 0; i < SCRUBS.length; i++) (function (i) {
+    var on = scrubUnlocked(i), sel = on && (SET.scrub || 0) === i, card = el('button', 'card' + (sel ? ' picked' : '')); card.type = 'button'; card.setAttribute('data-scrub', String(i));
+    var sw = el('div', 'swatch'); sw.style.background = SCRUBS[i]; if (!on) sw.style.opacity = '0.4'; card.appendChild(sw);
+    card.appendChild(el('h4', '', SCRUB_NAMES[i]));
+    card.appendChild(el('div', '', sel ? '<span class="tag sel">WEARING</span>' : on ? '<span class="tag">tap to wear</span>' : '<span class="tag locked">PGY-' + scrubNeed(i) + ' · or ' + SCRUB_COST + ' CME</span>'));
+    card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (on) { SET.scrub = i; saveMeta(); Snd.sfx('swap'); } else hubBuy('scrub' + i); openScrubs(true); });
+    cards.appendChild(card);
+  })(i);
+  body.appendChild(cards);
+}
+function openCaseBoard() {
+  var h = META.hub, body = hubPanel('board', 'Case board', 'Today’s case decides the dungeon and the boss behind its last door. A case opens once the one above it is beaten.'), cur = hubCase();
+  for (var i = 0; i < HUB_CASES.length; i++) (function (i) {
+    var cs = HUB_CASES[i], open = caseUnlocked(i), sel = cs === cur, n = cs.boss ? (h.bosses[cs.boss] || 0) : 0, line = el('div', 'shopline');
+    line.appendChild(el('div', 'nm', '<b style="color:' + (open ? cs.color : '#5e7080') + '">' + cs.name + '</b><small>' + (cs.boss ? esc(cs.what) + (n ? ' · beaten ' + n + (n === 1 ? ' time' : ' times') : '') : 'Under construction. The paint is still wet.') + '</small>'));
+    line.appendChild(el('span', 'price', sel ? 'TODAY' : open ? '' : cs.boss ? 'beat ' + esc(HUB_CASES[i - 1].what) + ' first' : 'COMING'));
+    var b = el('button', 'btn small' + (open && !sel ? ' primary' : ''), sel ? 'ON THE BOARD' : open ? 'TAKE THIS CASE' : 'LOCKED'); b.type = 'button'; b.disabled = !open || sel; b.setAttribute('data-case', cs.boss || 'peds');
+    b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (!open) return; h.dungeon = cs.boss; HUB.dirty = true; saveMeta(); Snd.sfx('door'); openCaseBoard(); });
+    line.appendChild(b); body.appendChild(line);
+  })(i);
+}
+// the OR door: what comes with you, and the button that starts the run
+function hubPack() {
+  var h = META.hub, rx = h.rx && h.rx.run === (META.runs || 0) ? h.rx : null;
+  return { boss: hubCase().boss, boon: rx && rx.pick && BOONS[rx.pick] ? rx.pick : '', cup: HUB_CUPS[HUB.cup] ? HUB.cup : '' };
+}
+function openScrubIn() {
+  var h = META.hub, cs = hubCase(), load = hubLoadout(), pack = hubPack(), body = hubPanel('door', 'Scrub in?', 'The OR is through this door. This is what comes with you.'), html = '', names = [], perks = [], i;
+  for (i = 0; i < load.length; i++) { var asp = ASPECTS[load[i]] ? aspectDef(load[i], chosenAspect(load[i])) : null; names.push(esc(WEAPONS[load[i]].name) + (asp ? ' <span class="hint">(' + esc(asp.name) + ')</span>' : '')); }
+  for (i = 0; i < HUB_PERK_ORDER.length; i++) if (hubPerk(HUB_PERK_ORDER[i])) perks.push(esc(HUB_PERKS[HUB_PERK_ORDER[i]].name) + ' ' + hubPips(hubPerk(HUB_PERK_ORDER[i]), HUB_PERKS[HUB_PERK_ORDER[i]].max));
+  html += '<div style="border-left:4px solid ' + cs.color + '"><small>Case</small><b style="font-size:17px">' + cs.name + '</b><small>' + esc(cs.what) + '</small></div>';
+  html += '<div><small>Instruments</small><b style="font-size:14px">' + names.join('<br>') + '</b></div>';
+  html += '<div><small>Starter boon</small><b style="font-size:14px">' + (pack.boon ? esc(BOONS[pack.boon].name) : '<span class="hint">none · pharmacy cart</span>') + '</b></div>';
+  html += '<div><small>Pin</small><b style="font-size:14px">' + (h.pin && h.met[h.pin] ? esc(HUB_PINS[h.pin].name) + ' <span class="hint">L' + pinLevel(h.pin) + '</span>' : '<span class="hint">none · lanyard pins</span>') + '</b></div>';
+  html += '<div><small>Coffee</small><b style="font-size:14px">' + (pack.cup ? esc(HUB_CUPS[pack.cup].name) : '<span class="hint">none · coffee machine</span>') + '</b></div>';
+  html += '<div><small>Perks</small><b style="font-size:12px">' + (perks.length ? perks.join('<br>') : '<span class="hint">none · whiteboard</span>') + '</b></div>';
+  var tiles = el('div', 'stat', html); tiles.style.gridTemplateColumns = 'repeat(auto-fit,minmax(112px,1fr))'; body.appendChild(tiles);
+  var go = hubBtn('SCRUB IN', 'primary', hubScrubIn); go.id = 'btnScrubIn'; $('hubExtra').appendChild(go);
+}
+function hubScrubIn() { RUNOPT = hubPack(); HUB.cup = ''; HUB.panel = ''; beginRun(); }
+function openHubMenu() {
+  var body = hubPanel('menu', 'The call room', 'PGY-' + residencyLevel() + ' · ' + META.hub.cme + ' CME credits · earned at the end of every run, spent only here.'), m = el('div', 'menu');
+  m.appendChild(hubBtn('HOW TO PLAY', '', function () { pendingStart = false; openOverlay('help'); buildMatrix(); }));
+  m.appendChild(hubBtn('SETTINGS', '', function () { openSettings('hub'); }));
+  m.appendChild(hubBtn('BACK TO TITLE', 'danger', showTitle));
+  if (EMBED) m.appendChild(hubBtn('EXIT GAME', 'danger', exitEmbed));
+  body.appendChild(m);
+}
+// a summary of the room for the test hooks (UroCrawl.hub.state)
+function hubState() {
+  return { on: G.screen === 'hub', near: HUB.near ? HUB.near.id : null, panel: HUB.panel, cup: HUB.cup, bubble: HUB.bubble ? { who: HUB.bubble.who, text: HUB.bubble.text } : null, toast: HUB.toast ? HUB.toast.text : null,
+    meta: META.hub, loadout: hubLoadout(), dungeon: hubCase().boss, hints: HUB.stations.filter(function (s) { return hubHint(s.id); }).map(function (s) { return s.id; }), stations: HUB.stations.map(function (s) { return { id: s.id, name: s.name, x: s.x, y: s.y, r: s.r }; }), npcs: HUB.npcs.map(function (n) { return { id: n.id, x: n.x, y: n.y }; }), props: HUB.props.length, lastRun: HUB.lastRun };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -6585,8 +7515,11 @@ function frame(ts) {
     G.frames++; G.fpsT += dtReal; if (G.fpsT >= 0.5) { G.fps = Math.round(G.frames / G.fpsT); G.frames = 0; G.fpsT = 0; }
     pollGamepad();
     if (takeEdge('pause')) handlePauseKey();
-    if (takeEdge('enter')) { if (G.overlay === 'summary') $('btnAgain').click(); else if (G.overlay === 'title') $('btnPlay').click(); else if (G.overlay === 'help') $('btnHelpOk').click(); }
-    if (G.running && !G.overlay && !document.hidden) {
+    if (takeEdge('enter')) { if (G.overlay === 'summary') $('btnSumHub').click(); else if (G.overlay === 'title') $('btnPlay').click(); else if (G.overlay === 'help') $('btnHelpOk').click(); else if (G.overlay === 'hub' && HUB.panel === 'door') hubScrubIn(); else if (G.screen === 'hub' && !G.overlay) edge('interact'); }
+    if (G.screen === 'hub' && !G.running) {   // the Call Room: its own fixed steps, no hit-stop, no slow-mo
+      if (!G.overlay && !document.hidden) { HUB.acc += dtReal; var hs = 0; while (HUB.acc >= STEP && hs < 6) { hubStep(STEP); HUB.acc -= STEP; hs++; if (G.overlay || G.screen !== 'hub') break; } if (hs >= 6) HUB.acc = 0; } else clearEdges();
+      G.shakeX = G.shakeY = 0;
+    } else if (G.running && !G.overlay && !document.hidden) {
       if (G.hitstopT > 0) G.hitstopT -= dtReal;
       else { acc += dtReal * G.timeScale; var steps = 0; while (acc >= STEP && steps < 6) { update(STEP); acc -= STEP; steps++; } if (steps >= 6) acc = 0; }
       G.shake *= Math.pow(0.002, dtReal); if (G.shake < 0.15) G.shake = 0; G.shakeX = (Math.random() * 2 - 1) * G.shake; G.shakeY = (Math.random() * 2 - 1) * G.shake;
@@ -6598,6 +7531,7 @@ function frame(ts) {
 }
 function handlePauseKey() {
   if (G.running) { if (!G.overlay) openPause(); else if (G.overlay === 'pause') resumeGame(); else if (G.overlay === 'settings' && settingsFrom === 'pause') openOverlay('pause'); return; }
+  if (G.screen === 'hub') { if (!G.overlay) openHubMenu(); else if (G.overlay === 'aspects') openLocker(); else { pendingStart = false; hubClose(); } return; }   // the Call Room: Esc opens its menu, or backs out of a station
   if (G.overlay === 'title') { if (EMBED) exitEmbed(); }
   else if (G.overlay === 'help' || G.overlay === 'bestiary' || G.overlay === 'settings' || G.overlay === 'aspects') showTitle();
 }
@@ -6609,18 +7543,21 @@ document.addEventListener('pointerdown', function () { noteInput(); }, true);
    §19 WIRING, TEST HOOKS, INIT
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 function beginRun() { if (!Q.seed && META.runs > 0 && !G.firstRunDone) { /* keep the first seed for the first run; later runs get fresh seeds */ } if (!Q.seed && G.firstRunDone) { SEED = (Math.random() * 1e9) | 0; } G.firstRunDone = true; startRun(); }
-onTap('btnPlay', function () { if (!META.helpSeen) { META.helpSeen = true; saveMeta(); pendingStart = true; openOverlay('help'); buildMatrix(); } else beginRun(); });
+// PLAY lands in the Call Room; QUICK START goes straight to a run. Either shows How to play first, once.
+onTap('btnPlay', function () { if (!META.helpSeen) { META.helpSeen = true; saveMeta(); pendingStart = 'hub'; openOverlay('help'); buildMatrix(); } else enterHub(); });
+onTap('btnQuick', function () { if (!META.helpSeen) { META.helpSeen = true; saveMeta(); pendingStart = 'run'; openOverlay('help'); buildMatrix(); } else beginRun(); });
 onTap('btnHelp', function () { pendingStart = false; openOverlay('help'); buildMatrix(); });
-onTap('btnHelpOk', function () { if (pendingStart) { pendingStart = false; beginRun(); } else showTitle(); });
-onTap('btnBestiary', openBestiary); onTap('btnBestBack', showTitle);
+onTap('btnHelpOk', function () { var go = pendingStart; pendingStart = false; if (go === 'hub') enterHub(); else if (go) beginRun(); else if (G.screen === 'hub') hubClose(); else showTitle(); });
+onTap('btnBestiary', openBestiary); onTap('btnBestBack', function () { if (G.screen === 'hub') hubClose(); else showTitle(); });
+onTap('btnHubBack', hubClose); onTap('btnSumHub', enterHub);
 onTap('btnSettings', function () { openSettings('title'); }); onTap('btnSetBack', closeSettings);
 onTap('btnExit', exitEmbed); onTap('btnPauseExit', exitEmbed);
 onTap('btnResume', resumeGame); onTap('btnPauseSettings', function () { openSettings('pause'); }); onTap('btnQuit', function () { G.running = false; showTitle(); });
-onTap('btnReroll', function () { if (!altarRef || altarRef.rerolled || G.rvu < 25) return; G.rvu -= 25; altarRef.rerolled = true; altarRef.offer = rollBoons(3, altarRef.offer, altarRef.patron); Snd.sfx('buy'); renderBoonCards(); });
+onTap('btnReroll', function () { var rc = rerollCost(); if (!altarRef || altarRef.rerolled || G.rvu < rc) return; G.rvu -= rc; if (!rc) G.freeReroll = 0; altarRef.rerolled = true; altarRef.offer = rollBoons(3, altarRef.offer, altarRef.patron); Snd.sfx('buy'); renderBoonCards(); });
 onTap('btnSkipPitch', showModChoice); onTap('btnFreePen', takeFreePen);
 onTap('btnGradeSkip', function () { var ref = gradeRef; gradeRef = null; if (ref) ref.onCancel(); else hideScreens(); });
 onTap('btnBoonSkip', function () { altarRef = null; hideScreens(); });
-onTap('btnAspects', openAspects); onTap('btnAspectsBack', showTitle);
+onTap('btnAspects', openAspects); onTap('btnAspectsBack', function () { if (G.screen === 'hub') openLocker(); else showTitle(); });
 onTap('btnModReroll', function () {
   var tgt = repRerollTarget(); if (!repRef || !tgt || repRef.rerolled || G.rvu < MOD_REROLL_COST) return;
   G.rvu -= MOD_REROLL_COST; repRef.rerolled = true;
@@ -6632,7 +7569,7 @@ onTap('btnModSkip', function () { repRef = null; hideScreens(); });
 onTap('btnWeapLeave', function () { hideScreens(); });
 onTap('btnShopLeave', function () { hideScreens(); });
 onTap('btnAgain', function () { beginRun(); }); onTap('btnSumTitle', showTitle);
-onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.aspects = {}; META.runs = 0; META.helpSeen = false; saveMeta(); updateTitle(); Snd.sfx('kill'); });
+onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.aspects = {}; META.runs = 0; META.helpSeen = false; META.hub = hubDefaults(null); HUB.cup = ''; HUB.dirty = true; if (G.screen === 'hub') hubBuild(); saveMeta(); updateTitle(); Snd.sfx('kill'); });
 $('setVol').addEventListener('input', function () { SET.vol = parseInt(this.value, 10) || 0; Snd.applyVolume(); saveMeta(); });
 onTap('setMute', function () { SET.mute = !SET.mute; Snd.applyVolume(); refreshSettings(); saveMeta(); });
 onTap('setMusic', function () { SET.music = !SET.music; refreshSettings(); saveMeta(); });
@@ -6640,7 +7577,7 @@ onTap('setShake', function () { SET.shake = !SET.shake; refreshSettings(); saveM
 onTap('setAim', function () { SET.aim = !SET.aim; refreshSettings(); saveMeta(); });
 onTap('setParts', function () { SET.parts = (SET.parts + 1) % 3; refreshSettings(); saveMeta(); });
 onTap('setLeft', function () { SET.left = !SET.left; refreshSettings(); saveMeta(); });
-onTap('setScrub', function () { var lvl = residencyLevel(), max = lvl >= 6 ? 6 : lvl >= 4 ? 4 : lvl >= 2 ? 3 : 1; SET.scrub = ((SET.scrub || 0) + 1) % max; refreshSettings(); saveMeta(); if (max === 1) $('setScrub').textContent = 'TEAL (more at PGY-2)'; });
+onTap('setScrub', function () { var cur = SET.scrub || 0, nxt = 0, n = 0, k; for (k = 0; k < SCRUBS.length; k++) if (scrubUnlocked(k)) n++; for (k = 1; k <= SCRUBS.length; k++) if (scrubUnlocked((cur + k) % SCRUBS.length)) { nxt = (cur + k) % SCRUBS.length; break; } SET.scrub = nxt; refreshSettings(); saveMeta(); if (n === 1) $('setScrub').textContent = 'TEAL (more at PGY-2)'; });
 window.UroCrawl = {
   state: G, version: '1.0',
   player: function () { return P; },
@@ -6658,13 +7595,27 @@ window.UroCrawl = {
   makeWall: makeWall, wallHit: wallHit, wallPerforate: wallPerforate, wallPlug: wallPlug, wallSegAt: wallSegAt, wallPoint: wallPoint, insideArena: insideArena, rollBossId: rollBossId,
   addLandmark: addLandmark, hitAreaDist: hitAreaDist, injureSphincter: function () { return G.running ? injureSphincter('hook') : false; }, cureSphincter: cureSphincter, sphincterCursed: sphincterCursed, leakPuddle: leakPuddle, openShop: openShop, openRepScreen: openRepScreen, winLine: winLine,
   bph: { flow: bphFlow, fogR: bphFogR, hoseChance: function (i, dmg) { var B = G.boss; return B && B.kind === 'bph' ? bphHoseChance(B, B.lobes[i || 0], dmg === undefined ? 10 : dmg) : 0; }, advance: function () { var B = G.boss; if (B && B.kind === 'bph' && B.sec < 3 && !B.slide) bphSlide(B); }, hoser: function (i) { var B = G.boss; return B && B.kind === 'bph' ? bphStartHoser(B, B.lobes[i || 0], true) : null; }, scar: function (v) { var B = G.boss; if (B && B.kind === 'bph') bphScarSet(B, v); } },
+  // the Call Room (§17b). `state` is a fresh summary each time it is read; `meta` inside it is the saved META.hub itself
+  hub: {
+    get state() { return hubState(); },
+    enter: enterHub, leave: showTitle, close: hubClose,
+    step: function (n) { n = n || 1; for (var i = 0; i < n; i++) { if (G.screen !== 'hub' || G.running || G.overlay) return; hubStep(STEP); } },
+    addCme: function (n) { META.hub.cme = Math.max(0, Math.floor(META.hub.cme + (+n || 0))); saveMeta(); return META.hub.cme; },
+    buy: hubBuy, place: hubPlace,
+    goto: function (id) { var s = hubStation(id); if (!s || G.screen !== 'hub') return false; P.x = s.x + (id === 'door' ? -14 : 0); P.y = s.y + (s.npc || id === 'attending' ? 22 : 0); hubKeepIn(); return true; },
+    use: function (id) { var s = hubStation(id); if (!s || G.screen !== 'hub') return false; s.use(s); return true; },
+    talk: hubTalk, scrubIn: hubScrubIn, meet: hubMeet, loadout: hubLoadout, rx: hubRx, pinLevel: pinLevel, pinText: pinText, caseUnlocked: caseUnlocked, award: hubAward, line: hubLine,
+    tables: { PERKS: HUB_PERKS, PINS: HUB_PINS, DECOR: HUB_DECOR, CUPS: HUB_CUPS, CASES: HUB_CASES, LINES: HUB_LINES, CME: HUB_CME, SLOTS: HUB_SLOTS, PIN_USE: PIN_USE }
+  },
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };
 resize(); setTimeout(resize, 100);
 if (TOUCH_DEVICE) canvas.className = 'touch';
+if (Q.cme !== undefined) META.hub.cme = Math.max(0, parseInt(Q.cme, 10) || 0);   // ?cme=N: set the balance (debug)
 updateTitle(); Snd.setMusicMode('title');
 if (EMBED) { $('btnExit').style.display = ''; }
+if (Q.hub === '1' || Q.hub === 'true') enterHub();   // ?hub=1: boot straight into the Call Room
 requestAnimationFrame(frame);
 })();
 </script>

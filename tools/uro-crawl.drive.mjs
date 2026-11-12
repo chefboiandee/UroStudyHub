@@ -20,6 +20,12 @@
 // injury and the incontinence curse with its fixes (Kegel, the Artificial Sphincter in the shop and from the next rep), neck
 // scar → contracture → the flow cap → incision, the hoser's red-out and both fixes, thrusts and the pinch, the section slides,
 // TUR syndrome, the Benign dungeon, the four-boss pool, and two full fights played by a bot with no god mode.
+// Block R: the Call Room (the walkable hub between runs): PLAY → the room, QUICK START past it, ?hub=1 / ?cme=N, walking and
+// the three ways to interact (E, Enter, click) plus touch (stick, INTERACT, ROLL, menu), every station (locker + aspects, case
+// board and its unlock chain, pharmacy cart, lanyard pins and their levels, whiteboard perks, chart rack, trophy wall, coffee,
+// scrub cabinet, decor catalog and its slots, rep table), the cast's rotating lines, the janitor's round, the OR door's
+// scrub-in sheet, a run that carries the picks (instruments, aspects, boon, pin, perks, coffee, case), the free reroll,
+// what a run pays in CME (rooms, boss, first kill, charts, favor), the summary's way back, and persistence across a reload.
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -158,7 +164,7 @@ await block('C. death + persistence', async () => {
 // ───────── D. touch (phone landscape) ─────────
 await block('D. touch', async () => {
   const { p, errs } = await open('?seed=4', 900, 420, true);
-  await p.tap('#btnPlay'); await p.waitForTimeout(100); await p.tap('#btnHelpOk').catch(() => {}); await p.waitForTimeout(100);
+  await p.tap('#btnQuick'); await p.waitForTimeout(100); await p.tap('#btnHelpOk').catch(() => {}); await p.waitForTimeout(100);   // QUICK START: PLAY now lands in the Call Room (block R)
   let b = await p.evaluate(() => ({ running: UroCrawl.state.running, mode: UroCrawl.input.mode }));
   check('touch run starts in touch mode', b.running && b.mode === 'touch');
   const box = await p.evaluate(() => { const r = document.getElementById('game').getBoundingClientRect(); return { l: r.left, t: r.top, s: r.width / 960 }; });
@@ -196,7 +202,7 @@ await block('E. embed', async () => {
   await pe.waitForFunction(() => { try { return !!document.getElementById('f').contentWindow.UroCrawl; } catch (e) { return false; } });
   const fr = pe.frames()[1];
   check('embed: Exit button visible', await fr.evaluate(() => document.getElementById('btnExit').style.display !== 'none'));
-  await fr.click('#btnPlay'); await pe.waitForTimeout(100); await fr.click('#btnHelpOk').catch(() => {});
+  await fr.click('#btnQuick'); await pe.waitForTimeout(100); await fr.click('#btnHelpOk').catch(() => {});   // QUICK START: PLAY now lands in the Call Room (block R)
   await fr.evaluate(() => { UroCrawl.step(10); UroCrawl.skipRoom(); UroCrawl.step(10); const P = UroCrawl.player(); const d = UroCrawl.state.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80); });
   check('rest room → boss door → room 9', await fr.evaluate(() => UroCrawl.state.roomIndex === 9 && UroCrawl.state.room.kind === 'boss'));
   await fr.evaluate(() => { UroCrawl.step(200); UroCrawl.skipRoom(); UroCrawl.step(400); }); await pe.waitForTimeout(200);
@@ -1188,6 +1194,7 @@ await block('P. staghorn duel', async () => {
   await shot(p6, 'p-core');
 
   // a full fight, played: no god mode, starting loadout, the bot reads the telegraphs
+  for (const cx of browser.contexts()) if (cx !== p.context()) await cx.close();   // the win sequence below runs on the real clock: close every other page first (as block Q does), or forty animating pages starve it
   let minTele = 9; const kinds = {}, runs = [];
   for (const seed of [11, 42]) {
     const o = await open('?seed=' + seed + '&boss=staghorn'); await o.p.evaluate(STAGLIB);
@@ -1619,6 +1626,251 @@ await block('Q. giant turp', async () => {
   check('phone (844×390, touch): the fight runs on its own clock at a playable frame rate', b.mode === 'touch' && b.sec === 2 && b.running && b.fps >= 40 && b.t > 4.5, 'fps ' + b.fps);
   await shot(p14, 'q-phone');
   errCheck('Q', [].concat(...allErrs));
+});
+
+// ───────── R. the Call Room (roadmap Step 3) ─────────
+await block('R. call room', async () => {
+  const allErrs = [];
+  const need = ['door', 'board', 'locker', 'cart', 'pins', 'perks', 'charts', 'trophy', 'coffee', 'scrubs', 'decor', 'reps'];
+  const cast = ['attending', 'janitor', 'brax', 'kiki', 'rex', 'sunny'];
+  const canvasBox = (pg) => pg.evaluate(() => { const r = document.getElementById('game').getBoundingClientRect(); return { l: r.left, t: r.top, s: r.width / 960 }; });
+
+  // ── a fresh save: the title, PLAY → the hub ──
+  const { p, errs } = await open('?seed=3&god=1'); allErrs.push(errs);
+  let b = await p.evaluate(() => ({ play: !!document.getElementById('btnPlay'), quick: !!document.getElementById('btnQuick'), hub: JSON.parse(JSON.stringify(UroCrawl.meta.hub)), on: UroCrawl.hub.state.on,
+    hooks: ['addCme', 'buy', 'enter', 'step', 'goto', 'use', 'place', 'talk', 'scrubIn'].every(k => typeof UroCrawl.hub[k] === 'function') && typeof UroCrawl.hub.state === 'object' }));
+  check('title has PLAY and QUICK START; META.hub starts at its defaults (cme 0, decor / owned / perks / met / lines empty, no pin); the hub hooks exist', b.play && b.quick && b.hooks && !b.on && b.hub.cme === 0 && b.hub.pin === '' && ['decor', 'owned', 'perks', 'met', 'lines'].every(k => Object.keys(b.hub[k]).length === 0), JSON.stringify(b.hub).slice(0, 150));
+  await p.click('#btnPlay'); await p.waitForTimeout(100);
+  const helpFirst = await p.evaluate(() => UroCrawl.state.overlay);
+  await p.click('#btnHelpOk'); await p.waitForTimeout(150);
+  b = await p.evaluate(() => { const G = UroCrawl.state, s = UroCrawl.hub.state; return { screen: G.screen, overlay: G.overlay, running: G.running, on: s.on, ids: s.stations.map(x => x.id), npcs: s.npcs.map(x => x.id), music: UroCrawl.snd.music.mode, enemies: G.enemies.length, held: G.weapons.map(w => w.id).join() }; });
+  check('PLAY (after the first-time How to play) lands in the Call Room: G.screen "hub", no run, no overlay, nothing to fight, the hub music mode', helpFirst === 'help' && b.screen === 'hub' && b.overlay === null && !b.running && b.on && b.enemies === 0 && b.music === 'hub', b.screen + ' · music ' + b.music);
+  check('every station of the roadmap is in the room (OR door, case board, locker, cart, pins, whiteboard, chart rack, trophy wall, coffee, scrub cabinet, decor desk, rep table); the cast is the attending, the janitor and the four reps', need.every(id => b.ids.includes(id)) && cast.every(id => b.npcs.includes(id)), b.ids.join(','));
+  const hints0 = await p.evaluate(() => UroCrawl.hub.state.hints.join());
+  await p.waitForTimeout(300); await shot(p, 'r-hub-first');
+
+  // ── walking, highlighting, the three ways to interact on a desktop ──
+  const x0 = await p.evaluate(() => UroCrawl.player().x);
+  await p.keyboard.down('KeyD'); await p.waitForTimeout(500); await p.keyboard.up('KeyD');
+  b = await p.evaluate(() => ({ x: UroCrawl.player().x }));
+  check('keyboard: D walks the surgeon across the room on the real clock', b.x > x0 + 40, Math.round(x0) + ' → ' + Math.round(b.x));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, P = UroCrawl.player(); P.x = 480; P.y = 300; H.step(2); const none = H.state.near; P.x = 20; P.y = 20; H.step(2); const walled = { x: P.x, y: P.y }; H.goto('locker'); H.step(2); return { none, walled, near: H.state.near, held: UroCrawl.state.weapons.map(w => w.id).join() }; });
+  check('standing by a station highlights it, standing in the open highlights nothing; the far wall and the room edge are solid; the surgeon carries the first instrument of the loadout', b.none === null && b.near === 'locker' && b.walled.y > 126 && b.walled.x > 26 && b.held === 'holmium', JSON.stringify(b));
+  await p.keyboard.press('KeyE'); await p.waitForTimeout(150);
+  b = await p.evaluate(() => { const W = UroCrawl.tables.WEAPONS, es = [...document.querySelectorAll('#hubBody [data-w]')].map(e => ({ id: e.getAttribute('data-w'), sel: e.classList.contains('sel'), locked: e.classList.contains('locked'), txt: e.textContent }));
+    return { overlay: UroCrawl.state.overlay, panel: UroCrawl.hub.state.panel, n: es.length, sel: es.filter(e => e.sel).map(e => e.id).join(), locked: es.filter(e => e.locked).length, wantLocked: Object.keys(W).filter(id => !W[id].ultimate && W[id].unlock > 1).length, does: es.find(e => e.id === 'bovie').txt, lockTxt: es.filter(e => e.locked).every(e => /\?\?\?/.test(e.txt) && /LOCKED · PGY-\d/.test(e.txt)), openTxt: es.filter(e => !e.locked).every(e => !/\?\?\?/.test(e.txt)) }; });
+  check('E opens the instrument locker: 23 instruments, the two starting ones marked, everything above PGY-1 a silhouette with its requirement', b.overlay === 'hub' && b.panel === 'locker' && b.n === 23 && b.sel === 'holmium,scalpel' && b.locked === b.wantLocked && b.locked > 5 && b.lockTxt && b.openTxt && /Crackling arc that jumps to 3 nearby enemies and strips biofilm\./.test(b.does), b.n + ' entries · ' + b.locked + ' locked');
+  await p.click('#hubBody [data-w="bovie"]'); await p.click('#hubBody [data-w="thulium"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => ({ load: UroCrawl.hub.loadout().join(), saved: UroCrawl.meta.hub.load.join(), held: UroCrawl.state.weapons.map(w => w.id).join(), sel: [...document.querySelectorAll('#hubBody [data-w].sel')].map(e => e.getAttribute('data-w')).join() }));
+  check('tapping an unlocked instrument swaps it in for the older pick (two stay selected); a locked one does nothing', b.load === 'scalpel,bovie' && b.saved === 'scalpel,bovie' && b.sel === 'scalpel,bovie' && b.held === 'scalpel', b.load);
+  await p.click('#hubExtra .btn'); await p.waitForTimeout(60);
+  const aspO = await p.evaluate(() => UroCrawl.state.overlay);
+  await p.click('#btnAspectsBack'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => ({ overlay: UroCrawl.state.overlay, panel: UroCrawl.hub.state.panel, screen: UroCrawl.state.screen }));
+  check('the locker\'s ASPECTS button opens the aspects screen, and DONE comes back to the locker', aspO === 'aspects' && b.overlay === 'hub' && b.panel === 'locker' && b.screen === 'hub');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(100);
+  check('Esc backs out of a station to the room', (await p.evaluate(() => UroCrawl.state.overlay)) === null);
+  await p.evaluate(() => { UroCrawl.hub.goto('perks'); UroCrawl.hub.step(2); });
+  let box = await canvasBox(p);
+  await p.mouse.click(box.l + 480 * box.s, box.t + 320 * box.s); await p.waitForTimeout(150);
+  b = await p.evaluate(() => ({ panel: UroCrawl.hub.state.panel, n: document.querySelectorAll('#hubBody [data-buy]').length, allOff: [...document.querySelectorAll('#hubBody [data-buy]')].every(x => x.disabled), buy: UroCrawl.hub.buy('hp'), cme: UroCrawl.meta.hub.cme }));
+  check('a mouse click uses the station you stand by: the whiteboard lists four perks, and with 0 CME nothing can be bought', b.panel === 'perks' && b.n === 4 && b.allOff && b.buy === false && b.cme === 0);
+  const hints1 = await p.evaluate(() => { UroCrawl.hub.addCme(500); const h = UroCrawl.hub.state.hints.join(); UroCrawl.hub.use('perks'); return h; });
+  await p.click('#hubBody [data-buy="hp"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta.hub, T = H.tables.PERKS, one = { hp: m.perks.hp, cme: m.cme, shown: document.getElementById('hubCme').textContent };
+    const r = [H.buy('hp'), H.buy('hp'), H.buy('hp'), H.buy('rvu'), H.buy('reroll'), H.buy('swap'), H.buy('nonsense')];
+    return { one, r, perks: JSON.parse(JSON.stringify(m.perks)), cme: m.cme, spent: T.hp.cost[0] + T.hp.cost[1] + T.hp.cost[2] + T.rvu.cost[0] + T.reroll.cost[0] + T.swap.cost[0] }; });
+  check('CME is spent on perks, level by level: Power Nap to its cap of 3 (a 4th is refused), Moonlighting, Second Opinion, Instrument Count; an unknown id buys nothing', b.one.hp === 1 && b.one.cme === 470 && b.one.shown === '470 CME' && b.r.join() === 'true,true,false,true,true,true,false' && b.perks.hp === 3 && b.perks.rvu === 1 && b.perks.reroll === 1 && b.perks.swap === 1 && b.cme === 500 - b.spent, JSON.stringify(b.perks) + ' · ' + b.cme + ' CME left');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(80);
+  await p.evaluate(() => { UroCrawl.hub.goto('board'); UroCrawl.hub.step(2); });
+  await p.keyboard.press('Enter'); await p.waitForTimeout(150);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, bt = id => document.querySelector('#hubBody [data-case="' + id + '"]'); return { panel: H.state.panel, stag: bt('staghorn').disabled && /ON THE BOARD/.test(bt('staghorn').textContent), four: bt('fournier').disabled, bph: bt('bph').disabled, mibc: bt('mibc').disabled, peds: bt('peds').disabled, un: [0, 1, 2, 3, 4].map(i => H.caseUnlocked(i)).join(), dungeon: H.state.dungeon }; });
+  check('Enter uses a station too: the case board starts with only STONES open; Infection, Benign, Oncology are locked behind the boss before them and the Peds Wing is not built', b.panel === 'board' && b.stag && b.four && b.bph && b.mibc && b.peds && b.un === 'true,false,false,false,false' && b.dungeon === 'staghorn', b.un);
+  const hints2 = await p.evaluate(() => { UroCrawl.meta.hub.bosses.staghorn = 1; const h = UroCrawl.hub.state.hints.join(); UroCrawl.hub.use('board'); return h; });
+  await p.click('#hubBody [data-case="fournier"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub; return { dungeon: H.state.dungeon, saved: UroCrawl.meta.hub.dungeon, bph: document.querySelector('#hubBody [data-case="bph"]').disabled, un: [0, 1, 2, 3, 4].map(i => H.caseUnlocked(i)).join() }; });
+  check('beating the Staghorn opens the Infection case (and only that one); taking it puts it on the board', b.dungeon === 'fournier' && b.saved === 'fournier' && b.bph && b.un === 'true,true,false,false,false', b.un);
+  const hints3 = await p.evaluate(() => UroCrawl.hub.state.hints.join());
+
+  // ── pharmacy cart + lanyard pins: both fed by the patrons you have met ──
+  b = await p.evaluate(() => { const H = UroCrawl.hub; H.use('cart'); const empty = { n: document.querySelectorAll('#hubBody [data-boon]').length, txt: document.getElementById('hubSub').textContent };
+    H.use('pins'); const pins0 = [...document.querySelectorAll('#hubBody [data-pin]')].map(e => e.classList.contains('locked')); document.querySelector('#hubBody [data-pin="young"]').click(); const pinNo = UroCrawl.meta.hub.pin;
+    const first = H.meet('civiale'), again = H.meet('civiale'), hintsMet = H.state.hints.join(); H.use('cart'); const B = UroCrawl.tables.BOONS, pool = UroCrawl.tables.PATRONS.civiale.pool, offer = [...document.querySelectorAll('#hubBody [data-boon]')].map(e => e.getAttribute('data-boon'));
+    return { empty, pins0, pinNo, first, again, hintsMet, offer, ok: offer.every(id => B[id].rarity === 'common' && pool.includes(id) && !B[id].requires), uniq: new Set(offer).size }; });
+  check('with no patron met the pharmacy cart is empty and every pin is locked', b.empty.n === 0 && /empty/.test(b.empty.txt) && b.pins0.length === 8 && b.pins0.every(Boolean) && b.pinNo === '');
+  check('meeting a patron (once) stocks the cart: three different common boons from that patron\'s pool', b.first === true && b.again === false && b.offer.length === 3 && b.uniq === 3 && b.ok, b.offer.join());
+  const offer0 = b.offer, hintsMet = b.hintsMet;
+  await p.click('#hubBody [data-boon="' + offer0[1] + '"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, pick = UroCrawl.meta.hub.rx.pick, picked = [...document.querySelectorAll('#hubBody .card.picked')].map(e => e.getAttribute('data-boon')).join(); H.close(); H.use('cart'); return { pick, picked, again: [...document.querySelectorAll('#hubBody [data-boon]')].map(e => e.getAttribute('data-boon')).join() }; });
+  check('tapping a boon packs it for the next run; the offer does not change when you come back to the cart', b.pick === offer0[1] && b.picked === offer0[1] && b.again === offer0.join(), b.pick);
+  await p.evaluate(() => UroCrawl.hub.use('pins'));
+  await p.click('#hubBody [data-pin="civiale"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta.hub, card = document.querySelector('#hubBody [data-pin="civiale"]'), locked = document.querySelectorAll('#hubBody [data-pin].locked').length; m.pinUse.civiale = 3; const l2 = H.pinLevel('civiale'); m.pinUse.civiale = 8; const l3 = H.pinLevel('civiale'); m.pinUse.civiale = 0;
+    return { pin: m.pin, worn: card.classList.contains('sel'), txt: card.textContent, locked, hints: H.state.hints.join(), l1: H.pinLevel('civiale'), l2, l3, t: [1, 2, 3].map(l => H.pinText('civiale', l)).join(' / ') }; });
+  check('a met patron\'s pin can be worn (one at a time); it shows its perk and level, and levels up with use: 3 runs worn → level 2, 8 → level 3', b.pin === 'civiale' && b.worn && /\+4% Litho damage/.test(b.txt) && /LEVEL 1/.test(b.txt) && b.locked === 7 && b.l1 === 1 && b.l2 === 2 && b.l3 === 3, b.t);
+
+  check('a gold dot marks a station that has something for you: none on a fresh save; the whiteboard and the catalog once you can afford something; the case board when a new case opens (until you take it); the cart and the pins once a patron is met (until you pack a boon and wear a pin)', hints0 === '' && /perks/.test(hints1) && /decor/.test(hints1) && !/board/.test(hints1) && /board/.test(hints2) && !/board/.test(hints3) && /cart/.test(hintsMet) && /pins/.test(hintsMet) && !/cart/.test(b.hints) && !/pins/.test(b.hints), [hints0 || '—', hints1, hints2, hints3, hintsMet, b.hints].join(' | '));
+
+  // ── chart rack, trophy wall, coffee, scrubs ──
+  await p.evaluate(() => UroCrawl.hub.use('charts'));
+  const bestO = await p.evaluate(() => UroCrawl.state.overlay);
+  await p.click('#btnBestBack'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, G = UroCrawl.state, back = { overlay: G.overlay, screen: G.screen }; H.use('trophy'); const trophy = document.getElementById('hubBody').textContent, tiles = document.querySelectorAll('#hubBody .stat > div').length, faces = document.querySelectorAll('#hubBody .bentry').length, lockedFaces = document.querySelectorAll('#hubBody .bentry.locked').length;
+    H.use('coffee'); const cups = [...document.querySelectorAll('#hubBody [data-cup]')].map(e => e.getAttribute('data-cup')).join(), quip = document.querySelector('#hubBody .bubble').textContent; return { back, trophy, tiles, faces, lockedFaces, cups, quip }; });
+  check('the chart rack is the bestiary, and BACK returns to the room (not the title)', bestO === 'bestiary' && b.back.overlay === null && b.back.screen === 'hub');
+  check('the trophy wall lists the four bosses, runs, best run, and a portrait frame per patron (1 of 8 met)', /Staghorn Calculus/.test(b.trophy) && /The Invader/.test(b.trophy) && /Patrons met · 1 \/ 8/.test(b.trophy) && b.tiles >= 6 && b.faces === 8 && b.lockedFaces === 7);
+  check('the coffee machine pours drip or decaf (espresso needs the machine from the decor catalog) and has something to say', b.cups === 'drip,decaf' && b.quip.length > 8, b.quip);
+  await p.click('#hubBody [data-cup="drip"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, cup = H.state.cup; H.use('scrubs'); const sw = [...document.querySelectorAll('#hubBody [data-scrub]')], pager = document.querySelector('#hubBody .bubble').textContent, cme0 = m.hub.cme;
+    const lockedTxt = sw[1].textContent; sw[1].click(); const bought = { scrub: m.settings.scrub, owned: !!m.hub.owned.scrub1, paid: cme0 - m.hub.cme }; document.querySelector('#hubBody [data-scrub="0"]').click(); const back0 = m.settings.scrub; document.querySelector('#hubBody [data-scrub="1"]').click(); const again = { scrub: m.settings.scrub, paid: cme0 - m.hub.cme };
+    return { cup, n: sw.length, pager, lockedTxt, bought, back0, again }; });
+  check('a cup of drip goes in your hand; the scrub cabinet shows six colours and a pager message', b.cup === 'drip' && b.n === 6 && /PAGER/.test(b.pager), b.pager);
+  check('a locked scrub colour (PGY-2) can be bought early for 15 CME and worn; switching between owned colours is free', /PGY-2/.test(b.lockedTxt) && b.bought.scrub === 1 && b.bought.owned && b.bought.paid === 15 && b.back0 === 0 && b.again.scrub === 1 && b.again.paid === 15, JSON.stringify(b.bought));
+
+  // ── decor: bought with CME, into fixed slots ──
+  await p.evaluate(() => UroCrawl.hub.use('decor'));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta.hub, D = H.tables.DECOR, btn = id => document.querySelector('#hubBody [data-decor="' + id + '"]'), props0 = H.state.props, cme0 = m.cme, slots = Object.keys(D).map(k => D[k].slot);
+    btn('greg').click(); const bought = { owned: !!m.owned.greg, at: m.decor.corner, paid: cme0 - m.cme, props: H.state.props, label: btn('greg').textContent };
+    btn('greg').click(); const away = { at: m.decor.corner, props: H.state.props, label: btn('greg').textContent, paid: cme0 - m.cme };
+    btn('greg').click(); const shown = { at: m.decor.corner, paid: cme0 - m.cme };
+    btn('poster').click(); btn('diplomas').click(); const wall1 = m.decor.wall; btn('poster').click(); const wall2 = m.decor.wall, bothOwned = !!m.owned.poster && !!m.owned.diplomas, paid2 = cme0 - m.cme;
+    const esp = H.buy('espresso'), again = H.buy('espresso'), coffeeName = H.state.stations.find(s => s.id === 'coffee').name; m.cme = 5; const poor = H.buy('tank'); m.cme = 300; const badPlace = H.place('wall', 'greg');
+    return { n: Object.keys(D).length, slots: [...new Set(slots)].sort().join(), bought, away, shown, wall1, wall2, bothOwned, paid2, esp, again, coffeeName, poor, badPlace, props0 }; });
+  check('the catalog sells the roadmap\'s decor into fixed slots (wall, window, desk, floor, corner, plus the counter)', b.n >= 8 && ['corner', 'desk', 'floor', 'wall', 'window'].every(s => b.slots.includes(s)), b.n + ' items · slots ' + b.slots);
+  check('buying Greg costs 25 CME and puts him in the corner (one more thing in the room); he can be put away and brought back for free', b.bought.owned && b.bought.at === 'greg' && b.bought.paid === 25 && b.bought.props === b.props0 + 1 && /PUT AWAY/.test(b.bought.label) && b.away.at === undefined && b.away.props === b.props0 && /DISPLAY/.test(b.away.label) && b.away.paid === 25 && b.shown.at === 'greg' && b.shown.paid === 25);
+  check('a slot holds one thing at a time: the diplomas replace the poster on the wall, and swapping back is free; an item you cannot afford is refused; an item cannot go in another slot', b.wall1 === 'diplomas' && b.wall2 === 'poster' && b.bothOwned && b.paid2 === 25 + 15 + 20 && b.poor === false && b.badPlace === false);
+  check('the espresso machine (decor) upgrades the coffee station, once', b.esp === true && b.again === false && b.coffeeName === 'ESPRESSO MACHINE');
+  await p.evaluate(() => { UroCrawl.hub.close(); UroCrawl.hub.use('coffee'); });
+  b = await p.evaluate(() => ({ cups: [...document.querySelectorAll('#hubBody [data-cup]')].map(e => e.getAttribute('data-cup')).join(), T: UroCrawl.hub.tables.CUPS }));
+  check('with the machine there are three cups: espresso beats drip, and decaf is a trap (slower)', b.cups === 'espresso,drip,decaf' && b.T.espresso.spd > b.T.drip.spd && b.T.drip.spd > 1 && b.T.espresso.dmg > 1 && b.T.decaf.spd < 1 && !/slow|−|-\d/.test(b.T.decaf.desc), 'decaf says: ' + b.T.decaf.desc);
+  await p.evaluate(() => UroCrawl.hub.close());
+
+  // ── the cast: lines rotate and never repeat back to back ──
+  b = await p.evaluate(() => { const H = UroCrawl.hub, L = H.tables.LINES, out = {}, who = ['attending', 'janitor', 'brax', 'kiki', 'rex', 'sunny'];
+    who.forEach(w => { const said = []; for (let i = 0; i < L[w].length * 2 + 1; i++) said.push(H.talk(w)); let rep = false; for (let i = 1; i < said.length; i++) if (said[i] === said[i - 1]) rep = true; out[w] = { n: L[w].length, uniq: new Set(said).size, rep, brace: said.some(s => /[{}]/.test(s)), empty: said.some(s => !s), bubble: H.state.bubble && H.state.bubble.who === w, pos: UroCrawl.meta.hub.lines[w] }; });
+    H.goto('reps'); H.step(2); const near = H.state.near; H.use('reps'); const repWho = H.state.bubble ? H.state.bubble.who : null;
+    return { out, near, repWho, caseLine: L.attending.some(s => /\{case\}/.test(s)), pager: L.pager.length, coffee: L.coffee.length }; });
+  check('the attending, the janitor and each of the four reps have at least 8 lines; they rotate, never repeat back to back, and the place in the rotation is saved', cast.every(w => b.out[w].n >= 8 && b.out[w].uniq >= 8 && !b.out[w].rep && !b.out[w].empty && b.out[w].bubble && typeof b.out[w].pos === 'number'), cast.map(w => w + ' ' + b.out[w].n).join(' · '));
+  check('the attending names today\'s case in his lines; the rep table lets the nearest rep talk; the pager and the coffee machine have their own lines', b.caseLine && !b.out.attending.brace && b.near === 'reps' && ['brax', 'kiki', 'rex', 'sunny'].includes(b.repWho) && b.pager >= 8 && b.coffee >= 8, 'rep: ' + b.repWho);
+  await p.waitForTimeout(250); await shot(p, 'r-rep-talk');
+  b = await p.evaluate(() => { const H = UroCrawl.hub, P = UroCrawl.player(), j = () => H.state.npcs.find(n => n.id === 'janitor'); P.x = 480; P.y = 300; H.step(300); const a = j(); H.step(600); const c = j(); H.talk('janitor'); const t0 = j(); H.step(40); const t1 = j(); H.step(900);
+    H.goto('janitor'); H.step(1); return { moved: Math.hypot(c.x - a.x, c.y - a.y), held: Math.hypot(t1.x - t0.x, t1.y - t0.y), near: H.state.near }; });
+  check('the janitor walks his round, stands still while he talks, and can be found wherever he is', b.moved > 40 && b.held < 0.01 && b.near === 'janitor', 'moved ' + Math.round(b.moved) + ' px');
+
+  // ── the OR door: walking into it asks, SCRUB IN starts the run with everything picked ──
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, P = UroCrawl.player(); m.xp = 9000; UroCrawl.setAspect('scalpel', 'lunger');
+    m.hub.rx = { run: m.runs || 0, offer: ['tamsulosin', 'dualfreq', 'bigfiber'], pick: 'tamsulosin' };
+    P.x = 880; P.y = 270; H.step(2); UroCrawl.input.keys.KeyD = true; H.step(40); UroCrawl.input.keys.KeyD = false; return { overlay: UroCrawl.state.overlay, panel: H.state.panel, back: document.getElementById('btnHubBack').textContent, txt: document.getElementById('hubBody').textContent }; });
+  check('walking into the OR door opens the scrub-in sheet: the case, both instruments with their aspects, the boon, the pin, the coffee, the perks', b.overlay === 'hub' && b.panel === 'door' && b.back === 'NOT YET' && /INFECTION/.test(b.txt) && /Scalpel/.test(b.txt) && /Lunger/.test(b.txt) && /Bovie/.test(b.txt) && /Tamsulosin/.test(b.txt) && /Lithotrite pin/.test(b.txt) && /Drip coffee/.test(b.txt) && /Power Nap/.test(b.txt), b.txt.slice(0, 120));
+  await p.click('#btnHubBack'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const H = UroCrawl.hub; H.step(20); const stay = UroCrawl.state.overlay; H.use('door'); return { stay, panel: H.state.panel }; });
+  check('NOT YET closes it and it does not pop straight back while you stand in the doorway; using the door asks again', b.stay === null && b.panel === 'door');
+  await p.click('#btnScrubIn'); await p.waitForTimeout(100);
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); G.timeScale = 0; UroCrawl.input.mode = 'kb';
+    const r = { running: G.running, screen: G.screen, overlay: G.overlay, room: G.roomIndex, weapons: G.weapons.map(w => w.id).join(), aspect: G.weapons[0].aspect, boons: G.boons.join(), boss: G.bossId, maxHp: P.maxHp, hp: P.hp, rvu: G.rvu, pin: G.pin, cup: G.cup && { kind: G.cup.kind, room: G.cup.room }, free: G.freeReroll, swapMul: G.swapMul, fromHub: G.fromHub, hubCup: UroCrawl.hub.state.cup, told: G.texts.some(t => /COFFEE: \+6% SPEED/.test(t.text)) };
+    G.enemies.forEach(e => { e.silent = true; e.hp = 0; }); UroCrawl.step(1); if (G.waves) G.waves.next = 99; G.bullets.length = 0;
+    const stone = UroCrawl.spawn('com', 700, 150, { instant: true }); stone.def = Object.assign({}, stone.def, { update: function () {} }); r.litho = UroCrawl.dealDamage(stone, 10, 'LITHO', {}); r.energy = UroCrawl.dealDamage(stone, 10, 'ENERGY', {});
+    UroCrawl.selectWeapon(1); r.swapT = G.swapT; stone.silent = true; stone.hp = 0; UroCrawl.step(30);
+    P.x = 200; P.y = 270; UroCrawl.input.keys.KeyD = true; UroCrawl.step(3); UroCrawl.input.keys.KeyD = false; r.dx1 = P.x - 200; return r; });
+  check('SCRUB IN starts a run in room 1 with the locker\'s two instruments and their aspects, the cart\'s boon and the case board\'s boss', b.running && b.screen === 'run' && b.overlay === null && b.room === 1 && b.weapons === 'scalpel,bovie' && b.aspect === 'lunger' && b.boons === 'tamsulosin' && b.boss === 'fournier' && b.fromHub === true, b.weapons + ' · ' + b.aspect + ' · ' + b.boons + ' · ' + b.boss);
+  check('the perks come along: Power Nap ×3 = 130 max HP, Moonlighting = 25 starting RVUs, a free altar reroll, 5% faster swaps', b.maxHp === 130 && b.hp === 130 && b.rvu === 25 && b.free === 1 && Math.abs(b.swapMul - 0.95) < 1e-9 && Math.abs(b.swapT - 0.25 * 0.95) < 1e-9, 'HP ' + b.maxHp + ' · RVU ' + b.rvu + ' · swap ' + b.swapT);
+  check('the pin works in the run: the Lithotrite pin adds 4% to LITHO damage and nothing to ENERGY', b.pin && b.pin.id === 'civiale' && b.pin.lvl === 1 && Math.abs(b.litho - 10 * 1.75 * 1.04) < 1e-6 && Math.abs(b.energy - 4) < 1e-6, 'LITHO ' + b.litho + ' · ENERGY ' + b.energy);
+  check('the coffee comes along (and leaves your hand): +6% move speed in the first room', b.cup && b.cup.kind === 'drip' && b.cup.room === 1 && b.hubCup === '' && b.told && Math.abs(b.dx1 - 3 * 190 * 1.06 / 60) < 0.01, 'dx ' + b.dx1.toFixed(3));
+  // an altar in this run: the free reroll, and meeting its patron
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), btn = document.getElementById('btnReroll'); G.rewards.push({ kind: 'altar', x: 600, y: 300, patron: 'huggins' }); P.x = 700; P.y = 300; UroCrawl.step(3); P.x = 600; P.y = 300; UroCrawl.step(3);
+    const o = G.overlay, label = btn.textContent, rvu0 = G.rvu, met = UroCrawl.meta.hub.met.huggins; btn.click(); const after = { rvu: G.rvu, free: G.freeReroll, label: btn.textContent }; document.getElementById('btnBoonSkip').click();
+    G.rewards.push({ kind: 'altar', x: 600, y: 400, patron: 'young' }); P.x = 700; P.y = 400; UroCrawl.step(3); P.x = 600; P.y = 400; UroCrawl.step(3); const label2 = btn.textContent, off2 = btn.disabled; btn.click(); const paid = rvu0 - G.rvu; document.getElementById('btnBoonSkip').click();
+    return { o, label, met, after, label2, off2, paid, metYoung: UroCrawl.meta.hub.met.young }; });
+  check('Second Opinion: the first altar reroll of the run is free, the next costs 25 RVU as before', b.o === 'boon' && /FREE/.test(b.label) && b.after.rvu === 25 && b.after.free === 0 && b.after.label === 'REROLLED' && b.label2 === 'REROLL (25 RVU)' && !b.off2 && b.paid === 25, b.label + ' → ' + b.label2);
+  check('opening a patron\'s altar is meeting them: Huggins and Young now have pins waiting in the call room', b.met === 1 && b.metYoung === 1);
+  b = await p.evaluate(() => { const G = UroCrawl.state; UroCrawl.skipRoom(); UroCrawl.step(5); const starter = G.overlay; if (G.overlay) UroCrawl.hideScreens(); const P = UroCrawl.player(), d = G.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(80);
+    G.enemies.forEach(e => { e.silent = true; e.hp = 0; }); UroCrawl.step(1); if (G.waves) G.waves.next = 99; const P2 = UroCrawl.player(), xa = P2.x; UroCrawl.input.keys.KeyD = true; UroCrawl.step(3); UroCrawl.input.keys.KeyD = false;
+    return { starter, room: G.roomIndex, done: G.cup.done, off: G.texts.some(t => /COFFEE WEARS OFF/.test(t.text)), dx2: P2.x - xa }; });
+  check('the coffee lasts one room: in room 2 it has worn off and the surgeon is back to normal speed', b.room === 2 && b.done === true && b.off && Math.abs(b.dx2 - 3 * 190 / 60) < 0.01, 'room ' + b.room + ' · dx ' + b.dx2.toFixed(3));
+  // persistence: everything bought and picked survives a reload
+  const before = await p.evaluate(() => JSON.stringify(UroCrawl.meta.hub));
+  await p.reload(); await p.waitForFunction(() => !!window.UroCrawl);
+  b = await p.evaluate(() => ({ json: JSON.stringify(UroCrawl.meta.hub), xpLine: document.getElementById('resXp').textContent }));
+  const h0 = JSON.parse(before), h1 = JSON.parse(b.json);
+  check('the Call Room\'s state persists across a reload: CME, perks, decor and what is on display, owned items, the pin, patrons met, the loadout, the case, the speakers\' places', b.json === before && h1.cme === h0.cme && h1.perks.hp === 3 && h1.decor.corner === 'greg' && h1.decor.wall === 'poster' && h1.decor.counter === 'espresso' && h1.owned.diplomas === 1 && h1.pin === 'civiale' && h1.met.civiale === 1 && h1.load.join() === 'scalpel,bovie' && h1.dungeon === 'fournier' && Object.keys(h1.lines).length >= 6 && / CME$/.test(b.xpLine), h1.cme + ' CME · decor ' + JSON.stringify(h1.decor));
+  await p.click('#btnPlay'); await p.waitForTimeout(250);
+  b = await p.evaluate(() => { const s = UroCrawl.hub.state; return { on: s.on, overlay: UroCrawl.state.overlay, coffee: s.stations.find(x => x.id === 'coffee').name, props: s.props, dungeon: s.dungeon, loadout: s.loadout.join() }; });
+  check('after the reload PLAY goes straight to the room (How to play is only shown once) and the decor is still standing', b.on && b.overlay === null && b.coffee === 'ESPRESSO MACHINE' && b.props === 8 && b.dungeon === 'fournier' && b.loadout === 'scalpel,bovie', b.props + ' props');
+  await p.waitForTimeout(300); await shot(p, 'r-hub-furnished');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(100);
+  b = await p.evaluate(() => ({ panel: UroCrawl.hub.state.panel, btns: [...document.querySelectorAll('#hubBody .btn')].map(x => x.textContent).join('|') }));
+  await p.evaluate(() => [...document.querySelectorAll('#hubBody .btn')].find(x => /TITLE/.test(x.textContent)).click());
+  const t = await p.evaluate(() => ({ overlay: UroCrawl.state.overlay, screen: UroCrawl.state.screen, on: UroCrawl.hub.state.on, music: UroCrawl.snd.music.mode }));
+  check('Esc in the room opens its menu (how to play, settings, back to title); BACK TO TITLE leaves the room', b.panel === 'menu' && /HOW TO PLAY/.test(b.btns) && /SETTINGS/.test(b.btns) && t.overlay === 'title' && t.screen === 'title' && !t.on && t.music === 'title', b.btns);
+  // QUICK START: no hub, but what is permanent still applies
+  await p.click('#btnQuick'); await p.waitForTimeout(100);
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); return { running: G.running, fromHub: G.fromHub, weapons: G.weapons.map(w => w.id).join(), boons: G.boons.length, cup: G.cup, pin: G.pin && G.pin.id, maxHp: P.maxHp, rvu: G.rvu, boss: G.bossId, roll: UroCrawl.rollBossId() }; });
+  check('QUICK START skips the room: a run with the saved loadout, pin and perks, but no cart boon, no coffee, and the boss the seed rolls (not the case board\'s)', b.running && b.fromHub === false && b.weapons === 'scalpel,bovie' && b.boons === 0 && b.cup === null && b.pin === 'civiale' && b.maxHp === 130 && b.rvu === 25 && b.boss === b.roll, b.weapons + ' · boss ' + b.boss);
+
+  // ── CME: what a run pays, and the summary's way back ──
+  const { p: p2, errs: errs2 } = await open('?seed=5&god=1&boss=staghorn&hub=1&cme=40'); allErrs.push(errs2);
+  b = await p2.evaluate(() => ({ on: UroCrawl.hub.state.on, cme: UroCrawl.meta.hub.cme, title: document.getElementById('ov-title').classList.contains('show'), screen: UroCrawl.state.screen }));
+  check('?hub=1 boots straight into the Call Room and ?cme=N sets the balance', b.on && b.cme === 40 && !b.title && b.screen === 'hub');
+  b = await p2.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, G = UroCrawl.state; H.meet('civiale'); m.hub.pin = 'civiale'; m.hub.pinUse.civiale = 2; const un0 = H.caseUnlocked(1);
+    H.scrubIn(); UroCrawl.step(200); G.favor = { civiale: 2 }; G.pens = 2; UroCrawl.skipRoom(); UroCrawl.step(400);
+    const lr = H.state.lastRun; return { un0, won: G.won, overlay: G.overlay, parts: lr.parts, total: lr.total, cme: m.hub.cme, kills: m.hub.bosses.staghorn, use: m.hub.pinUse.civiale, lvl: H.pinLevel('civiale'), pens: m.hub.pens, fav: m.hub.fav.civiale, line: document.getElementById('sumCme').textContent, un1: H.caseUnlocked(1), btn: document.getElementById('btnSumHub').textContent, T: H.tables.CME }; });
+  const part = (re) => b.parts.find(s => re.test(s)), num = (s) => s ? +s.split(' ').pop() : 0;
+  const charts = part(/new chart/), nCharts = charts ? +charts.split(' ')[0] : 0;
+  check('a won run pays CME for rooms cleared (9 × 2), the boss (15), a first kill of that boss (60), each first-time chart (5) and a patron favor milestone (10)', b.won && b.overlay === 'summary' && part(/^rooms 18$/) && part(/^boss 15$/) && part(/^first kill 60$/) && nCharts >= 1 && num(charts) === nCharts * b.T.CHART && part(/^patron favor 10$/) && b.total === 18 + 15 + 60 + nCharts * 5 + 10 && b.cme === 40 + b.total, b.parts.join(' · ') + ' = ' + b.total);
+  check('the summary shows the CME earned; the boss kill is on record and opens the next case; the worn pin gained a run (3 → level 2); free pens go in the jar', new RegExp('\\+' + b.total + ' CME').test(b.line) && b.kills === 1 && !b.un0 && b.un1 && b.use === 3 && b.lvl === 2 && b.pens === 2 && b.fav === 2 && b.btn === 'CALL ROOM', b.line);
+  await p2.waitForTimeout(200); await shot(p2, 'r-summary');
+  await p2.click('#btnSumHub'); await p2.waitForTimeout(150);
+  b = await p2.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, G = UroCrawl.state, back = { screen: G.screen, overlay: G.overlay, on: H.state.on, running: G.running, music: UroCrawl.snd.music.mode, toast: H.state.toast }, cme0 = m.hub.cme;
+    H.scrubIn(); UroCrawl.step(200); G.favor = { civiale: 4 }; UroCrawl.skipRoom(); UroCrawl.step(400); const lr = H.state.lastRun; return { back, parts: lr.parts, total: lr.total, paid: m.hub.cme - cme0, kills: m.hub.bosses.staghorn, pin: G.pin && G.pin.lvl }; });
+  check('the summary\'s CALL ROOM button walks you back into the room, which says what the run paid', b.back.screen === 'hub' && b.back.overlay === null && b.back.on && !b.back.running && b.back.music === 'hub' && /^\+108 CME/.test(b.back.toast || ''), String(b.back.toast));
+  check('a second win over the same boss pays no first-kill bonus and no chart twice; the next favor milestone (4) pays once more; the pin went in at level 2', b.parts.join('|') === 'rooms 18|boss 15|patron favor 10' && b.total === 43 && b.paid === 43 && b.kills === 2 && b.pin === 2, b.parts.join(' · '));
+  // a lost run: rooms only
+  const { p: p3, errs: errs3 } = await open('?seed=9&room=3&hub=1'); allErrs.push(errs3);
+  b = await p3.evaluate(() => { const H = UroCrawl.hub, G = UroCrawl.state; H.scrubIn(); UroCrawl.step(60); UroCrawl.skipRoom(); UroCrawl.step(10); if (G.overlay) UroCrawl.hideScreens(); UroCrawl.hurtPlayer(5000, 'test', 0, true); UroCrawl.step(300);
+    const lr = H.state.lastRun, one = { won: G.won, overlay: G.overlay, parts: lr.parts.join('|'), cme: UroCrawl.meta.hub.cme }; document.getElementById('btnSumHub').click(); H.scrubIn(); UroCrawl.step(30); UroCrawl.hurtPlayer(5000, 'test', 0, true); UroCrawl.step(300);
+    return { one, zero: H.state.lastRun.total, line: document.getElementById('sumCme').textContent, cme: UroCrawl.meta.hub.cme }; });
+  check('a lost run still pays for the rooms it cleared (3 rooms = 6 CME); a run that clears nothing pays nothing and says so', !b.one.won && b.one.overlay === 'summary' && b.one.parts === 'rooms 6' && b.one.cme === 6 && b.zero === 0 && /No CME/.test(b.line) && b.cme === 6, b.one.parts + ' · then: ' + b.line);
+  // a fresh save is the game as it was
+  const { p: p4, errs: errs4 } = await open('?seed=3'); allErrs.push(errs4);
+  b = await p4.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state, P = UroCrawl.player(); G.timeScale = 0; UroCrawl.step(5); const s = UroCrawl.spawn('com', 700, 150, { instant: true });
+    return { weapons: G.weapons.map(w => w.id).join(), maxHp: P.maxHp, rvu: G.rvu, pin: G.pin, cup: G.cup, free: G.freeReroll, swapMul: G.swapMul, speed: P.speed, litho: UroCrawl.dealDamage(s, 10, 'LITHO', {}), fromHub: G.fromHub }; });
+  check('with nothing bought or picked a run is exactly the run it was: holmium + scalpel, 100 HP, 0 RVU, no pin, no coffee, LITHO × stone still 17.5', b.weapons === 'holmium,scalpel' && b.maxHp === 100 && b.rvu === 0 && b.pin === null && b.cup === null && b.free === 0 && b.swapMul === 1 && b.speed === 190 && Math.abs(b.litho - 17.5) < 1e-9 && b.fromHub === false, JSON.stringify(b));
+
+  // ── phone: touch, the stick, the one big INTERACT button ──
+  for (const cx of browser.contexts()) await cx.close();   // the frame rate below should be this page's own
+  const { p: p5, errs: errs5 } = await open('?seed=4', 844, 390, true); allErrs.push(errs5);
+  await p5.tap('#btnPlay'); await p5.waitForTimeout(100); await p5.tap('#btnHelpOk'); await p5.waitForTimeout(200);
+  b = await p5.evaluate(() => ({ on: UroCrawl.hub.state.on, mode: UroCrawl.input.mode }));
+  check('touch: PLAY lands in the room in touch mode', b.on && b.mode === 'touch');
+  box = await canvasBox(p5);
+  const px = (x, y) => [box.l + x * box.s, box.t + y * box.s];
+  const cdp = await p5.context().newCDPSession(p5);
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(pt => ({ x: pt[0], y: pt[1], id: pt[2] || 1, radiusX: 6, radiusY: 6, force: 1 })) });
+  const tx0 = await p5.evaluate(() => UroCrawl.player().x);
+  let a = px(200, 380); await touch('touchStart', [[a[0], a[1], 1]]); await p5.waitForTimeout(50);
+  let a2 = px(262, 380); await touch('touchMove', [[a2[0], a2[1], 1]]); await p5.waitForTimeout(450);
+  b = await p5.evaluate(() => ({ stick: !!UroCrawl.input.stick, x: UroCrawl.player().x }));
+  check('touch: the floating stick walks the surgeon', b.stick && b.x > tx0 + 30, Math.round(tx0) + ' → ' + Math.round(b.x));
+  await touch('touchEnd', []); await p5.waitForTimeout(80);
+  await p5.evaluate(() => { UroCrawl.hub.goto('perks'); UroCrawl.hub.step(2); });
+  const fire = px(960 - 84, 540 - 86); await touch('touchStart', [[fire[0], fire[1], 2]]); await p5.waitForTimeout(40); await touch('touchEnd', []); await p5.waitForTimeout(150);
+  b = await p5.evaluate(() => ({ panel: UroCrawl.hub.state.panel, overlay: UroCrawl.state.overlay }));
+  check('touch: the big INTERACT button uses the station you stand by', b.overlay === 'hub' && b.panel === 'perks');
+  await p5.evaluate(() => UroCrawl.hub.addCme(100)); await p5.evaluate(() => UroCrawl.hub.use('perks'));
+  await p5.tap('#hubBody [data-buy="rvu"]'); await p5.waitForTimeout(60); await p5.tap('#btnHubBack'); await p5.waitForTimeout(100);
+  b = await p5.evaluate(() => ({ rvu: UroCrawl.meta.hub.perks.rvu, cme: UroCrawl.meta.hub.cme, overlay: UroCrawl.state.overlay }));
+  check('touch: a panel\'s buttons work with a tap (bought Moonlighting, BACK closes)', b.rvu === 1 && b.cme === 80 && b.overlay === null);
+  const roll = px(960 - 196, 540 - 58); await touch('touchStart', [[roll[0], roll[1], 3]]); await p5.waitForTimeout(60);
+  const rolled = await p5.evaluate(() => { const P = UroCrawl.player(); return P.roll > 0 || P.rollCd > 0; });
+  await touch('touchEnd', []); await p5.waitForTimeout(500);
+  const menu = px(960 - 32, 30); await touch('touchStart', [[menu[0], menu[1], 4]]); await p5.waitForTimeout(40); await touch('touchEnd', []); await p5.waitForTimeout(150);
+  b = await p5.evaluate(() => ({ panel: UroCrawl.hub.state.panel }));
+  check('touch: ROLL rolls, the menu button opens the room\'s menu', rolled && b.panel === 'menu');
+  await p5.tap('#btnHubBack'); await p5.waitForTimeout(2300);
+  b = await p5.evaluate(() => ({ fps: UroCrawl.state.fps, on: UroCrawl.hub.state.on, overlay: UroCrawl.state.overlay }));
+  check('phone (844×390, touch): the room draws at a playable frame rate', b.on && b.overlay === null && b.fps >= 40, 'fps ' + b.fps);
+  await shot(p5, 'r-phone');
+  errCheck('R', [].concat(...allErrs));
 });
 
 await browser.close();

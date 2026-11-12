@@ -26,7 +26,9 @@ inside another workspace; nothing here depends on that one any more.)
   four bosses, `?boss=staghorn|fournier|mibc|bph` (the Staghorn: a mobile head-on duel, numbers in `STAG`, script `stag*` in §14b; the Invader: round arena on the generic wall + perforation system, §14c / §14d;
   the Giant TURP: a flow-meter fight in three sections, `?section=1|2|3`, numbers in `BPH`, script `bph*` in §14f, on the generic landmark component and the sphincter curse of §14e, `UroCrawl.injureSphincter()`); weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
-  Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`).
+  Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`;
+  between runs the Call Room, a walkable hub, §17b: PLAY lands there, QUICK START skips it, `?hub=1`, `?cme=N`, saved in
+  `META.hub`, tables `HUB_PERKS` / `HUB_PINS` / `HUB_DECOR` / `HUB_CUPS` / `HUB_CASES` / `HUB_CME` / `HUB_LINES`, hooks `UroCrawl.hub.*`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
