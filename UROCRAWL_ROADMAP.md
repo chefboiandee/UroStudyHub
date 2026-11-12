@@ -1,6 +1,6 @@
 # Path of Pathology (Uro Crawl) — roadmap for the next sessions
 
-`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~6.7k lines, no dependencies so far) that
+`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~7.6k lines, no dependencies so far) that
 the Arcade hosts in a frame. Players see the name **Path of Pathology**; the file, `window.UroCrawl`, the `crawl:*`
 messages and the storage key keep the working name Uro Crawl on purpose. This file is the build plan. **How to use it:** the owner tells a session
 *"read UROCRAWL_ROADMAP.md and do Step N"* or *"…and do the next step"* (= the first unchecked box below).
@@ -9,7 +9,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 
 - [x] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style). Done 2026-11-11 (as built: the note at the end of Step 1)
 - [x] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon. Done 2026-11-12 (as built: the note at the end of Step 2)
-- [ ] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes)
+- [x] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes). Done 2026-11-12 (as built: the note at the end of Step 3)
 - [ ] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
@@ -19,7 +19,8 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 
 1. **Read first, never whole-read.** `games/uro-crawl.html` is huge. Read the newest `STATUS.md` entries ("Uro Crawl"),
    then `grep -n` for the tables you need (`WEAPONS`, `ENEMIES`, `BOONS`, `PATRONS`, `REPS`, `BOSSES`, `MODS`, `ASPECTS`,
-   `META`, `showTitle`, `startRun`) and read slices. The file header comment documents the URL parameters and hooks.
+   `META`, `showTitle`, `startRun`; for the Call Room `HUB_`, `hubBuild`, `hubApplyRun`) and read slices. The file header comment
+   documents the URL parameters and hooks.
 2. **Engine target: modern browsers, phone-first.** `games/` pages do not need to run on the Boox (the owner uses it for AI
    tutoring only, not games), so modern JS (`?.`, `??`, classes, ES modules), libraries and WebGL are allowed in `games/`.
    Still required: the page loads straight from Pages with no build step, runs at 60 fps on a mid-range phone with touch
@@ -36,7 +37,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–Q, 329 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP; the steps below add blocks R and S). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–R, 387 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room; Step 4 adds block S). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -264,6 +265,49 @@ Add debug hooks `UroCrawl.hub.addCme(n)`, `.buy(id)`, `.enter()`, `.state` and a
 a run started from the hub uses the picked weapons/aspects/starter boon/pin/perks, CME is earned and spent, decor persists,
 and harness block (R) covers it; earlier blocks pass.
 
+**As built (2026-11-12):** the room is §17b of the game file: `hub*` and `open*` functions, art in `drawHub*` / `hubPaintBg`, every
+number in a table (`HUB_PERKS`, `HUB_PINS` + `PIN_USE`, `HUB_DECOR`, `HUB_CUPS`, `HUB_CASES`, `HUB_CME`, lines in `HUB_LINES`; all
+under `UroCrawl.hub.tables`). Saved state is `META.hub` (`hubDefaults`). Where the build reads the spec one way or adds to it:
+- **The run picks things up in two places.** What is permanent (the locker's two instruments, aspects, the worn pin, perks)
+  applies to every run, QUICK START and TRY AGAIN included (`hubLoadout`, `hubApplyRun`). What you pick per visit (the case,
+  the cart's boon, the coffee) only goes through the OR door (`RUNOPT`). QUICK START still rolls its boss from the seed.
+  A save with nothing bought or picked starts exactly the run it always did.
+- **The door asks first.** Using it, or walking into it, opens a scrub-in sheet (case, instruments + aspects, boon, pin,
+  coffee, perks) with SCRUB IN / NOT YET. The summary's main button (and Enter) is CALL ROOM; TRY AGAIN and TITLE stay.
+- **The room is laid out for its walls.** The floor starts at y = 126 (`HUB_Y`) so the far wall has a face: trophy wall, pin
+  board, whiteboard, window, coffee counter, the wall decor slot and the case board hang there, under a HUD strip (PGY, the
+  loadout, CME, menu). The locker and the chart rack are on the west wall, the scrub cabinet under the OR door on the east.
+- **Case board:** Stones, Infection, Benign, Oncology, then the Peds Wing as a locked placeholder row (`HUB_CASES`; Step 4
+  fills it in). `?boss=` still beats the board. Stones and Infection runs keep their mixed rooms: only Benign and Oncology
+  have themed room pools so far.
+- **Locker:** any two instruments your PGY has unlocked; tapping one replaces the older pick. The tutorial room's
+  third-instrument choice is unchanged. The surgeon carries the first pick around the room.
+- **Pharmacy cart:** three common boons from the pools of patrons you have met, free, fixed until the next run is over.
+  Empty until you meet someone: opening a patron's altar in a run is meeting them (`hubMeet`), which also leaves their pin.
+- **Pins:** one perk per patron (`HUB_PINS`: +4/6/8% to a weapon class for Civiale, Young, Bovie and Foley; +5/8/11% against
+  malignant for Huggins and against microbes for Fleming; +15/25/35 starting RVUs for Gleason; +3/5/7% move speed for
+  Nitze). Level 2 after 3 finished runs worn, level 3 after 8, win or lose.
+- **Perks:** Power Nap (+10 max HP, 3 levels), Moonlighting (+25 starting RVUs, 3), Second Opinion (the first altar reroll of
+  a run is free, 1), Instrument Count (5% faster swaps, 2). 515 CME buys them all.
+- **CME (`HUB_CME`):** 2 per room cleared, 15 for the boss, 60 more the first time that boss falls, 5 per first-time
+  bestiary chart, 10 the first time a patron's favor reaches 2 and again at 4. The summary lists the parts.
+- **Coffee:** one cup per run, first room only. Drip +6% move speed; espresso +10% speed and damage, which needs the espresso
+  machine: a sixth decor slot, the counter, added for it. Decaf is 5% slower and its card does not say so.
+- **Decor:** nine items in six slots, one per slot on display, owned ones swap for free. The patron portraits exist twice:
+  small frames on the trophy wall fill in on their own as you meet patrons, and the big gallery is a wall item you buy.
+  The paperweights count the stone types you have beaten; the pen jar on the rep table counts free pens taken on runs.
+- **Scrub cabinet:** colours still come with PGY; any can be bought early for 15 CME (the "optional unlocks"). The pager
+  on top has its own lines.
+- **The cast:** lines go round in order (so never back to back) and each speaker's place is saved. The attending has 10
+  (two name today's case), the janitor 12 (every one a real hint), each rep 8 new ones (not their in-run pitches). The reps
+  and the attending are solid; the janitor walks a loop, stops to mop, and stands still while he talks.
+- **Small things that were not asked for:** a gold dot floats over a station that has something for you right now (a perk
+  or item you can afford, a boon nobody packed, a pin nobody wears, a newly opened case: `hubHint`); coming back from a run
+  the room says what it paid; the locker cards carry each tool's one-line description.
+- **Hooks beyond the four asked for:** `step(n)`, `goto(id)`, `use(id)`, `place(slot, id)`, `talk(who)`, `scrubIn()`,
+  `meet(patron)`, `leave()`, `close()`, `loadout()`, `rx()`, `pinLevel()`, `caseUnlocked()`, `award()`, `tables`.
+- **Left for Step 4 (its 4g):** the sticker book, the Sim Lab, the child-life specialist, Peds decor.
+
 ---------------------------------------------------------------------------------------------------
 
 ## Step 4 — Dungeon 5: The Peds Wing
@@ -375,6 +419,9 @@ patterns that loop around the arena, and a hide-and-pop rhythm.
   peristaltic wave as a travelling phase offset along the chain.
 
 ### 4g. Hub tie-ins (Step 3)
+Where they plug in (§17b): a case is a row of `HUB_CASES` (the last row is the Peds placeholder: give it its boss id), decor is a
+row of `HUB_DECOR` plus its drawing in `hubPaintBg` or a prop in `hubBuild`, a station is one `station(...)` line in `hubBuild`
+with its `open…` panel, an NPC is an entry in `hubBuild`'s cast plus its lines in `HUB_LINES`.
 Peds-wing decor in the Call Room catalog (stickers, a mural, a toy box), a **sticker book** that fills with medal stickers, a
 friendly **child-life specialist** NPC with ≥ 8 lines who gives the Sticker Chart pin keepsake, a Wilms portrait on the trophy
 wall once met, and a **Sim Lab** station where every trial can be replayed on its own with personal bests and the medal
