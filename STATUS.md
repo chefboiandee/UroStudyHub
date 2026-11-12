@@ -3,6 +3,24 @@
 **Updated:** 2026-11-12
 **Tool:** Claude Code
 
+## 2026-11-12 (later 3) — 🗞️ Pre-Op, Please: Continue from the furthest day (the unmerged Oct 25 branch)
+
+Andrew: "merge everything that's not live on the app". Two branches had work that was not on `main`. The Call Room
+(PR #48) is merged. The other was `claude/funny-archimedes-o1vv7g` (Oct 25, never a PR): "games remember furthest
+wave/day" for Pre-Op, Clinic Rush and Consults.
+
+**Done:** carried over only its Pre-Op part (`games/preop-please.html`, 6 lines). The furthest day reached is saved
+(`localStorage` `pp_day`), and a fresh visit's Day 1 bulletin offers **Continue — Day N** next to Start shift; it jumps to
+that day's bulletin. Its Clinic Rush and Consults part was left out on purpose: on Oct 31 those two React games were
+replaced by Uro Rush (`games/uro-rush.html`), so the code it edits no longer exists. The old branch is still on GitHub,
+untouched. No rebuild: the change is in the game's own page, not in `UroStudyHub.html`.
+**Verified:** `tools/preop-please.drive.mjs` has 4 new checks (no Continue on a first visit; day 3 saved after a full run;
+a new visit shows "Continue — Day 3"; it lands on the Day 3 bulletin). A full run passed 170 / 170 in headless Chrome.
+Some runs, on unchanged `main` too, stop at "timeout: patient present": the harness taps NEXT as the 75 s shift closes
+(its crash shot reads 17:00 DESK CLOSED). That flake predates this change.
+**Next steps:** none needed. If wanted, the harness wait can treat a closing desk as the end of the day instead of a failure.
+**Open questions:** should Uro Rush also remember its furthest wave and offer a Continue? It has none today.
+
 ## 2026-11-12 (later 2) — 🛋️ Path of Pathology: the Call Room, a walkable hub between runs (roadmap Step 3)
 
 Andrew: "read urocrawl roadmap and do step 3". PLAY no longer starts a run: it puts the surgeon in a call room you walk

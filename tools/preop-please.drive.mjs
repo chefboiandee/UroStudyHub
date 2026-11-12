@@ -76,6 +76,7 @@ try {
   log('   verdict mix', JSON.stringify({ d1: [st.out.day1.approve, st.out.day1.deny], d2: [st.out.day2.approve, st.out.day2.deny], d3: [st.out.day3.approve, st.out.day3.deny, st.out.day3.escalate] }));
   await send('Page.navigate', { url: BASE + '?seed=7&daylen=75&debug' });
   await until(`!!window.__pp && !!document.getElementById('startBtn')`, 15000, 'reboot');
+  check(await evaluate(`!document.getElementById('contBtn')`), 'first visit: no Continue button (no furthest day saved yet)');
   await pause(600); await shot('01-bulletin-day1');
 
   log('\n— music');
@@ -158,6 +159,16 @@ try {
   await shot('09-final');
   const savings = await S('G.savings');
   check(typeof savings === 'number', `final screen reached, savings $${savings}`);
+
+  log('\n— continue from the furthest day');
+  check(await evaluate(`localStorage.getItem('pp_day') === '3'`), 'the furthest day reached (3) is saved');
+  await send('Page.navigate', { url: BASE + '?seed=7&daylen=75' });
+  await until(`!!window.__pp && !!document.getElementById('startBtn')`, 15000, 'reboot for continue');
+  check(await evaluate(`(()=>{const b=document.getElementById('contBtn');return !!b && b.textContent.includes('Continue — Day 3') && __pp.G.day===1})()`), 'a new visit opens on the Day 1 bulletin with a "Continue — Day 3" button');
+  await tapSel('#contBtn');
+  await until(`__pp.G.day===3 && __pp.G.state==='bulletin'`, 3000, 'continue to day 3');
+  check(await evaluate(`!document.getElementById('contBtn') && !!document.getElementById('startBtn') && document.getElementById('ovp').textContent.includes('Vol. 3')`), 'Continue jumps to the Day 3 bulletin: Start shift, no second Continue');
+  await shot('09b-continue-day3');
 
   log('\n— other viewports');
   for (const [w, h, name] of [[820, 1180, 'ipad-portrait'], [390, 844, 'phone']]) {
