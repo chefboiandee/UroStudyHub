@@ -28,7 +28,7 @@ the new §17c; the roadmap's Step 5 note lists every place the build reads the s
   the attending coat), then their usual lines.
 - **Portraits:** a round bust left of the HP bar in a run (worried below 25% HP) and next to the summary's title.
 
-**Verified:** headless Chromium, `node tools/uro-crawl.drive.mjs`: block T passes 42 / 42 (the full A–T run is below). New block T is 42 checks: the first-time
+**Verified:** headless Chromium, `node tools/uro-crawl.drive.mjs`: every block passes, 522 checks (480 before, plus T). New block T is 42 checks: the first-time
 screen and its pickers, the look seen in the room, the HUD and the summary by sampling pixels for the chosen skin and hair
 colours, the mirror, persistence, QUICK START players asked on their first walk-in, `?hero=`; every wardrobe item tried on,
 bought for exactly its price, worn, taken off and put back on; sets, sepia, the new scrub colours, the CME floor, the
