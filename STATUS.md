@@ -3,6 +3,47 @@
 **Updated:** 2026-11-13
 **Tool:** Claude Code
 
+## 2026-11-13 (later 2) — 🪞 Path of Pathology: character select and the wardrobe (roadmap Step 5)
+
+Andrew: "Read UROCRAWL_ROADMAP.md and do Step 5". All in `games/uro-crawl.html`: the rig is `drawSurgeon` (§15), the rest is
+the new §17c; the roadmap's Step 5 note lists every place the build reads the spec its own way. Cosmetic only.
+
+**Done:**
+- **"Who are you?"** opens the first time you walk into the Call Room: Male / Female / Neutral (one rig, a different
+  silhouette: shoulders, waist, hair volume, lashes, brows), 8 skin tones, 6 hair styles, 10 hair colours (two silly), with a
+  live turning preview and THAT'S ME inside it (so a phone never scrolls to it). A cheval mirror by the scrub cabinet reopens
+  it and shows your reflection when you stand close. Saved in `META.hero`; an untouched save looks exactly as before.
+- **The wardrobe** (the scrub cabinet, `META.wardrobe`): six slots (cap, outfit, coat, mask, headlamp, extras), 31 items and
+  9 scrub colours (3 new). Tap to try on, tap again to buy with CME (10-25 small, 40-80 themed), tap what you wear to take it
+  off. Printed skull caps (ducks, flames, little kidneys, stones, stripes), a bouffant, no cap, the embroidered and the long
+  attending coat, loupes, warm / teal / rainbow headlamps, a lanyard with your PGY and a stethoscope; two sets: the **retro
+  surgeon** (gown, gauze mask, cloth cap with a head mirror, rubber gloves, and an old-photograph sepia toggle) and the
+  **plague doctor** (dark coat, beaked mask that points where you face, wide hat whose brim holds the headlamp as a lantern).
+  A catalogue tab lists everything as silhouettes with the unlock.
+- **Deeds:** plague doctor for beating Fournier's, retro surgeon for Young's favour, lead apron for a room of nothing but
+  stones (or Nitze's favour), attending coat at PGY-6, the cap of shame for a run that ends with continence lost. Each can
+  also be bought early. New unlocks are named on the summary, toasted in the room and dotted on the cabinet.
+- **The cast notices:** one remark per speaker per new look ("Please take that off." / "Seen worse." / "Love the beak, very
+  on-brand for infectious disease." and more for the retro set, the cap of shame, the apron, sepia, the rainbow lamp, loupes,
+  the attending coat), then their usual lines.
+- **Portraits:** a round bust left of the HP bar in a run (worried below 25% HP) and next to the summary's title.
+
+**Verified:** headless Chromium, `node tools/uro-crawl.drive.mjs`: every block passes, 522 checks (480 before, plus T). New block T is 42 checks: the first-time
+screen and its pickers, the look seen in the room, the HUD and the summary by sampling pixels for the chosen skin and hair
+colours, the mirror, persistence, QUICK START players asked on their first walk-in, `?hero=`; every wardrobe item tried on,
+bought for exactly its price, worn, taken off and put back on; sets, sepia, the new scrub colours, the CME floor, the
+catalogue's silhouettes; each deed (with a mixed room that must not count); the cast's lines; and one seeded room played by
+the same bot in five looks with identical numbers (P.r 13 throughout); a costumed fight at 60 fps on a phone viewport.
+Block R was adapted where the first-time screen, the mirror prop and the nine colours changed its flow and counts. Script
+parses as ES2019. `UroStudyHub.html` is unchanged (no rebuild).
+**Roadmap:** Step 5 is ticked: all five numbered steps are done; only the parked items remain.
+**Next steps:** look at the outfits on the phone; the art is drawn at 1.2× in a 960×540 room, so the small details (the coat
+embroidery, the stethoscope, the lanyard digit) only really read in the previews.
+**Open questions:**
+- Neutral kept as a third build (the open question from the Step 5 planning entry): drop it, or keep?
+- The lanyard got its own "extras" slot (with the stethoscope) instead of the outfit slot, so it can be worn over scrubs. OK?
+- Deed items can also be bought early (like the scrub colours). Should the plague doctor stay deed-only instead?
+
 ## 2026-11-13 (later) — 🧠 AI Tutor: reasoning effort, and switching provider / model without leaving the tab
 
 Andrew: can people set the model's reasoning effort through the API, ideally from the AI Tutor tab, and switch models or

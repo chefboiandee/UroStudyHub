@@ -18,8 +18,12 @@
   toys and abstract organs; the testicular torsion room is an abstract timed knot. Between runs there is
   the Call Room (§17b): a walkable hub where PLAY lands you, with a station for every choice a run starts with (the two
   starting instruments and their aspects, a starter boon, a lanyard pin, permanent perks, today's case) and things to buy
-  with CME credits, which every run pays. QUICK START on the title skips it. No quizzes: the learning is osmosis
-  plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
+  with CME credits, which every run pays. QUICK START on the title skips it. The LOCKER ROOM (§17c): the first time in, "Who are
+  you?" picks the surgeon's build (Male / Female / Neutral: the same rig, a different silhouette), skin tone, hair and hair colour,
+  and a mirror in the room reopens it; the scrub cabinet is a wardrobe of cosmetic caps, outfits, coats, masks, headlamps and
+  extras bought with CME or unlocked by deeds (the plague doctor for beating Fournier's, the retro surgeon for Young's favour,
+  ...). Cosmetic only: no look changes a hitbox or a number. The look shows in the room, on the HUD portrait and on the
+  summary. No quizzes: the learning is osmosis plus one-line bestiary facts. Art direction: Binding-of-Isaac grotesque-cute — thick outlines, squash and stretch,
   body-horror gags played for laughs; everything stylized and abstract, never anatomical. Seen from a raised 3/4
   camera (far wall face, foreshortened tiles, ground shadows, back-to-front draw order). Type reads at a glance: a thin
   family-coloured rim (blue stone, green microbe, red malignant, yellow benign, violet clot) and a face per family
@@ -40,6 +44,8 @@
               ?mods=holmium_joules,scalpel_backstab (weapon mods at run start; grants the weapon if not carried)
               ?aspects=holmium:fragmenting,scalpel:lunger (pre-run aspects, unlocked for the session)
               ?hub=1 (boot straight into the Call Room)  ?cme=N (set the CME credit balance)
+              ?hero=build:skin:hair[:colour] (e.g. female:6:ponytail:8; skips "Who are you?")  ?wear=cap_ducks,plague,... (own and wear
+              wardrobe items or sets)  ?sepia=1 (the old photograph, with the retro set)
               ?embed=1  ?debug=1 (FPS, hitboxes, ` then number keys spawn enemies)
   Test hooks: window.UroCrawl = { state, spawn(enemyId,x,y), giveWeapon(id), giveBoon(id), giveMod(id), setAspect(weapon, aspect),
               skipRoom(), step(n), startRun(), tables: { WEAPONS, MODS, ASPECTS, ENEMIES, BOONS, ... },
@@ -54,6 +60,11 @@
                      enter(), leave(), step(n), addCme(n), buy(id) (a perk, a decor item or 'scrub1'..'scrub5'),
                      place(slot, id), goto(stationId), use(stationId), talk(who), scrubIn(), meet(patronId),
                      loadout(), rx() (the pharmacy cart's offer), pinLevel(id), caseUnlocked(i), award(won), tables }
+              (hub.buy also takes 'scrub1'..'scrub8' and any wardrobe item or set id)
+              wardrobe: { state (hero, owned, equipped, sepia, deeds, unlocked, sets, tag, fresh, panel, tryOn, tab), equip(id or set),
+                          unequip(slot), own(id) (a set piece brings the set), buy(id), wearSet(id), hero({build, skin, ...}), deed(id),
+                          unlocked(id), setUnlocked(id), tag() (the look the cast comments on), look() (the resolved look), resolve(...),
+                          fresh(), outfitLine(who, rep), openMirror(first), openWardrobe(), portrait(), figure(...), bust(...), tables }
               peds: { state (on, sim, trial summary, par, medals, plan, us, gates, tides, meta = META.peds, tech = META.tech),
                       trial() (the live drill), sim(id), leaveSim(), start(id), plan(list), fail(), win(), learn(id), master(id),
                       techOn(id), medalFor(t, par), award(kind, key, t, par), perfect(), speedMul(), addGate(...), addTide(...), gates(),
@@ -236,6 +247,32 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 .swatch{height:44px;border-radius:12px;border:3px solid rgba(0,0,0,.35)}
 #hubExtra{margin:0}
 
+/* the locker room: the mirror ("Who are you?") and the wardrobe (§17c) */
+.lookgrid{display:flex;gap:14px;align-items:flex-start;margin-top:10px}
+.lookprev{flex:0 0 150px;position:sticky;top:0;background:radial-gradient(circle at 50% 38%,#24445c,#10202c 72%);border:2px solid var(--line);border-radius:18px;padding:6px 6px 8px;text-align:center}
+.lookprev canvas{display:block;width:138px;height:172px;margin:0 auto}
+.lookprev .hint{display:block;font-weight:800;font-size:11px;letter-spacing:.08em;line-height:1.3}
+.lookprev .btn{width:100%;margin-top:6px;min-height:40px;padding:6px 8px}
+.lookopts{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.lookopts h3{margin:8px 0 0;font-size:12px}
+.optrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{min-height:40px;padding:4px 12px;border-radius:12px;border:2px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:800;font-size:13px}
+.chip.on{border-color:#45c66e;background:#1f5e3e;color:#c9ffe0}
+.dot{width:36px;height:36px;min-height:0;border-radius:50%;border:3px solid rgba(0,0,0,.4);padding:0}
+.dot.on{border-color:#fff;box-shadow:0 0 0 3px #45c66e}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.witem{display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--panel2);border:2px solid var(--line);border-radius:14px;padding:6px 6px 8px;color:var(--ink);text-align:center;font-size:12px;font-weight:800;line-height:1.15}
+.witem canvas{width:52px;height:52px;display:block}
+.witem .swatch{width:100%;height:30px}
+.witem.on{border-color:#45c66e;box-shadow:0 0 14px rgba(69,198,110,.28)}
+.witem.try{border-color:var(--gold);border-style:dashed}
+.witem.locked{opacity:.75}
+.witem small{font-size:10px;color:var(--mute);font-weight:700}
+.tag.try{background:#5e4a1f;color:#ffeec9}
+#sumHead{display:flex;gap:14px;align-items:center}
+#sumHero{width:72px;height:72px;flex:0 0 72px;border-radius:50%;background:#1d3647;border:3px solid var(--line)}
+@media (max-width:640px),(max-height:420px){.lookprev{flex-basis:104px}.lookprev canvas{width:96px;height:120px}.chip{min-height:36px;padding:3px 10px;font-size:12px}.dot{width:30px;height:30px}.wgrid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}.witem canvas{width:40px;height:40px}#sumHero{width:52px;height:52px;flex-basis:52px}}
+
 /* misc */
 .xpbar{height:10px;background:#0b1a24;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
 .xpbar i{display:block;height:100%;background:linear-gradient(90deg,#38e8ff,#5df07a);border-radius:999px}
@@ -415,12 +452,12 @@ kbd{background:#0b1a24;border:1px solid var(--line);border-bottom-width:3px;bord
 <!-- SUMMARY -->
 <div class="ov" id="ov-summary">
   <div class="panel">
-    <h2 id="sumTitle">CODE BLUE</h2>
-    <p id="sumSub"></p>
+    <div id="sumHead"><canvas id="sumHero" width="144" height="144"></canvas><div><h2 id="sumTitle">CODE BLUE</h2><p id="sumSub"></p></div></div>
     <div class="stat" id="sumStats"></div>
     <div id="sumLoad" class="row"></div>
     <p class="hint" id="sumXp"></p>
     <p class="hint" id="sumCme" style="color:#7dffb0"></p>
+    <p class="hint" id="sumWard" style="color:#ffd166"></p>
     <div class="row center" style="margin-top:12px">
       <button class="btn primary" id="btnSumHub">CALL ROOM</button>
       <button class="btn" id="btnAgain">TRY AGAIN</button>
@@ -459,6 +496,7 @@ var FONT = '"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif
 var Q = {};
 try { location.search.replace(/^\?/, '').split('&').forEach(function (kv) { if (!kv) return; var p = kv.split('='); Q[decodeURIComponent(p[0])] = p.length > 1 ? decodeURIComponent(p[1]) : '1'; }); } catch (e) {}
 var EMBED = !!Q.embed && window.parent !== window;
+var HERO_NO_ASK = !!(Q.hub || Q.hero || Q.trial || Q.wear);   // debug boots skip the first-time "Who are you?" screen (§17c)
 var DEBUG = Q.debug === '1' || Q.debug === 'true';
 var GOD = Q.god === '1' || Q.god === 'true';
 var SEED = Q.seed ? (parseInt(Q.seed, 10) || 1) : ((Math.random() * 1e9) | 0);
@@ -485,12 +523,32 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&
 
 // localStorage behind try/catch: the game must run with storage unavailable.
 var STORE_KEY = 'urocrawl.v1';
-var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, aspects: {}, hub: null, tech: {}, peds: null, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
+var META = { xp: 0, best: null, runs: 0, bestiary: {}, seen: {}, aspects: {}, hub: null, tech: {}, peds: null, hero: null, wardrobe: null, settings: { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 } };
+// who you are and what you wear (§17c). Defaults are the original look: neutral build, the original skin tone, hair under the cap.
+var WARDROBE_DEFAULT = { outfit: 'scrubs', cap: 'cap_solid', coat: 'coat_short', mask: 'mask_surgical', lamp: 'lamp_white', neck: 'neck_none' };
+function heroDefaults(h) {
+  if (!h || typeof h !== 'object') h = {};
+  if (['male', 'female', 'neutral'].indexOf(h.build) < 0) h.build = 'neutral';
+  h.skin = Math.floor(+h.skin); if (!(h.skin >= 0 && h.skin <= 7)) h.skin = 1;
+  if (['covered', 'crop', 'ponytail', 'bun', 'curls', 'long'].indexOf(h.hairStyle) < 0) h.hairStyle = 'covered';
+  h.hairColor = Math.floor(+h.hairColor); if (!(h.hairColor >= 0 && h.hairColor <= 9)) h.hairColor = 1;
+  h.set = !!h.set;
+  return h;
+}
+function wardrobeDefaults(w) {
+  if (!w || typeof w !== 'object') w = {};
+  var objs = ['owned', 'equipped', 'deeds', 'heard', 'heardN', 'seen'], k;
+  for (k = 0; k < objs.length; k++) if (!w[objs[k]] || typeof w[objs[k]] !== 'object') w[objs[k]] = {};
+  for (k in WARDROBE_DEFAULT) if (typeof w.equipped[k] !== 'string') w.equipped[k] = WARDROBE_DEFAULT[k];
+  w.sepia = !!w.sepia;
+  return w;
+}
 function loadMeta() {
   try { var raw = localStorage.getItem(STORE_KEY); if (raw) { var o = JSON.parse(raw); if (o && typeof o === 'object') { for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) META[k] = o[k]; } } } catch (e) {}
   META.settings = META.settings || {}; META.bestiary = META.bestiary || {}; META.seen = META.seen || {}; META.aspects = META.aspects || {};
   META.hub = hubDefaults(META.hub);   // the Call Room's saved state (§17b)
   if (!META.tech || typeof META.tech !== 'object') META.tech = {}; META.peds = pedsDefaults(META.peds);   // the Peds Wing: techniques learned, drill records, stickers (§14g)
+  META.hero = heroDefaults(META.hero); META.wardrobe = wardrobeDefaults(META.wardrobe);   // the mirror and the wardrobe (§17c)
   var d = { vol: 70, mute: false, music: true, shake: null, aim: true, parts: 2, left: false, scrub: 0 };
   for (var s in d) if (META.settings[s] === undefined) META.settings[s] = d[s];
   if (META.settings.shake === null) {
@@ -3661,7 +3719,7 @@ function killEnemy(e, cls, wid) {
   if (fam === 'MICROBE' && !e.silent) { var ab = activeAbx(); for (var ai = 0; ai < ab.length; ai++) if (BOONS[ab[ai]].dmg(e, cls, wid) > 1) abxUse(ab[ai], 1); }   // every covered microbe kill teaches resistance
   if (wid === 'roller' && (fam === 'BENIGN' || fam === 'CLOT')) healPlayer(3);
   // kill chain → Wolf in Scrubs
-  if (!e.silent && !def.hidden) { G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
+  if (!e.silent && !def.hidden) { wardNoteKill(e); G.killChain.push(G.time); G.killChain = G.killChain.filter(function (t) { return G.time - t < 6; }); if (hasBoon('wolf') && G.killChain.length >= 5 && G.wolfT <= 0) { G.wolfT = 2; P.inv = Math.max(P.inv, 2); G.killChain = []; addText(P.x, P.y - 50, 'WOLF IN SCRUBS!', { color: '#ffd166', size: 18 }); Snd.sfx('roar'); } }
   if (!e.silent && !def.hidden) { G.stats.kills++; recordBestiary(def.id, true); ultKill(); }
   if (e.isArm || e.boss || e.def.isLobe || e.def.isStump) bossPartDied(e);
 }
@@ -4079,7 +4137,7 @@ function startRun() {
   G.stats = newStats(); P = newPlayer(); G.rvu = 0; G.boons = []; G.weapons = []; G.wIndex = 0; G.maxWeapons = 4; G.swapT = 0; G.swapBonusT = 0; G.time = 0; G.over = false; G.won = false; G.boss = null; G.fosfo = false; G.fosfoRoom = -1; G.killChain = []; G.wolfT = 0; G.timeScale = 1; G.introT = 0; G.endT = 0; G.visited = []; G.transition = null; G.banner = null; G.tutorial = null; G.cleared = false; G.hitstopT = 0; G.shake = 0; G.flash = 0; G.overlay = null; G.spawner = false; G.lastTemplate = null; G.roomIndex = 0;
   G.plan = { boons: 0, weapons: 0, shops: 0 }; G.ult = newUlt();
   G.famRotation = shuffle(['MICROBE', 'MALIGNANT', 'STONE', 'BENIGN']);
-  G.bossId = BOSS_IDS.indexOf(Q.boss) >= 0 ? Q.boss : Q.dungeon === 'peds' ? 'reflux' : opt && BOSS_IDS.indexOf(opt.boss) >= 0 ? opt.boss : rollBossId(); G.dungeon = DUNGEONS[G.bossId]; G.neoadj = false; G.neoadjLoss = 0; G.arena = null; G.wall = null;   // ?boss= wins, then ?dungeon=peds, then the case board's pick, then the seed
+  G.bossId = BOSS_IDS.indexOf(Q.boss) >= 0 ? Q.boss : Q.dungeon === 'peds' ? 'reflux' : opt && BOSS_IDS.indexOf(opt.boss) >= 0 ? opt.boss : rollBossId(); G.dungeon = DUNGEONS[G.bossId]; G.roomFam = null; G.neoadj = false; G.neoadjLoss = 0; G.arena = null; G.wall = null;   // ?boss= wins, then ?dungeon=peds, then the case board's pick, then the seed
   G.peds = !!G.dungeon.peds; G.sim = null; G.trial = null; G.par = null; G.us = null; G.gates = []; G.tides = []; G.medals = []; G.teddyRoom = -1; G.cicRoom = -1; G.collateralHeld = null; G.techNote = null; G.trialPlan = G.peds ? pedsTrialPlan() : null;   // the Peds Wing (§14g)
   var ws = Q.weapons ? Q.weapons.split(',') : hubLoadout();   // the instrument locker's two picks (holmium + scalpel until you change them)
   for (var i = 0; i < ws.length; i++) if (WEAPONS[ws[i]]) giveWeapon(ws[i]);
@@ -4271,7 +4329,7 @@ function roomCleared(quiet) {
     addXPLive(10);
   }
   var dw = carriedWeapon('dropper'); if (dw) dw.drops = DROPPER_MAX;   // the Dropper refills on clear
-  if (!quiet) { pinRoomPay(); if (G.peds) pedsRoomCleared(plan); }   // the Sticker Chart pin; the Peds Wing's medal, Sticker Chart and Lollipop (§14g)
+  if (!quiet) { pinRoomPay(); wardRoomCleared(); if (G.peds) pedsRoomCleared(plan); }   // wardRoomCleared: a room of nothing but stones unlocks the lead apron (§17c)   // the Sticker Chart pin; the Peds Wing's medal, Sticker Chart and Lollipop (§14g)
   var rw = plan.reward, spot;
   if (rw === 'weapon' || rw === 'elite' || (rw === 'coins' && rnd() < 0.5)) { spot = freeSpot(520, 270, 30); G.rewards.push({ kind: 'crate', x: spot.x, y: spot.y, item: rollWeaponDrop() }); }
   if (rw === 'boon' || rw === 'elite') { spot = freeSpot(rw === 'elite' ? 440 : 480, rw === 'elite' ? 330 : 270, 30); G.rewards.push({ kind: 'altar', x: spot.x, y: spot.y, patron: plan.patron || pickPatron() }); }   // the door's patron keeps the altar
@@ -4392,6 +4450,7 @@ function finishRun() {
   var rec = { won: won, rooms: st.rooms, kills: st.kills, rvu: st.rvu, time: secs, score: score, date: Date.now() };
   var isBest = !META.best || score > META.best.score; if (isBest) META.best = rec;
   var cme = hubAward(won);   // CME credits for the Call Room (§17b)
+  wardRunEnded();   // a run that ended with continence lost earns the cap of shame (§17c)
   META.wins = (META.wins || 0) + (won ? 1 : 0); saveMeta();
   if (EMBED) { try { window.parent.postMessage({ type: 'crawl:result', won: !!won, rooms: st.rooms, kills: st.kills, rvu: st.rvu, seconds: secs }, '*'); } catch (e) {} }
   openSummary(won, xp, lvlAfter > lvlBefore ? lvlAfter : 0, isBest, cme);
@@ -6938,12 +6997,11 @@ function drawRefluxIcon(c, e) {   // the bestiary portrait: a coiled serpent, ki
    §15 RENDERING — dark clinical teal arena, saturated monsters, class-coloured player weapons
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var PAL = { wallOuter: '#070e14', wall: '#172836', wallEdge: '#2a4152', floor: '#0f1d27', tile: 'rgba(255,255,255,0.03)', tileDark: 'rgba(0,0,0,0.14)' };
-var SCRUBS = ['#2fa38a', '#3b5bdb', '#a3335b', '#e07a9a', '#6c6f9c', '#d9a441'];
-var SCRUB_NAMES = ['TEAL', 'NAVY', 'WINE', 'PINK', 'SLATE', 'MUSTARD'];
+var SCRUBS = ['#2fa38a', '#3b5bdb', '#a3335b', '#e07a9a', '#6c6f9c', '#d9a441', '#6fa8dc', '#3d434c', '#9a86d8'];
+var SCRUB_NAMES = ['TEAL', 'NAVY', 'WINE', 'PINK', 'SLATE', 'MUSTARD', 'CEIL BLUE', 'CHARCOAL', 'LAVENDER'];
 var SCRUB_COST = 15;   // CME, to wear a colour before its residency level (the Call Room's scrub cabinet)
 function scrubNeed(i) { return i < 1 ? 1 : i < 3 ? 2 : i < 4 ? 4 : 6; }
 function scrubUnlocked(i) { return i >= 0 && i < SCRUBS.length && (residencyLevel() >= scrubNeed(i) || !!(META.hub && META.hub.owned['scrub' + i])); }
-function scrubColor() { var i = SET.scrub || 0; if (!scrubUnlocked(i)) i = 0; return SCRUBS[i]; }
 
 function drawGlyph(c, cls, x, y, s, dim) {
   var col = dim ? '#5e7080' : (CLASSES[cls] ? CLASSES[cls].color : '#fff');
@@ -7222,15 +7280,23 @@ function drawEnemy(c, e) {
   if (e.elite && e.armorCls) { c.fillStyle = '#ffd166'; c.font = '800 9px ' + FONT; c.textAlign = 'center'; c.fillText('ARMOR: ' + CLASSES[e.armorCls].name.toUpperCase(), e.x, top - 26); }
 }
 /* ── player: a chibi resident — scrub cap, mask, headlamp, scrubs, and a white coat whose tails trail like a cape.
-   Local origin = the hitbox centre (the chest); the feet stand 15 px below it on their shadow. ── */
+   Local origin = the hitbox centre (the chest); the feet stand 15 px below it on their shadow.
+   Who you are (META.hero: build, skin, hair) and what you wear (META.wardrobe) arrive as one resolved look, L = heroLook()
+   (§17c; cached, so a frame allocates nothing for it). Cosmetic only: P.r, P.x / P.y and every gameplay number are
+   untouched. drawSurgeon paints back to front: the hair behind the head, the far sleeve, the coat's back panel, legs,
+   the outfit, the coat fronts, the neck item, the head, the mask, the hair in front, the cap, the headlamp, the near sleeve.
+   The same rig draws the previews (the mirror, the wardrobe), the HUD portrait and the summary portrait. ── */
 var SKIN = '#f4c89a', COAT = '#f4f7fb', PLAYER_SCALE = 1.2;
 function shade(hex, k) {   // k < 0 darkens toward black, k > 0 lightens toward white
   var h = hex.replace('#', ''), n = parseInt(h, 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255, t = k < 0 ? 0 : 255, q = Math.abs(k);
   return 'rgb(' + Math.round(r + (t - r) * q) + ',' + Math.round(g + (t - g) * q) + ',' + Math.round(b + (t - b) * q) + ')';
 }
+// the pose the rig is drawn in: the player's (drawPlayer) or a preview's. One shared object, refilled before each draw.
+var POSE = { f: 1, aim: 0, rolling: false, moving: false, step: 0, stag: false, low: false, lean: 0, t: 0, blink: 1, arm: true, armX: 12, armY: 0, hand: false };
+var LANYARD_FONT = '900 3.6px ' + FONT, PGY_TXT = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 function drawPlayer(c) {
-  var scrub = scrubColor(), dark = shade(scrub, -0.38), lite = shade(scrub, 0.32), i, s;
-  for (i = 0; i < P.after.length; i++) { var af = P.after[i]; c.globalAlpha = af.t * 1.5; c.fillStyle = i % 2 ? COAT : scrub; c.beginPath(); c.ellipse(af.x, af.y - 5, P.r * 0.8, P.r * 1.35, 0, 0, TAU); c.fill(); }
+  var L = heroLook(), i;
+  for (i = 0; i < P.after.length; i++) { var af = P.after[i]; c.globalAlpha = af.t * 1.5; c.fillStyle = i % 2 ? L.after1 : L.after2; c.beginPath(); c.ellipse(af.x, af.y - 5, P.r * 0.8, P.r * 1.35, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
   // facing follows the aim, with a dead zone so it does not flicker when you aim straight up or down
   var ca = Math.cos(P.aim); if (ca > 0.2) P.face = 1; else if (ca < -0.2) P.face = -1;
@@ -7245,60 +7311,23 @@ function drawPlayer(c) {
   else if (lunging) c.rotate(f * 0.28);
   else if (lean) c.rotate(lean * 0.07);
   c.translate(0, bob); c.scale(PLAYER_SCALE, PLAYER_SCALE);
-  // white coat: wide shoulders, tails that flare away from where you are heading and sway at rest; the far sleeve hangs behind it
-  var fa = moving ? step * 4 : 0, tail = -lean * 5 + (moving ? step * 1.5 : Math.sin(G.realTime * 2.2) * 0.8), flare = rolling ? 3 : moving ? 2.5 : 0;
-  c.beginPath(); c.moveTo(-f * 7.5, -4); c.lineTo(-f * 11 - f * fa * 0.4, 4.5); tube(c, null, 4.2, '#dfe6ee', 1.5);
-  c.fillStyle = SKIN; c.beginPath(); c.arc(-f * 11.3 - f * fa * 0.4, 6.4, 2.3, 0, TAU); c.fill(); outline(c, 1.4);
-  c.beginPath(); c.moveTo(-9.5, -6.5); c.lineTo(9.5, -6.5); c.lineTo(12.5 + flare + tail, 10.5); c.quadraticCurveTo(tail, 13.8 + flare * 0.4, -12.5 - flare + tail, 10.5); c.closePath(); c.fillStyle = COAT; c.fill(); outline(c, 2);
-  // legs + shoes
-  for (s = -1; s <= 1; s += 2) {
-    var sw = moving ? step * s * 3.6 : 0, lf = moving && sw * f > 0 ? Math.abs(step) * 2 : 0, fx = s * 3.2 + f * sw, fy = 13.6 - lf;
-    c.beginPath(); c.moveTo(s * 2.8, 7); c.lineTo(fx, fy - 1.5); tube(c, null, 4.2, dark, 1.5);
-    c.beginPath(); c.ellipse(fx + f * 1.2, fy + 0.6, 3.9, 2.4, 0, 0, TAU); c.fillStyle = '#e9eef4'; c.fill(); outline(c, 1.5);
-  }
-  // scrub top between the open coat fronts: lapels, pocket badge, drawstring
-  roundRect(c, -5.6, -7, 11.2, 15.5, 4.5); c.fillStyle = scrub; c.fill(); outline(c, 1.8);
-  c.strokeStyle = 'rgba(26,18,24,0.45)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-7.4, -5.5); c.lineTo(-9.6, 9.5); c.moveTo(7.4, -5.5); c.lineTo(9.6, 9.5); c.stroke();
-  c.fillStyle = '#fff'; c.fillRect(f * 1.4 - 1.7, -1, 3.4, 4.2); c.fillStyle = '#ff4d6d'; c.fillRect(f * 1.4 - 0.8, 0, 1.6, 1.6);
-  c.strokeStyle = lite; c.lineWidth = 1.1; c.lineCap = 'round'; c.beginPath(); c.moveTo(-1, 5.6); c.lineTo(-1.5, 7.6); c.moveTo(1, 5.6); c.lineTo(1.5, 7.6); c.stroke();
-  // head: ear, skin, mask, cap with a tie at the back, headlamp
-  var hx = f * 0.6, hy = -15.5, blink = (G.realTime % 3.9) < 0.11 ? 0.12 : 1, ex = hx + f * 1.6, ey = hy + 0.7, px = Math.cos(P.aim) * 1.1, py = Math.sin(P.aim) * 1.1;
-  c.beginPath(); c.arc(hx - f * 10, hy + 1, 2.5, 0, TAU); c.fillStyle = SKIN; c.fill(); outline(c, 1.6);
-  c.beginPath(); c.arc(hx, hy, 10.6, 0, TAU); c.fillStyle = SKIN; c.fill(); outline(c, 2.2);
-  c.fillStyle = 'rgba(255,120,120,0.28)'; c.beginPath(); c.arc(ex - 6.4, ey + 2.6, 2, 0, TAU); c.arc(ex + 6.4, ey + 2.6, 2, 0, TAU); c.fill();
-  c.strokeStyle = '#8fb6d6'; c.lineWidth = 1; c.beginPath(); c.moveTo(hx - f * 7.4, hy + 3.6); c.lineTo(hx - f * 10, hy + 0.8); c.stroke();
-  c.beginPath(); c.moveTo(hx - 8.4 + f, hy + 4); c.quadraticCurveTo(hx + f, hy + 2.2, hx + 8.4 + f, hy + 4); c.quadraticCurveTo(hx + 8 + f, hy + 9.4, hx + f, hy + 11.2); c.quadraticCurveTo(hx - 8 + f, hy + 9.4, hx - 8.4 + f, hy + 4); c.closePath(); c.fillStyle = '#c4e6ff'; c.fill(); outline(c, 1.5);
-  c.strokeStyle = 'rgba(60,110,150,0.5)'; c.lineWidth = 0.9; c.beginPath(); c.moveTo(hx - 5.6 + f, hy + 6.6); c.quadraticCurveTo(hx + f, hy + 5.6, hx + 5.6 + f, hy + 6.6); c.moveTo(hx - 4.6 + f, hy + 8.8); c.quadraticCurveTo(hx + f, hy + 7.9, hx + 4.6 + f, hy + 8.8); c.stroke();
-  for (s = -1; s <= 1; s += 2) {   // eyes: big whites, pupils that follow the aim
-    c.save(); c.translate(ex + s * 4, ey); c.scale(1, blink); c.beginPath(); c.ellipse(0, 0, 2.9, 3.2, 0, 0, TAU); c.fillStyle = '#fff'; c.fill(); outline(c, 1.3);
-    c.fillStyle = '#1a1218'; c.beginPath(); c.arc(px, py, 1.75, 0, TAU); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(px - 0.6, py - 0.7, 0.6, 0, TAU); c.fill(); c.restore();
-  }
-  c.strokeStyle = OUTLINE; c.lineWidth = 1.5; c.lineCap = 'round'; c.beginPath();
-  for (s = -1; s <= 1; s += 2) { if (low || stag) { c.moveTo(ex + s * 6.4, ey - 4); c.lineTo(ex + s * 2.4, ey - 5.2); } else { c.moveTo(ex + s * 6.4, ey - 5.2); c.lineTo(ex + s * 2.2, ey - 4.1); } }
-  c.stroke();
-  if (low) { c.fillStyle = 'rgba(150,210,255,0.95)'; c.beginPath(); c.ellipse(hx - f * 8.5, hy - 3 + ((G.realTime * 9) % 6), 1.3, 2, 0, 0, TAU); c.fill(); }
-  c.beginPath(); c.arc(hx - f * 10.9, hy - 7, 2.1, 0, TAU); c.fillStyle = scrub; c.fill(); outline(c, 1.5);
-  c.beginPath(); c.ellipse(hx, hy - 4.9, 11.2, 8.7, 0, Math.PI, 0); c.quadraticCurveTo(hx, hy - 3.7, hx - 11.2, hy - 4.9); c.closePath(); c.fillStyle = scrub; c.fill(); outline(c, 2);
-  c.strokeStyle = lite; c.lineWidth = 1.5; c.beginPath(); c.moveTo(hx - 9.4, hy - 6); c.quadraticCurveTo(hx, hy - 4.9, hx + 9.4, hy - 6); c.stroke();
-  c.fillStyle = lite; for (i = 0; i < 4; i++) { c.beginPath(); c.arc(hx - 6 + i * 4.1, hy - 9.6 - (i % 2) * 1.8, 0.8, 0, TAU); c.fill(); }
-  var lx = hx + f * 2.2 + Math.cos(P.aim) * 3, ly = hy - 9 + Math.sin(P.aim) * 1.2;
-  c.strokeStyle = '#2b3a4c'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(hx - 10.6, hy - 7.2); c.quadraticCurveTo(hx, hy - 10.2, hx + 10.6, hy - 7.2); c.stroke();
-  c.fillStyle = 'rgba(255,246,200,0.2)'; c.beginPath(); c.arc(lx, ly, 5.2, 0, TAU); c.fill();
-  c.beginPath(); c.arc(lx, ly, 3, 0, TAU); c.fillStyle = '#dfe7ef'; c.fill(); outline(c, 1.4); c.fillStyle = '#fff6c8'; c.beginPath(); c.arc(lx, ly, 1.7, 0, TAU); c.fill();
-  // near arm: a white sleeve reaching to the hand on the tool (drawn below, in room space)
-  if (!rolling) { c.beginPath(); c.moveTo(f * 6.5, -3.5); c.lineTo(Math.cos(P.aim) * 12 / PLAYER_SCALE, (Math.sin(P.aim) * 12 - bob * 0.5) / PLAYER_SCALE); tube(c, null, 4.2, COAT, 1.5); }
+  var o = POSE; o.f = f; o.aim = P.aim; o.rolling = rolling; o.moving = moving; o.step = step; o.stag = stag; o.low = low; o.lean = lean; o.t = G.realTime;
+  o.blink = (G.realTime % 3.9) < 0.11 ? 0.12 : 1; o.arm = !rolling; o.hand = false;
+  o.armX = Math.cos(P.aim) * 12 / PLAYER_SCALE; o.armY = (Math.sin(P.aim) * 12 - bob * 0.5) / PLAYER_SCALE;   // the near sleeve reaches to the hand on the tool (drawn below, in room space)
+  drawSurgeon(c, L, o);
+  var hx = f * 0.6, hy = -15.5;
   if (stag) { c.fillStyle = '#ffe066'; for (i = 0; i < 3; i++) { var sa = G.realTime * 7 + i * 2.1; c.save(); c.translate(hx + Math.cos(sa) * 12, hy - 15 + Math.sin(sa) * 3.5); starPath(c, 3.4, 1.4, 5, sa); c.fill(); outline(c, 1.2); c.restore(); } }
   if (P.tur > 0) { c.fillStyle = '#7ad7ff'; c.font = '900 11px ' + FONT; c.textAlign = 'center'; for (i = 0; i < 2; i++) c.fillText('?', hx + Math.cos(G.realTime * 6 + i * 3.1) * 11, hy - 16 + Math.sin(G.realTime * 6 + i * 3.1) * 3); }   // TUR syndrome: confused
   if (G.incont && !G.incont.fixed && !rolling) { c.fillStyle = '#ffe14a'; for (i = 0; i < 2; i++) { var dk = (G.realTime * 1.6 + i * 0.5) % 1; c.globalAlpha = 1 - dk * 0.6; c.beginPath(); c.arc(-2 + i * 4, 4 + dk * 12, 1.8 - dk * 0.5, 0, TAU); c.fill(); } c.globalAlpha = 1; }   // the incontinence curse: a visible drip
   c.restore();
-  // hand + tool (or the bulking needle, §14h)
-  if (P.needle && !rolling) { c.save(); c.translate(P.x + Math.cos(P.aim) * 15, P.y + Math.sin(P.aim) * 15 + bob * 0.5); c.rotate(P.aim); drawNeedleIcon(c, 0.85); c.fillStyle = SKIN; c.beginPath(); c.arc(-4, 0, 4.6, 0, TAU); c.fill(); outline(c, 2); c.restore(); }
+  // hand + tool (or the bulking needle, §14h); a glove when the outfit has one
+  if (P.needle && !rolling) { c.save(); c.translate(P.x + Math.cos(P.aim) * 15, P.y + Math.sin(P.aim) * 15 + bob * 0.5); c.rotate(P.aim); drawNeedleIcon(c, 0.85); c.fillStyle = L.hand; c.beginPath(); c.arc(-4, 0, 4.6, 0, TAU); c.fill(); outline(c, 2); c.restore(); }
   if (cur && !rolling && !P.needle) {
     var tx = P.x + Math.cos(P.aim) * 15, ty = P.y + Math.sin(P.aim) * 15 + bob * 0.5, cls = wcls(cur), col = CLASSES[cls].color;
     c.save(); c.translate(tx, ty); c.rotate(P.aim);
     var swg = cur.fx && cur.fx.kind === 'arc' ? (1 - cur.fx.t / cur.fx.dur) : 0; if (swg) c.rotate((cur.fx.dir || 1) * (-cur.fx.half + swg * cur.fx.half * 2) * 0.6);
     drawTool(c, cur.id, 22, col);
-    c.fillStyle = SKIN; c.beginPath(); c.arc(-4, 0, 4.6, 0, TAU); c.fill(); outline(c, 2);
+    c.fillStyle = L.hand; c.beginPath(); c.arc(-4, 0, 4.6, 0, TAU); c.fill(); outline(c, 2);
     c.restore();
   }
   // swap indicator + roll cooldown ring
@@ -7310,10 +7339,215 @@ function drawPlayer(c) {
   if (cur && cur.bal) { c.fillStyle = 'rgba(93,240,122,0.18)'; c.beginPath(); c.arc(P.x, P.y, cur.bal.r, 0, TAU); c.fill(); c.strokeStyle = 'rgba(93,240,122,0.8)'; c.lineWidth = 3; c.stroke(); highlight(c, P.x - cur.bal.r * 0.4, P.y - cur.bal.r * 0.45, cur.bal.r * 0.2); }
   if (DEBUG) { c.strokeStyle = '#0f0'; c.lineWidth = 1; c.beginPath(); c.arc(P.x, P.y, P.r, 0, TAU); c.stroke(); }
 }
+// the rig itself, in the surgeon's local space (already scaled by PLAYER_SCALE): L is a resolved look, o a pose (POSE)
+function drawSurgeon(c, L, o) {
+  var f = o.f, moving = o.moving, rolling = o.rolling, step = o.step, t = o.t, B = L.build, i, s;
+  var hx = f * 0.6, hy = -15.5, ex = hx + f * 1.6, ey = hy + 0.7, px = Math.cos(o.aim) * 1.1, py = Math.sin(o.aim) * 1.1;
+  var fa = moving ? step * 4 : 0, tail = -o.lean * 5 + (moving ? step * 1.5 : Math.sin(t * 2.2) * 0.8), flare = rolling ? 3 : moving ? 2.5 : 0;
+  // ── hair that hangs behind: a ponytail, a bun, long hair, the back of the curls ──
+  if (!L.hairHidden) drawHairBack(c, L, o, hx, hy, tail);
+  // ── far sleeve + hand, then the coat's back panel: wide shoulders, tails that flare away from where you are heading ──
+  c.beginPath(); c.moveTo(-f * (B.sh - 2), -4); c.lineTo(-f * (B.sh + 1.5) - f * fa * 0.4, 4.5); tube(c, null, 4.2, L.sleeveFar, 1.5);
+  c.fillStyle = L.hand; c.beginPath(); c.arc(-f * (B.sh + 1.8) - f * fa * 0.4, 6.4, 2.3, 0, TAU); c.fill(); outline(c, 1.4);
+  if (L.coat) { var cl = L.coatLen; c.beginPath(); c.moveTo(-B.sh, -6.5); c.lineTo(B.sh, -6.5); c.lineTo(B.hem + flare + tail, cl); c.quadraticCurveTo(tail, cl + 3.3 + flare * 0.4, -B.hem - flare + tail, cl); c.closePath(); c.fillStyle = L.coat; c.fill(); outline(c, 2); }
+  // ── legs + shoes ──
+  for (s = -1; s <= 1; s += 2) {
+    var sw = moving ? step * s * 3.6 : 0, lf = moving && sw * f > 0 ? Math.abs(step) * 2 : 0, fx = s * 3.2 + f * sw, fy = 13.6 - lf;
+    c.beginPath(); c.moveTo(s * 2.8, 7); c.lineTo(fx, fy - 1.5); tube(c, null, 4.2, L.legs, 1.5);
+    c.beginPath(); c.ellipse(fx + f * 1.2, fy + 0.6, 3.9, 2.4, 0, 0, TAU); c.fillStyle = L.shoe; c.fill(); outline(c, 1.5);
+  }
+  // ── the outfit: a scrub top between the open coat fronts, or a long robe (the retro gown, the plague coat), or an apron over the scrubs ──
+  var tw = B.tw;
+  if (L.robe) {
+    var rs = moving ? step * 1.2 : Math.sin(t * 2.2) * 0.4;
+    c.beginPath(); c.moveTo(-tw - 1.2, -7); c.lineTo(tw + 1.2, -7); c.quadraticCurveTo(tw + 2.6, 2, tw + 3.4 + rs, 12); c.quadraticCurveTo(rs, 13.6, -tw - 3.4 + rs, 12); c.quadraticCurveTo(-tw - 2.6, 2, -tw - 1.2, -7); c.closePath(); c.fillStyle = L.robe; c.fill(); outline(c, 1.8);
+    if (L.robeRim) { c.strokeStyle = L.robeRim; c.lineWidth = 0.8; c.stroke(); }   // a light rim keeps a dark robe readable on a dark floor
+    c.strokeStyle = L.robeLine; c.lineWidth = 1; c.beginPath();
+    if (L.robeKind === 'retro') { c.moveTo(-tw - 0.6, 2.6); c.quadraticCurveTo(0, 3.6, tw + 0.6, 2.6); c.moveTo(f * 1.6, 3.2); c.lineTo(f * 2.6, 6.4); c.moveTo(f * 1.6, 3.2); c.lineTo(f * 0.2, 6.6); c.moveTo(-f * 2, 5); c.lineTo(-f * 2.6 + rs, 11.6); }   // a waist tie and a fold
+    else { c.moveTo(f * 1.4, -6); c.lineTo(f * 1.4 + rs * 0.4, 12); }   // the plague coat's front seam
+    c.stroke();
+    if (L.robeKind === 'plague') { c.fillStyle = L.robeButton; for (i = 0; i < 4; i++) { c.beginPath(); c.arc(f * 2.6, -3.6 + i * 3.6, 0.8, 0, TAU); c.fill(); } }
+  } else {
+    if (B.waist) {   // the female build tapers at the waist
+      var wv = B.waist;
+      c.beginPath(); c.moveTo(-tw + 3.6, -7); c.lineTo(tw - 3.6, -7); c.quadraticCurveTo(tw, -7, tw, -3); c.quadraticCurveTo(tw - wv, 1.2, tw, 5); c.quadraticCurveTo(tw, 8.5, tw - 3.6, 8.5); c.lineTo(-tw + 3.6, 8.5); c.quadraticCurveTo(-tw, 8.5, -tw, 5); c.quadraticCurveTo(-tw + wv, 1.2, -tw, -3); c.quadraticCurveTo(-tw, -7, -tw + 3.6, -7); c.closePath();
+    } else roundRect(c, -tw, -7, tw * 2, 15.5, 4.5);
+    c.fillStyle = L.scrub; c.fill(); outline(c, 1.8);
+    if (L.neck !== 'lanyard' && !L.apron) { c.fillStyle = L.badge; c.fillRect(f * 1.4 - 1.7, -1, 3.4, 4.2); c.fillStyle = L.badgeDot; c.fillRect(f * 1.4 - 0.8, 0, 1.6, 1.6); }   // the pocket badge
+    c.strokeStyle = L.scrubLite; c.lineWidth = 1.1; c.lineCap = 'round'; c.beginPath(); c.moveTo(-1, 5.6); c.lineTo(-1.5, 7.6); c.moveTo(1, 5.6); c.lineTo(1.5, 7.6); c.stroke();   // the drawstring
+    if (L.apron) {   // the lead apron: grey, heavy, a size too big
+      c.beginPath(); c.moveTo(-tw - 0.6, -6.4); c.lineTo(tw + 0.6, -6.4); c.lineTo(tw + 2.8, 10.8); c.quadraticCurveTo(0, 12.2, -tw - 2.8, 10.8); c.closePath(); c.fillStyle = L.apron; c.fill(); outline(c, 1.8);
+      c.strokeStyle = L.apronLine; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-tw - 1.2, 3.2); c.lineTo(tw + 1.6, 3.2); c.stroke();
+      c.fillStyle = L.apronTab; c.fillRect(-f * (tw - 0.4) - 1.4, 1.8, 2.8, 2.8);
+    }
+  }
+  // ── the coat fronts: its lapel edges either side of the outfit; the embroidered coat has a name over the pocket ──
+  if (L.coat) {
+    c.strokeStyle = 'rgba(26,18,24,0.45)'; c.lineWidth = 1; c.beginPath(); c.moveTo(-(B.sh - 2.1), -5.5); c.lineTo(-(B.sh + 0.1), 9.5); c.moveTo(B.sh - 2.1, -5.5); c.lineTo(B.sh + 0.1, 9.5); c.stroke();
+    if (L.coatTag) { var tgx = -f * (B.sh - 1.1); c.strokeStyle = L.thread; c.lineWidth = 0.8; c.beginPath(); c.moveTo(tgx - 1.4, -2.2); c.quadraticCurveTo(tgx - 0.6, -3.6, tgx, -2.1); c.quadraticCurveTo(tgx + 0.6, -0.8, tgx + 1.4, -2.4); c.stroke(); }
+  }
+  // ── the neck: a lanyard with your best PGY on the badge, or a stethoscope ──
+  if (L.neck === 'lanyard') {
+    c.strokeStyle = L.strapCol; c.lineWidth = 1.2; c.beginPath(); c.moveTo(-2.8, -6.8); c.lineTo(-1.2, 2); c.moveTo(2.8, -6.8); c.lineTo(1.2, 2); c.stroke();
+    c.fillStyle = L.badge; c.fillRect(-2.7, 1.6, 5.4, 4.4); c.strokeStyle = OUTLINE; c.lineWidth = 0.8; c.strokeRect(-2.7, 1.6, 5.4, 4.4);
+    c.fillStyle = L.strapCol; c.font = LANYARD_FONT; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(PGY_TXT[Math.min(12, L.pgy)] || '1', 0, 3.9);
+  } else if (L.neck === 'scope') {
+    c.strokeStyle = L.scopeTube; c.lineWidth = 1.3; c.lineCap = 'round'; c.beginPath(); c.moveTo(-4.6, -6.6); c.quadraticCurveTo(-4.4, -0.6, -2.2, 1.6); c.moveTo(4.6, -6.6); c.quadraticCurveTo(4.6, -2.4, 3.4, -0.4); c.stroke();
+    c.fillStyle = L.scopeBell; c.beginPath(); c.arc(-2.2, 2.6, 1.7, 0, TAU); c.fill(); outline(c, 0.9);
+  }
+  // ── head: ear, skin, a rim light on the cheeks (it keeps the head round and readable on every skin tone) ──
+  c.beginPath(); c.arc(hx - f * 10, hy + 1, 2.5, 0, TAU); c.fillStyle = L.skin; c.fill(); outline(c, 1.6);
+  c.beginPath(); c.arc(hx, hy, 10.6, 0, TAU); c.fillStyle = L.skin; c.fill(); outline(c, 2.2);
+  c.strokeStyle = L.skinRim; c.lineWidth = 1.2; c.lineCap = 'round'; c.beginPath(); c.arc(hx, hy, 9.2, -0.35, 0.5); c.moveTo(hx + Math.cos(Math.PI - 0.5) * 9.2, hy + Math.sin(Math.PI - 0.5) * 9.2); c.arc(hx, hy, 9.2, Math.PI - 0.5, Math.PI + 0.35); c.stroke();
+  c.fillStyle = L.blush; c.beginPath(); c.arc(ex - 6.4, ey + 2.6, 2, 0, TAU); c.arc(ex + 6.4, ey + 2.6, 2, 0, TAU); c.fill();
+  // ── the mask (under the eyes): surgical (the loupes wear one too), the retro gauze, or none ──
+  var mk = L.maskKind;
+  if (mk === 'surgical' || mk === 'loupes') {
+    c.strokeStyle = L.strap; c.lineWidth = 1; c.beginPath(); c.moveTo(hx - f * 7.4, hy + 3.6); c.lineTo(hx - f * 10, hy + 0.8); c.stroke();
+    c.beginPath(); c.moveTo(hx - 8.4 + f, hy + 4); c.quadraticCurveTo(hx + f, hy + 2.2, hx + 8.4 + f, hy + 4); c.quadraticCurveTo(hx + 8 + f, hy + 9.4, hx + f, hy + 11.2); c.quadraticCurveTo(hx - 8 + f, hy + 9.4, hx - 8.4 + f, hy + 4); c.closePath(); c.fillStyle = L.maskCol; c.fill(); outline(c, 1.5);
+    c.strokeStyle = L.pleat; c.lineWidth = 0.9; c.beginPath(); c.moveTo(hx - 5.6 + f, hy + 6.6); c.quadraticCurveTo(hx + f, hy + 5.6, hx + 5.6 + f, hy + 6.6); c.moveTo(hx - 4.6 + f, hy + 8.8); c.quadraticCurveTo(hx + f, hy + 7.9, hx + 4.6 + f, hy + 8.8); c.stroke();
+  } else if (mk === 'gauze') {   // a round, many-layered gauze pad on ties
+    c.strokeStyle = L.strap; c.lineWidth = 1; c.beginPath(); c.moveTo(hx - f * 6.6, hy + 4.4); c.lineTo(hx - f * 10.2, hy + 1.6); c.moveTo(hx - f * 6.8, hy + 8); c.lineTo(hx - f * 10, hy + 6.4); c.stroke();
+    c.beginPath(); c.ellipse(hx + f * 1.4, hy + 6.6, 7.4, 5.4, 0, 0, TAU); c.fillStyle = L.maskCol; c.fill(); outline(c, 1.5);
+    c.strokeStyle = L.pleat; c.lineWidth = 0.7; c.beginPath(); for (i = -2; i <= 2; i++) { c.moveTo(hx + f * 1.4 + i * 2.6 - 1.4, hy + 2.4); c.lineTo(hx + f * 1.4 + i * 2.6 + 1.4, hy + 10.8); c.moveTo(hx + f * 1.4 - 6.4, hy + 6.6 + i * 1.8); c.lineTo(hx + f * 1.4 + 6.4, hy + 6.6 + i * 1.8); } c.stroke();
+  }
+  // ── eyes: big whites, pupils that follow the aim; lashes on the female build ──
+  for (s = -1; s <= 1; s += 2) {
+    c.save(); c.translate(ex + s * 4, ey); c.scale(1, o.blink); c.beginPath(); c.ellipse(0, 0, 2.9, 3.2, 0, 0, TAU); c.fillStyle = L.eyeW; c.fill(); outline(c, 1.3);
+    c.fillStyle = L.pupil; c.beginPath(); c.arc(px, py, 1.75, 0, TAU); c.fill(); c.fillStyle = L.eyeW; c.beginPath(); c.arc(px - 0.6, py - 0.7, 0.6, 0, TAU); c.fill();
+    if (B.lash) { c.strokeStyle = OUTLINE; c.lineWidth = 0.9; c.beginPath(); c.moveTo(s * 2.2, -2.6); c.lineTo(s * 3.6, -3.7); c.moveTo(s * 2.9, -1.6); c.lineTo(s * 4.3, -2.3); c.stroke(); }
+    c.restore();
+  }
+  c.strokeStyle = L.brow; c.lineWidth = B.brow; c.lineCap = 'round'; c.beginPath();
+  for (s = -1; s <= 1; s += 2) { if (o.low || o.stag) { c.moveTo(ex + s * 6.4, ey - 4); c.lineTo(ex + s * 2.4, ey - 5.2); } else { c.moveTo(ex + s * 6.4, ey - 5.2); c.lineTo(ex + s * 2.2, ey - 4.1); } }
+  c.stroke();
+  if (o.low) { c.fillStyle = 'rgba(150,210,255,0.95)'; c.beginPath(); c.ellipse(hx - f * 8.5, hy - 3 + ((t * 9) % 6), 1.3, 2, 0, 0, TAU); c.fill(); }
+  if (mk === 'none') { c.strokeStyle = OUTLINE; c.lineWidth = 1.3; c.beginPath(); if (o.low || o.stag) { c.moveTo(hx + f * 1.4 - 2.4, hy + 7.4); c.quadraticCurveTo(hx + f * 1.4 - 0.8, hy + 6.4, hx + f * 1.4, hy + 7.4); c.quadraticCurveTo(hx + f * 1.4 + 0.8, hy + 8.4, hx + f * 1.4 + 2.4, hy + 7.4); } else c.arc(hx + f * 1.4, hy + 5.4, 2.8, 0.25 * Math.PI, 0.75 * Math.PI); c.stroke(); }
+  else if (mk === 'loupes') {   // magnifying barrels over the eyes, a glint that sweeps across the glass
+    c.strokeStyle = L.loupeFrame; c.lineWidth = 1.1; c.beginPath(); c.moveTo(ex - 6.6, ey - 0.6); c.lineTo(ex + 6.6, ey - 0.6); c.stroke();
+    for (s = -1; s <= 1; s += 2) {
+      c.fillStyle = L.loupeBarrel; roundRect(c, ex + s * 4 + f * 0.6 - 2.6, ey - 1.6, 5.2, 4.4, 1.6); c.fill(); outline(c, 1.1);
+      c.beginPath(); c.arc(ex + s * 4 + f * 0.8, ey + 0.6, 2, 0, TAU); c.fillStyle = L.loupeGlass; c.fill(); outline(c, 0.8);
+    }
+    var gl = (t * 0.7) % 1; if (gl < 0.3) { c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 0.9; for (s = -1; s <= 1; s += 2) { c.beginPath(); c.moveTo(ex + s * 4 + f * 0.8 - 1.4 + gl * 6, ey - 0.6); c.lineTo(ex + s * 4 + f * 0.8 - 2.2 + gl * 6, ey + 1.6); c.stroke(); } }
+  } else if (mk === 'beak') {   // the plague doctor: round red-glass goggles and a long beak pointing the way you face
+    for (s = -1; s <= 1; s += 2) { c.beginPath(); c.arc(ex + s * 4, ey, 3.3, 0, TAU); c.fillStyle = L.goggle; c.fill(); c.lineWidth = 1.5; c.strokeStyle = L.goggleRim; c.stroke(); outline(c, 0.7); }
+    c.beginPath(); c.moveTo(hx + f * 2, hy + 2.4); c.quadraticCurveTo(hx + f * 12, hy + 3, hx + f * 20, hy + 8.6); c.quadraticCurveTo(hx + f * 10, hy + 10.8, hx + f * 1.4, hy + 9.6); c.quadraticCurveTo(hx - f * 1.6, hy + 6, hx + f * 2, hy + 2.4); c.closePath(); c.fillStyle = L.beak; c.fill(); outline(c, 1.6);
+    c.strokeStyle = L.beakLine; c.lineWidth = 0.8; c.beginPath(); c.moveTo(hx + f * 3, hy + 6); c.quadraticCurveTo(hx + f * 11, hy + 6.4, hx + f * 18.4, hy + 8.4); c.stroke();
+    c.fillStyle = L.beakLine; c.beginPath(); c.arc(hx + f * 7, hy + 4.6, 0.6, 0, TAU); c.arc(hx + f * 8.6, hy + 4.8, 0.6, 0, TAU); c.fill();
+  }
+  // ── the thyroid shield wraps the neck, in front of the chin ──
+  if (L.apron) { c.beginPath(); c.moveTo(-6.2, -5.6); c.quadraticCurveTo(0, -1.4, 6.2, -5.6); c.lineTo(5.6, -3.4); c.quadraticCurveTo(0, 0.6, -5.6, -3.4); c.closePath(); c.fillStyle = L.apron; c.fill(); outline(c, 1.4); }
+  // ── hair in front (under the cap), then the cap, then the headlamp ──
+  if (!L.hairHidden) drawHairFront(c, L, o, hx, hy);
+  var ck = L.capKind;
+  if (ck === 'none') drawHairTop(c, L, o, hx, hy);
+  else if (ck === 'skull' || ck === 'shame') {
+    c.beginPath(); c.arc(hx - f * 10.9, hy - 7, 2.1, 0, TAU); c.fillStyle = L.cap; c.fill(); outline(c, 1.5);   // the tie at the back
+    if (ck === 'shame') {   // tall, floppy, faintly damp, with a bell
+      var wob = Math.sin(t * 3) * 1.5 + (moving ? step * 1.2 : 0), tipx = hx - f * 7 + wob, tipy = hy - 30;
+      c.beginPath(); c.moveTo(hx - 6.4, hy - 10.6); c.quadraticCurveTo(hx - 2.4, hy - 25, tipx, tipy); c.quadraticCurveTo(hx + 2.4, hy - 21, hx + 6.8, hy - 10.8); c.closePath(); c.fillStyle = L.cap; c.fill(); outline(c, 1.8);
+      c.fillStyle = L.pc[0]; c.beginPath(); c.ellipse(hx - 0.6 + wob * 0.2, hy - 18, 0.9, 1.4, 0, 0, TAU); c.ellipse(tipx * 0.4 + hx * 0.6 + 1, hy - 24.5, 0.8, 1.2, 0, 0, TAU); c.fill();
+      c.beginPath(); c.arc(tipx, tipy - 0.6, 2, 0, TAU); c.fillStyle = L.pc[1]; c.fill(); outline(c, 1.1);
+    }
+    capPath(c, hx, hy); c.fillStyle = L.cap; c.fill();
+    if (L.print) { c.save(); c.clip(); drawCapPrint(c, L, hx, hy, f); c.restore(); capPath(c, hx, hy); }
+    outline(c, 2);
+    c.strokeStyle = L.capLite; c.lineWidth = 1.5; c.beginPath(); c.moveTo(hx - 9.4, hy - 6); c.quadraticCurveTo(hx, hy - 4.9, hx + 9.4, hy - 6); c.stroke();
+    if (L.capDots) { c.fillStyle = L.capLite; for (i = 0; i < 4; i++) { c.beginPath(); c.arc(hx - 6 + i * 4.1, hy - 9.6 - (i % 2) * 1.8, 0.8, 0, TAU); c.fill(); } }
+    if (L.capCrease) { c.strokeStyle = L.capCrease; c.lineWidth = 0.9; c.beginPath(); c.moveTo(hx - 3, hy - 13); c.quadraticCurveTo(hx - 1, hy - 9, hx + 2, hy - 8.4); c.stroke(); }
+  } else if (ck === 'bouffant') {   // a big puffy cap that holds all the hair, elastic scallops along its edge
+    var bcx = hx - f * 0.5, bcy = hy - 5.8, brx = 12.9;
+    c.beginPath(); c.ellipse(bcx, bcy, brx, 10.8, 0, Math.PI, 0);
+    for (i = 1; i <= 6; i++) c.quadraticCurveTo(bcx + brx - (i - 0.5) * (brx / 3), bcy + 2.6, bcx + brx - i * (brx / 3), bcy);
+    c.closePath(); c.fillStyle = L.cap; c.fill(); outline(c, 2);
+    c.strokeStyle = L.capLite; c.lineWidth = 1; c.beginPath(); c.moveTo(bcx - 7, bcy - 6); c.quadraticCurveTo(bcx - 3, bcy - 9, bcx + 1, bcy - 7); c.moveTo(bcx + 2, bcy - 11); c.quadraticCurveTo(bcx + 6, bcy - 12, bcx + 8, bcy - 8); c.stroke();
+  } else if (ck === 'hat') {   // the plague doctor's wide brim and tall crown
+    var bx = hx + f * 0.4, by = hy - 6.4;
+    c.beginPath(); c.ellipse(bx + f * 1.5, by + 0.4, 17.5, 4.3, 0, 0, TAU); c.fillStyle = L.hat; c.fill(); outline(c, 2); c.strokeStyle = L.hatLite; c.lineWidth = 0.8; c.stroke();
+    c.strokeStyle = L.hatLite; c.lineWidth = 1; c.beginPath(); c.ellipse(bx + f * 1.5, by + 0.4, 15.4, 3.2, 0, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+    c.beginPath(); c.moveTo(bx - 8, by); c.lineTo(bx - 7, by - 11); c.quadraticCurveTo(bx, by - 13.6, bx + 7, by - 11); c.lineTo(bx + 8, by); c.quadraticCurveTo(bx, by + 1.6, bx - 8, by); c.closePath(); c.fillStyle = L.hat; c.fill(); outline(c, 2);
+    c.beginPath(); c.moveTo(bx - 7.7, by - 3.2); c.lineTo(bx + 7.7, by - 3.2); c.lineTo(bx + 7.95, by - 0.4); c.quadraticCurveTo(bx, by + 1, bx - 7.95, by - 0.4); c.closePath(); c.fillStyle = L.hatBand; c.fill(); outline(c, 1);
+  }
+  // the headlamp in the lamp's colour: a lantern under the plague hat's brim, a head mirror on the retro cap
+  var lx = hx + f * 2.2 + Math.cos(o.aim) * 3, ly = hy - 9 + Math.sin(o.aim) * 1.2, lens = L.lens, glow = L.lampGlow;
+  if (L.rainbow) { var rk2 = Math.floor(t * 10) % RAINBOW.lens.length; lens = RAINBOW.lens[rk2]; glow = RAINBOW.glow[rk2]; }
+  if (L.lampKind === 'lantern') {
+    var qx = hx + f * 15.5, qy = hy - 1.6 + Math.sin(t * 3) * 0.6;
+    c.strokeStyle = OUTLINE; c.lineWidth = 1; c.beginPath(); c.moveTo(qx, hy - 5.8); c.lineTo(qx, qy - 3.4); c.stroke();
+    c.fillStyle = glow; c.beginPath(); c.arc(qx, qy, 5.8, 0, TAU); c.fill();
+    c.fillStyle = L.lampBody; roundRect(c, qx - 2.4, qy - 3.4, 4.8, 6.6, 1.2); c.fill(); outline(c, 1.2); c.fillStyle = lens; c.fillRect(qx - 1.3, qy - 2, 2.6, 3.6);
+  } else {
+    var lift = ck === 'bouffant' ? -2.2 : 0;
+    c.strokeStyle = L.band; c.lineWidth = 1.6; c.beginPath(); c.moveTo(hx - 10.6, hy - 7.2 + lift); c.quadraticCurveTo(hx, hy - 10.2 + lift, hx + 10.6, hy - 7.2 + lift); c.stroke();
+    c.fillStyle = glow; c.beginPath(); c.arc(lx, ly + lift, 5.2, 0, TAU); c.fill();
+    if (L.lampKind === 'mirror') {   // a round head mirror with the peephole in the middle
+      c.beginPath(); c.arc(lx, ly - 0.6, 4.5, 0, TAU); c.fillStyle = L.lampBody; c.fill(); outline(c, 1.4);
+      c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 1; c.beginPath(); c.arc(lx, ly - 0.6, 3, -2.4, -1.2); c.stroke();
+      c.fillStyle = OUTLINE; c.beginPath(); c.arc(lx, ly - 0.6, 0.9, 0, TAU); c.fill();
+    } else { c.beginPath(); c.arc(lx, ly + lift, 3, 0, TAU); c.fillStyle = L.lampBody; c.fill(); outline(c, 1.4); c.fillStyle = lens; c.beginPath(); c.arc(lx, ly + lift, 1.7, 0, TAU); c.fill(); }
+  }
+  // the near arm: a sleeve reaching to the hand (on the tool in a run; empty in a preview)
+  if (o.arm) { c.beginPath(); c.moveTo(f * (B.sh - 3), -3.5); c.lineTo(o.armX, o.armY); tube(c, null, 4.2, L.sleeve, 1.5); if (o.hand) { c.fillStyle = L.hand; c.beginPath(); c.arc(o.armX, o.armY + 1, 2.6, 0, TAU); c.fill(); outline(c, 1.4); } }
+}
+// the skull cap's outline (the cap, the printed caps, the retro cloth cap, the cap of shame's base)
+function capPath(c, hx, hy) { c.beginPath(); c.ellipse(hx, hy - 4.9, 11.2, 8.7, 0, Math.PI, 0); c.quadraticCurveTo(hx, hy - 3.7, hx - 11.2, hy - 4.9); c.closePath(); }
+// the printed skull caps: drawn inside the cap's clip
+function drawCapPrint(c, L, hx, hy, f) {
+  var k = L.print, pc = L.pc, i;
+  if (k === 'ducks') for (i = 0; i < 3; i++) { var dx = hx - 6.5 + i * 6.4, dy = hy - 7.6 - (i % 2) * 3.6; c.fillStyle = pc[0]; c.beginPath(); c.ellipse(dx, dy, 2.2, 1.5, 0, 0, TAU); c.arc(dx + 1.6, dy - 1.5, 1.1, 0, TAU); c.fill(); c.fillStyle = pc[1]; c.beginPath(); c.moveTo(dx + 2.6, dy - 1.6); c.lineTo(dx + 3.6, dy - 1.2); c.lineTo(dx + 2.6, dy - 0.9); c.fill(); }
+  else if (k === 'flames') for (i = 0; i < 5; i++) { var fx = hx - 9 + i * 4.5, fh = 7 + (i % 2) * 2.4; c.fillStyle = pc[0]; c.beginPath(); c.moveTo(fx - 2.2, hy - 4.6); c.quadraticCurveTo(fx - 2.6, hy - 4.6 - fh * 0.5, fx, hy - 4.6 - fh); c.quadraticCurveTo(fx + 2.6, hy - 4.6 - fh * 0.5, fx + 2.2, hy - 4.6); c.closePath(); c.fill(); c.fillStyle = pc[1]; c.beginPath(); c.moveTo(fx - 1, hy - 4.6); c.quadraticCurveTo(fx - 1.2, hy - 4.6 - fh * 0.3, fx, hy - 4.6 - fh * 0.55); c.quadraticCurveTo(fx + 1.2, hy - 4.6 - fh * 0.3, fx + 1, hy - 4.6); c.closePath(); c.fill(); }
+  else if (k === 'kidneys') for (i = 0; i < 4; i++) { c.save(); c.translate(hx - 7 + i * 4.8, hy - 7.4 - (i % 2) * 3.4); c.rotate(0.5 + i); c.fillStyle = pc[0]; c.beginPath(); c.moveTo(-1.2, -1.8); c.bezierCurveTo(2.4, -2.4, 2.6, 2.4, -1.2, 1.8); c.bezierCurveTo(-2.4, 1.6, -0.6, 0.4, -0.6, 0); c.bezierCurveTo(-0.6, -0.4, -2.4, -1.6, -1.2, -1.8); c.fill(); c.restore(); }
+  else if (k === 'stones') for (i = 0; i < 6; i++) { c.fillStyle = pc[i % 2]; c.beginPath(); c.arc(hx - 8 + i * 3.3, hy - 7 - (i % 3) * 2.2, 1.2 + (i % 2) * 0.5, 0, TAU); c.fill(); }
+  else if (k === 'stripes') { c.strokeStyle = pc[0]; c.lineWidth = 1.7; c.beginPath(); for (i = -4; i <= 4; i++) { c.moveTo(hx + i * 4 - 6, hy - 2); c.lineTo(hx + i * 4 + 6, hy - 16); } c.stroke(); }
+}
+// hair: behind the head (drawn first), in front under the cap rim, and the whole top when there is no cap
+function drawHairBack(c, L, o, hx, hy, tail) {
+  var f = o.f, v = L.hairVol, hs = L.hairStyle;
+  if (hs === 'long') {
+    c.beginPath(); c.moveTo(hx - 10.2 * v, hy - 6); c.quadraticCurveTo(hx - 13 * v, hy + 6, hx - 11 * v + tail * 0.3, hy + 14); c.quadraticCurveTo(hx + tail * 0.3, hy + 16.5, hx + 11 * v + tail * 0.3, hy + 14); c.quadraticCurveTo(hx + 13 * v, hy + 6, hx + 10.2 * v, hy - 6); c.closePath(); c.fillStyle = L.hair; c.fill(); outline(c, 1.8);
+  } else if (hs === 'ponytail') {
+    var ax = hx - f * 9.4, ay = hy - 6.5, sw2 = o.moving ? Math.abs(o.step) * 1.6 : 0, tx = hx - f * 14.5 + tail * 0.6, ty = hy + 5.5 * v + sw2;
+    c.beginPath(); c.moveTo(ax, ay); c.quadraticCurveTo(hx - f * 16 * v, hy - 4, tx, ty); tube(c, null, 3.8 * v, L.hair, 1.4);
+    c.beginPath(); c.ellipse(tx, ty + 0.6, 2.6 * v, 3.2 * v, 0, 0, TAU); c.fillStyle = L.hair; c.fill(); outline(c, 1.3);
+    c.beginPath(); c.arc(ax - f * 0.6, ay + 0.6, 1.5, 0, TAU); c.fillStyle = L.hairTie; c.fill(); outline(c, 1);
+  } else if (hs === 'bun') {
+    c.beginPath(); c.arc(hx - f * 8.2, hy - 9.4, 4.4 * v, 0, TAU); c.fillStyle = L.hair; c.fill(); outline(c, 1.8);
+    c.strokeStyle = L.hairLine; c.lineWidth = 0.9; c.beginPath(); c.arc(hx - f * 8.2, hy - 9.4, 2.2 * v, 0.4, 4.2); c.stroke();
+  } else if (hs === 'curls') {
+    for (var k = 0; k < CURLS_BACK.length; k += 2) { c.beginPath(); c.arc(hx - f * CURLS_BACK[k] * v, hy + CURLS_BACK[k + 1] * v, 3.8 * v, 0, TAU); c.fillStyle = L.hair; c.fill(); outline(c, 1.5); }
+  }
+}
+var CURLS_BACK = [9.8, -5.6, 11.4, -1.4, 10.8, 3, 8.4, 6.6], CURLS_TOP = [-9.6, -2.6, -8.8, -7.2, -5.6, -10.6, -1.2, -12, 3.4, -11.4, 7.4, -8.8, 9.8, -4.6];
+function drawHairFront(c, L, o, hx, hy) {
+  var f = o.f, hs = L.hairStyle, v = L.hairVol, k;
+  if (hs === 'covered') return;
+  c.fillStyle = L.hair;
+  if (hs === 'crop') { roundRect(c, hx - f * 8.4 - 1.2, hy - 5.2, 2.4, 4.8, 1); c.fill(); outline(c, 0.9); }   // a sideburn
+  else if (hs === 'curls') { for (k = 0; k < 3; k++) { c.beginPath(); c.arc(hx + f * (-5 + k * 3.6), hy - 4.6 + (k % 2) * 0.6, 1.9 * v, 0, TAU); c.fill(); outline(c, 1); } c.beginPath(); c.arc(hx - f * 8.8, hy - 2.6, 2.1 * v, 0, TAU); c.fill(); outline(c, 1); }
+  else {   // a fringe under the cap rim; long hair also frames the face with a lock in front of the ear
+    c.beginPath(); c.moveTo(hx - 9.4, hy - 5.4); c.quadraticCurveTo(hx - f * 2, hy - 1.8, hx + 8.8, hy - 5.6); c.quadraticCurveTo(hx, hy - 4.6, hx - 9.4, hy - 5.4); c.closePath(); c.fill(); outline(c, 1);
+    if (hs === 'long') { c.beginPath(); c.moveTo(hx - f * 9.8, hy - 5); c.quadraticCurveTo(hx - f * 11.6 * v, hy + 3, hx - f * 9.6, hy + 9.4); c.lineTo(hx - f * 7.6, hy + 7.4); c.quadraticCurveTo(hx - f * 9, hy + 1, hx - f * 7.4, hy - 5); c.closePath(); c.fill(); outline(c, 1.2); }
+  }
+}
+function drawHairTop(c, L, o, hx, hy) {
+  var f = o.f, hs = L.hairStyle, v = L.hairVol, k;
+  if (hs === 'covered') { c.fillStyle = 'rgba(255,255,255,0.32)'; c.beginPath(); c.ellipse(hx + f * 2.4, hy - 7.2, 3.2, 1.6, f * -0.3, 0, TAU); c.fill(); return; }   // bald: a shine
+  if (hs === 'curls') { for (k = 0; k < CURLS_TOP.length; k += 2) { c.beginPath(); c.arc(hx + f * CURLS_TOP[k] * v, hy + CURLS_TOP[k + 1] * v - 0.6, 3.7 * v, 0, TAU); c.fillStyle = L.hair; c.fill(); outline(c, 1.4); } return; }
+  // a cap of hair hugging the skull with a hairline over the brow (crop, ponytail, bun, long)
+  var top = hs === 'crop' ? 0 : 0.8;
+  c.beginPath(); c.ellipse(hx, hy - 3.8, 11 + top, 8.6 + top, 0, Math.PI, 0); c.quadraticCurveTo(hx + f * 3, hy - 6.6, hx - f * 1, hy - 3.4); c.quadraticCurveTo(hx - f * 6, hy - 6.4, hx - 11 - top, hy - 3.8); c.closePath(); c.fillStyle = L.hair; c.fill(); outline(c, 1.8);
+  c.strokeStyle = L.hairLine; c.lineWidth = 0.9; c.beginPath();
+  if (hs === 'crop') { for (k = 0; k < 4; k++) { c.moveTo(hx - 6 + k * 4, hy - 10.6 + (k % 2)); c.lineTo(hx - 5 + k * 4, hy - 8.2); } }
+  else { c.moveTo(hx - f * 2, hy - 12); c.quadraticCurveTo(hx - f * 1, hy - 8, hx - f * 1.6, hy - 4.6); }   // a parting
+  c.stroke();
+  if (hs === 'ponytail') { c.beginPath(); c.arc(hx - f * 9.8, hy - 6, 1.5, 0, TAU); c.fillStyle = L.hairTie; c.fill(); outline(c, 1); }
+}
 function drawHeadlamp(c) {
-  var len = 250, half = 0.42, cold = hasBoon('coldlight');
+  var len = 250, half = 0.42, cold = hasBoon('coldlight'), L = heroLook(), c0 = L.cone, c1 = L.coneEnd;
+  if (L.rainbow) { var rk = Math.floor(G.realTime * 10) % RAINBOW.cone.length; c0 = RAINBOW.cone[rk]; c1 = RAINBOW.coneEnd[rk]; }
   c.save(); c.beginPath(); c.moveTo(P.x, P.y); c.arc(P.x, P.y, len, P.aim - half, P.aim + half); c.closePath();
-  var g = c.createRadialGradient(P.x, P.y, 10, P.x, P.y, len); g.addColorStop(0, cold ? 'rgba(200,240,255,0.16)' : 'rgba(255,250,220,0.09)'); g.addColorStop(1, 'rgba(255,250,220,0)'); c.fillStyle = g; c.fill(); c.restore();
+  var g = c.createRadialGradient(P.x, P.y, 10, P.x, P.y, len); g.addColorStop(0, cold ? 'rgba(200,240,255,0.16)' : c0); g.addColorStop(1, cold ? 'rgba(255,250,220,0)' : c1); c.fillStyle = g; c.fill(); c.restore();
 }
 /* ── weapon fx ── */
 function drawWeaponFx(c) {
@@ -7515,8 +7749,9 @@ function drawWeaponDetail(c, w, rct) {
   c.restore();
 }
 function drawHUD(c) {
-  // HP
-  var hpw = 190, hx = 16, hy = 14; c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, hx - 2, hy - 2, hpw + 4, 20, 8); c.fill();
+  // the portrait (who you are and what you wear, §17c), then HP
+  drawHudPortrait(c, 28, 22, 15);
+  var hpw = 190, hx = 50, hy = 14; c.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(c, hx - 2, hy - 2, hpw + 4, 20, 8); c.fill();
   var frac = clamp(P.hp / P.maxHp, 0, 1); c.fillStyle = frac > 0.5 ? '#5df07a' : frac > 0.25 ? '#ffd166' : '#ff4d6d'; roundRect(c, hx, hy, Math.max(6, hpw * frac), 16, 6); c.fill();
   if (P.flash > 0) { c.fillStyle = 'rgba(255,255,255,0.5)'; roundRect(c, hx, hy, hpw, 16, 6); c.fill(); }
   text(c, 'HP ' + Math.ceil(P.hp) + ' / ' + P.maxHp, hx + 8, hy + 8, 12, '#fff', 'left');
@@ -7972,6 +8207,9 @@ function openSummary(won, xp, newLevel, isBest, cme) {
   var ml = []; for (var mw = 0; mw < G.weapons.length; mw++) { var ww = G.weapons[mw], ids = ww.modIds.concat(ww.capstone ? [ww.capstone] : []); for (var mi = 0; mi < ids.length; mi++) ml.push('<span class="tag ' + (MODS[ids[mi]].capstone ? 'capstone' : 'br-' + MODS[ids[mi]].branch) + '">' + esc(MODS[ids[mi]].name) + '</span>'); }
   $('sumLoad').innerHTML = '<div><h3>Instruments</h3>' + wl.join(' ') + '</div><div style="margin-top:8px"><h3>Boons</h3>' + (bl.length ? bl.join(' ') : '<span class="hint">none</span>') + '</div>' + (ml.length ? '<div style="margin-top:8px"><h3>Mods</h3>' + ml.join(' ') + '</div>' : '');
   $('sumXp').textContent = '+' + xp + ' XP' + (newLevel ? ' · LEVEL UP → PGY-' + newLevel + '!' : '') + (isBest ? ' · NEW BEST RUN' : '');
+  try { drawBust($('sumHero').getContext('2d'), heroLook(), 144, !won); } catch (e) {}   // the surgeon, as they look (§17c)
+  var fresh = wardrobeFresh(), fn = []; for (var fi = 0; fi < fresh.length; fi++) fn.push(freshName(fresh[fi]));
+  $('sumWard').textContent = fn.length ? 'New in the wardrobe: ' + fn.join(', ') + ' (the scrub cabinet in the call room)' : '';
   $('sumCme').textContent = cme && cme.total ? '+' + cme.total + ' CME for the call room (' + cme.parts.join(' · ') + ') · ' + META.hub.cme + ' in all' : 'No CME this time: clear a room and the call room gets paid.';
 }
 
@@ -8243,7 +8481,8 @@ function hubBuild() {
   station('locker', 'INSTRUMENT LOCKER', 86, 176, 54, openLocker); so.push({ type: 'rect', x: -40, y: HUB_Y - 60, w: 114, h: 274 - HUB_Y }); prop(214, drawHubLocker);
   station('charts', 'CHART RACK · BESTIARY', 86, 366, 54, openBestiary); so.push({ type: 'rect', x: -40, y: 334, w: 108, h: 64 }); prop(398, drawHubCharts);
   // east wall, below the door
-  station('scrubs', 'PAGER + SCRUB CABINET', 874, 392, 54, function () { openScrubs(); }); so.push({ type: 'rect', x: 892, y: 352, w: 110, h: 76 }); prop(428, drawHubScrubs);
+  station('scrubs', 'SCRUB CABINET · WARDROBE', 874, 392, 54, function () { openScrubs(); }); so.push({ type: 'rect', x: 892, y: 352, w: 110, h: 76 }); prop(428, drawHubScrubs);
+  station('mirror', 'MIRROR · WHO ARE YOU?', 870, 482, 44, function () { openMirror(false); }); so.push({ type: 'rect', x: 894, y: 476, w: 108, h: 40 }); prop(506, drawHubMirror);   // §17c
   // on the floor
   station('cart', 'PHARMACY CART', 330, 250, 52, openCart); so.push({ type: 'circle', x: 330, y: 250, r: 20 }); prop(262, drawHubCart);
   station('decor', 'DECOR CATALOG', 255, 424, 72, openDecor); so.push({ type: 'rect', x: 200, y: 408, w: 110, h: 34 }); prop(442, drawHubDesk);
@@ -8343,8 +8582,10 @@ function enterHub() {
   P = newPlayer(); P.x = 84; P.y = 270; P.aim = 0;
   HUB.near = null; HUB.bubble = null; HUB.panel = ''; HUB.doorAway = true; HUB.acc = 0; RUNOPT = null;
   hubBuild(); hubHoldTool(); hideScreens(); Snd.setMusicMode('hub');
-  if (HUB.lastRun && HUB.lastRun.total && !HUB.lastRun.seen) { HUB.lastRun.seen = true; hubToast('+' + HUB.lastRun.total + ' CME FROM THAT RUN'); }
+  var fresh = wardrobeFresh().length ? ' · NEW CLOTHES IN THE SCRUB CABINET' : '';
+  if (HUB.lastRun && HUB.lastRun.total && !HUB.lastRun.seen) { HUB.lastRun.seen = true; hubToast('+' + HUB.lastRun.total + ' CME FROM THAT RUN' + fresh); } else if (fresh) hubToast(fresh.slice(3), '#ffd166');
   META.hub.visits = (META.hub.visits || 0) + 1; saveMeta();
+  if (!META.hero.set && !HERO_NO_ASK) openMirror(true);   // the first time in: "Who are you?" (§17c)
 }
 // the surgeon carries the first instrument of the loadout around the room: the locker's choice, visible
 function hubHoldTool() { G.weapons = []; G.wIndex = 0; var l = hubLoadout(); try { G.weapons.push(makeWeapon(l[0], 'common')); } catch (e) { G.weapons = []; } }
@@ -8354,7 +8595,7 @@ function hubTalk(who) {
     META.hub.owned.pin_stickers = 1; HUB.dirty = true; HUB.bubble = { who: who, text: CHILDLIFE_GIFT, t: 2.6 + CHILDLIFE_GIFT.length * 0.05, dur: 2.6 + CHILDLIFE_GIFT.length * 0.05 };
     hubToast('STICKER CHART PIN · on the lanyard board'); Snd.sfx('jingle'); saveMeta(); return CHILDLIFE_GIFT;
   }
-  var line = hubLine(who).replace('{case}', hubCase().name.charAt(0) + hubCase().name.slice(1).toLowerCase());
+  var line = hubOutfitLine(who, !!n.rep) || hubLine(who).replace('{case}', hubCase().name.charAt(0) + hubCase().name.slice(1).toLowerCase());   // the cast notices what you wear (§17c)
   HUB.bubble = { who: who, text: line, t: 2.6 + line.length * 0.05, dur: 2.6 + line.length * 0.05 };
   Snd.sfx('pickup'); saveMeta(); return line;
 }
@@ -8368,11 +8609,12 @@ function hubHint(id) {
   if (id === 'decor') { for (k in HUB_DECOR) if (!h.owned[k] && h.cme >= HUB_DECOR[k].cost) return true; return false; }
   if (id === 'cart') return hubMetCount() > 0 && !(h.rx && h.rx.run === (META.runs || 0) && h.rx.pick);
   if (id === 'pins') return (hubMetCount() > 0 || pinOwned('stickers')) && !(h.pin && pinOwned(h.pin));
+  if (id === 'scrubs') return wardrobeFresh().length > 0;   // a deed unlocked something you have not looked at (§17c)
   if (id === 'board') { for (k = 0; k < HUB_CASES.length; k++) if (caseUnlocked(k) && !(h.bosses[HUB_CASES[k].boss] > 0) && hubCase() !== HUB_CASES[k]) return true; return false; }
   return false;
 }
 // where a station's marker floats: over a person's head, on the skirting board under something on the wall, above furniture
-function hubMarkY(s) { return s.npc || s.id === 'attending' ? s.y - 46 : s.id === 'coffee' ? HUB_Y - 62 : s.id === 'door' ? s.y - 86 : s.y < HUB_Y + 30 ? HUB_Y - 9 : s.y - 56; }
+function hubMarkY(s) { return s.id === 'mirror' ? s.y - 46 : s.npc || s.id === 'attending' ? s.y - 46 : s.id === 'coffee' ? HUB_Y - 62 : s.id === 'door' ? s.y - 86 : s.y < HUB_Y + 30 ? HUB_Y - 9 : s.y - 56; }
 function hubToast(t, color) { HUB.toast = { text: t, color: color || '#7dffb0', t: 2.6, dur: 2.6 }; }
 
 /* ── one step of the room (1/60 s): walk, roll, the janitor's round, which station is in reach, interact ── */
@@ -8589,10 +8831,11 @@ function drawHubScrubs(c) {
   roundRect(c, x, y, w, hh, 6); c.fillStyle = '#31475a'; c.fill(); outline(c, 3);
   c.fillStyle = '#131f29'; roundRect(c, x + 4, y + 18, w - 8, hh - 24, 4); c.fill();
   for (i = 0; i < SCRUBS.length; i++) {   // one folded stack per colour: grey until you can wear it, boxed if you are
-    var sx = x + 7 + (i % 2) * 17, sy = y + 23 + Math.floor(i / 2) * 27, on = scrubUnlocked(i);
-    c.fillStyle = on ? SCRUBS[i] : '#4a4f55'; roundRect(c, sx, sy, 15, 20, 3); c.fill(); outline(c, 1.6); c.strokeStyle = 'rgba(26,18,24,0.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(sx + 1, sy + 7); c.lineTo(sx + 14, sy + 7); c.moveTo(sx + 1, sy + 13); c.lineTo(sx + 14, sy + 13); c.stroke();
-    if (on && i === cur) { c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.strokeRect(sx - 1.5, sy - 1.5, 18, 23); }
+    var sx = x + 6 + (i % 3) * 12, sy = y + 23 + Math.floor(i / 3) * 27, on = scrubUnlocked(i);
+    c.fillStyle = on ? SCRUBS[i] : '#4a4f55'; roundRect(c, sx, sy, 10, 20, 2.5); c.fill(); outline(c, 1.4); c.strokeStyle = 'rgba(26,18,24,0.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(sx + 1, sy + 7); c.lineTo(sx + 9, sy + 7); c.moveTo(sx + 1, sy + 13); c.lineTo(sx + 9, sy + 13); c.stroke();
+    if (on && i === cur) { c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.strokeRect(sx - 1.5, sy - 1.5, 13, 23); }
   }
+  if (setUnlocked('plague')) { c.fillStyle = '#2a2530'; c.beginPath(); c.ellipse(x + 23, y + 1, 17, 3.6, 0, 0, TAU); c.fill(); outline(c, 1.8); roundRect(c, x + 16, y - 9, 14, 10, 3); c.fill(); outline(c, 1.8); }   // the plague hat lives on top
   roundRect(c, x + 13, y + 4, 20, 11, 3); c.fillStyle = '#1a1e24'; c.fill(); outline(c, 2); c.fillStyle = '#7ad7ff'; c.fillRect(x + 16, y + 7, 9, 5);   // the pager, never quiet for long
   c.fillStyle = blink ? '#ff4d6d' : '#5a1a26'; c.beginPath(); c.arc(x + 29, y + 9.5, 1.8, 0, TAU); c.fill();
   if (blink) { c.strokeStyle = 'rgba(255,77,109,0.6)'; c.lineWidth = 1.4; c.beginPath(); c.arc(x + 29, y + 9.5, 5, -1.2, 0.2); c.stroke(); c.beginPath(); c.arc(x + 29, y + 9.5, 8, -1.2, 0.2); c.stroke(); }
@@ -8758,7 +9001,7 @@ function hubPanel(id, title, sub) {
   if (fresh) { try { $('ov-hub').scrollTop = 0; $('ov-hub').firstElementChild.scrollTop = 0; } catch (e) {} }
   return $('hubBody');
 }
-function hubClose() { HUB.panel = ''; saveMeta(); if (G.sim) { leaveSim(false); return; } if (G.screen === 'hub') hideScreens(); else showTitle(); }
+function hubClose() { if (HUB.panel === 'mirror') heroConfirm(); if (HUB.panel === 'scrubs') { HUB.tryOn = null; HUB.tryScrub = -1; HUB.prevLook = null; } HUB.panel = ''; saveMeta(); if (G.sim) { leaveSim(false); return; } if (G.screen === 'hub') hideScreens(); else showTitle(); }
 function hubBtn(label, cls, fn) { var b = el('button', 'btn' + (cls ? ' ' + cls : ''), label); b.type = 'button'; b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); fn(ev); }); return b; }
 function hubPips(n, max) { var s = ''; for (var i = 0; i < max; i++) s += i < n ? '●' : '○'; return s; }
 function hubSpend(cost) { var h = META.hub; if (!(cost >= 0) || h.cme < cost) { Snd.sfx('tink'); return false; } h.cme -= cost; Snd.sfx('buy'); return true; }
@@ -8767,7 +9010,8 @@ function hubBuy(id) {
   var h = META.hub, d, lv;
   if (HUB_PERKS[id]) { d = HUB_PERKS[id]; lv = hubPerk(id); if (lv >= d.max || !hubSpend(d.cost[lv])) return false; h.perks[id] = lv + 1; hubToast(d.name.toUpperCase() + ' · LEVEL ' + (lv + 1)); }
   else if (HUB_DECOR[id]) { d = HUB_DECOR[id]; if (h.owned[id] || !hubSpend(d.cost)) return false; h.owned[id] = 1; h.decor[d.slot] = id; hubToast(d.name.toUpperCase() + ' DELIVERED'); if (G.screen === 'hub') hubBuild(); }
-  else if (/^scrub[1-5]$/.test(id)) { var si = +id.charAt(5); if (scrubUnlocked(si) || !hubSpend(SCRUB_COST)) return false; h.owned[id] = 1; SET.scrub = si; hubToast(SCRUB_NAMES[si] + ' SCRUBS'); }
+  else if (WARDROBE[id] || WARDROBE_SETS[id]) return wardrobeBuy(id);   // the wardrobe (§17c)
+  else if (/^scrub[1-9]$/.test(id) && +id.charAt(5) < SCRUBS.length) { var si = +id.charAt(5); if (scrubUnlocked(si) || !hubSpend(SCRUB_COST)) return false; h.owned[id] = 1; SET.scrub = si; hubToast(SCRUB_NAMES[si] + ' SCRUBS'); }
   else return false;
   HUB.dirty = true; saveMeta(); return true;
 }
@@ -8888,21 +9132,6 @@ function openCoffee(keep) {
   body.appendChild(cards);
   if (!esp) body.appendChild(el('p', 'hint', 'The decor catalog sells an espresso machine. It would do better than this.'));
 }
-function openScrubs(keep) {
-  var body, cards = el('div', 'cards');
-  if (!keep) HUB.pagerLine = hubLine('pager');
-  body = hubPanel('scrubs', 'Pager + scrub cabinet', 'Scrub colours are cosmetic. New ones come with residency level, or early for ' + SCRUB_COST + ' CME each.');
-  body.appendChild(el('div', 'bubble', '<b>PAGER:</b> ' + esc(HUB.pagerLine)));
-  for (var i = 0; i < SCRUBS.length; i++) (function (i) {
-    var on = scrubUnlocked(i), sel = on && (SET.scrub || 0) === i, card = el('button', 'card' + (sel ? ' picked' : '')); card.type = 'button'; card.setAttribute('data-scrub', String(i));
-    var sw = el('div', 'swatch'); sw.style.background = SCRUBS[i]; if (!on) sw.style.opacity = '0.4'; card.appendChild(sw);
-    card.appendChild(el('h4', '', SCRUB_NAMES[i]));
-    card.appendChild(el('div', '', sel ? '<span class="tag sel">WEARING</span>' : on ? '<span class="tag">tap to wear</span>' : '<span class="tag locked">PGY-' + scrubNeed(i) + ' · or ' + SCRUB_COST + ' CME</span>'));
-    card.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); if (on) { SET.scrub = i; saveMeta(); Snd.sfx('swap'); } else hubBuy('scrub' + i); openScrubs(true); });
-    cards.appendChild(card);
-  })(i);
-  body.appendChild(cards);
-}
 function openCaseBoard() {
   var h = META.hub, body = hubPanel('board', 'Case board', 'Today’s case decides the dungeon and the boss behind its last door. A case opens once the one above it is beaten.'), cur = hubCase();
   for (var i = 0; i < HUB_CASES.length; i++) (function (i) {
@@ -8948,6 +9177,475 @@ function hubState() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   §17c THE LOCKER ROOM — who you are (the mirror) and what you wear (the wardrobe); roadmap Step 5. Cosmetic only:
+   no item, build or colour changes a hitbox (P.r 13 at the chest) or any gameplay number.
+     META.hero = { build, skin, hairStyle, hairColor, set }. A build is the same rig drawn with a different silhouette
+   (shoulders, waist, hair volume, lashes, brows). `set` turns true once "Who are you?" has been answered: it opens the
+   first time you walk into the Call Room, and the mirror by the scrub cabinet reopens it.
+     META.wardrobe = { owned, equipped: { outfit, cap, coat, mask, lamp, neck }, sepia, deeds, heard, heardN, seen }.
+   Items (WARDROBE) are bought with CME at the scrub cabinet; some also unlock by a deed (WARDROBE_DEEDS: Young's favour,
+   Fournier's beaten, a room of nothing but stones, PGY-6, a run that ended with continence lost) and sets (WARDROBE_SETS:
+   the retro surgeon, the plague doctor) are bought and worn together. Scrub colours stay where they were (SCRUBS,
+   SET.scrub, META.hub.owned.scrubN). The rig reads one resolved look (resolveLook); heroLook() caches it and only
+   rebuilds it when something it depends on changes, so a frame allocates nothing for it.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+var HERO_BUILDS = {
+  male:    { name: 'Male', sh: 10.8, hem: 12.6, tw: 6.3, waist: 0, lash: 0, brow: 2.1, vol: 0.9 },
+  female:  { name: 'Female', sh: 8.6, hem: 13.6, tw: 5.3, waist: 0.9, lash: 1, brow: 1.3, vol: 1.15 },
+  neutral: { name: 'Neutral', sh: 9.5, hem: 12.5, tw: 5.6, waist: 0, lash: 0, brow: 1.5, vol: 1 }
+};
+var HERO_BUILD_ORDER = ['male', 'female', 'neutral'];
+var HERO_SKINS = ['#fde3cf', '#f4c89a', '#e6b287', '#cf986a', '#b07849', '#8d5735', '#6a3d24', '#472717'];   // index 1 is the original look
+var HERO_HAIRS = { covered: 'Covered / bald', crop: 'Short crop', ponytail: 'Ponytail', bun: 'Bun', curls: 'Curls', long: 'Long' };
+var HERO_HAIR_ORDER = ['covered', 'crop', 'ponytail', 'bun', 'curls', 'long'];
+var HERO_HAIR_COLORS = ['#1d1612', '#3d2618', '#6b4329', '#93421f', '#d07a34', '#e3c26c', '#a9aeb5', '#ece8de', '#2fe0c8', '#ff5fb0'];
+var HERO_HAIR_COLOR_NAMES = ['Black', 'Dark brown', 'Brown', 'Auburn', 'Ginger', 'Blonde', 'Grey', 'White', 'Hospital teal', 'Highlighter pink'];
+var WARDROBE_SLOTS = ['outfit', 'cap', 'coat', 'mask', 'lamp', 'neck'];
+var WARDROBE_SLOT_NAMES = { outfit: 'Outfit', cap: 'Caps', coat: 'Coats', mask: 'Masks', lamp: 'Headlamps', neck: 'Extras' };
+// every item: its slot, its CME price (0 = free, always yours), a deed that also unlocks it, or the set it belongs to
+var WARDROBE = {
+  scrubs:        { slot: 'outfit', name: 'Scrubs', cost: 0, desc: 'The uniform. The colour is yours: pick it above.' },
+  lead_apron:    { slot: 'outfit', name: 'Lead apron + thyroid shield', cost: 40, deed: 'stones', desc: 'The fluoroscopy classic: grey, heavy and a size too big. In the call room it protects you from nothing.' },
+  retro_gown:    { slot: 'outfit', set: 'retro', name: 'Retro gown + rubber gloves', desc: 'A long white gown and amber rubber gloves, straight out of an old black-and-white photograph.' },
+  plague_coat:   { slot: 'outfit', set: 'plague', name: 'Plague doctor’s coat', desc: 'Long, dark, waxed and gloved. A historical costume, worn for laughs.' },
+  cap_solid:     { slot: 'cap', name: 'Scrub cap', cost: 0, desc: 'Matches your scrubs. Tie at the back, dignity at the front.' },
+  cap_none:      { slot: 'cap', name: 'No cap', cost: 0, desc: 'Show the hair. Infection control would like a word.' },
+  cap_bouffant:  { slot: 'cap', name: 'Bouffant cap', cost: 15, desc: 'Holds every hair you have. Rustles when you think.' },
+  cap_ducks:     { slot: 'cap', name: 'Skull cap: rubber ducks', cost: 15, print: 'ducks', base: '#2aa5a0', pc: ['#ffd93b', '#ff9f43'], desc: 'Small yellow ducks. Morale-positive.' },
+  cap_flames:    { slot: 'cap', name: 'Skull cap: flames', cost: 15, print: 'flames', base: '#2b2b33', pc: ['#ff7a2a', '#ffd166'], desc: 'For the resident who cauterizes first and asks never.' },
+  cap_kidneys:   { slot: 'cap', name: 'Skull cap: little kidneys', cost: 15, print: 'kidneys', base: '#33449a', pc: ['#f59fae', '#f59fae'], desc: 'Beans. Medical beans.' },
+  cap_stones:    { slot: 'cap', name: 'Skull cap: stones', cost: 15, print: 'stones', base: '#e2cc8c', pc: ['#7f98b2', '#a77a4c'], desc: 'Calcium oxalate, tastefully arranged.' },
+  cap_stripes:   { slot: 'cap', name: 'Skull cap: stripes', cost: 10, print: 'stripes', base: '#f4f7fb', pc: ['#ff4d6d', '#ff4d6d'], desc: 'Candy stripes, like a very confident peppermint.' },
+  cap_mirror:    { slot: 'cap', set: 'retro', name: 'Cloth cap + head mirror', desc: 'The headlamp before headlamps: a round mirror on a band, aimed at a gas lamp.' },
+  cap_plague:    { slot: 'cap', set: 'plague', name: 'Wide-brimmed hat', desc: 'Your headlamp becomes a little lantern hanging from the brim.' },
+  cap_shame:     { slot: 'cap', name: 'Surgeon’s cap of shame', cost: 20, deed: 'leak', desc: 'Tall, floppy, faintly damp, with a little bell. Earned by a run that ended with continence lost.' },
+  coat_short:    { slot: 'coat', name: 'Resident coat', cost: 0, desc: 'Short, white, pockets full of folded lists.' },
+  coat_none:     { slot: 'coat', name: 'No coat', cost: 0, desc: 'Just the outfit. Brave, in a hospital this cold.' },
+  coat_tag:      { slot: 'coat', name: 'Embroidered coat', cost: 15, desc: 'The resident coat with your name stitched over the pocket, misspelled with love.' },
+  coat_long:     { slot: 'coat', name: 'Attending coat', cost: 60, deed: 'pgy6', desc: 'Long, starched, faintly judgmental. Free once you reach PGY-6.' },
+  mask_surgical: { slot: 'mask', name: 'Surgical mask', cost: 0, desc: 'Pleated, blue, standard issue.' },
+  mask_none:     { slot: 'mask', name: 'No mask', cost: 0, desc: 'A face! With a smile on it, mostly.' },
+  mask_loupes:   { slot: 'mask', name: 'Loupes', cost: 25, desc: 'Magnifying surgical glasses with a shiny lens glint (and the mask, still). Everything looks closer, deadlines included.' },
+  mask_gauze:    { slot: 'mask', set: 'retro', name: 'Gauze mask', desc: 'A round pad of many-layered gauze on ties.' },
+  mask_beak:     { slot: 'mask', set: 'plague', name: 'Beaked mask', desc: 'Red-glass goggles and a long beak that points wherever you face. It hits nothing.' },
+  lamp_white:    { slot: 'lamp', name: 'Standard headlamp', cost: 0, lamp: 'white', desc: 'A cool white light, as issued.' },
+  lamp_warm:     { slot: 'lamp', name: 'Warm headlamp', cost: 10, lamp: 'warm', desc: 'Amber and cosy: every stone looks like a sunset.' },
+  lamp_teal:     { slot: 'lamp', name: 'Teal headlamp', cost: 15, lamp: 'teal', desc: 'Aquarium light. The fish in the call room approve.' },
+  lamp_rainbow:  { slot: 'lamp', name: 'Rainbow strobe', cost: 25, lamp: 'rainbow', desc: 'Cycles through every colour, slowly. A party on your forehead.' },
+  neck_none:     { slot: 'neck', name: 'Nothing', cost: 0, desc: 'Nothing round your neck. Freedom.' },
+  neck_lanyard:  { slot: 'neck', name: 'Lanyard', cost: 10, desc: 'A badge that shows your best residency year. It opens no doors.' },
+  neck_scope:    { slot: 'neck', name: 'Stethoscope', cost: 15, desc: 'Draped round the neck. Mostly decorative, like most stethoscopes.' }
+};
+var WARDROBE_SETS = {
+  retro:  { name: 'Retro surgeon', cost: 70, deed: 'young', pieces: ['retro_gown', 'mask_gauze', 'cap_mirror'], desc: 'Gown, gauze mask, cloth cap and head mirror, from the early-1900s photographs. Also unlocks the old-photograph look.' },
+  plague: { name: 'Plague doctor', cost: 80, deed: 'fournier', pieces: ['plague_coat', 'mask_beak', 'cap_plague'], desc: 'Coat, beak and hat. Pure comedy; the beak reaches nobody.' }
+};
+var WARDROBE_DEEDS = {
+  young:    'Win Young’s favour: take two of his boons in one run',
+  fournier: 'Beat Fournier’s gangrene',
+  stones:   'Clear a room of nothing but stones, or win Nitze’s favour',
+  pgy6:     'Reach PGY-6',
+  leak:     'Finish a run with continence lost'
+};
+var LAMPS = {
+  white: { lens: '#fff6c8', glow: 'rgba(255,246,200,0.2)', cone: 'rgba(255,250,220,0.09)', coneEnd: 'rgba(255,250,220,0)' },
+  warm:  { lens: '#ffc46b', glow: 'rgba(255,190,100,0.26)', cone: 'rgba(255,196,110,0.1)', coneEnd: 'rgba(255,196,110,0)' },
+  teal:  { lens: '#8ff7ea', glow: 'rgba(120,255,235,0.24)', cone: 'rgba(130,255,235,0.085)', coneEnd: 'rgba(130,255,235,0)' }
+};
+var RAINBOW = (function () { var o = { lens: [], glow: [], cone: [], coneEnd: [] }; for (var i = 0; i < 24; i++) { var h = i * 15; o.lens.push('hsl(' + h + ',100%,72%)'); o.glow.push('hsla(' + h + ',100%,70%,0.26)'); o.cone.push('hsla(' + h + ',100%,72%,0.1)'); o.coneEnd.push('hsla(' + h + ',100%,72%,0)'); } return o; })();
+
+/* ── the look: everything the rig needs, resolved once ── */
+function sepiaHex(hex) {   // the old photograph: a sepia print, a little faded toward the paper
+  var h = hex.replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var n = parseInt(h, 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  var R = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189) * 0.86 + 26, G2 = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168) * 0.86 + 21, B2 = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131) * 0.86 + 14;
+  return '#' + ((1 << 24) | (Math.round(Math.min(255, R)) << 16) | (Math.round(Math.min(255, G2)) << 8) | Math.round(Math.min(255, B2))).toString(16).slice(1);
+}
+function resolveLook(h, eq, scrubIdx, sepia) {
+  function sp(x) { return sepia ? sepiaHex(x) : x; }
+  function item(slot) { var id = eq[slot], d = WARDROBE[id]; return d && d.slot === slot ? id : WARDROBE_DEFAULT[slot]; }
+  var B = HERO_BUILDS[h.build] || HERO_BUILDS.neutral, ids = { outfit: item('outfit'), cap: item('cap'), coat: item('coat'), mask: item('mask'), lamp: item('lamp'), neck: item('neck') };
+  var L = { sepia: !!sepia, build: B, ids: ids, pc: [], print: null, capDots: false, capCrease: null, robe: null, apron: null, coat: null, coatTag: false, rainbow: false };
+  var scrub = sp(SCRUBS[scrubIdx] || SCRUBS[0]), skin = sp(HERO_SKINS[h.skin] || SKIN), hair = sp(HERO_HAIR_COLORS[h.hairColor] || HERO_HAIR_COLORS[1]);
+  L.skin = skin; L.skinRim = shade(skin, 0.28); L.hand = skin;
+  L.hair = hair; L.hairLine = shade(hair, -0.4); L.hairTie = sp('#ff6b8a'); L.hairStyle = HERO_HAIRS[h.hairStyle] ? h.hairStyle : 'covered'; L.hairVol = B.vol; L.hairHidden = ids.cap === 'cap_bouffant';
+  // outfit
+  L.scrub = scrub; L.scrubLite = shade(scrub, 0.32); L.legs = shade(scrub, -0.38); L.shoe = sp('#e9eef4'); L.badge = sp('#ffffff'); L.badgeDot = sp('#ff4d6d');
+  if (ids.outfit === 'retro_gown') { var gown = sp('#f2eee2'); L.robe = gown; L.robeKind = 'retro'; L.robeLine = sepia ? 'rgba(110,86,56,0.45)' : 'rgba(120,100,70,0.45)'; L.legs = shade(gown, -0.14); L.shoe = sp('#2b2622'); L.hand = sp('#c98b4a'); }
+  else if (ids.outfit === 'plague_coat') { L.robe = sp('#3b3445'); L.robeRim = sepia ? 'rgba(240,220,180,0.45)' : 'rgba(200,190,230,0.5)'; L.robeKind = 'plague'; L.robeLine = 'rgba(0,0,0,0.5)'; L.robeButton = sp('#b8955a'); L.legs = sp('#26222b'); L.shoe = sp('#3a2e28'); L.hand = sp('#3b302a'); }
+  else if (ids.outfit === 'lead_apron') { var ap = sp('#7f8892'); L.apron = ap; L.apronLine = shade(ap, -0.32); L.apronTab = sp('#3a4048'); }
+  // coat
+  var base = L.robe || scrub;
+  if (ids.coat === 'coat_none') { L.sleeve = base; L.sleeveFar = shade(base, -0.12); }
+  else if (ids.coat === 'coat_long') { var lc = sp('#f7f3e8'); L.coat = lc; L.coatLen = 15.6; L.sleeve = lc; L.sleeveFar = shade(lc, -0.09); }
+  else { L.coat = sp(COAT); L.coatLen = 10.5; L.sleeve = L.coat; L.sleeveFar = sp('#dfe6ee'); L.coatTag = ids.coat === 'coat_tag'; L.thread = sp('#3b5bdb'); }
+  // neck
+  L.neck = ids.neck === 'neck_lanyard' ? 'lanyard' : ids.neck === 'neck_scope' ? 'scope' : ''; L.strapCol = sp('#1f8fb0'); L.scopeTube = sp('#56606c'); L.scopeBell = sp('#cfd8e2'); L.pgy = residencyLevel();
+  // face and mask
+  L.eyeW = sp('#ffffff'); L.pupil = OUTLINE; L.brow = OUTLINE; L.blush = sepia ? 'rgba(170,120,80,0.22)' : 'rgba(255,120,120,0.28)';
+  L.maskKind = ids.mask === 'mask_none' ? 'none' : ids.mask === 'mask_loupes' ? 'loupes' : ids.mask === 'mask_gauze' ? 'gauze' : ids.mask === 'mask_beak' ? 'beak' : 'surgical';
+  L.maskCol = sp('#c4e6ff'); L.strap = sp('#8fb6d6'); L.pleat = sepia ? 'rgba(110,90,60,0.45)' : 'rgba(60,110,150,0.5)';
+  if (L.maskKind === 'gauze') { L.maskCol = sp('#f3efe4'); L.strap = sp('#cfc6b0'); L.pleat = 'rgba(140,120,90,0.45)'; }
+  L.loupeFrame = OUTLINE; L.loupeBarrel = sp('#3a4350'); L.loupeGlass = sepia ? 'rgba(230,210,170,0.6)' : 'rgba(160,220,255,0.55)';
+  L.goggle = sepia ? 'rgba(150,110,70,0.75)' : 'rgba(220,60,60,0.62)'; L.goggleRim = sp('#8a6a3a'); L.beak = sp('#e2d3b0'); L.beakLine = sp('#9b8458');
+  // cap
+  var cd = WARDROBE[ids.cap];
+  L.capKind = ids.cap === 'cap_none' ? 'none' : ids.cap === 'cap_bouffant' ? 'bouffant' : ids.cap === 'cap_plague' ? 'hat' : ids.cap === 'cap_shame' ? 'shame' : 'skull';
+  L.cap = scrub; L.capLite = L.scrubLite;
+  if (ids.cap === 'cap_solid') L.capDots = true;
+  else if (cd.print) { L.cap = sp(cd.base); L.capLite = shade(L.cap, 0.3); L.print = cd.print; L.pc = [sp(cd.pc[0]), sp(cd.pc[1])]; }
+  else if (ids.cap === 'cap_mirror') { L.cap = sp('#ece8dc'); L.capLite = shade(L.cap, 0.5); L.capCrease = 'rgba(120,100,70,0.45)'; }
+  else if (ids.cap === 'cap_bouffant') { L.cap = sp('#9fd0f2'); L.capLite = 'rgba(255,255,255,0.6)'; }
+  else if (ids.cap === 'cap_shame') { L.cap = sp('#ffe14a'); L.capLite = shade(L.cap, 0.4); L.pc = [sp('#4fb8ff'), sp('#ffb630')]; }
+  L.hat = sp('#363040'); L.hatBand = sp('#6b4a32'); L.hatLite = 'rgba(220,210,255,0.3)';
+  // headlamp
+  var lk = WARDROBE[ids.lamp].lamp, lp = LAMPS[lk] || LAMPS.white;
+  L.rainbow = lk === 'rainbow' && !sepia;
+  L.lens = sp(lp.lens); L.lampGlow = sepia ? 'rgba(240,215,170,0.22)' : lp.glow; L.cone = sepia ? 'rgba(240,220,180,0.09)' : lp.cone; L.coneEnd = sepia ? 'rgba(240,220,180,0)' : lp.coneEnd;
+  L.lampKind = ids.cap === 'cap_plague' ? 'lantern' : ids.cap === 'cap_mirror' ? 'mirror' : 'lamp';
+  L.lampBody = sp(L.lampKind === 'lantern' ? '#8a6a3a' : L.lampKind === 'mirror' ? '#d6e0e8' : '#dfe7ef'); L.band = sp(L.lampKind === 'mirror' ? '#bfb6a0' : '#2b3a4c');
+  // afterimages of a roll: the coat (or the robe, or the apron) and the outfit
+  L.after1 = L.coat || L.robe || L.apron || scrub; L.after2 = L.robe || scrub;
+  return L;
+}
+var LOOK = null, LOOK_REV = 0;
+function heroLook() {
+  var h = META.hero, w = META.wardrobe, e = w.equipped, sc = scrubIndex(), L = LOOK;
+  if (L && L._rev === LOOK_REV && L._b === h.build && L._sk === h.skin && L._hs === h.hairStyle && L._hc === h.hairColor && L._sc === sc && L._sp === w.sepia
+    && L._o === e.outfit && L._c === e.cap && L._co === e.coat && L._m === e.mask && L._l === e.lamp && L._n === e.neck) return L;
+  L = LOOK = resolveLook(h, e, sc, w.sepia);
+  L._rev = LOOK_REV; L._b = h.build; L._sk = h.skin; L._hs = h.hairStyle; L._hc = h.hairColor; L._sc = sc; L._sp = w.sepia; L._o = e.outfit; L._c = e.cap; L._co = e.coat; L._m = e.mask; L._l = e.lamp; L._n = e.neck;
+  return L;
+}
+function scrubIndex() { var i = SET.scrub || 0; return scrubUnlocked(i) ? i : 0; }
+
+/* ── what you own, what you may wear ── */
+function wardrobeDeed(id) {
+  var h = META.hub, w = META.wardrobe;
+  if (id === 'young') return (h.fav.young || 0) >= 2;
+  if (id === 'fournier') return (h.bosses.fournier || 0) > 0;
+  if (id === 'stones') return !!w.deeds.stoneRoom || (h.fav.nitze || 0) >= 2;
+  if (id === 'pgy6') return residencyLevel() >= 6;
+  if (id === 'leak') return !!w.deeds.leak;
+  return false;
+}
+function itemDeed(id) { var d = WARDROBE[id]; return d ? (d.set ? WARDROBE_SETS[d.set].deed : d.deed) || '' : ''; }
+function itemCost(id) { var d = WARDROBE[id]; return d ? (d.set ? WARDROBE_SETS[d.set].cost : d.cost || 0) : 0; }
+function itemFree(id) { var d = WARDROBE[id]; return !!d && !d.set && !d.deed && !(d.cost > 0); }
+function itemUnlocked(id) { var dd = itemDeed(id); return !!WARDROBE[id] && (itemFree(id) || !!META.wardrobe.owned[id] || (!!dd && wardrobeDeed(dd))); }
+function setUnlocked(sid) { var s = WARDROBE_SETS[sid]; if (!s) return false; for (var i = 0; i < s.pieces.length; i++) if (!itemUnlocked(s.pieces[i])) return false; return true; }
+function itemHow(id) { var dd = itemDeed(id), cost = itemCost(id); return (dd ? WARDROBE_DEEDS[dd] + ' · or ' : '') + cost + ' CME' + (WARDROBE[id].set ? ' for the set' : ''); }
+function wardrobeEquip(id) {
+  var d = WARDROBE[id]; if (!d || !itemUnlocked(id)) return false;
+  META.wardrobe.equipped[d.slot] = id; saveMeta(); return true;
+}
+function wardrobeUnequip(slot) { if (!WARDROBE_DEFAULT[slot]) return false; META.wardrobe.equipped[slot] = WARDROBE_DEFAULT[slot]; saveMeta(); return true; }
+function wardrobeWearSet(sid) {   // the whole costume, and no white coat over it
+  var s = WARDROBE_SETS[sid]; if (!s || !setUnlocked(sid)) return false;
+  for (var i = 0; i < s.pieces.length; i++) META.wardrobe.equipped[WARDROBE[s.pieces[i]].slot] = s.pieces[i];
+  META.wardrobe.equipped.coat = 'coat_none'; saveMeta(); return true;
+}
+function wardrobeOwn(id) {   // a debug hook and what a purchase does: a set piece brings the whole set
+  var d = WARDROBE[id], sid = WARDROBE_SETS[id] ? id : d && d.set, list = sid ? WARDROBE_SETS[sid].pieces : d ? [id] : [];
+  for (var i = 0; i < list.length; i++) META.wardrobe.owned[list[i]] = 1;
+  if (list.length) { LOOK_REV++; saveMeta(); }
+  return list.length > 0;
+}
+function wardrobeBuy(id) {
+  var sid = WARDROBE_SETS[id] ? id : '', pid = sid ? WARDROBE_SETS[sid].pieces[0] : id, d = WARDROBE[pid];
+  if (!d || itemUnlocked(pid)) return false;
+  if (!hubSpend(itemCost(pid))) return false;
+  wardrobeOwn(pid);
+  if (d.set) { wardrobeWearSet(d.set); hubToast(WARDROBE_SETS[d.set].name.toUpperCase() + ' · IN THE CABINET'); }
+  else { wardrobeEquip(pid); hubToast(d.name.toUpperCase()); }
+  HUB.tryOn = null; HUB.dirty = true; return true;
+}
+function wardrobeSanitize() {   // an equipped item you can no longer wear (a wiped save, an edited one) goes back to the default
+  var e = META.wardrobe.equipped;
+  for (var i = 0; i < WARDROBE_SLOTS.length; i++) { var sl = WARDROBE_SLOTS[i], d = WARDROBE[e[sl]]; if (!d || d.slot !== sl || !itemUnlocked(e[sl])) e[sl] = WARDROBE_DEFAULT[sl]; }
+  if (META.wardrobe.sepia && !setUnlocked('retro')) META.wardrobe.sepia = false;
+  LOOK_REV++;
+}
+// deed unlocks nobody has looked at yet: a toast in the room, a gold dot on the cabinet, a line on the summary
+function wardrobeFresh() {
+  var out = [], w = META.wardrobe, k;
+  for (k in WARDROBE_SETS) if (!w.seen['set_' + k] && !w.owned[WARDROBE_SETS[k].pieces[0]] && wardrobeDeed(WARDROBE_SETS[k].deed)) out.push('set_' + k);
+  for (k in WARDROBE) if (!WARDROBE[k].set && WARDROBE[k].deed && !w.seen[k] && !w.owned[k] && wardrobeDeed(WARDROBE[k].deed)) out.push(k);
+  return out;
+}
+function freshName(key) { return key.indexOf('set_') === 0 ? WARDROBE_SETS[key.slice(4)].name : WARDROBE[key].name; }
+function wardrobeSeen() { var f = wardrobeFresh(); for (var i = 0; i < f.length; i++) META.wardrobe.seen[f[i]] = 1; if (f.length) { HUB.dirty = true; saveMeta(); } }
+// deeds that happen in a run
+function wardNoteKill(e) { var rf = G.roomFam; if (!rf || rf.room !== G.roomIndex) rf = G.roomFam = { room: G.roomIndex, stone: 0, other: 0 }; if (e.family === 'STONE') rf.stone++; else rf.other++; }
+function wardRoomCleared() {
+  var rf = G.roomFam, w = META.wardrobe;
+  if (rf && rf.room === G.roomIndex && rf.stone >= 3 && !rf.other && !w.deeds.stoneRoom) { w.deeds.stoneRoom = 1; saveMeta(); addText(P.x, P.y - 62, 'NOTHING BUT STONES · A LEAD APRON WAITS IN THE CALL ROOM', { color: '#c9d6e0', size: 11 }); }
+}
+function wardRunEnded() { if (G.incont && !G.incont.fixed) META.wardrobe.deeds.leak = 1; LOOK_REV++; }
+
+/* ── the cast notices what you wear: one remark per speaker per new look, then their usual lines ── */
+var HUB_OUTFIT_LINES = {
+  attending: {
+    plague: ['Please take that off.', 'We have masks. Paper ones. Lovely ones. Please.'],
+    retro: ['Ah, the good old days: no lasers, no gloves, no idea. Nice gown.', 'Did you raid the archive again? Put the head mirror back when you are done.'],
+    shame: ['I am not going to ask about the hat. I am going to write it down.'],
+    lead: ['The apron is for fluoro. This is the call room. The coffee is not radioactive. Mostly.'],
+    sepia: ['You look like a photograph from the archive. Please do not haunt the call room.'],
+    rainbow: ['Your headlamp is doing a disco. Turn it off before a patient requests a song.'],
+    loupes: ['Loupes, in the call room. Can you see my disappointment in high definition?'],
+    attcoat: ['Nice coat. Long coats are earned. You earned it. Do not let it go to your head.']
+  },
+  janitor: {
+    plague: ['Seen worse.', 'Mind the beak on the door frames. I just painted those.'],
+    retro: ['My granddad mopped for a man dressed like you. Nicer gloves, though.'],
+    shame: ['That hat. I mopped up after the run that earned it. We do not need to talk about it.'],
+    lead: ['Lead apron. Good. You can stop the next spill all by yourself.'],
+    rainbow: ['That lamp. Now I can see every mark on this floor. Thanks. I hate it.'],
+    attcoat: ['Long coat. Mind the hem. This floor is not as clean as I would like.'],
+    sepia: ['You have gone all brown and grainy. Happens to the floor tiles too.']
+  },
+  rep: {
+    plague: ['Love the beak, very on-brand for infectious disease.', 'Is that a mask or a product? Because I can get you a deal on either.'],
+    retro: ['Vintage! We have a heritage line. Same product, sepia logo.'],
+    shame: ['Bold hat. Very confident. Could I put our logo on the bell?'],
+    lead: ['Radiation protection! We sell an app for that. It measures nothing, beautifully.'],
+    rainbow: ['RGB headlamp? You are an influencer now. Let us talk partnerships.'],
+    loupes: ['Loupes! We have loupes with an app. They zoom. Also the app.'],
+    attcoat: ['Long coat! So you sign the purchase orders now? Hi! Hello! Lunch?'],
+    sepia: ['Love the filter. Very retro. Very shareable.']
+  },
+  childlife: {
+    plague: ['The kids would adore the beak. Please never wear it into a procedure room.'],
+    shame: ['That is a very brave hat. You get a sticker for it.'],
+    rainbow: ['A rainbow headlamp! That is a distraction technique. I am writing it down.']
+  }
+};
+function lookTag() {
+  var L = heroLook(), id = L.ids;
+  if (id.outfit === 'plague_coat' || id.mask === 'mask_beak' || id.cap === 'cap_plague') return 'plague';
+  if (id.outfit === 'retro_gown' || id.mask === 'mask_gauze' || id.cap === 'cap_mirror') return 'retro';
+  if (id.cap === 'cap_shame') return 'shame';
+  if (id.outfit === 'lead_apron') return 'lead';
+  if (L.sepia) return 'sepia';
+  if (id.lamp === 'lamp_rainbow') return 'rainbow';
+  if (id.mask === 'mask_loupes') return 'loupes';
+  if (id.coat === 'coat_long') return 'attcoat';
+  return '';
+}
+function hubOutfitLine(who, rep) {   // the remark, or '' when this speaker has already said something about this look
+  var w = META.wardrobe, tag = lookTag(), grp = rep ? 'rep' : who, OL = HUB_OUTFIT_LINES[grp], prev = w.heard[who];
+  w.heard[who] = tag;
+  if (!tag || prev === tag || !OL || !OL[tag]) return '';
+  var key = grp + ':' + tag, arr = OL[tag], i = ((w.heardN[key] === undefined ? -1 : w.heardN[key]) + 1) % arr.length; w.heardN[key] = i;
+  return arr[i];
+}
+
+/* ── drawing the look outside a run: the try-on preview, thumbnails, the bust on the HUD and the summary ── */
+function previewPose(f, aim, t, moving) {
+  var o = POSE; o.f = f; o.aim = aim; o.rolling = false; o.moving = moving; o.step = Math.sin(t * 9); o.stag = false; o.low = false; o.lean = 0; o.t = t;
+  o.blink = (t % 3.9) < 0.11 ? 0.12 : 1; o.arm = true; o.hand = true; o.armX = f * 7.6; o.armY = 6.2; return o;
+}
+// the preview turns on the spot (a paper-doll spin: the width follows the cosine and the sprite mirrors as it passes side-on)
+function drawLookPreview() {
+  if (G.overlay !== 'hub' || (HUB.panel !== 'mirror' && HUB.panel !== 'scrubs')) return;
+  var cv = $('lookPrev'); if (!cv) return;
+  var L = HUB.panel === 'scrubs' && HUB.prevLook ? HUB.prevLook : heroLook(), c = cv.getContext('2d'), w = cv.width, h = cv.height, t = G.realTime, turn = Math.cos(t * 0.9), sc = h / 56;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+  c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(w / 2, h / 2 + 17.4 * sc, 14 * sc * Math.max(0.6, Math.abs(turn)), 4.4 * sc, 0, 0, TAU); c.fill();
+  c.save(); c.translate(w / 2, h / 2 + 2 * sc); c.scale(sc * (turn < 0 ? -1 : 1) * (0.3 + 0.7 * Math.abs(turn)), sc);
+  drawSurgeon(c, L, previewPose(1, 0.3 + Math.sin(t * 0.7) * 0.35, t, Math.sin(t * 0.45) > 0.35));
+  c.restore();
+}
+function drawLookThumb(cv, L, slot, silhouette) {
+  var c = cv.getContext('2d'), w = cv.width, h = cv.height, head = slot === 'cap' || slot === 'mask' || slot === 'lamp', s = head ? w / 36 : h / 50;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h); c.save();
+  if (head) { c.translate(w / 2 - 2 * s, h * 0.62); c.scale(s, s); c.translate(0, 15.5); } else { c.translate(w / 2, h / 2 + 4 * s); c.scale(s, s); }
+  drawSurgeon(c, L, previewPose(1, 0.25, 1.3, false)); c.restore();
+  if (silhouette) { c.globalCompositeOperation = 'source-in'; c.fillStyle = '#3d566a'; c.fillRect(0, 0, w, h); c.globalCompositeOperation = 'source-over'; }
+}
+function drawBust(c, L, size, low) {   // head and shoulders, for the HUD portrait and the run summary
+  var s = size / 30; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, size, size); c.save();
+  c.translate(size / 2 - 0.6 * s, size * 0.56); c.scale(s, s); c.translate(0, 13.5);
+  var o = previewPose(1, 0.2, 0, false); o.arm = false; o.hand = false; o.low = !!low; o.blink = 1;
+  drawSurgeon(c, L, o); c.restore();
+}
+var PORTRAIT = { cv: null, look: null, low: -1 };
+function heroPortrait(L, low) { var pr = PORTRAIT; if (!pr.cv) { pr.cv = document.createElement('canvas'); pr.cv.width = pr.cv.height = 96; } if (pr.look !== L || pr.low !== low) { pr.look = L; pr.low = low; drawBust(pr.cv.getContext('2d'), L, 96, low); } return pr.cv; }
+function drawHudPortrait(c, x, y, r) {
+  var low = P.hp / P.maxHp < 0.25 ? 1 : 0, cv = heroPortrait(heroLook(), low);
+  c.fillStyle = 'rgba(0,0,0,0.5)'; c.beginPath(); c.arc(x, y, r + 2, 0, TAU); c.fill();
+  c.save(); c.beginPath(); c.arc(x, y, r, 0, TAU); c.fillStyle = '#1d3647'; c.fill(); c.clip(); c.drawImage(cv, x - r, y - r, r * 2, r * 2); c.restore();
+  c.strokeStyle = low ? '#ff4d6d' : 'rgba(255,255,255,0.55)'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke();
+}
+
+/* ── the mirror: "Who are you?" (the first time) and the same choices any time after ── */
+function openMirror(first) {
+  var h = META.hero;
+  if (first !== undefined) HUB.mirrorFirst = !!first;
+  var body = hubPanel('mirror', HUB.mirrorFirst ? 'Who are you?' : 'The mirror', HUB.mirrorFirst ? 'Pick your surgeon’s look. Looks only: every build plays exactly the same. The mirror by the scrub cabinet changes it any time.' : 'Same surgeon, new look. Nothing here changes how you play.');
+  var grid = el('div', 'lookgrid'), prev = el('div', 'lookprev'), cv = el('canvas'), opts = el('div', 'lookopts'), i;
+  cv.id = 'lookPrev'; cv.width = 240; cv.height = 300; prev.appendChild(cv); prev.appendChild(el('span', 'hint', esc(HERO_BUILDS[h.build].name.toUpperCase())));
+  var ok = hubBtn('THAT’S ME', 'small primary', hubClose); ok.id = 'btnHeroOk'; prev.appendChild(ok); grid.appendChild(prev);   // in the sticky preview, so a phone never has to scroll to it
+  function row(title, kids) { opts.appendChild(el('h3', '', title)); var r = el('div', 'optrow'); for (var k = 0; k < kids.length; k++) r.appendChild(kids[k]); opts.appendChild(r); }
+  function chip(label, on, attr, val, fn) { var b = el('button', 'chip' + (on ? ' on' : ''), label); b.type = 'button'; b.setAttribute(attr, String(val)); b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); fn(); saveMeta(); Snd.sfx('swap'); openMirror(); }); return b; }
+  function dot(color, on, attr, val, title, fn) { var b = chip('', on, attr, val, fn); b.className = 'dot' + (on ? ' on' : ''); b.style.background = color; b.title = title; b.setAttribute('aria-label', title); return b; }
+  var kids = [];
+  for (i = 0; i < HERO_BUILD_ORDER.length; i++) (function (id) { kids.push(chip(HERO_BUILDS[id].name, h.build === id, 'data-build', id, function () { h.build = id; })); })(HERO_BUILD_ORDER[i]);
+  row('Build', kids); kids = [];
+  for (i = 0; i < HERO_SKINS.length; i++) (function (k) { kids.push(dot(HERO_SKINS[k], h.skin === k, 'data-skin', k, 'Skin tone ' + (k + 1), function () { h.skin = k; })); })(i);
+  row('Skin tone', kids); kids = [];
+  for (i = 0; i < HERO_HAIR_ORDER.length; i++) (function (id) { kids.push(chip(HERO_HAIRS[id], h.hairStyle === id, 'data-hair', id, function () { h.hairStyle = id; })); })(HERO_HAIR_ORDER[i]);
+  row('Hair', kids); kids = [];
+  for (i = 0; i < HERO_HAIR_COLORS.length; i++) (function (k) { kids.push(dot(HERO_HAIR_COLORS[k], h.hairColor === k, 'data-haircol', k, HERO_HAIR_COLOR_NAMES[k], function () { h.hairColor = k; })); })(i);
+  row('Hair colour', kids);
+  opts.appendChild(el('p', 'hint', 'Hair shows under the cap (a ponytail, a bun, curls, long hair); the wardrobe in the scrub cabinet has a no-cap option and a bouffant.'));
+  grid.appendChild(opts); body.appendChild(grid);
+  $('btnHubBack').textContent = 'THAT’S ME';
+}
+function heroConfirm() { if (!META.hero.set) { META.hero.set = true; hubToast('NICE TO MEET YOU, DOCTOR'); } saveMeta(); }
+
+/* ── the scrub cabinet: the wardrobe. Tap to try something on; tap it again to buy it or to wear it; tap what you wear to take it off ── */
+function wardTryLook() {
+  var e = META.wardrobe.equipped, eq = {}, k, tr = HUB.tryOn;
+  for (k in e) eq[k] = e[k];
+  if (tr && WARDROBE_SETS[tr]) { var s = WARDROBE_SETS[tr]; for (var i = 0; i < s.pieces.length; i++) eq[WARDROBE[s.pieces[i]].slot] = s.pieces[i]; eq.coat = 'coat_none'; }
+  else if (tr && WARDROBE[tr]) eq[WARDROBE[tr].slot] = tr;
+  return eq;
+}
+function openScrubs(keep) {
+  var W = META.wardrobe, body, i, tab;
+  if (!keep) { HUB.pagerLine = hubLine('pager'); HUB.tryOn = null; HUB.tryScrub = -1; wardrobeSeen(); }
+  tab = HUB.wtab = HUB.wtab || 'outfit';
+  body = hubPanel('scrubs', 'Scrub cabinet + wardrobe', 'All of it is cosmetic. Tap anything to try it on, tap again to buy it with CME or to wear it; tap what you wear to take it off. Scrub colours also come with residency level (or ' + SCRUB_COST + ' CME each).');
+  body.appendChild(el('div', 'bubble', '<b>PAGER:</b> ' + esc(HUB.pagerLine)));
+  var tryScrub = HUB.tryScrub >= 0 ? HUB.tryScrub : scrubIndex();
+  HUB.prevLook = resolveLook(META.hero, wardTryLook(), tryScrub, W.sepia);
+  var grid = el('div', 'lookgrid'), prev = el('div', 'lookprev'), cv = el('canvas'), side = el('div', 'lookopts');
+  cv.id = 'lookPrev'; cv.width = 240; cv.height = 300; prev.appendChild(cv);
+  var tn = HUB.tryOn ? (WARDROBE_SETS[HUB.tryOn] ? WARDROBE_SETS[HUB.tryOn].name : WARDROBE[HUB.tryOn].name) : HUB.tryScrub >= 0 ? SCRUB_NAMES[HUB.tryScrub] + ' scrubs' : '';
+  prev.appendChild(el('span', 'hint', tn ? '<span style="color:#ffd166">TRYING ON</span><br>' + esc(tn) : 'WEARING'));
+  var done = hubBtn('DONE', 'small', hubClose); done.id = 'btnWardDone'; prev.appendChild(done); grid.appendChild(prev);
+  var tabs = el('div', 'optrow');
+  for (i = 0; i <= WARDROBE_SLOTS.length; i++) (function (id) {
+    var b = el('button', 'chip' + (tab === id ? ' on' : ''), id === 'catalog' ? 'Catalogue' : WARDROBE_SLOT_NAMES[id]); b.type = 'button'; b.setAttribute('data-wtab', id);
+    b.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); HUB.wtab = id; Snd.sfx('click'); openScrubs(true); });
+    tabs.appendChild(b);
+  })(i < WARDROBE_SLOTS.length ? WARDROBE_SLOTS[i] : 'catalog');
+  side.appendChild(tabs);
+  if (tab === 'catalog') side.appendChild(wardCatalog());
+  else {
+    if (tab === 'outfit') {
+      side.appendChild(el('h3', '', 'Scrub colour'));
+      var sg = el('div', 'wgrid');
+      for (i = 0; i < SCRUBS.length; i++) (function (i) {
+        var on = scrubUnlocked(i), sel = on && scrubIndex() === i, trying = HUB.tryScrub === i, card = el('button', 'witem' + (sel ? ' on' : '') + (trying ? ' try' : '') + (on ? '' : ' locked')); card.type = 'button'; card.setAttribute('data-scrub', String(i));
+        var sw = el('div', 'swatch'); sw.style.background = SCRUBS[i]; if (!on) sw.style.opacity = '0.45'; card.appendChild(sw);
+        card.appendChild(el('span', '', SCRUB_NAMES[i]));
+        card.appendChild(el('span', '', sel ? '<span class="tag sel">WEARING</span>' : on ? '<span class="tag">wear</span>' : trying ? '<span class="tag try">BUY · ' + SCRUB_COST + ' CME</span>' : '<span class="tag locked">PGY-' + scrubNeed(i) + ' · or ' + SCRUB_COST + ' CME</span>'));
+        card.addEventListener('click', function (ev) {
+          ev.preventDefault(); noteInput();
+          if (on) { SET.scrub = i; HUB.tryScrub = -1; saveMeta(); Snd.sfx('swap'); }
+          else if (HUB.tryScrub === i) { if (hubBuy('scrub' + i)) HUB.tryScrub = -1; }
+          else { HUB.tryScrub = i; Snd.sfx('click'); }
+          HUB.dirty = true; openScrubs(true);
+        });
+        sg.appendChild(card);
+      })(i);
+      side.appendChild(sg);
+      side.appendChild(el('h3', '', 'Sets'));
+      var setg = el('div', 'wgrid');
+      for (var sid in WARDROBE_SETS) setg.appendChild(wardSetCard(sid));
+      side.appendChild(setg);
+      if (setUnlocked('retro')) {
+        var sep = el('button', 'chip' + (W.sepia ? ' on' : ''), 'Old photograph (sepia): ' + (W.sepia ? 'ON' : 'OFF')); sep.type = 'button'; sep.setAttribute('data-sepia', W.sepia ? '1' : '0');
+        sep.addEventListener('click', function (ev) { ev.preventDefault(); noteInput(); W.sepia = !W.sepia; saveMeta(); Snd.sfx('swap'); openScrubs(true); });
+        var sr = el('div', 'optrow'); sr.style.marginTop = '8px'; sr.appendChild(sep); side.appendChild(sr);
+      }
+      side.appendChild(el('h3', '', 'Outfits'));
+    }
+    var ig = el('div', 'wgrid');
+    for (var id in WARDROBE) if (WARDROBE[id].slot === tab) ig.appendChild(wardItemCard(id));
+    side.appendChild(ig);
+  }
+  grid.appendChild(side); body.appendChild(grid);
+}
+function wardItemCard(id) {
+  var d = WARDROBE[id], W = META.wardrobe, on = itemUnlocked(id), worn = W.equipped[d.slot] === id, trying = HUB.tryOn === id, card = el('button', 'witem' + (worn ? ' on' : '') + (trying ? ' try' : '') + (on ? '' : ' locked')), cv = el('canvas');
+  card.type = 'button'; card.setAttribute('data-item', id); card.title = d.desc;
+  cv.width = cv.height = 104; var eq = {}, k; for (k in W.equipped) eq[k] = W.equipped[k]; eq[d.slot] = id;
+  drawLookThumb(cv, resolveLook(META.hero, eq, scrubIndex(), W.sepia), d.slot, false); card.appendChild(cv);
+  card.appendChild(el('span', '', esc(d.name)));
+  var cost = itemCost(id), tag = worn ? (itemFree(id) && WARDROBE_DEFAULT[d.slot] === id ? '<span class="tag sel">WEARING</span>' : '<span class="tag sel">WEARING · take off</span>') : on ? '<span class="tag">wear</span>' : trying ? '<span class="tag try">BUY · ' + cost + ' CME' + (d.set ? ' (set)' : '') + '</span>' : '<span class="tag locked">' + cost + ' CME' + (d.set ? ' · set' : '') + '</span>';
+  card.appendChild(el('span', '', tag));
+  if (!on && itemDeed(id)) card.appendChild(el('small', '', esc(WARDROBE_DEEDS[itemDeed(id)])));
+  card.addEventListener('click', function (ev) {
+    ev.preventDefault(); noteInput();
+    if (worn) { if (WARDROBE_DEFAULT[d.slot] !== id) { wardrobeUnequip(d.slot); Snd.sfx('click'); } else Snd.sfx('tink'); }
+    else if (on) { wardrobeEquip(id); HUB.tryOn = null; Snd.sfx('swap'); }
+    else if (trying) wardrobeBuy(id);
+    else { HUB.tryOn = id; Snd.sfx('click'); }
+    openScrubs(true);
+  });
+  return card;
+}
+function wardSetCard(sid) {
+  var s = WARDROBE_SETS[sid], on = setUnlocked(sid), e = META.wardrobe.equipped, worn = true, trying = HUB.tryOn === sid, i, card = el('button', 'witem' + (trying ? ' try' : '') + (on ? '' : ' locked')), cv = el('canvas');
+  for (i = 0; i < s.pieces.length; i++) if (e[WARDROBE[s.pieces[i]].slot] !== s.pieces[i]) worn = false;
+  if (worn) card.className += ' on';
+  card.type = 'button'; card.setAttribute('data-set', sid); card.title = s.desc;
+  var eq = {}, k; for (k in e) eq[k] = e[k]; for (i = 0; i < s.pieces.length; i++) eq[WARDROBE[s.pieces[i]].slot] = s.pieces[i]; eq.coat = 'coat_none';
+  cv.width = cv.height = 104; drawLookThumb(cv, resolveLook(META.hero, eq, scrubIndex(), META.wardrobe.sepia || (sid === 'retro' && !on)), 'outfit', false); card.appendChild(cv);
+  card.appendChild(el('span', '', esc(s.name)));
+  card.appendChild(el('span', '', worn ? '<span class="tag sel">WEARING</span>' : on ? '<span class="tag">wear the set</span>' : trying ? '<span class="tag try">BUY · ' + s.cost + ' CME</span>' : '<span class="tag locked">' + s.cost + ' CME</span>'));
+  if (!on) card.appendChild(el('small', '', esc(WARDROBE_DEEDS[s.deed])));
+  card.addEventListener('click', function (ev) {
+    ev.preventDefault(); noteInput();
+    if (on) { if (!worn) { wardrobeWearSet(sid); Snd.sfx('swap'); } else Snd.sfx('tink'); HUB.tryOn = null; }
+    else if (trying) wardrobeBuy(sid);
+    else { HUB.tryOn = sid; Snd.sfx('click'); }
+    openScrubs(true);
+  });
+  return card;
+}
+// the catalogue: everything, bestiary-style; what you cannot wear yet is a silhouette with its unlock
+function wardCatalog() {
+  var g = el('div', 'bgrid'), W = META.wardrobe, n = 0, have = 0, id, k;
+  function entry(key, name, slot, look, on, how) {
+    var d = el('div', 'bentry' + (on ? '' : ' locked')), cv = el('canvas'); cv.width = cv.height = 128; d.setAttribute('data-cat', key);
+    drawLookThumb(cv, look, slot, !on); d.appendChild(cv);
+    d.appendChild(el('b', '', esc(name))); d.appendChild(el('small', '', on ? 'in your cabinet' : esc(how)));
+    g.appendChild(d); n++; if (on) have++;
+  }
+  for (k in WARDROBE_SETS) { var s = WARDROBE_SETS[k], eq = {}, j; for (j in W.equipped) eq[j] = W.equipped[j]; for (j = 0; j < s.pieces.length; j++) eq[WARDROBE[s.pieces[j]].slot] = s.pieces[j]; eq.coat = 'coat_none'; entry('set_' + k, s.name + ' (set)', 'outfit', resolveLook(META.hero, eq, scrubIndex(), false), setUnlocked(k), WARDROBE_DEEDS[s.deed] + ' · or ' + s.cost + ' CME'); }
+  for (id in WARDROBE) {
+    var dd = WARDROBE[id]; if (itemFree(id) || dd.set) continue;
+    var e2 = {}; for (k in W.equipped) e2[k] = W.equipped[k]; e2[dd.slot] = id;
+    entry(id, dd.name, dd.slot, resolveLook(META.hero, e2, scrubIndex(), false), itemUnlocked(id), itemHow(id));
+  }
+  var wrap = el('div', ''); wrap.appendChild(el('p', 'hint', have + ' of ' + n + ' in your cabinet. Free basics (no cap, no coat, no mask) are always yours.')); wrap.appendChild(g);
+  return wrap;
+}
+
+/* ── the mirror in the room: an oval cheval glass by the scrub cabinet; step close and it shows you ── */
+function drawHubMirror(c) {
+  var x = 914, y = 470, d = dist(P.x, P.y, x, y), t = HUB.t;
+  c.strokeStyle = OUTLINE; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 10, y + 22); c.lineTo(x - 15, y + 36); c.moveTo(x + 10, y + 22); c.lineTo(x + 15, y + 36); c.stroke();
+  c.strokeStyle = '#8a6242'; c.lineWidth = 2.6; c.stroke();
+  c.beginPath(); c.ellipse(x, y, 18, 28, 0, 0, TAU); c.fillStyle = '#8a6242'; c.fill(); outline(c, 3);
+  c.beginPath(); c.ellipse(x, y, 13.6, 23.6, 0, 0, TAU); c.fillStyle = '#9cc3d6'; c.fill();
+  c.save(); c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.18)'; c.fillRect(x - 14, y - 24, 28, 10);
+  if (d < 190 && !G.running) {
+    c.globalAlpha = clamp(1.4 - d / 150, 0.2, 1);
+    c.translate(x, y + 7); c.scale(-0.62, 0.62);
+    drawSurgeon(c, heroLook(), previewPose(P.face || 1, P.aim, G.realTime, P.moving));
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(x + 4, y - 18 + Math.sin(t) * 0.5); c.lineTo(x + 9, y - 10); c.moveTo(x + 6, y - 6); c.lineTo(x + 9, y - 1); c.stroke();
+  c.beginPath(); c.ellipse(x, y, 13.6, 23.6, 0, 0, TAU); outline(c, 2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
    §18 MAIN LOOP — fixed 1/60 s steps with an accumulator, hit-stop and slow-mo, auto-pause when hidden
    ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 var lastTs = 0, acc = 0;
@@ -8972,7 +9670,7 @@ function frame(ts) {
     G.frames++; G.fpsT += dtReal; if (G.fpsT >= 0.5) { G.fps = Math.round(G.frames / G.fpsT); G.frames = 0; G.fpsT = 0; }
     pollGamepad();
     if (takeEdge('pause')) handlePauseKey();
-    if (takeEdge('enter')) { if (G.overlay === 'summary') $('btnSumHub').click(); else if (G.overlay === 'title') $('btnPlay').click(); else if (G.overlay === 'help') $('btnHelpOk').click(); else if (G.overlay === 'hub' && HUB.panel === 'door') hubScrubIn(); else if (G.screen === 'hub' && !G.overlay) edge('interact'); }
+    if (takeEdge('enter')) { if (G.overlay === 'summary') $('btnSumHub').click(); else if (G.overlay === 'title') $('btnPlay').click(); else if (G.overlay === 'help') $('btnHelpOk').click(); else if (G.overlay === 'hub' && HUB.panel === 'door') hubScrubIn(); else if (G.overlay === 'hub' && HUB.panel === 'mirror') hubClose(); else if (G.screen === 'hub' && !G.overlay) edge('interact'); }
     if (G.screen === 'hub' && !G.running) {   // the Call Room: its own fixed steps, no hit-stop, no slow-mo
       if (!G.overlay && !document.hidden) { HUB.acc += dtReal; var hs = 0; while (HUB.acc >= STEP && hs < 6) { hubStep(STEP); HUB.acc -= STEP; hs++; if (G.overlay || G.screen !== 'hub') break; } if (hs >= 6) HUB.acc = 0; } else clearEdges();
       G.shakeX = G.shakeY = 0;
@@ -8983,7 +9681,7 @@ function frame(ts) {
       G.punch = Math.max(0, G.punch - dtReal * 1.6); G.flash = Math.max(0, G.flash - dtReal * 1.6);
       if (G.over) { G.endT -= dtReal; if (G.endT <= 0) { G.timeScale = 1; finishRun(); } }
     } else { G.shakeX = G.shakeY = 0; if (!G.running) clearEdges(); }
-    render(dtReal);
+    render(dtReal); drawLookPreview();
   } catch (err) { if (DEBUG) throw err; try { console.error(err); } catch (e2) {} }
 }
 function handlePauseKey() {
@@ -9026,7 +9724,7 @@ onTap('btnModSkip', function () { repRef = null; hideScreens(); });
 onTap('btnWeapLeave', function () { hideScreens(); });
 onTap('btnShopLeave', function () { hideScreens(); });
 onTap('btnAgain', function () { beginRun(); }); onTap('btnSumTitle', showTitle);
-onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.aspects = {}; META.runs = 0; META.helpSeen = false; META.hub = hubDefaults(null); HUB.cup = ''; HUB.dirty = true; if (G.screen === 'hub') hubBuild(); saveMeta(); updateTitle(); Snd.sfx('kill'); });
+onTap('btnWipe', function () { META.xp = 0; META.best = null; META.bestiary = {}; META.seen = {}; META.aspects = {}; META.runs = 0; META.helpSeen = false; META.hub = hubDefaults(null); META.hero = heroDefaults(null); META.wardrobe = wardrobeDefaults(null); LOOK_REV++; HUB.cup = ''; HUB.dirty = true; if (G.screen === 'hub') hubBuild(); saveMeta(); updateTitle(); Snd.sfx('kill'); });
 $('setVol').addEventListener('input', function () { SET.vol = parseInt(this.value, 10) || 0; Snd.applyVolume(); saveMeta(); });
 onTap('setMute', function () { SET.mute = !SET.mute; Snd.applyVolume(); refreshSettings(); saveMeta(); });
 onTap('setMusic', function () { SET.music = !SET.music; refreshSettings(); saveMeta(); });
@@ -9079,12 +9777,26 @@ window.UroCrawl = {
     talk: hubTalk, scrubIn: hubScrubIn, meet: hubMeet, loadout: hubLoadout, rx: hubRx, pinLevel: pinLevel, pinText: pinText, caseUnlocked: caseUnlocked, award: hubAward, line: hubLine,
     tables: { PERKS: HUB_PERKS, PINS: HUB_PINS, DECOR: HUB_DECOR, CUPS: HUB_CUPS, CASES: HUB_CASES, LINES: HUB_LINES, CME: HUB_CME, SLOTS: HUB_SLOTS, PIN_USE: PIN_USE }
   },
+  // the mirror and the wardrobe (§17c). `state` is a fresh summary each time it is read; hero / owned / equipped inside it are the saved objects
+  wardrobe: {
+    get state() { var W = META.wardrobe, un = [], k; for (k in WARDROBE) if (itemUnlocked(k)) un.push(k); return { hero: META.hero, owned: W.owned, equipped: W.equipped, sepia: W.sepia, deeds: W.deeds, heard: W.heard, unlocked: un, sets: { retro: setUnlocked('retro'), plague: setUnlocked('plague') }, tag: lookTag(), fresh: wardrobeFresh(), panel: HUB.panel, tryOn: HUB.tryOn || null, tab: HUB.wtab || 'outfit' }; },
+    equip: function (id) { if (WARDROBE_SETS[id]) return wardrobeWearSet(id); return wardrobeEquip(id); }, unequip: wardrobeUnequip, own: wardrobeOwn, buy: wardrobeBuy, wearSet: wardrobeWearSet,
+    hero: function (o) { var h = META.hero; o = o || {}; for (var k in o) h[k] = o[k]; META.hero = heroDefaults(h); saveMeta(); return META.hero; },
+    deed: wardrobeDeed, unlocked: itemUnlocked, setUnlocked: setUnlocked, tag: lookTag, look: heroLook, resolve: resolveLook, fresh: wardrobeFresh, outfitLine: hubOutfitLine,
+    figure: function (c, L, x, y, sc, f, t, moving) { c.save(); c.translate(x, y); c.scale(sc, sc); drawSurgeon(c, L || heroLook(), previewPose(f || 1, 0.3, t || 0, !!moving)); c.restore(); }, bust: drawBust,
+    openMirror: openMirror, openWardrobe: function () { return openScrubs(); }, portrait: function () { return heroPortrait(heroLook(), 0); }, sepiaHex: sepiaHex,
+    tables: { WARDROBE: WARDROBE, SETS: WARDROBE_SETS, DEEDS: WARDROBE_DEEDS, DEFAULT: WARDROBE_DEFAULT, SLOTS: WARDROBE_SLOTS, BUILDS: HERO_BUILDS, SKINS: HERO_SKINS, HAIRS: HERO_HAIRS, HAIR_COLORS: HERO_HAIR_COLORS, LINES: HUB_OUTFIT_LINES, SCRUBS: SCRUBS }
+  },
   tables: { WEAPONS: WEAPONS, MODS: MODS, ASPECTS: ASPECTS, ENEMIES: ENEMIES, BOONS: BOONS, MATRIX: MATRIX, FAMILIES: FAMILIES, ROOM_TEMPLATES: ROOM_TEMPLATES, DOOR_TYPES: DOOR_TYPES, PATRONS: PATRONS, REPS: REPS, ABX_VIALS: ABX_VIALS },
   input: Input, snd: Snd, meta: META, hideScreens: hideScreens, openOverlay: openOverlay
 };
 resize(); setTimeout(resize, 100);
 if (TOUCH_DEVICE) canvas.className = 'touch';
 if (Q.cme !== undefined) META.hub.cme = Math.max(0, parseInt(Q.cme, 10) || 0);   // ?cme=N: set the balance (debug)
+if (Q.hero) { var hq = String(Q.hero).split(':'); META.hero = heroDefaults({ build: hq[0], skin: hq[1], hairStyle: hq[2], hairColor: hq[3] === undefined ? META.hero.hairColor : hq[3], set: true }); }   // ?hero=build:skin:hair[:colour]
+if (Q.wear) String(Q.wear).split(',').forEach(function (id) { if (!WARDROBE[id] && !WARDROBE_SETS[id]) return; wardrobeOwn(id); if (WARDROBE_SETS[id]) wardrobeWearSet(id); else wardrobeEquip(id); });   // ?wear=cap_ducks,plague,...: own and wear (debug)
+if (Q.sepia === '1') META.wardrobe.sepia = true;
+wardrobeSanitize();
 updateTitle(); Snd.setMusicMode('title');
 if (EMBED) { $('btnExit').style.display = ''; }
 if (Q.hub === '1' || Q.hub === 'true') enterHub();   // ?hub=1: boot straight into the Call Room
