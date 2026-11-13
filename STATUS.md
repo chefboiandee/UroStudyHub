@@ -3,6 +3,31 @@
 **Updated:** 2026-11-13
 **Tool:** Claude Code
 
+## 2026-11-13 (later 3) — 👟 Path of Pathology: wardrobe follow-up (med student coat, OR scrubs, jogger scrubs, OR shoes)
+
+Andrew, on Step 5 (`games/uro-crawl.html` §17c): keep Neutral; make the plague doctor deed-only; start everyone in a med
+student's short white coat; OR green or light blue scrubs to start, more colours as unlockables; a slim jogger-scrub option;
+unlockable OR shoes with colour options ("fine if they only show in the mirror"); and should colours give bonuses?
+**Done:**
+- **Plague doctor:** deed-only now (beat Fournier's); its cards say "not for sale" and no buy path works.
+- **Coats:** the default is the **med student coat** (hip-length, pockets stuffed with a pocket guide, a penlight and a reflex
+  hammer); the resident coat is longer (free at PGY-2 or 20 CME), then the embroidered (25) and attending (PGY-6 or 60) coats.
+- **Scrubs:** 12 colours. OR green and ceil blue are both free from day one, and "Who are you?" now has a scrubs row with
+  them; navy, maroon, royal blue, tan, lavender, charcoal, black, hunter green, rose pink and mustard come with residency
+  level or 15 CME. Older saves keep their worn and bought colours (`loadMeta` remaps them, `META.scrubV`). **Jogger scrubs**
+  (20 CME): a slim top with a zip collar and tapered, cuffed joggers in the same colour.
+- **OR shoes:** a seventh slot. Hospital clogs (the original), foam clogs, running sneakers, vented OR clogs, cork-bed clogs,
+  pro clogs and cowboy boots (free for beating the Staghorn, or 30 CME), each in any of 9 colours, free to switch. The styles
+  you named are real brands, so they carry generic names (the repo rule) but keep the look: holes and a heel strap, side vents,
+  a cork footbed and buckle, a stapled rocker sole. They are drawn in the run too, just tiny; the detail is in the previews.
+- **Bonuses on colours:** not added (see the answer in chat, and the roadmap's Step 5 note): everything in the wardrobe stays
+  cosmetic.
+**Verified:** headless Chromium, `node tools/uro-crawl.drive.mjs`: every block passes, 527 checks. Block T grew to 47 checks (deed-only plague,
+OR shoes and colours, the coats and joggers, the cowboy-boot deed, the PGY-2 coat, an old save's colours migrated, shoes and
+joggers in the five-look numbers check); block R follows the new palette (navy is the PGY-2 colour it buys early).
+**Next steps:** none required.
+**Open questions:** none new.
+
 ## 2026-11-13 (later 2) — 🪞 Path of Pathology: character select and the wardrobe (roadmap Step 5)
 
 Andrew: "Read UROCRAWL_ROADMAP.md and do Step 5". All in `games/uro-crawl.html`: the rig is `drawSurgeon` (§15), the rest is

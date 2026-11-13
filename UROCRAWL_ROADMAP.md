@@ -525,25 +525,40 @@ else is §17c of the game file (`WARDROBE`, `WARDROBE_SETS`, `WARDROBE_DEEDS`, `
 panels, the mirror prop, `HUB_OUTFIT_LINES`). Hooks: `UroCrawl.wardrobe.*`; URL params `?hero=build:skin:hair[:colour]`,
 `?wear=id,set,...`, `?sepia=1`. Where the build reads the spec its own way or adds to it:
 - **Builds:** all three (Male, Female, Neutral), kept as the spec suggests: shoulders, waist taper, hair volume, lashes (Female)
-  and brow weight (Male). Default is Neutral with the original skin tone and hair under the cap, so an untouched save looks
-  exactly as before. 8 skin tones, 6 hair styles (covered/bald, crop, ponytail, bun, curls, long), 10 hair colours (two silly:
+  and brow weight (Male). Default is Neutral with the original skin tone, hair under the cap, OR-green scrubs and the med
+  student's short coat (the owner's call, the same day: everyone starts as a med student). 8 skin tones, 6 hair styles (covered/bald, crop, ponytail, bun, curls, long), 10 hair colours (two silly:
   hospital teal, highlighter pink). A light cheek rim keeps the face readable on the darkest tones.
 - **"Who are you?"** opens the first time you walk into the Call Room (from PLAY, or from a summary after QUICK START runs);
   debug boots (`?hub=1`, `?hero=`, `?trial=`, `?wear=`) skip it. Closing it in any way keeps the current look. A cheval mirror by
   the scrub cabinet reopens it, and shows your reflection when you stand close.
-- **Slots:** six, not five: cap, outfit, coat, mask, headlamp, and **extras** (the lanyard with your PGY on the badge, a
-  stethoscope), because a lanyard in the outfit slot would replace the scrubs. Loupes sit in the mask slot and keep the
-  surgical mask under them. The scrub colour stays its own choice (now nine: Ceil blue, Charcoal and Lavender added) and is
-  worn under the lead apron and on the plain cap.
+- **Slots:** seven, not five: cap, outfit, coat, mask, headlamp, **extras** (the lanyard with your PGY on the badge, a
+  stethoscope; a lanyard in the outfit slot would replace the scrubs) and **shoes** (added at the owner's request). Loupes sit in
+  the mask slot and keep the surgical mask under them.
+- **Scrubs** (the owner's follow-up): OR green and ceil blue are both free from day one (most ORs use one or the other; "Who
+  are you?" offers them); navy, maroon, royal blue (PGY-2), tan, lavender (PGY-3), charcoal, black (PGY-4), hunter green, rose
+  pink, mustard (PGY-6), or 15 CME each, like before. `loadMeta` moves an older save's worn and bought colours to the new order
+  (`META.scrubV`). Two styles: classic (boxy) and **jogger scrubs** (20 CME: a slim top with a zip collar, tapered joggers with
+  cuffed ankles); the colour is shared, and shows on the plain cap and under the lead apron.
+- **Coats:** the **med student coat** is where everyone starts (hip-length, pockets stuffed with a pocket guide, a penlight and a
+  reflex hammer); the resident coat (longer, free at PGY-2 or 20 CME), the embroidered coat (25), the attending coat (longest,
+  PGY-6 or 60), or none.
+- **OR shoes:** seven pairs, any of them in any of nine colours (free to switch): hospital clogs (the original), foam clogs with
+  holes and a heel strap, running sneakers, vented autoclavable clogs, cork-bed clogs with a buckle, pro clogs on a stapled rocker
+  sole, and cowboy boots (free for beating the Staghorn, or 30 CME). Generic names for the styles the owner named, because the
+  repo carries no brands. They show in the run too, but they are tiny there; the detail is for the mirror and the previews.
 - **Buying:** tap = try on (the preview changes, nothing is spent), tap again = buy (or wear, if owned), tap what you wear =
   take it off (the slot goes back to its default). Deed items follow the scrub-colour pattern: free on the deed, or bought early
-  for their price. Sets are bought once (Retro surgeon 70, Plague doctor 80) and worn whole with one tap (no white coat over
-  them). Prices: 10-25 CME for small items, 40-80 for themed ones. 31 items in all: 22 to earn (16 on their own and two sets of
-  three; the catalogue tab lists them as 18 entries, silhouettes until unlocked), 9 free basics (the defaults, and no cap,
-  no coat, no mask, nothing round the neck), plus the 9 scrub colours.
+  for their price, except the **plague doctor, which is deed-only** (the owner's call: you have to beat Fournier's). Sets are worn
+  whole with one tap (no white coat over them); the retro surgeon is 70 CME. Prices: 10-30 CME for small items, 40-70 for themed
+  ones. 40 items in all: 30 to earn (24 on their own and two sets of three; the catalogue tab lists 26 entries, silhouettes
+  until unlocked), 10 free basics (the defaults, and no cap, no coat, no mask, nothing round the neck), plus 12 scrub colours
+  and 9 shoe colours.
+- **No bonuses** on colours or items (the owner asked; decided against): a stat on a colour makes one colour the right answer,
+  everyone wears it, and the wardrobe stops being self-expression; colour on an enemy already means its family, so it should
+  not start meaning power on the player. Power stays on the lanyard pins and the perks.
 - **Deeds:** the plague doctor for beating Fournier's; the retro surgeon for Young's favour (two of his boons in one run); the
-  lead apron for clearing a room of nothing but stones (three or more) or Nitze's favour; the attending coat at PGY-6; the
-  cap of shame for finishing a run with continence lost. A fresh unlock is named on the summary, toasted in the room, and puts
+  lead apron for clearing a room of nothing but stones (three or more) or Nitze's favour; the resident coat at PGY-2, the
+  attending coat at PGY-6; cowboy boots for beating the Staghorn; the cap of shame for finishing a run with continence lost. A fresh unlock is named on the summary, toasted in the room, and puts
   a gold dot on the scrub cabinet until you look.
 - **Old photograph:** a toggle once the retro set is yours; every colour of the look goes through a sepia print (the instrument
   in your hand keeps its class colour, it is gameplay information).
