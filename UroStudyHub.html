@@ -1452,8 +1452,10 @@ function orParseModels(data) {
   }).map(function(m) {
     var p = m.pricing || {};
     var pin = parseFloat(p.prompt), pout = parseFloat(p.completion);
+    var sp = m.supported_parameters;  // "reasoning" listed = takes reasoning.effort; unknown = assume it might
     return { id: m.id, name: m.name || m.id, ctx: m.context_length || 0, created: m.created || 0,
-      free: pin === 0 && pout === 0, inM: pin * 1e6, outM: pout * 1e6 };
+      free: pin === 0 && pout === 0, inM: pin * 1e6, outM: pout * 1e6,
+      reason: Array.isArray(sp) ? sp.indexOf("reasoning") >= 0 || sp.indexOf("include_reasoning") >= 0 : undefined };
   }).sort(function(a, b) { return b.created - a.created; });
 }
 function orPriceLabel(m) {
@@ -1462,8 +1464,14 @@ function orPriceLabel(m) {
   function f(n) { return String(+n.toFixed(n < 1 ? 3 : 2)); }
   return "$" + f(m.inM) + " / $" + f(m.outM);
 }
+// Parsed once per stored copy: the tutor's AI chip asks on every render (the Pomodoro ticks each second).
+var _orCache = { raw: null, val: null };
 function loadOrModels() {
-  try { var v = localStorage.getItem("uroStudyHub_orModels"); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+  try {
+    var v = localStorage.getItem("uroStudyHub_orModels");
+    if (v !== _orCache.raw) { _orCache.raw = v; _orCache.val = v ? JSON.parse(v) : null; }
+    return _orCache.val;
+  } catch(e) { return null; }
 }
 function saveOrModels(models) {
   try { localStorage.setItem("uroStudyHub_orModels", JSON.stringify({ ts: Date.now(), models: models })); } catch(e) { /* ignore */ }
@@ -1793,6 +1801,284 @@ function claudeRefusal() {
   var e = new Error("Claude's safety filter declined this one. Try rephrasing it, or pick another model in Settings.");
   e.refusal = true;
   return e;
+}
+
+// ═══ OTHER PROVIDERS' MODEL LISTS ═══
+// OpenAI: a fixed list (Settings and the tutor's AI panel). Gemini and local servers list their
+// models live; the last list fetched is kept so the tutor's panel can offer it without a refetch.
+var OPENAI_MODELS = [
+  { id: "gpt-4o", label: "GPT-4o (reliable)" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini (fast, cheap)" },
+  { id: "gpt-4.1", label: "GPT-4.1" },
+  { id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+  { id: "gpt-4.1-nano", label: "GPT-4.1 Nano (cheapest)" },
+  { id: "gpt-5", label: "GPT-5 (reasoning)" },
+  { id: "gpt-5-mini", label: "GPT-5 Mini (reasoning)" },
+  { id: "o3-mini", label: "o3-mini (reasoning)" },
+  { id: "o4-mini", label: "o4-mini (reasoning)" },
+];
+// OpenAI's reasoning models take max_completion_tokens (not max_tokens) and only the default temperature.
+function openaiReasoning(model) { var m = String(model || ""); return /^o\d/.test(m) || (/^gpt-5/.test(m) && m.indexOf("chat") < 0); }
+function geminiListModels(key) {
+  return fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + key)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) throw new Error(data.error.message || "API error");
+      var models = (data.models || [])
+        .filter(function(m) { return m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf("generateContent") >= 0; })
+        .map(function(m) { return { id: m.name.replace("models/", ""), name: m.displayName || m.name.replace("models/", "") }; })
+        .sort(function(a, b) { return a.name < b.name ? -1 : 1; });
+      if (models.length) { try { localStorage.setItem("uroStudyHub_gModels", JSON.stringify(models)); } catch (e) { /* ignore */ } }
+      return models;
+    });
+}
+function localListModels(ep) {
+  return fetch(ep + "/v1/models")
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var ids = (data.data || []).map(function(m) { return m.id; }).filter(Boolean);
+      if (ids.length) { try { localStorage.setItem("uroStudyHub_lmModels", JSON.stringify(ids)); } catch (e) { /* ignore */ } }
+      return ids;
+    });
+}
+function loadSavedList(key) { try { var v = JSON.parse(localStorage.getItem(key) || "null"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+
+// ═══ REASONING EFFORT ═══
+// One setting (lm.effort; "" = leave it to the model) sent the way each API takes it: Claude
+// output_config.effort; OpenAI, Gemini (OpenAI-compatible endpoint) and local servers reasoning_effort;
+// OpenRouter reasoning.effort. A level a model doesn't offer is sent as its nearest one.
+var EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+var EFFORT_LABEL = { "": "Default", none: "Off", minimal: "Minimal", low: "Low", medium: "Medium", high: "High", xhigh: "X-High", max: "Max" };
+// The levels a model takes, lowest first, or null when it has no reasoning setting.
+function effortLevels(prov, model) {
+  var m = String(model || "").toLowerCase().replace(/^models\//, "");
+  if (prov === "claude") {
+    if (/^claude-(opus|sonnet|haiku|fable|mythos)-5/.test(m) || /^claude-opus-4-[78]/.test(m)) return ["low", "medium", "high", "xhigh", "max"];
+    if (/^claude-(opus|sonnet)-4-6/.test(m)) return ["low", "medium", "high", "max"];
+    if (/^claude-opus-4-5/.test(m)) return ["low", "medium", "high"];
+    return null;
+  }
+  if (prov === "openai") {
+    if (/^o\d/.test(m)) return ["low", "medium", "high"];
+    if (/^gpt-5(-mini|-nano)?(-\d{4}-\d\d-\d\d)?$/.test(m)) return ["minimal", "low", "medium", "high"];
+    if (/^gpt-5\.\d/.test(m) && m.indexOf("chat") < 0) return ["none", "low", "medium", "high"];
+    return null;
+  }
+  if (prov === "gemini") {
+    if (/^gemini-2\.5-pro/.test(m)) return ["low", "medium", "high"];  // 2.5 Pro can't stop thinking
+    if (/^gemini-2\.5/.test(m)) return ["none", "low", "medium", "high"];
+    var v = /^gemini-(\d+)/.exec(m);
+    if (v && +v[1] >= 3) return m.indexOf("flash") >= 0 ? ["minimal", "low", "medium", "high"] : ["low", "medium", "high"];
+    return null;  // Gemini 2.0 / 1.5, Gemma: no thinking setting
+  }
+  if (prov === "openrouter") {
+    var cat = loadOrModels();
+    var hit = cat && (cat.models || []).filter(function(x) { return x.id === model; })[0];
+    if (hit && hit.reason === false) return null;
+    // OpenRouter turns effort into a share of max_tokens for Claude / Gemini (high ≈ 80%), so no X-High:
+    // it would leave too little room for the answer.
+    return ["low", "medium", "high"];
+  }
+  if (prov === "lmstudio") return ["low", "medium", "high"];  // only some local models (gpt-oss, Qwen3, ...) listen
+  return null;
+}
+// What the model does when no level is sent, where that is known.
+function effortDefault(prov, model) {
+  var m = String(model || "");
+  if (prov === "claude" && effortLevels(prov, m)) return /^claude-(opus-5-5|haiku-5-5)/.test(m) ? "medium" : "high";
+  if (prov === "openai" && effortLevels(prov, m)) return /^gpt-5\.\d/.test(m) ? "none" : "medium";
+  return "";
+}
+// The level to send for the user's pick (null = send none).
+function effortFor(prov, model, want) {
+  if (!want) return null;
+  var lv = effortLevels(prov, model);
+  if (!lv) return null;
+  if (lv.indexOf(want) >= 0) return want;
+  var wi = EFFORT_ORDER.indexOf(want), best = null, bd = 99;
+  lv.forEach(function(l) { var d = Math.abs(EFFORT_ORDER.indexOf(l) - wi); if (d < bd) { bd = d; best = l; } });
+  return best;
+}
+// Room for the thinking a level asks for (it comes out of the same output budget as the answer).
+// Unused tokens aren't billed. Local servers keep the caller's limit (small context windows).
+function effortMaxTokens(prov, eff, maxTok) {
+  if (!eff || eff === "none" || prov === "lmstudio") return maxTok;
+  return Math.max(maxTok, (prov === "gemini" && eff === "high") || eff === "xhigh" || eff === "max" ? 32000 : 16000);
+}
+
+var AI_PROVIDERS = [
+  { id: "gemini", label: "Gemini", icon: "✦", col: "#4285f4" },
+  { id: "claude", label: "Claude", icon: "◈", col: "#c084fc" },
+  { id: "openai", label: "OpenAI", icon: "◉", col: "#10a37f" },
+  { id: "openrouter", label: "Router", icon: "◎", col: "#f97316" },
+  { id: "lmstudio", label: "Local", icon: "⊛", col: "#a78bfa" },
+];
+
+// Reasoning-effort buttons for one model (Settings and the tutor's AI panel). Keeps its own copy of
+// the value so the memoized Settings modal can update it without remounting.
+function EffortPicker(p) {
+  var c = p.c;
+  var [v, setV] = useState(p.value || "");
+  useEffect(function() { setV(p.value || ""); }, [p.value]);
+  var lv = effortLevels(p.prov, p.model);
+  if (!lv) {
+    var why = p.prov === "openai" ? "GPT-4o and GPT-4.1 don't reason, so there's nothing to set. GPT-5, o3-mini and o4-mini have a reasoning setting."
+      : p.prov === "gemini" ? "This Gemini model doesn't think, so there's nothing to set. Gemini 2.5 and newer have one."
+      : p.prov === "openrouter" ? "OpenRouter lists this model without a reasoning setting."
+      : p.prov === "claude" ? "This Claude model has no effort setting. Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1 do."
+      : "No reasoning setting for this model.";
+    return <div data-effort-none style={{ fontSize: 10, color: "var(--c-mut)", lineHeight: 1.5 }}>{why}</div>;
+  }
+  var sent = effortFor(p.prov, p.model, v);
+  var def = effortDefault(p.prov, p.model);
+  function pick(x) { setV(x); p.onChange(x); }
+  return (
+    <div data-effort>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {[""].concat(lv).map(function(x) {
+          var on = x === "" ? !v : sent === x;
+          return <button key={x || "default"} data-effort-opt={x || "default"} onClick={function() { pick(x); }} style={{ flex: "1 1 auto", padding: "7px 4px", minHeight: 32, background: on ? c.a + "25" : "transparent", border: "1px solid " + (on ? c.a + "70" : "var(--c-br)"), borderRadius: 7, color: on ? c.a : "var(--c-mut)", fontSize: 10, fontWeight: on ? 800 : 600, cursor: "pointer" }}>{EFFORT_LABEL[x]}</button>;
+        })}
+      </div>
+      <div style={{ fontSize: 9, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
+        {v && sent !== v && <div data-effort-clamp style={{ color: "var(--a-or2)" }}>{"You picked " + EFFORT_LABEL[v] + "; this model doesn't offer it, so " + EFFORT_LABEL[sent] + " is sent."}</div>}
+        <div>{"Default leaves it to the model" + (def ? " (" + EFFORT_LABEL[def] + " for this one)" : "") + ". Higher thinks longer before answering: slower replies, and the thinking is billed as output tokens (it isn't shown)." + (lv.indexOf("none") >= 0 ? " Off skips thinking." : "")}</div>
+        {p.prov === "lmstudio" && <div>{"Only some local models listen to this (gpt-oss, Qwen3 and the like); others ignore it."}</div>}
+      </div>
+    </div>
+  );
+}
+
+// The AI Tutor's panel (the AI chip in its toolbar): switch provider, model and reasoning effort
+// in place. Keys are still added in Settings (a provider without one opens it on that tab, over the tutor).
+function AiQuickPanel(p) {
+  var c = p.c, lm = p.lm, prov = lm.provider;
+  var [orQ, setOrQ] = useState("");
+  var [orCat, setOrCat] = useState(loadOrModels);
+  var [gList, setGList] = useState(function() { return loadSavedList("uroStudyHub_gModels"); });
+  var [lList, setLList] = useState(function() { return loadSavedList("uroStudyHub_lmModels"); });
+  var [busy, setBusy] = useState(false);
+  var [err, setErr] = useState("");
+  var keys = { claude: lm.claudeKey, gemini: lm.geminiKey, openai: lm.openaiKey, openrouter: lm.openrouterKey, lmstudio: "local" };
+  function provModel(id) {
+    return id === "claude" ? (lm.claudeModel || CLAUDE_DEFAULT) : id === "gemini" ? (lm.geminiModel || "gemini-2.5-flash")
+      : id === "openai" ? (lm.openaiModel || "gpt-4o") : id === "openrouter" ? (lm.openrouterModel || OR_DEFAULT_MODEL)
+      : (lm.localModel || (lm.provider === "lmstudio" ? lm.model : ""));
+  }
+  function pickProv(id) {
+    setErr("");
+    if (!keys[id]) { p.onAllSettings(id); return; }
+    var m = provModel(id);
+    p.setLm(function(x) { return Object.assign({}, x, { provider: id, model: m, on: !!m }); });
+    if (id === "lmstudio" && !m) refreshList("lmstudio");
+  }
+  function setModel(m, pv) {  // pv: the provider it is for (default: the one shown)
+    if (!m) return;
+    var field = { claude: "claudeModel", gemini: "geminiModel", openai: "openaiModel", openrouter: "openrouterModel", lmstudio: "localModel" }[pv || prov];
+    p.setLm(function(x) { var u = { model: m, on: true }; u[field] = m; return Object.assign({}, x, u); });
+  }
+  function refreshList(which) {
+    setBusy(true); setErr("");
+    var job = which === "gemini" ? geminiListModels(lm.geminiKey).then(function(ms) { setGList(ms); if (!ms.length) setErr("No models found for this key."); })
+      : which === "lmstudio" ? localListModels(lm.ep).then(function(ids) {
+          setLList(ids);
+          if (!ids.length) { setErr("Connected, but no model is loaded in LM Studio."); return; }
+          if (!provModel("lmstudio")) setModel(ids[0], "lmstudio");
+        })
+      : fetch("https://openrouter.ai/api/v1/models").then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+          .then(function(d) { saveOrModels(orParseModels(d)); setOrCat(loadOrModels()); });
+    job.catch(function(e) { setErr(which === "lmstudio" ? "Can't reach " + lm.ep + ". Is LM Studio running?" : "Couldn't load the list: " + (e.message || "network error")); })
+      .then(function() { setBusy(false); });
+  }
+  var selStyle = { flex: 1, minWidth: 0, padding: "8px 10px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: 11, minHeight: 34 };
+  var smallBtn = { padding: "6px 10px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-mut)", fontSize: 11, cursor: "pointer", minHeight: 34, whiteSpace: "nowrap" };
+  var cur = p.model;
+  function plainSelect(list) {  // list of { id, label }
+    var has = list.some(function(m) { return m.id === cur; });
+    return (
+      <select data-aipick-model value={cur || ""} onChange={function(e) { setModel(e.target.value); }} style={selStyle}>
+        {!cur && <option value="">{"Pick a model"}</option>}
+        {list.map(function(m) { return <option key={m.id} value={m.id}>{m.label}</option>; })}
+        {cur && !has && <option value={cur}>{cur}</option>}
+      </select>
+    );
+  }
+  var modelUi;
+  if (!keys[prov]) {
+    modelUi = <div style={{ fontSize: 10, color: "var(--c-mut)" }}>{"No key saved for this provider yet: add one in All AI settings."}</div>;
+  } else if (prov === "claude") {
+    modelUi = plainSelect(CLAUDE_MODELS);
+  } else if (prov === "openai") {
+    modelUi = plainSelect(OPENAI_MODELS);
+  } else if (prov === "gemini" || prov === "lmstudio") {
+    var raw = prov === "gemini" ? gList.map(function(m) { return { id: m.id, label: m.id }; }) : lList.map(function(id) { return { id: id, label: id }; });
+    modelUi = (
+      <div style={{ display: "flex", gap: 6 }}>
+        {plainSelect(raw)}
+        <button data-aipick-refresh onClick={function() { refreshList(prov); }} disabled={busy} title={prov === "gemini" ? "Load Google's current model list" : "List the models loaded in LM Studio"} style={Object.assign({}, smallBtn, { opacity: busy ? 0.5 : 1 })}>{busy ? "…" : "↻ List"}</button>
+      </div>
+    );
+  } else {  // OpenRouter: search the cached catalog
+    var all = (orCat && orCat.models) || [];
+    var q = orQ.trim().toLowerCase();
+    var shown = all.filter(function(m) { return !q || m.id.toLowerCase().indexOf(q) >= 0 || m.name.toLowerCase().indexOf(q) >= 0; });
+    modelUi = (
+      <div>
+        <div style={{ fontSize: 10, color: "var(--c-mut)", marginBottom: 5, wordBreak: "break-all" }}>{"Now: "}<b style={{ color: "var(--c-tx)" }}>{cur}</b></div>
+        {all.length === 0
+          ? <button data-aipick-refresh onClick={function() { refreshList("openrouter"); }} disabled={busy} style={Object.assign({}, smallBtn, { width: "100%" })}>{busy ? "Loading…" : "Load OpenRouter's model list"}</button>
+          : <div>
+              <input data-aipick-search value={orQ} onChange={function(e) { setOrQ(e.target.value); }} placeholder={"Search " + all.length + " models (claude, gemini, qwen…)"} style={Object.assign({}, selStyle, { width: "100%", boxSizing: "border-box", marginBottom: 5 })} />
+              <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid var(--c-br)", borderRadius: 8 }}>
+                {shown.slice(0, 40).map(function(m) {
+                  var sel = m.id === cur;
+                  return (
+                    <div key={m.id} data-aipick-or={m.id} onClick={function() { setModel(m.id); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 9px", cursor: "pointer", borderBottom: "1px solid var(--c-br)", background: sel ? "#f9731620" : "transparent" }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: sel ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(sel ? "✓ " : "") + m.name}</div>
+                      <span style={{ fontSize: 9, color: m.free ? "var(--a-grn)" : "var(--c-mut)", fontWeight: m.free ? 800 : 400, flexShrink: 0 }}>{orPriceLabel(m)}</span>
+                    </div>
+                  );
+                })}
+                {shown.length === 0 && <div style={{ padding: 10, fontSize: 10, color: "#64748b", textAlign: "center" }}>{"No models match"}</div>}
+                {shown.length > 40 && <div style={{ padding: 7, fontSize: 9, color: "#64748b", textAlign: "center" }}>{(shown.length - 40) + " more: narrow the search"}</div>}
+              </div>
+            </div>}
+      </div>
+    );
+  }
+  var head = { fontSize: 10, fontWeight: 700, color: "var(--c-mut)", margin: "10px 0 5px", textTransform: "uppercase", letterSpacing: 0.4 };
+  return (
+    <div data-aipick-panel style={{ position: "absolute", top: 50, left: 8, zIndex: 45, width: "min(360px, calc(100% - 16px))", maxHeight: "calc(100% - 60px)", overflowY: "auto", boxSizing: "border-box", background: c.bg, border: "1px solid " + c.a + "55", borderRadius: 12, boxShadow: "0 14px 44px rgba(0,0,0,0.6)", padding: 12, fontSize: 11, color: "var(--c-tx)", lineHeight: 1.4 }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <span style={{ fontWeight: 800, color: c.a, flex: 1 }}>{"AI model"}</span>
+        <button onClick={p.onClose} title="Close" style={{ background: c.cd, border: "1px solid var(--c-br)", borderRadius: 9, color: "var(--c-tx)", cursor: "pointer", fontSize: 14, minWidth: 34, minHeight: 32, padding: 0, fontWeight: 700 }}>{"✕"}</button>
+      </div>
+      {!lm.on && <div style={{ fontSize: 10, color: "var(--a-or2)", marginTop: 4 }}>{"Not connected: tap a provider to use it."}</div>}
+      <div style={head}>{"Provider"}</div>
+      <div style={{ display: "flex", gap: 4 }}>
+        {AI_PROVIDERS.map(function(pv) {
+          var active = prov === pv.id, ok = !!keys[pv.id];
+          return (
+            <button key={pv.id} data-aipick-prov={pv.id} onClick={function() { pickProv(pv.id); }} title={ok ? "Use " + pv.label : "No " + pv.label + " key yet: opens Settings"} style={{ flex: 1, padding: "6px 2px", minHeight: 44, background: active ? pv.col + "20" : "transparent", border: "1px solid " + (active ? pv.col + "70" : "var(--c-br)"), borderRadius: 8, cursor: "pointer", color: active ? pv.col : ok ? "var(--c-mut)" : "#64748b", opacity: ok || active ? 1 : 0.6, fontSize: 9, fontWeight: active ? 800 : 600, position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+              <span style={{ fontSize: 13 }}>{pv.icon}</span>
+              <span>{pv.label}</span>
+              {!ok && <span style={{ fontSize: 7 }}>{"add key"}</span>}
+              {active && lm.on && <div style={{ position: "absolute", top: 3, right: 3, width: 5, height: 5, borderRadius: "50%", background: "var(--a-grn)" }} />}
+            </button>
+          );
+        })}
+      </div>
+      <div style={head}>{"Model"}</div>
+      {modelUi}
+      {err && <div style={{ fontSize: 10, color: "var(--a-red0)", marginTop: 5 }}>{err}</div>}
+      <div style={head}>{"Reasoning effort"}</div>
+      <EffortPicker c={c} prov={prov} model={cur} value={lm.effort || ""} onChange={function(v) { p.setLm(function(x) { return Object.assign({}, x, { effort: v }); }); }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--c-br)" }}>
+        <span style={{ flex: 1, fontSize: 9, color: "#64748b" }}>{"Changes apply from your next message; the chat so far stays."}</span>
+        <button data-aipick-settings onClick={function() { p.onAllSettings(); }} style={smallBtn}>{"⚙ All AI settings"}</button>
+      </div>
+    </div>
+  );
 }
 
 // ═══ AI COST METER ═══
@@ -4370,6 +4656,8 @@ export default function UroStudyHub() {
       geminiKey: "", geminiModel: "gemini-2.5-flash",
       openaiKey: "", openaiModel: "gpt-4o",
       openrouterKey: "", openrouterModel: OR_DEFAULT_MODEL,
+      localModel: "",  // the LM Studio model (lm.model mirrors whichever provider is connected)
+      effort: "",      // reasoning effort: "" = the model's default, else a level from EFFORT_ORDER
     };
     try {
       var saved = localStorage.getItem("uroStudyHub_lmSettings");
@@ -4377,6 +4665,7 @@ export default function UroStudyHub() {
         var parsed = JSON.parse(saved);
         if (CLAUDE_LEGACY[parsed.claudeModel]) parsed.claudeModel = CLAUDE_LEGACY[parsed.claudeModel];
         if (CLAUDE_LEGACY[parsed.model]) parsed.model = CLAUDE_LEGACY[parsed.model];
+        if (parsed.provider === "lmstudio" && !parsed.localModel && parsed.model) parsed.localModel = parsed.model;  // saved before localModel existed
         return Object.assign({}, defaults, parsed, { on: false });
       }
     } catch (e) { /* ignore */ }
@@ -4391,6 +4680,7 @@ export default function UroStudyHub() {
         geminiKey: lm.geminiKey, geminiModel: lm.geminiModel,
         openaiKey: lm.openaiKey, openaiModel: lm.openaiModel,
         openrouterKey: lm.openrouterKey, openrouterModel: lm.openrouterModel,
+        localModel: lm.localModel, effort: lm.effort,
       }));
     } catch (e) { /* ignore */ }
   }, [lm]);
@@ -5185,6 +5475,11 @@ export default function UroStudyHub() {
     try { return JSON.parse(localStorage.getItem("uroStudyHub_prices") || "{}") || {}; } catch (e) { return {}; }
   });
   var [showCost, setShowCost] = useState(false);
+  var [showAiPick, setShowAiPick] = useState(false);  // the tutor's AI panel: provider, model, reasoning effort
+  var settingsTab = useRef(null);  // provider tab the Settings modal opens on (null = the connected one)
+  useEffect(function() { if (!showSet) settingsTab.current = null; }, [showSet]);
+  function setEffort(v) { setLm(function(p) { return Object.assign({}, p, { effort: v }); }); }
+  function openAiSettings(provId) { settingsTab.current = provId || null; setShowSet(true); }
   var [priceDraft, setPriceDraft] = useState(["", ""]);
   var [, setCatTick] = useState(0);  // re-render once OpenRouter's price list lands
   // A Gemini model with no built-in price borrows OpenRouter's: fetch (and cache) that list up front.
@@ -7049,6 +7344,7 @@ export default function UroStudyHub() {
     // Cost meter: record what this call cost from the usage the provider reports (exact $ from
     // OpenRouter), else ~4 characters per token. A reply cut off or aborted mid-stream still counts.
     var model = currentModel();
+    var eff = effortFor(prov, model, lm.effort);  // reasoning effort to send, or null
     var inChars = sysPrompt.length + messages.reduce(function(n, m) { return n + String(m.content || "").length; }, 0);
     var acc = "", usage = null, noted = false, epoch = sessEpoch.current;
     var flight = { inTok: Math.round(inChars / 4), rate: (priceFor(prov, model, Math.round(inChars / 4)) || {}).rate || null };
@@ -7074,7 +7370,15 @@ export default function UroStudyHub() {
       var headers = Object.assign({ "Content-Type": "application/json" }, extraHeaders || {});
       if (apiKey) headers["Authorization"] = "Bearer " + apiKey;
       var apiMsgs = [{ role: "system", content: sysPrompt }].concat(messages);
-      var reqBody = { model: model, messages: apiMsgs, temperature: temp, max_tokens: maxTok };
+      var reqBody = { model: model, messages: apiMsgs };
+      if (prov === "openai" && openaiReasoning(model)) {
+        // o-series / GPT-5: reasoning counts against this limit, and only the default temperature is accepted
+        reqBody.max_completion_tokens = Math.max(maxTok, eff === "high" ? 32000 : 16000);
+      } else {
+        reqBody.temperature = temp;
+        reqBody.max_tokens = effortMaxTokens(prov, eff, maxTok);
+      }
+      if (eff) { if (prov === "openrouter") reqBody.reasoning = { effort: eff }; else reqBody.reasoning_effort = eff; }
       if (onDelta) reqBody.stream = true;
       if (onDelta && prov === "openai") reqBody.stream_options = { include_usage: true };  // token counts in the last chunk
       if (prov === "openrouter") reqBody.usage = { include: true };  // OpenRouter reports the exact $ cost
@@ -7117,7 +7421,9 @@ export default function UroStudyHub() {
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true",
       };
-      var claudeBody = { model: model, max_tokens: claudeMaxTokens(model, maxTok), system: sysPrompt, messages: messages, stream: !!onDelta };
+      // X-High / Max think longest: more room when streaming (a long non-streamed call risks a timeout)
+      var claudeBody = { model: model, max_tokens: onDelta && (eff === "xhigh" || eff === "max") ? Math.max(claudeMaxTokens(model, maxTok), 32000) : claudeMaxTokens(model, maxTok), system: sysPrompt, messages: messages, stream: !!onDelta };
+      if (eff) claudeBody.output_config = { effort: eff };
       if (claudeFallbackOk(model)) { claudeHeaders["anthropic-beta"] = "server-side-fallback-2026-07-01"; claudeBody.fallbacks = "default"; }
       var refused = false;
       fetch("https://api.anthropic.com/v1/messages", {
@@ -7180,7 +7486,7 @@ export default function UroStudyHub() {
       : prov === "gemini" ? (lm.geminiModel || "gemini-2.5-flash")
       : prov === "openai" ? (lm.openaiModel || "gpt-4o")
       : prov === "openrouter" ? (lm.openrouterModel || OR_DEFAULT_MODEL)
-      : (lm.model || "local-model");
+      : (lm.localModel || lm.model || "local-model");
   }
 
   // $ per million tokens [input, output] for a model, and where that price comes from.
@@ -9684,7 +9990,7 @@ export default function UroStudyHub() {
     var [ep, setEp] = useState(lm.ep);
     var [testing, setTesting] = useState(false);
     var [testMsg, setTestMsg] = useState("");
-    var [prov, setProv] = useState(lm.provider || "lmstudio");
+    var [prov, setProv] = useState(settingsTab.current || lm.provider || "lmstudio");
     var [cKey, setCKey] = useState(lm.claudeKey || "");
     var [cModel, setCModel] = useState(lm.claudeModel || CLAUDE_DEFAULT);
     var [gKey, setGKey] = useState(lm.geminiKey || "");
@@ -9707,14 +10013,8 @@ export default function UroStudyHub() {
     function fetchGeminiModels() {
       if (!gKey) { setGFetchErr("Enter an API key first"); return; }
       setTesting(true); setGFetchErr(""); setGModels([]);
-      fetch("https://generativelanguage.googleapis.com/v1beta/models?key=" + gKey)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) { setGFetchErr(data.error.message || "API error"); setTesting(false); return; }
-          var models = (data.models || [])
-            .filter(function(m) { return m.supportedGenerationMethods && m.supportedGenerationMethods.indexOf("generateContent") >= 0; })
-            .map(function(m) { return { id: m.name.replace("models/", ""), name: m.displayName || m.name.replace("models/", "") }; })
-            .sort(function(a, b) { return a.name < b.name ? -1 : 1; });
+      geminiListModels(gKey)
+        .then(function(models) {
           if (models.length === 0) { setGFetchErr("No generative models found for this key"); setTesting(false); return; }
           setGModels(models);
           var current = models.find(function(m) { return m.id === gModel; });
@@ -9747,10 +10047,8 @@ export default function UroStudyHub() {
 
     function fetchLmModels() {
       setTesting(true); setLmFetchErr(""); setLmModels([]);
-      fetch(ep + "/v1/models")
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          var models = (data.data || []).map(function(m) { return m.id; }).filter(Boolean);
+      localListModels(ep)
+        .then(function(models) {
           if (models.length === 0) { setLmFetchErr("Connected but no models loaded."); setTesting(false); return; }
           setLmModels(models);
           setSelectedLmModel(models.indexOf(lm.model) >= 0 ? lm.model : models[0]);
@@ -9760,7 +10058,7 @@ export default function UroStudyHub() {
     }
     function connectLmModel() {
       if (!selectedLmModel) return;
-      setLm(function(p) { return Object.assign({}, p, { ep: ep, model: selectedLmModel, on: true, provider: "lmstudio" }); });
+      setLm(function(p) { return Object.assign({}, p, { ep: ep, model: selectedLmModel, localModel: selectedLmModel, on: true, provider: "lmstudio" }); });
     }
 
     // Generic test for OpenAI-compatible APIs
@@ -9770,7 +10068,9 @@ export default function UroStudyHub() {
       if (key) headers["Authorization"] = "Bearer " + key;
       fetch(endpoint, {
         method: "POST", headers: headers,
-        body: JSON.stringify({ model: model, messages: [{ role: "user", content: "Say hello in 3 words." }], max_tokens: 20 }),
+        // OpenAI's reasoning models refuse max_tokens; their reasoning also comes out of the limit
+        body: JSON.stringify(Object.assign({ model: model, messages: [{ role: "user", content: "Say hello in 3 words." }] },
+          provName === "openai" && openaiReasoning(model) ? { max_completion_tokens: 512 } : { max_tokens: 20 })),
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -9825,13 +10125,7 @@ export default function UroStudyHub() {
     var inputStyle = { width: "100%", padding: "10px 14px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: 12, outline: "none", marginBottom: 10, boxSizing: "border-box" };
     var selectStyle = Object.assign({}, inputStyle, { marginBottom: 12 });
 
-    var PROVIDERS = [
-      { id: "gemini", label: "Gemini", icon: "✦", col: "#4285f4" },
-      { id: "claude", label: "Claude", icon: "◈", col: "#c084fc" },
-      { id: "openai", label: "OpenAI", icon: "◉", col: "#10a37f" },
-      { id: "openrouter", label: "Router", icon: "◎", col: "#f97316" },
-      { id: "lmstudio", label: "Local", icon: "⊛", col: "#a78bfa" },
-    ];
+    var PROVIDERS = AI_PROVIDERS;
 
     return (
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={function() { setShowSet(false); }}>
@@ -9917,13 +10211,8 @@ export default function UroStudyHub() {
               <input value={oKey} onChange={function(e) { setOKey(e.target.value); }} type="password" placeholder="sk-..." style={inputStyle} />
               <label style={{ fontSize: 11, color: "var(--c-mut)", marginBottom: 4, display: "block" }}>Model</label>
               <select value={oModel} onChange={function(e) { setOModel(e.target.value); }} style={selectStyle}>
-                <option value="gpt-4o">GPT-4o (reliable)</option>
-                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
-                <option value="gpt-4.1">GPT-4.1</option>
-                <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                <option value="gpt-4.1-nano">GPT-4.1 Nano (cheapest)</option>
-                <option value="o3-mini">o3-mini (reasoning)</option>
-                <option value="o4-mini">o4-mini (reasoning)</option>
+                {OPENAI_MODELS.map(function(m) { return <option key={m.id} value={m.id}>{m.label}</option>; })}
+                {!OPENAI_MODELS.some(function(m) { return m.id === oModel; }) && <option value={oModel}>{oModel}</option>}
               </select>
               <button onClick={function() { testApiKey("openai", "https://api.openai.com/v1/chat/completions", oKey, oModel); }} disabled={!oKey || testing} style={{ width: "100%", padding: 10, background: !oKey ? "var(--c-br)" : "linear-gradient(135deg, #10a37f, #1a7f64)", color: "#fff", border: "none", borderRadius: 10, cursor: !oKey ? "default" : "pointer", fontWeight: 600, fontSize: 12, opacity: testing ? 0.6 : 1 }}>{testing ? "Testing..." : "Connect to OpenAI"}</button>
               <div style={{ marginTop: 12, padding: 10, background: c.cd + "80", borderRadius: 8, fontSize: 9, color: "#64748b", lineHeight: 1.5 }}>
@@ -10008,6 +10297,13 @@ export default function UroStudyHub() {
             </div>
           )}
 
+          {/* ═══ REASONING EFFORT — the connected model's; the tutor's AI panel has the same control ═══ */}
+          <div data-set-effort style={{ marginTop: 16, borderTop: "1px solid var(--c-br)", paddingTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--c-mut)", marginBottom: 4 }}>{"🧠 Reasoning effort"}</div>
+            <div style={{ fontSize: 9, color: "#64748b", marginBottom: 8 }}>{(lm.on ? "For " : "For your last model, ") + currentModel() + ". You can also change it from the model button in the AI Tutor."}</div>
+            <EffortPicker c={c} prov={lm.provider} model={currentModel()} value={lm.effort || ""} onChange={setEffort} />
+          </div>
+
           {/* ═══ STUDY COMMITMENT ═══ */}
           <div style={{ marginTop: 16, borderTop: "1px solid var(--c-br)", paddingTop: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--c-mut)", marginBottom: 8 }}>{"📅 Study Commitment"}</div>
@@ -10078,10 +10374,13 @@ export default function UroStudyHub() {
   }
 
   // Memoized so parent re-renders (lecture timers, tutor updates) do not remount the modal
-  // and reset its provider tab / typed API key.
+  // and reset its provider tab / typed API key. A reasoning-effort change doesn't remount it either
+  // (that would jump the modal back to the top): its picker keeps its own copy of the value.
+  var lmNoEffort = Object.assign({}, lm); delete lmNoEffort.effort;
+  var lmSig = JSON.stringify(lmNoEffort);
   var settingsOverlay = useMemo(function() {
     return showSet ? React.createElement(SettingsModal, null) : null;
-  }, [showSet, lm]);
+  }, [showSet, lmSig]);
 
   // ═══ HEADER ═══
   var header = (
@@ -12271,17 +12570,25 @@ export default function UroStudyHub() {
       {page === "chat" && (
         <div style={{ display: "flex", flexDirection: "column", flex: "1 1 0", minHeight: 0, width: "100%", maxWidth: 820, margin: "0 auto", position: "relative" }}>
           <div style={{ display: "flex", gap: 5, padding: "6px 12px", borderBottom: "1px solid " + c.cd, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
-              <span style={{ fontSize: 9, color: lm.on ? "var(--a-grn)" : "var(--a-red0)" }}>{lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + (lm.model || "").split("/").pop().substring(0, 20) : "Off"}</span>
-            </div>
+            {/* AI chip: provider · model · effort. Tap to switch any of them without leaving the tutor. */}
+            {(function() {
+              var cm = currentModel(), ef = effortFor(lm.provider, cm, lm.effort);
+              var label = lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + cm.split("/").pop().substring(0, 20) + (ef ? " · " + EFFORT_LABEL[ef] : "") : "AI off · pick a model";
+              return (
+                <button data-aipick onClick={function() { setShowCost(false); setShowAiPick(!showAiPick); }} title="Switch AI provider, model or reasoning effort" style={{ display: "flex", alignItems: "center", gap: 5, background: showAiPick ? c.a + "20" : c.cd, border: "1px solid " + (showAiPick ? c.a + "80" : "var(--c-br)"), borderRadius: 8, padding: "4px 8px", cursor: "pointer", minHeight: 28, maxWidth: "100%" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: lm.on ? "var(--c-tx)" : "var(--a-red0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+                  <span style={{ fontSize: 8, color: "var(--c-mut)" }}>{"▼"}</span>
+                </button>
+              );
+            })()}
             {/* Cost meter — this session so far, climbing while a reply is written. Tap for details. */}
             {(function() {
               var lc = liveSessCost();
               var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
               var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
               return (
-                <button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={{ display: "flex", alignItems: "center", gap: 4, background: showCost ? c.a + "20" : c.cd, border: "1px solid " + (lc.live ? c.a + "80" : "var(--c-br)"), borderRadius: 8, padding: "4px 8px", cursor: "pointer", color: lc.live ? c.a : "var(--c-mut)", fontSize: 10, fontWeight: 700, fontVariantNumeric: "tabular-nums", minHeight: 28 }}>
+                <button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowAiPick(false); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={{ display: "flex", alignItems: "center", gap: 4, background: showCost ? c.a + "20" : c.cd, border: "1px solid " + (lc.live ? c.a + "80" : "var(--c-br)"), borderRadius: 8, padding: "4px 8px", cursor: "pointer", color: lc.live ? c.a : "var(--c-mut)", fontSize: 10, fontWeight: 700, fontVariantNumeric: "tabular-nums", minHeight: 28 }}>
                   <span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>{label}
                 </button>
               );
@@ -12984,6 +13291,8 @@ export default function UroStudyHub() {
               </div>
             );
           })()}
+          {/* ═══ AI PANEL — switch provider / model / reasoning effort in place ═══ */}
+          {showAiPick && <AiQuickPanel c={c} lm={lm} setLm={setLm} model={currentModel()} onClose={function() { setShowAiPick(false); }} onAllSettings={openAiSettings} />}
           {/* ═══ QUICK ASK — floating side chat: quick clarifications that never touch the lecture thread ═══ */}
           {chatView === "chat" && chatMsgs.length > 0 && !sideOpen && (
             <button onClick={openSidekick} title="Side chat for quick definitions & clarifications — the lecture won't see it" style={{ position: "absolute", right: 10, bottom: 72, zIndex: 30, display: "flex", alignItems: "center", gap: 5, padding: "8px 13px", background: "linear-gradient(135deg," + c.a + "," + (c.a2 || c.a) + ")", border: "none", borderRadius: 20, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px rgba(0,0,0,0.45)" }}>
