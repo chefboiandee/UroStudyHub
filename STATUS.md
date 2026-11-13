@@ -1,7 +1,68 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-12
+**Updated:** 2026-11-13
 **Tool:** Claude Code
+
+## 2026-11-13 — 🧸 Path of Pathology: the Peds Wing and Reflux, the kidney serpent (roadmap Step 4)
+
+Andrew: "read urocrawl.md and do step 4" (`UROCRAWL_ROADMAP.md`, Step 4). The fifth dungeon and its boss, all in
+`games/uro-crawl.html` (§14g the dungeon, §14h the boss, §17b the Call Room parts); the roadmap's Step 4 note lists every
+place the build reads the spec its own way.
+
+**Done:**
+- **The Peds Wing** (`?dungeon=peds`, or the case board's Peds row once the first four bosses are beaten): a bright toy-box
+  dungeon of eight rooms with its own enemies. No children are drawn and nothing anatomical: toys, abstract organs, and
+  torsion only as an abstract knot in a timed room. The pediatric scope (−15% range, +20% weak-point damage, rooms framed
+  tighter by toy blocks) shows on the HUD. Every room has a calm par timer instead of the clock; bronze / silver / gold pay
+  RVU and CME and become stickers in a sticker book.
+- **Six drills** (Valve Run, Tide Dash, Aim Gallery, Catheter Course, Pop-Off, Torsion ER) in rooms 2, 4 and 6 of a run:
+  no damage, a par, a personal best, fail-and-restart (three fails wave you through). Four of them teach a movement technique
+  kept in `META.tech` and listed on the pause screen: Perfect Roll, Slide, Flick Shot, Roll Cancel; gold is the mastery badge.
+- **Enemies:** the Hydronephrotic Kidney (SFU 1-4: decompress it with a stent or Foley for coins, or it bursts and floods),
+  BBD blob, Wilms tumour (elite: a telegraphed roll then a slam, sheds nephroblasts), Botryoid rhabdomyosarcoma (sheds grapes),
+  Spasm Bladder (elite: a pressure meter that throws a tide), nocturnal water balloons, febrile-UTI E. coli, PUV leaflet gates
+  in the corridors (time them, roll through, or ablate them), and antenatal-ultrasound rooms where kidneys show in the fan.
+- **Wilms**, a Peds-only patron, with twelve boons (VA, VAC, PEG, Timed Voiding, Biofeedback, DDAVP, Oxybutynin, CIC, CAP,
+  Teddy Bear, Lollipop, Sticker Chart); Young adds two valve boons.
+- **Reflux** (`?boss=reflux`): a kidney head on a ureter tail with a peristaltic lump (only the lump hurts), rippled sine /
+  figure-eight / loop passes, three wall ports it dives into and pops out of with a backwash, toy-block breakwaters, and the
+  verb: carry a bulking needle from the tray (no weapons, 85% speed, a hit or a backwash knocks it loose), stand by a port
+  and aim at four injection points to raise a gel mound. All three plugged: it is stranded with its head exposed. Grades
+  I-II / III (swarm on every backwash, tail slams that crack plugs) / IV-V (double backwash, the one-time Antireflux Tunnel
+  capstone for a CUT hit). The Foley balloon plugs a port once for free.
+- **Call Room:** the Peds case row, a sticker-book station, a Sim Lab station that replays every drill with its medal ladder,
+  a child-life specialist (10 lines; the first talk gives the Sticker Chart pin), Wilms's Kidney pin and portrait, the
+  kids' corner with a toy box, a mural and locker decals in the decor catalog.
+- **Tuning the serpent took most of the session.** Bots playing whole fights in headless Chrome showed: at the spec's ~15 s
+  plugs nobody strands it (0 strands in 6 fights at 18 s, most of them lost to the E. coli swarm; 0-2 a fight at 24 s, in
+  fights of 120-220 s); a strand that
+  never ended (the plug clocks froze while stranded, so it re-stranded forever: fixed); a strand that ran on across a grade
+  skipped that grade in 5 s; and chasing the head with the Bovie beat plugging outright. As shipped: plugs last 60 s; only
+  the maw (a lime weak-point orb at the front) takes the head's ×2 while it swims, and a strand exposes the whole head at
+  ×2.5 more for 8 s; plugged ports keep it out longer; a strand that ends with all plugs held blows out the weakest (0.7 s
+  tell), and a new grade blows out all of them and refills the tray. A bot that plugs now wins 8 of 8 (99-166 s, mean
+  ≈ 125 s, ≈ 50 damage, about one strand a grade); a bot that only chases the head wins half its fights.
+- Also fixed on the way: a comment in `startRun` had swallowed `G.neoadj = false; G.neoadjLoss = 0; G.arena = null;
+  G.wall = null;`, so those never reset between runs.
+
+**Verified:** headless Chromium, `node tools/uro-crawl.drive.mjs`: every block passes, 480 checks (A-R adapted where the
+new patron, pins, props and case row changed their counts). New block S is 93 checks: the scope modifier, par medals and
+the sticker book, each drill's success / fail-restart / best time, the four techniques, the elites, gates, decompress vs
+pop, every serpent mechanic (loops, the lump, dive / pop / backwash / breakwaters, the needle's pick-up, carry, drop and
+loss, the injection ring, weak plugs, the maw, stranding and the blowout, the grades, the tunnel, the Foley, the win), two
+full bot fights with no god mode (every tell seen ≥ 0.7 s), the Call Room pieces (SCRUB IN on the Peds case starts a Peds
+run), a `?dungeon=peds` run through all nine rooms to the win and its summary, and phone-size touch at 60 fps (the fight and
+the busiest drill). Script parses as ES2019. `UroStudyHub.html` is
+unchanged (no rebuild).
+**Roadmap:** Step 4 is ticked: all four numbered steps are done; only the parked items remain.
+**Next steps:** play the Peds Wing on the phone and tune: `REFLUX` (`PLUG_T` 60, `STRAND_MUL` 2.5, `BODY_MUL` 0.5 for the
+maw rule, `HP` 3400, `REFILL` 10), the drill pars in `TRIALS` (they come from a bot that plays perfectly: it took gold in
+all six), and the room pars in `PEDS.FIGHT`.
+**Open questions:**
+- Plugs last 60 s instead of the spec's ~15 s, and the maw-only weak point is my addition (the spec says the head is ×2).
+  Both came from the bot fights; worth a feel check by hand.
+- Three drills in a nine-room run: too many? (`pedsTrialPlan`; one or two is a one-line change.)
+- The Peds floor is quite saturated next to the other dungeons; tone it down?
 
 ## 2026-11-12 (later 4) — ⏭️ Uro Rush: Continue from the furthest block
 

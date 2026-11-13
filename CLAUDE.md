@@ -23,8 +23,12 @@ inside another workspace; nothing here depends on that one any more.)
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
   `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, shown to players as
   **Path of Pathology** (the file, storage key and hooks keep the working name Uro Crawl), pure canvas, no deps;
-  four bosses, `?boss=staghorn|fournier|mibc|bph` (the Staghorn: a mobile head-on duel, numbers in `STAG`, script `stag*` in §14b; the Invader: round arena on the generic wall + perforation system, §14c / §14d;
-  the Giant TURP: a flow-meter fight in three sections, `?section=1|2|3`, numbers in `BPH`, script `bph*` in §14f, on the generic landmark component and the sphincter curse of §14e, `UroCrawl.injureSphincter()`); weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
+  five bosses, `?boss=staghorn|fournier|mibc|bph|reflux` (the Staghorn: a mobile head-on duel, numbers in `STAG`, script `stag*` in §14b; the Invader: round arena on the generic wall + perforation system, §14c / §14d;
+  the Giant TURP: a flow-meter fight in three sections, `?section=1|2|3`, numbers in `BPH`, script `bph*` in §14f, on the generic landmark component and the sphincter curse of §14e, `UroCrawl.injureSphincter()`;
+  Reflux, the kidney serpent: plug its wall ports with a carried bulking needle to strand it, numbers in `REFLUX`, script `reflux*` in §14h, hooks `UroCrawl.reflux.*`);
+  the Peds Wing, §14g: `?dungeon=peds` (or the case board once the first four bosses are beaten), par-timer medals and a sticker book,
+  six drills (`TRIALS`, `?trial=valve|tide|aim|catheter|popoff|torsion`, the Sim Lab replays them), movement tech in `META.tech` (`TECH`, `?tech=`),
+  the pediatric scope in `PEDS`, hooks `UroCrawl.peds.*`; weapon mods + aspects + Instrument Rep doors: `MODS` / `ASPECTS` tables, `?mods=`,
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
   Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`;
   between runs the Call Room, a walkable hub, §17b: PLAY lands there, QUICK START skips it, `?hub=1`, `?cme=N`, saved in

@@ -26,6 +26,12 @@
 // scrub cabinet, decor catalog and its slots, rep table), the cast's rotating lines, the janitor's round, the OR door's
 // scrub-in sheet, a run that carries the picks (instruments, aspects, boon, pin, perks, coffee, case), the free reroll,
 // what a run pays in CME (rooms, boss, first kill, charts, favor), the summary's way back, and persistence across a reload.
+// Block S: the Peds Wing (?dungeon=peds) and Reflux (?boss=reflux): the pediatric scope, par timers + medals + the sticker
+// book, the six drills (success, fail-restart, personal bests, the Sim Lab), the four movement techniques, the Peds enemies,
+// elites and PUV gates, hydronephrosis decompress vs pop, the Wilms patron and the new boons, every serpent mechanic (loops,
+// the peristaltic lump, dive / pop / backwash, the bulking needle and the injection ring, the maw, stranding and the blowout,
+// the grades, the tunnel, the Foley), two full fights played by a bot with no god mode, the Call Room pieces, a run end to end
+// and phone-size frame rates. BLOCKS=S runs only it (the letter before the dot).
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -746,7 +752,7 @@ await block('M. reps + patrons', async () => {
     const missing = Object.keys(B).filter(id => pooled.indexOf(id) < 0);
     return { reps: R.length, pitches: R.map(r => r.pitches.length), companies: R.map(r => r.company), repLooks: R.every(r => r.look && r.name && r.title), patrons: order, dup, missing, glyphs: order.map(k => PT[k].glyph), pools: { civ: PT.civiale.pool.length, young: PT.young.pool.length, bovie: PT.bovie.pool.length, foley: PT.foley.pool.length, hug: PT.huggins.pool.join(), gle: PT.gleason.pool.join(), nitze: PT.nitze.pool.join(), flem: PT.fleming.pool.join() }, guest: PT.fleming.guest === true, rare: PT.gleason.rare === true, newBoons: ['smokevac', 'bipolar', 'cbi', 'cystoscope', 'grading'].map(id => !!B[id]) }; });
   check('REPS: a cast of 4 from invented companies, each with ≥ 6 pitches and a caricature spec', b.reps === 4 && b.pitches.every(n => n >= 6) && b.companies.join() === 'Lumenex Surgical,StoneWorks Medical,OmniCautery Systems,FluidLogic Devices' && b.repLooks, JSON.stringify(b.pitches));
-  check('PATRONS: Civiale / Young / Bovie / Foley / Huggins / Gleason / Nitze / Fleming (guest); every boon sits in exactly one pool; Gleason only has Grading', b.patrons.join() === 'civiale,young,bovie,foley,huggins,gleason,nitze,fleming' && b.dup.length === 0 && b.missing.length === 0 && b.pools.gle === 'grading' && /cisplatin/.test(b.pools.hug) && /bep/.test(b.pools.hug) && b.pools.flem.split(',').length === 7 && b.pools.nitze === 'coldlight,digiscope,cystoscope' && b.guest && b.rare && b.newBoons.every(Boolean) && b.glyphs.join() === 'diamond,tri,bolt,drop,medal,grade,eye,petri', JSON.stringify({ dup: b.dup, missing: b.missing }));
+  check('PATRONS: Civiale / Young / Bovie / Foley / Huggins / Gleason / Nitze / Fleming (guest) / Wilms (the Peds Wing, block S); every boon sits in exactly one pool; Gleason only has Grading', b.patrons.join() === 'civiale,young,bovie,foley,huggins,gleason,nitze,fleming,wilms' && b.dup.length === 0 && b.missing.length === 0 && b.pools.gle === 'grading' && /cisplatin/.test(b.pools.hug) && /bep/.test(b.pools.hug) && b.pools.flem.split(',').length === 7 && b.pools.nitze === 'coldlight,digiscope,cystoscope' && b.guest && b.rare && b.newBoons.every(Boolean) && b.glyphs.join() === 'diamond,tri,bolt,drop,medal,grade,eye,petri,kidney', JSON.stringify({ dup: b.dup, missing: b.missing }));
   b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); const G = UroCrawl.state; __prep(); const doors = G.doors.map(d => d.type + (d.patron ? ':' + d.patron : '')), boonDoors = G.doors.filter(d => d.type === 'boon');
     let gle = 0; for (let i = 0; i < 100; i++) if (UroCrawl.pickPatron() === 'gleason') gle++; UroCrawl.giveBoon('cisplatin'); const poolG = UroCrawl.patronPool('gleason'); let gle2 = 0; for (let i = 0; i < 300; i++) if (UroCrawl.pickPatron() === 'gleason') gle2++;
     return { doors, allHave: boonDoors.every(d => !!d.patron && !!UroCrawl.tables.PATRONS[d.patron]), gle, poolG, gle2 }; });
@@ -1685,7 +1691,7 @@ await block('R. call room', async () => {
   await p.evaluate(() => { UroCrawl.hub.goto('board'); UroCrawl.hub.step(2); });
   await p.keyboard.press('Enter'); await p.waitForTimeout(150);
   b = await p.evaluate(() => { const H = UroCrawl.hub, bt = id => document.querySelector('#hubBody [data-case="' + id + '"]'); return { panel: H.state.panel, stag: bt('staghorn').disabled && /ON THE BOARD/.test(bt('staghorn').textContent), four: bt('fournier').disabled, bph: bt('bph').disabled, mibc: bt('mibc').disabled, peds: bt('peds').disabled, un: [0, 1, 2, 3, 4].map(i => H.caseUnlocked(i)).join(), dungeon: H.state.dungeon }; });
-  check('Enter uses a station too: the case board starts with only STONES open; Infection, Benign, Oncology are locked behind the boss before them and the Peds Wing is not built', b.panel === 'board' && b.stag && b.four && b.bph && b.mibc && b.peds && b.un === 'true,false,false,false,false' && b.dungeon === 'staghorn', b.un);
+  check('Enter uses a station too: the case board starts with only STONES open; Infection, Benign, Oncology are locked behind the boss before them and the Peds Wing behind all four (block S)', b.panel === 'board' && b.stag && b.four && b.bph && b.mibc && b.peds && b.un === 'true,false,false,false,false' && b.dungeon === 'staghorn', b.un);
   const hints2 = await p.evaluate(() => { UroCrawl.meta.hub.bosses.staghorn = 1; const h = UroCrawl.hub.state.hints.join(); UroCrawl.hub.use('board'); return h; });
   await p.click('#hubBody [data-case="fournier"]'); await p.waitForTimeout(60);
   b = await p.evaluate(() => { const H = UroCrawl.hub; return { dungeon: H.state.dungeon, saved: UroCrawl.meta.hub.dungeon, bph: document.querySelector('#hubBody [data-case="bph"]').disabled, un: [0, 1, 2, 3, 4].map(i => H.caseUnlocked(i)).join() }; });
@@ -1697,7 +1703,7 @@ await block('R. call room', async () => {
     H.use('pins'); const pins0 = [...document.querySelectorAll('#hubBody [data-pin]')].map(e => e.classList.contains('locked')); document.querySelector('#hubBody [data-pin="young"]').click(); const pinNo = UroCrawl.meta.hub.pin;
     const first = H.meet('civiale'), again = H.meet('civiale'), hintsMet = H.state.hints.join(); H.use('cart'); const B = UroCrawl.tables.BOONS, pool = UroCrawl.tables.PATRONS.civiale.pool, offer = [...document.querySelectorAll('#hubBody [data-boon]')].map(e => e.getAttribute('data-boon'));
     return { empty, pins0, pinNo, first, again, hintsMet, offer, ok: offer.every(id => B[id].rarity === 'common' && pool.includes(id) && !B[id].requires), uniq: new Set(offer).size }; });
-  check('with no patron met the pharmacy cart is empty and every pin is locked', b.empty.n === 0 && /empty/.test(b.empty.txt) && b.pins0.length === 8 && b.pins0.every(Boolean) && b.pinNo === '');
+  check('with no patron met the pharmacy cart is empty and every pin is locked (nine patrons\' pins and the child-life specialist\'s, block S)', b.empty.n === 0 && /empty/.test(b.empty.txt) && b.pins0.length === 10 && b.pins0.every(Boolean) && b.pinNo === '');
   check('meeting a patron (once) stocks the cart: three different common boons from that patron\'s pool', b.first === true && b.again === false && b.offer.length === 3 && b.uniq === 3 && b.ok, b.offer.join());
   const offer0 = b.offer, hintsMet = b.hintsMet;
   await p.click('#hubBody [data-boon="' + offer0[1] + '"]'); await p.waitForTimeout(60);
@@ -1707,7 +1713,7 @@ await block('R. call room', async () => {
   await p.click('#hubBody [data-pin="civiale"]'); await p.waitForTimeout(60);
   b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta.hub, card = document.querySelector('#hubBody [data-pin="civiale"]'), locked = document.querySelectorAll('#hubBody [data-pin].locked').length; m.pinUse.civiale = 3; const l2 = H.pinLevel('civiale'); m.pinUse.civiale = 8; const l3 = H.pinLevel('civiale'); m.pinUse.civiale = 0;
     return { pin: m.pin, worn: card.classList.contains('sel'), txt: card.textContent, locked, hints: H.state.hints.join(), l1: H.pinLevel('civiale'), l2, l3, t: [1, 2, 3].map(l => H.pinText('civiale', l)).join(' / ') }; });
-  check('a met patron\'s pin can be worn (one at a time); it shows its perk and level, and levels up with use: 3 runs worn → level 2, 8 → level 3', b.pin === 'civiale' && b.worn && /\+4% Litho damage/.test(b.txt) && /LEVEL 1/.test(b.txt) && b.locked === 7 && b.l1 === 1 && b.l2 === 2 && b.l3 === 3, b.t);
+  check('a met patron\'s pin can be worn (one at a time); it shows its perk and level, and levels up with use: 3 runs worn → level 2, 8 → level 3', b.pin === 'civiale' && b.worn && /\+4% Litho damage/.test(b.txt) && /LEVEL 1/.test(b.txt) && b.locked === 9 && b.l1 === 1 && b.l2 === 2 && b.l3 === 3, b.t);
 
   check('a gold dot marks a station that has something for you: none on a fresh save; the whiteboard and the catalog once you can afford something; the case board when a new case opens (until you take it); the cart and the pins once a patron is met (until you pack a boon and wear a pin)', hints0 === '' && /perks/.test(hints1) && /decor/.test(hints1) && !/board/.test(hints1) && /board/.test(hints2) && !/board/.test(hints3) && /cart/.test(hintsMet) && /pins/.test(hintsMet) && !/cart/.test(b.hints) && !/pins/.test(b.hints), [hints0 || '—', hints1, hints2, hints3, hintsMet, b.hints].join(' | '));
 
@@ -1718,7 +1724,7 @@ await block('R. call room', async () => {
   b = await p.evaluate(() => { const H = UroCrawl.hub, G = UroCrawl.state, back = { overlay: G.overlay, screen: G.screen }; H.use('trophy'); const trophy = document.getElementById('hubBody').textContent, tiles = document.querySelectorAll('#hubBody .stat > div').length, faces = document.querySelectorAll('#hubBody .bentry').length, lockedFaces = document.querySelectorAll('#hubBody .bentry.locked').length;
     H.use('coffee'); const cups = [...document.querySelectorAll('#hubBody [data-cup]')].map(e => e.getAttribute('data-cup')).join(), quip = document.querySelector('#hubBody .bubble').textContent; return { back, trophy, tiles, faces, lockedFaces, cups, quip }; });
   check('the chart rack is the bestiary, and BACK returns to the room (not the title)', bestO === 'bestiary' && b.back.overlay === null && b.back.screen === 'hub');
-  check('the trophy wall lists the four bosses, runs, best run, and a portrait frame per patron (1 of 8 met)', /Staghorn Calculus/.test(b.trophy) && /The Invader/.test(b.trophy) && /Patrons met · 1 \/ 8/.test(b.trophy) && b.tiles >= 6 && b.faces === 8 && b.lockedFaces === 7);
+  check('the trophy wall lists the bosses (the four, and Reflux since block S), runs, best run, and a portrait frame per patron (1 of 9 met)', /Staghorn Calculus/.test(b.trophy) && /The Invader/.test(b.trophy) && /Reflux/.test(b.trophy) && /Patrons met · 1 \/ 9/.test(b.trophy) && b.tiles >= 6 && b.faces === 9 && b.lockedFaces === 8);
   check('the coffee machine pours drip or decaf (espresso needs the machine from the decor catalog) and has something to say', b.cups === 'drip,decaf' && b.quip.length > 8, b.quip);
   await p.click('#hubBody [data-cup="drip"]'); await p.waitForTimeout(60);
   b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, cup = H.state.cup; H.use('scrubs'); const sw = [...document.querySelectorAll('#hubBody [data-scrub]')], pager = document.querySelector('#hubBody .bubble').textContent, cme0 = m.hub.cme;
@@ -1795,7 +1801,7 @@ await block('R. call room', async () => {
   check('the Call Room\'s state persists across a reload: CME, perks, decor and what is on display, owned items, the pin, patrons met, the loadout, the case, the speakers\' places', b.json === before && h1.cme === h0.cme && h1.perks.hp === 3 && h1.decor.corner === 'greg' && h1.decor.wall === 'poster' && h1.decor.counter === 'espresso' && h1.owned.diplomas === 1 && h1.pin === 'civiale' && h1.met.civiale === 1 && h1.load.join() === 'scalpel,bovie' && h1.dungeon === 'fournier' && Object.keys(h1.lines).length >= 6 && / CME$/.test(b.xpLine), h1.cme + ' CME · decor ' + JSON.stringify(h1.decor));
   await p.click('#btnPlay'); await p.waitForTimeout(250);
   b = await p.evaluate(() => { const s = UroCrawl.hub.state; return { on: s.on, overlay: UroCrawl.state.overlay, coffee: s.stations.find(x => x.id === 'coffee').name, props: s.props, dungeon: s.dungeon, loadout: s.loadout.join() }; });
-  check('after the reload PLAY goes straight to the room (How to play is only shown once) and the decor is still standing', b.on && b.overlay === null && b.coffee === 'ESPRESSO MACHINE' && b.props === 8 && b.dungeon === 'fournier' && b.loadout === 'scalpel,bovie', b.props + ' props');
+  check('after the reload PLAY goes straight to the room (How to play is only shown once) and the decor is still standing', b.on && b.overlay === null && b.coffee === 'ESPRESSO MACHINE' && b.props === 10 && b.dungeon === 'fournier' && b.loadout === 'scalpel,bovie', b.props + ' props');
   await p.waitForTimeout(300); await shot(p, 'r-hub-furnished');
   await p.keyboard.press('Escape'); await p.waitForTimeout(100);
   b = await p.evaluate(() => ({ panel: UroCrawl.hub.state.panel, btns: [...document.querySelectorAll('#hubBody .btn')].map(x => x.textContent).join('|') }));
@@ -1871,6 +1877,462 @@ await block('R. call room', async () => {
   check('phone (844×390, touch): the room draws at a playable frame rate', b.on && b.overlay === null && b.fps >= 40, 'fps ' + b.fps);
   await shot(p5, 'r-phone');
   errCheck('R', [].concat(...allErrs));
+});
+
+// ───────── S. the Peds Wing (roadmap Step 4): the dungeon, its drills and tech, Wilms, the Reflux serpent, the kids' corner ─────────
+// helpers evaluated in the page: clear the room, pin an enemy in place
+const PEDSLIB = `
+window.__clear = function () { const G = UroCrawl.state; G.enemies.forEach(e => { if (!e.boss) { e.silent = true; e.hp = 0; } }); UroCrawl.step(1); if (G.waves && !G.waves.trial) G.waves.next = 99; G.bullets.length = 0; G.teles.length = 0; G.hazards.length = 0; G.pickups.length = 0; };
+window.__pin = function (e) { if (e) e.def = Object.assign({}, e.def, { update: function (x) { x.vx = x.vy = 0; } }); return e; };
+`;
+async function openS(q, w, h, touch) { const o = await open(q, w, h, touch); await o.p.evaluate(PEDSLIB); return o; }
+
+await block('S. core', async () => {
+  const { p, errs } = await openS('?dungeon=peds&seed=3&god=1');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state; UroCrawl.step(2); const ids = []; G.waves.list.forEach(w => w.forEach(x => ids.push(x.id)));
+    return { peds: G.peds, boss: G.bossId, name: G.dungeon.name, room: G.roomIndex, tut: !!G.tutorial, plan: G.trialPlan, par: G.par && G.par.par, ids, frames: G.obstacles.filter(o => o.frame).length, tpl: G.room.template }; });
+  const ROOT6 = ['valve', 'tide', 'aim', 'catheter', 'popoff', 'torsion'];
+  check('?dungeon=peds starts the Peds Wing: boss Reflux, the dungeon named on the HUD, room 1 a tutorial in the nursery (water balloons, a hydronephrotic kidney), three of the six drills planned for rooms 2, 4 and 6', b.peds && b.boss === 'reflux' && b.name === 'PEDS WING' && b.room === 1 && b.tut && b.tpl === 'p_nursery' && b.ids.every(id => id === 'balloon' || id === 'hydro') && [2, 4, 6].every(k => ROOT6.includes(b.plan[k])) && new Set([b.plan[2], b.plan[4], b.plan[6]]).size === 3 && !b.plan[3], JSON.stringify(b.plan) + ' · ' + b.ids.join());
+  // par times and medals
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), m = UroCrawl.meta; const par = G.par.par.slice(), live = !G.par.done; G.par.t = par[0] - 0.5; const rvu0 = G.rvu; UroCrawl.skipRoom(); UroCrawl.step(2); if (G.overlay) UroCrawl.hideScreens();
+    return { par, live, medals: G.medals.slice(), bonus: G.rvu - rvu0, banner: G.banner && G.banner.text, sub: G.banner && G.banner.sub, st: Object.assign({}, m.peds.stickers), gold: m.peds.fights[3] }; });
+  check('every Peds room runs a calm par timer (gold < silver < bronze); a clear under gold is a GOLD medal: +10 RVU at once, a gold sticker in the book', b.live && b.par[0] < b.par[1] && b.par[1] < b.par[2] && b.medals.length === 1 && b.medals[0].medal === 3 && b.medals[0].kind === 'fight' && b.bonus === 10 && /GOLD/.test(b.banner) && b.st['fight:3'] === 1 && b.gold === 1, JSON.stringify(b));
+  b = await p.evaluate(() => { const F = UroCrawl.peds.frame(), A = { x: 26, y: 26, w: 908, h: 488 }, ix0 = 62, ix1 = 898, iy0 = 46, iy1 = 494, ratio = (ix1 - ix0) * (iy1 - iy0) / (A.w * A.h);
+    const P = UroCrawl.player(), G = UroCrawl.state; __clear(); P.x = 120; P.y = 150; UroCrawl.input.keys.KeyA = true; UroCrawl.step(30); UroCrawl.input.keys.KeyA = false; const wallX = P.x; P.x = 300; P.y = 100; UroCrawl.input.keys.KeyW = true; UroCrawl.step(30); UroCrawl.input.keys.KeyW = false; const wallY = P.y;
+    P.x = 120; P.y = 270; UroCrawl.input.keys.KeyA = true; UroCrawl.step(40); UroCrawl.input.keys.KeyA = false; const doorX = P.x;
+    return { n: F.length, ratio, wallX, wallY, doorX }; });
+  check('the toy-box wall stands in from the edges (36 px at the sides, 20 at the ends) with gaps at the four doors: the room is ~15% tighter and the wall is solid', b.n === 8 && b.ratio > 0.82 && b.ratio < 0.87 && b.wallX >= 62 + 13 - 0.5 && b.wallY >= 46 + 13 - 0.5 && b.doorX < 60, 'area ×' + b.ratio.toFixed(3) + ' · stopped at x ' + b.wallX.toFixed(1) + ', y ' + b.wallY.toFixed(1) + ' · in the door gap x ' + b.doorX.toFixed(1));
+  // the pediatric scope: −15% range (every range number goes through wmod), +20% on weak points
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); G.weapons.length = 0; G.wIndex = 0; UroCrawl.giveWeapon('thulium'); G.swapT = 0; const w = G.weapons[0];
+    P.x = 200; P.y = 270; UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = 900; UroCrawl.input.my = 270; UroCrawl.input.mouseFire = true; UroCrawl.step(4); UroCrawl.input.mouseFire = false; const len = w.fx ? Math.hypot(w.fx.x1 - w.fx.x0, w.fx.y1 - w.fx.y0) : -1;
+    const ab = UroCrawl.spawn('abscess', 600, 200, { instant: true }); __pin(ab); const wp = ab.wp; const at = { hx: ab.x + wp.ox, hy: ab.y + wp.oy }, d1 = UroCrawl.dealDamage(ab, 10, 'FLUID', Object.assign({}, at)), d0 = UroCrawl.dealDamage(ab, 10, 'FLUID', { hx: ab.x - ab.r * 0.95 * Math.cos(Math.atan2(wp.oy, wp.ox)), hy: ab.y - ab.r * 0.95 * Math.sin(Math.atan2(wp.oy, wp.ox)) });
+    return { wr: UroCrawl.wmod(w, 'range'), len, d1, d0, hasWp: !!wp }; });
+  const { p: q2 } = await openS('?seed=3&god=1&room=2');
+  const base = await q2.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); __clear(); const G = UroCrawl.state, P = UroCrawl.player(); G.obstacles.length = 0; G.weapons.length = 0; G.wIndex = 0; UroCrawl.giveWeapon('thulium'); G.swapT = 0; const w = G.weapons[0];
+    P.x = 200; P.y = 270; UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = 900; UroCrawl.input.my = 270; UroCrawl.input.mouseFire = true; UroCrawl.step(4); UroCrawl.input.mouseFire = false; const len = w.fx ? Math.hypot(w.fx.x1 - w.fx.x0, w.fx.y1 - w.fx.y0) : -1;
+    const ab = UroCrawl.spawn('abscess', 600, 200, { instant: true }); __pin(ab); const wp = ab.wp; const d1 = UroCrawl.dealDamage(ab, 10, 'FLUID', { hx: ab.x + wp.ox, hy: ab.y + wp.oy }); return { wr: UroCrawl.wmod(w, 'range'), len, d1, peds: UroCrawl.state.peds }; });
+  await q2.context().close();
+  check('the pediatric scope: in the Peds Wing every weapon has −15% range (a Thulium beam reaches 85% as far) and hits on a weak point do +20%; outside it nothing changes', Math.abs(b.wr - 0.85) < 1e-9 && base.wr === 1 && !base.peds && Math.abs(b.len / base.len - 0.85) < 0.02 && b.hasWp && Math.abs(b.d1 / base.d1 - 1.2) < 1e-6, 'beam ' + Math.round(b.len) + ' vs ' + Math.round(base.len) + ' px · weak point ' + b.d1.toFixed(2) + ' vs ' + base.d1.toFixed(2));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), d = G.doors[0]; P.x = d.x - 20; P.y = d.y + d.h / 2; UroCrawl.step(60); if (G.overlay) UroCrawl.hideScreens(); const room = G.roomIndex, trial = G.room.trial || null;
+    let fight = null; if (trial) { UroCrawl.skipRoom(); UroCrawl.step(3); if (G.overlay) UroCrawl.hideScreens(); const d2 = G.doors[0]; P.x = d2.x - 20; P.y = d2.y + d2.h / 2; UroCrawl.step(60); if (G.overlay) UroCrawl.hideScreens(); }
+    const par = G.par ? G.par.par.slice() : null; if (G.par) G.par.t = par[2] + 5; const rvu0 = G.rvu; UroCrawl.skipRoom(); UroCrawl.step(2); if (G.overlay) UroCrawl.hideScreens(); fight = { room: G.roomIndex, medal: G.medals[G.medals.length - 1], bonus: G.rvu - rvu0 };
+    const lr = UroCrawl.hub.award(false); return { room, trial, fight, parts: lr.parts.join('|'), medals: G.medals.map(m => m.medal) }; });
+  check('a slow clear only loses the bonus: past bronze it is NO MEDAL and no RVU, never a penalty; the run\'s medals pay CME at the end (gold 3, silver 2, bronze 1)', b.fight.medal.medal === 0 && b.fight.bonus === 0 && /medals \d+/.test(b.parts) && +(b.parts.match(/medals (\d+)/) || [0, 0])[1] === b.medals.reduce((a, m) => a + [0, 1, 2, 3][m], 0), b.parts + ' · medals ' + b.medals.join(','));
+  check('room 2 of the Peds Wing is a drill (the stopwatch door led there)', b.room === 2 && !!b.trial, 'room ' + b.room + ' · ' + b.trial);
+  await shot(p, 's-core');
+  errCheck('S core', errs);
+});
+
+await block('S. enemies', async () => {
+  const { p, errs } = await openS('?dungeon=peds&seed=5&god=1&room=3');
+  await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); const G = UroCrawl.state; if (G.trial) UroCrawl.skipRoom(); UroCrawl.step(1); __clear(); G.waves = { list: [], next: 0, timer: 99 }; G.cleared = false; });
+  let b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(), ids = Object.keys(UroCrawl.tables.ENEMIES).filter(k => UroCrawl.tables.ENEMIES[k].peds && !UroCrawl.tables.ENEMIES[k].hidden);
+    const pool = []; for (const id in UroCrawl.tables.ENEMIES) { const d = UroCrawl.tables.ENEMIES[id]; if (!d.hidden && !d.boss && d.cost > 0) pool.push(id + (d.peds ? '*' : '') + (d.dungeon ? '@' + d.dungeon : '')); }
+    return { ids, facts: ids.every(id => UroCrawl.tables.ENEMIES[id].fact.length > 40), peds: pool.filter(s => /\*/.test(s)), dung: pool.filter(s => /\*/.test(s)).every(s => /@reflux/.test(s)) }; });
+  check('the Peds bestiary: hydronephrotic kidney, BBD, Wilms tumour (elite) and its nephroblasts, botryoid rhabdo, spasm bladder (elite), nocturnal water balloons, febrile UTI, PUV gates, the torsion knot, Reflux; every one has a real fact line, and only the Peds Wing draws them', ['hydro', 'bbd', 'wilms', 'nephroblast', 'botryoid', 'spasm', 'balloon', 'uti', 'puvgate', 'torsion', 'reflux'].every(id => b.ids.includes(id)) && b.facts && b.dung && b.peds.length >= 5, b.ids.join(','));
+  // the hydronephrotic kidney: decompress, don't pop
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); P.x = 140; P.y = 270;
+    const k = UroCrawl.spawn('hydro', 500, 270, { instant: true }); k.pr = 0.5; const pr0 = k.pr, grade = k.grade; let steps = 0; const coins0 = G.pickups.length;
+    while (!k.dead && steps < 40) { UroCrawl.dealDamage(k, 5, 'FLUID', { wid: 'stent' }); UroCrawl.step(7); steps++; }
+    const dec = { dead: k.dead, decomp: !!k.decomp, floods: G.hazards.filter(h => h.kind === 'flood').length, coins: G.pickups.length - coins0, hits: steps, txt: G.texts.some(t => /DECOMPRESSED/.test(t.text)), grade };
+    const k2 = __pin(UroCrawl.spawn('hydro', 600, 200, { instant: true })); const hp2 = k2.hp; UroCrawl.dealDamage(k2, 999, 'CUT', {}); const pop = { dead: k2.dead, floods: G.hazards.filter(h => h.kind === 'flood').length, txt: G.texts.some(t => /POPPED/.test(t.text)) };
+    const k3 = UroCrawl.spawn('hydro', 700, 380, { instant: true }); k3.pr = 0.999; UroCrawl.step(2); const tele = G.teles.find(t => t.e === k3), telDur = tele ? tele.dur : 0; UroCrawl.step(45); const self = { dead: k3.dead, telDur, floods: G.hazards.filter(h => h.kind === 'flood').length };
+    return { pr0, dec, pop, self, grades: [1, 2, 3, 4].map(g => { const e = UroCrawl.spawn('hydro', 300 + g * 60, 120, { instant: true }); e.grade = 0; return true; }) }; });
+  check('hydronephrosis: a Stent Turret bolt (or the Foley balloon) DECOMPRESSES the kidney: its pressure drains, it goes quietly with coins and no flood', b.dec.dead && b.dec.decomp && b.dec.floods === 0 && b.dec.coins >= 3 && b.dec.txt && b.dec.hits >= 3, JSON.stringify(b.dec));
+  check('…while popping it (killing it with damage) floods the floor; left alone its pressure climbs and it bursts by itself after a ≥ 0.5 s warning ring, flooding again', b.pop.dead && b.pop.floods === 1 && b.pop.txt && b.self.dead && b.self.telDur >= 0.5 && b.self.floods === 2, JSON.stringify(b.pop) + ' · ' + JSON.stringify(b.self));
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); G.us = { x: 480, y: 50, a: Math.PI / 2, half: 0.46, len: 480, t: 0 }; const a = UroCrawl.spawn('hydro', 480, 300, { instant: true }), c = UroCrawl.spawn('hydro', 110, 470, { instant: true }); a.pr = c.pr = 0.1; UroCrawl.step(20); const r = { inFan: a.usHide, outFan: c.usHide }; G.us = null; UroCrawl.step(20); r.after = c.usHide; return r; });
+  check('the antenatal-ultrasound room: kidneys show clearly only inside the grey scanning fan (outside it they are a ghost with no health bar)', b.inFan === false && b.outFan === true && b.after === false, JSON.stringify(b));
+  // BBD: the slow zone and the crowd it presses together; PEG and Biofeedback
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); P.x = 300; P.y = 270; const m0 = UroCrawl.peds.speedMul(); const bb = UroCrawl.spawn('bbd', 360, 270, { instant: true }); const m1 = UroCrawl.peds.speedMul();
+    UroCrawl.giveBoon('peg', true); const m2 = UroCrawl.peds.speedMul(); UroCrawl.dropBoon('peg'); UroCrawl.giveBoon('biofeedback', true); const m3 = UroCrawl.peds.speedMul(); UroCrawl.dropBoon('biofeedback');
+    const o = UroCrawl.spawn('nephroblast', 480, 270, { instant: true }); o.def = Object.assign({}, o.def, { update: function (x) { x.vx = x.vy = 0; } }); const d0 = o.x; UroCrawl.step(60); const d1 = o.x;
+    const d10 = UroCrawl.dealDamage(bb, 10, 'CUT', {}); UroCrawl.giveBoon('peg', true); const dPeg = UroCrawl.dealDamage(bb, 10, 'CUT', {}); UroCrawl.dropBoon('peg'); UroCrawl.giveBoon('timedvoid', true); const dTv = UroCrawl.dealDamage(bb, 10, 'CUT', {}); UroCrawl.dropBoon('timedvoid');
+    return { m0, m1, m2, m3, d0, d1, peg: dPeg / d10, tv: dTv / d10 }; });
+  check('BBD: inside its slow zone you move at 62% (Polyethylene Glycol or Biofeedback: 81%), it presses the crowd together, and PEG (×1.6) and Timed Voiding (×1.3) shred it', b.m0 === 1 && Math.abs(b.m1 - 0.62) < 1e-9 && Math.abs(b.m2 - 0.81) < 1e-9 && Math.abs(b.m3 - 0.81) < 1e-9 && b.d1 < b.d0 - 15 && Math.abs(b.peg - 1.6) < 1e-6 && Math.abs(b.tv - 1.3) < 1e-6, JSON.stringify(b));
+  // nocturnal water balloons; DDAVP; puddles
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); P.x = 300; P.y = 270; P.inv = 0;
+    const bl = UroCrawl.spawn('balloon', 700, 270, { instant: true }); const sp = () => Math.hypot(bl.vx, bl.vy - Math.sin(bl.ph) * 12); UroCrawl.step(2); const v0 = sp(); UroCrawl.giveBoon('ddavp', true); UroCrawl.step(1); const v1 = sp();
+    bl.x = P.x + 10; bl.y = P.y; UroCrawl.step(2); const pud = G.hazards.filter(h => h.kind === 'puddle'); P.x = pud.length ? pud[0].x : 0; P.y = pud.length ? pud[0].y : 0; const sm = UroCrawl.peds.speedMul(); UroCrawl.dropBoon('ddavp');
+    return { v0, v1, dead: bl.dead, pud: pud.length, r: pud.length ? pud[0].r : 0, splash: G.texts.some(t => /SPLASH/.test(t.text)), sm }; });
+  check('nocturnal water balloons drift at you and burst into a puddle that slows you (DDAVP: 40% slower drift, smaller puddles)', Math.abs(b.v1 / b.v0 - 0.6) < 0.02 && b.dead && b.pud === 1 && b.r === 17 && b.splash && Math.abs(b.sm - 0.78) < 1e-9, JSON.stringify(b));
+  // febrile UTI swarms, halved by prophylaxis
+  b = await p.evaluate(() => { const G = UroCrawl.state; const count = () => { let mx = 0, mn = 99; for (let i = 0; i < 25; i++) { __clear(); UroCrawl.spawnWave([{ id: 'uti', elite: false }]); const n = G.enemies.filter(e => !e.dead && e.id === 'uti').length; mx = Math.max(mx, n); mn = Math.min(mn, n); } return [mn, mx]; };
+    const a = count(); UroCrawl.giveBoon('cap', true); const c = count(); UroCrawl.dropBoon('cap'); const e = UroCrawl.spawn('uti', 600, 270, { instant: true }); const dc = UroCrawl.dealDamage(e, 10, 'NEUTRAL', {}); UroCrawl.giveBoon('ceftriaxone', true); const dc2 = UroCrawl.dealDamage(e, 10, 'NEUTRAL', {}); UroCrawl.dropBoon('ceftriaxone'); return { a, c, cef: dc2 / dc }; });
+  check('febrile UTI swarms come 3–5 strong; Continuous Antibiotic Prophylaxis halves them; ceftriaxone covers the infant E. coli (+35%)', b.a[0] >= 3 && b.a[1] <= 5 && b.a[1] >= 4 && b.c[1] <= 3 && b.c[0] >= 2 && Math.abs(b.cef - 1.35) < 1e-6, JSON.stringify(b));
+  // the Wilms elite: roll (0.7 s lane) → slam (0.55 s circle) → nephroblasts; VA ×1.4
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); P.x = 160; P.y = 270; const w = UroCrawl.spawn('wilms', 620, 270, { instant: true }); w.timer = 0.05; w.shedT = 99; let lane = null, slam = null, rolled = false, rings0 = G.fxRings.length, slammed = false;
+    for (let i = 0; i < 260; i++) { UroCrawl.step(1); G.teles.forEach(t => { if (t.e === w && t.kind === 'line' && !lane) lane = t.dur; if (t.e === w && t.kind === 'circle' && !slam) slam = t.dur; }); if (w.roll > 0) rolled = true; if (slam && G.fxRings.length > rings0) { slammed = true; break; } }
+    w.shedT = 0; w.atk = null; UroCrawl.step(3); const kids = G.enemies.filter(e => !e.dead && e.id === 'nephroblast').length;
+    const d0 = UroCrawl.dealDamage(w, 10, 'CUT', {}); UroCrawl.giveBoon('va', true); const d1 = UroCrawl.dealDamage(w, 10, 'CUT', {}); const nb = G.enemies.find(e => e.id === 'nephroblast' && !e.dead), dn = nb ? UroCrawl.dealDamage(nb, 1, 'NEUTRAL', {}) : 0; UroCrawl.dropBoon('va'); const dn0 = nb && !nb.dead ? UroCrawl.dealDamage(nb, 1, 'NEUTRAL', {}) : 0;
+    return { lane, slam, rolled, slammed, kids, va: d1 / d0, mini: w.def.miniBoss, hp: w.maxHp, vaN: dn0 ? dn / dn0 : 0 }; });
+  check('the Wilms tumour elite (450 HP): it rolls down a 0.7 s telegraphed lane, stops and slams (0.55 s ring), sheds nephroblasts; VA chemotherapy is ×1.4 on it and its nephroblasts', b.mini && b.hp === 450 && b.lane >= 0.7 - 1e-9 && b.slam >= 0.5 && b.rolled && b.slammed && b.kids === 2 && Math.abs(b.va - 1.4) < 1e-6, JSON.stringify(b));
+  // botryoid: fans of seeds, grapes break off when hit, VAC
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); P.x = 160; P.y = 270; const bo = UroCrawl.spawn('botryoid', 600, 270, { instant: true }); bo.timer = 0.05; let tele = 0, shots = 0;
+    for (let i = 0; i < 60; i++) { UroCrawl.step(1); G.teles.forEach(t => { if (t.e === bo) tele = Math.max(tele, t.dur); }); shots = Math.max(shots, G.bullets.filter(x => x.hostile).length); }
+    const g0 = bo.grapes; UroCrawl.dealDamage(bo, 30, 'NEUTRAL', {}); const grapes = G.enemies.filter(e => !e.dead && e.id === 'grape').length;
+    const d0 = UroCrawl.dealDamage(bo, 5, 'NEUTRAL', {}); UroCrawl.giveBoon('va', true); UroCrawl.giveBoon('vac', true); const d1 = UroCrawl.dealDamage(bo, 5, 'NEUTRAL', {}); UroCrawl.dropBoon('vac'); UroCrawl.dropBoon('va');
+    return { tele, shots, g0, g1: bo.grapes, grapes, vac: d1 / d0 }; });
+  check('botryoid rhabdo: a 0.6 s flash, then a 5-seed fan; a grape breaks off the bunch when it is hit; VA + VAC = ×1.75 on it', b.tele >= 0.6 - 1e-9 && b.shots === 5 && b.g1 < b.g0 && b.grapes >= 1 && Math.abs(b.vac - 1.4 * 1.25) < 1e-6, JSON.stringify(b));
+  // the spasm bladder elite: pressure, spasm bursts, the reflux wave; Oxybutynin, CIC
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); P.x = 160; P.y = 270; const sp = UroCrawl.spawn('spasm', 600, 270, { instant: true }); sp.spT = 99; sp.pr = 0.2; UroCrawl.step(60); const r0 = sp.pr - 0.2;
+    UroCrawl.giveBoon('oxybutynin', true); sp.pr = 0.2; UroCrawl.step(60); const r1 = sp.pr - 0.2; UroCrawl.dropBoon('oxybutynin');
+    sp.spT = 0.01; let tele = 0, burst = 0; for (let i = 0; i < 60; i++) { UroCrawl.step(1); G.teles.forEach(t => { if (t.e === sp) tele = Math.max(tele, t.dur); }); burst = Math.max(burst, G.bullets.filter(x => x.hostile).length); } G.bullets.length = 0;
+    sp.pr = 0.999; sp.spT = 99; let waveTele = 0; UroCrawl.step(1); waveTele = sp.waveT; UroCrawl.step(70); const tides = UroCrawl.peds.tides().filter(t => t.src === 'reflux').length;
+    const sp2 = UroCrawl.spawn('spasm', 700, 400, { instant: true }); UroCrawl.giveBoon('cic', true); sp2.pr = 0.8; sp2.spT = 99; UroCrawl.step(2); const drained = sp2.pr; sp2.pr = 0.8; UroCrawl.step(2); const again = sp2.pr; UroCrawl.dropBoon('cic');
+    return { r0, r1, tele, burst, waveTele, tides, drained, again, mini: sp.def.miniBoss }; });
+  check('the spasm bladder elite: its pressure climbs (Oxybutynin: 40% slower), spasms burst droplets after a ≥ 0.6 s flash, and at full pressure (0.9 s warning) it refluxes a wave into the room', b.mini && Math.abs(b.r1 / b.r0 - 0.6) < 0.02 && b.tele >= 0.6 - 1e-9 && b.burst === 10 && b.waveTele >= 0.9 - 1e-9 && b.tides === 1, JSON.stringify(b));
+  check('Clean Intermittent Catheterization drains the first pressure meter past 75% at once, once a room', b.drained < 0.01 && b.again > 0.75, 'drained ' + b.drained + ' · second ' + b.again);
+  // PUV gates
+  b = await p.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); __clear(); G.obstacles = G.obstacles.filter(o => o.frame); const g = UroCrawl.peds.addGate({ x: 480, y: 270, half: 60, phase: 0 });
+    const st = []; for (let i = 0; i < 240; i++) { UroCrawl.step(1); if (st[st.length - 1] !== g.state) st.push(g.state); }
+    // wait until the gate is shut, then try to walk through it
+    let k = 0; while (g.state !== 'shut' && k++ < 300) UroCrawl.step(1); P.x = 440; P.y = 270; UroCrawl.input.keys.KeyD = true; UroCrawl.step(20); UroCrawl.input.keys.KeyD = false; const blocked = P.x;
+    // pinched: stand in the gap as it shuts
+    k = 0; while (g.state !== 'warn' && k++ < 300) UroCrawl.step(1); P.x = 476; P.y = 270; P.inv = 0; const hp0 = P.hp, pin0 = G.stats.pinches || 0; k = 0; while (g.state === 'warn' && k++ < 100) { P.x = 476; P.y = 270; P.inv = 0; UroCrawl.step(1); } const pinched = { x: P.x, n: (G.stats.pinches || 0) - pin0 };
+    // rolled through: be rolling in the gap as it shuts
+    k = 0; while (g.state !== 'warn' && k++ < 400) UroCrawl.step(1); while (g.state === 'warn' && k++ < 500) { P.x = 470; P.y = 270; P.roll = 0.2; P.rollDx = 520; P.rollDy = 0; P.inv = 0.25; UroCrawl.step(1); } const through = { x: P.x, n: G.stats.rolledThrough || 0 };
+    // an enemy in the gap is trapped (pushed out, stunned)
+    k = 0; while (g.state !== 'warn' && k++ < 400) UroCrawl.step(1); const en = UroCrawl.spawn('nephroblast', 480, 300, { instant: true }); en.def = Object.assign({}, en.def, { update: function (x) { x.vx = x.vy = 0; x.x = x.st.stun ? x.x : 480; } }); while (g.state === 'warn' && k++ < 500) UroCrawl.step(1); const trapped = { stun: !!en.st.stun, out: Math.abs(en.x - 480) > 8 };
+    return { st: st.join('>'), blocked, pinched, through, trapped, obs: !!g.obs }; });
+  check('PUV gates swing open → warn (red flash, 0.5 s) → shut on a rhythm; shut, they are a wall you cannot walk through', /open>warn>shut>open/.test(b.st) && b.blocked < 480 - 8 - 13 + 1, b.st + ' · stopped at x ' + b.blocked.toFixed(1));
+  check('a gate that shuts on you pinches you back out (in a fight: damage and a stagger); one that shuts while you roll lets you through on the roll\'s i-frames; an enemy caught in it is trapped (stunned)', b.pinched.n === 1 && b.pinched.x < 480 - 8 && b.through.n === 1 && b.through.x > 480 + 8 && b.trapped.stun && b.trapped.out, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state; __clear(); const mk = () => UroCrawl.peds.addGate({ x: 480, y: 270, half: 50, phase: 0 }); const g1 = mk();
+    UroCrawl.dealDamage(g1.e, 14, 'LITHO', {}); const litho = g1.cut; UroCrawl.dealDamage(g1.e, 14, 'CUT', { wid: 'scalpel' }); const cut = g1.cut; g1.cut = 0; UroCrawl.dealDamage(g1.e, 14, 'CUT', { wid: 'urethrotome' }); const ure = g1.cut; g1.cut = 0;
+    UroCrawl.giveBoon('valvehook', true); UroCrawl.dealDamage(g1.e, 14, 'ENERGY', { wid: 'bovie' }); const hook = g1.cut; UroCrawl.dropBoon('valvehook'); g1.cut = 0;
+    for (let i = 0; i < 20; i++) UroCrawl.dealDamage(g1.e, 14, 'CUT', {}); let stays = true; for (let i = 0; i < 400; i++) { UroCrawl.step(1); if (g1.state !== 'open' || !g1.obs.dead) stays = false; }
+    return { litho, cut, ure, hook, ablated: g1.ablated, stays, charted: !!(UroCrawl.meta.bestiary.puvgate && UroCrawl.meta.bestiary.puvgate.kills) }; });
+  check('gates are cut with CUT or ENERGY (LITHO does nothing); the Urethrotome cuts ×1.5 and the Valve Hook doubles it; a fully cut gate is ablated and stays open', b.litho === 0 && Math.abs(b.cut - 0.1) < 1e-9 && Math.abs(b.ure - 0.15) < 1e-9 && Math.abs(b.hook - 0.2) < 1e-9 && b.ablated && b.stays && b.charted, JSON.stringify(b));
+  await shot(p, 's-enemies');
+  errCheck('S enemies', errs);
+});
+
+await block('S. boons', async () => {
+  const { p, errs } = await openS('?seed=7&god=1&room=3');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); const G = UroCrawl.state, PT = UroCrawl.tables.PATRONS, B = UroCrawl.tables.BOONS; let wil = 0; for (let i = 0; i < 200; i++) if (UroCrawl.pickPatron() === 'wilms') wil++;
+    const sample = new Set(); for (let i = 0; i < 300; i++) UroCrawl.rollBoons(3).forEach(id => sample.add(id)); const leaked = [...sample].filter(id => B[id].peds);
+    return { peds: G.peds, wil, pool: UroCrawl.patronPool('wilms').length, young: UroCrawl.patronPool('young').filter(id => B[id].peds).length, leaked, wilms: PT.wilms, list: PT.wilms.pool.slice() }; });
+  check('Wilms (Max Wilms, 1867–1918, a historical caricature) is a patron with a kidney glyph and 12 boons; outside the Peds Wing he never shows, and no Peds boon leaks into other dungeons (altars, shops, Young\'s valve boons)', b.wilms && /Max Wilms/.test(b.wilms.full) && b.wilms.glyph === 'kidney' && b.list.length === 12 && !b.peds && b.wil === 0 && b.pool === 0 && b.young === 0 && b.leaked.length === 0 && ['va', 'vac', 'peg', 'timedvoid', 'biofeedback', 'ddavp', 'oxybutynin', 'cic', 'cap', 'teddy', 'lollipop', 'stickerchart'].every(id => b.list.includes(id)), 'wilms picked ' + b.wil + ' · leaked ' + b.leaked.join());
+  await p.context().close();
+  const { p: q, errs: errs2 } = await openS('?dungeon=peds&seed=7&god=1&room=3');
+  b = await q.evaluate(() => { UroCrawl.startRun(); UroCrawl.step(2); const G = UroCrawl.state, B = UroCrawl.tables.BOONS; let wil = 0; for (let i = 0; i < 200; i++) if (UroCrawl.pickPatron() === 'wilms') wil++;
+    return { wil, pool: UroCrawl.patronPool('wilms'), young: UroCrawl.patronPool('young').filter(id => B[id].peds) }; });
+  check('in the Peds Wing Wilms is a likely altar (weighted ×2) with his pool (VAC waits for VA), and Young also offers the valve boons (Valve Hook, Young\'s Classification)', b.wil > 30 && b.pool.length === 11 && !b.pool.includes('vac') && b.young.join() === 'valvehook,youngclass', 'wilms ' + b.wil + '/200 · ' + b.pool.join());
+  // the comfort boons
+  b = await q.evaluate(() => { const G = UroCrawl.state, P = UroCrawl.player(); if (G.trial) UroCrawl.skipRoom(); __clear(); UroCrawl.giveBoon('teddy', true); P.inv = 0; const hp0 = P.hp; G.over = false;
+    UroCrawl.hurtPlayer(10, 'test', 0); const first = { absorbed: P.hp === hp0, txt: G.texts.some(t => /TEDDY/.test(t.text)) }; P.inv = 0; UroCrawl.hurtPlayer(10, 'test', 0); const second = G.texts.filter(t => /TEDDY/.test(t.text)).length;
+    UroCrawl.giveBoon('lollipop', true); UroCrawl.giveBoon('stickerchart', true); G.cleared = false; G.waves = { list: [], next: 0, timer: 99 }; G.par = { kind: 'fight', key: 'fight', par: [10, 20, 30], t: 15, done: false }; const rvu0 = G.rvu; UroCrawl.skipRoom(); UroCrawl.step(1); const paid = G.rvu - rvu0, lolly = G.pickups.filter(x => x.kind === 'lolly').length;
+    P.hp = 50; const lp = G.pickups.find(x => x.kind === 'lolly'); if (lp) { P.x = lp.x; P.y = lp.y; } UroCrawl.step(30);
+    return { first, second, paid, lolly, healed: P.hp }; });
+  check('Teddy Bear absorbs the first hit in a room (and only the first); Lollipop drops a lollipop at every clear that heals 10; Sticker Chart pays +4 RVU a room and +2 a medal', b.first.absorbed && b.first.txt && b.second === 1 && b.lolly === 1 && b.healed === 60 && b.paid === 4 + 6 + 2, JSON.stringify(b));
+  b = await q.evaluate(() => { const G = UroCrawl.state, B = UroCrawl.tables.BOONS; const ids = ['va', 'vac', 'peg', 'timedvoid', 'biofeedback', 'ddavp', 'oxybutynin', 'cic', 'cap', 'teddy', 'lollipop', 'stickerchart', 'valvehook', 'youngclass']; return { ok: ids.every(id => B[id] && B[id].peds && B[id].desc.length > 30), vacReq: (B.vac.requires || []).join() }; });
+  check('all fourteen Peds boons exist with a card description (VAC is a duo on VA)', b.ok && b.vacReq === 'va');
+  errCheck('S boons', errs.concat(errs2));
+});
+
+// the drills, played to the end by small bots (keyboard + mouse), the Sim Lab way (?trial=)
+const DRILLBOT = `
+window.__keys = function (dx, dy, dz) { const K = UroCrawl.input.keys; dz = dz || 3; K.KeyD = dx > dz; K.KeyA = dx < -dz; K.KeyS = dy > dz; K.KeyW = dy < -dz; };
+window.__stop = function () { const K = UroCrawl.input.keys; K.KeyD = K.KeyA = K.KeyS = K.KeyW = false; UroCrawl.input.mouseFire = false; };
+window.__T = function () { return UroCrawl.peds.state.trial; };
+window.__bots = {
+  valve: function () { const P = UroCrawl.player(); const gs = UroCrawl.peds.gates().filter(g => g.x > P.x - 6).sort((a, b) => a.x - b.x), g = gs[0]; let go = true; if (g && !g.ablated) { const dx = g.x - P.x; if ((g.state === 'shut' && dx < 42) || (g.state === 'warn' && dx < 70 && dx > 0)) go = false; } __keys(go ? 50 : 0, 270 - P.y); },
+  tide: function () { const P = UroCrawl.player(), W = [[150, 440], [250, 447], [356, 300], [480, 96], [560, 108], [600, 300], [710, 447], [800, 440], [890, 300]]; window.__wi = window.__wi || 0; const w = W[window.__wi]; if (Math.hypot(w[0] - P.x, w[1] - P.y) < 20 && window.__wi < W.length - 1) window.__wi++; __keys(w[0] - P.x, w[1] - P.y, 6); if (P.rollCd <= 0 && P.roll <= 0) UroCrawl.input.edges.roll = true; },
+  aim: function () { const G = UroCrawl.state, P = UroCrawl.player(); const ts = G.enemies.filter(e => !e.dead && e.id === 'target' && !e.noHit).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y)); if (!ts.length) { __keys(480 - P.x, 270 - P.y, 20); UroCrawl.input.mouseFire = false; return; } const t = ts[0], d = Math.hypot(t.x - P.x, t.y - P.y); UroCrawl.input.mx = t.x; UroCrawl.input.my = t.y; UroCrawl.input.mouseFire = true; if (d > 200) __keys(t.x - P.x, t.y - P.y); else __keys(0, 0); },
+  catheter: function () { const P = UroCrawl.player(), L = [[190, 270], [190, 118], [380, 118], [380, 420], [580, 420], [580, 170], [760, 170], [760, 320], [900, 320]]; window.__wi = window.__wi || 0; const w = L[window.__wi]; if (Math.abs(w[0] - P.x) <= 4 && Math.abs(w[1] - P.y) <= 4 && window.__wi < L.length - 1) window.__wi++; const w2 = L[window.__wi], dx = w2[0] - P.x, dy = w2[1] - P.y; if (Math.abs(dx) > 3) __keys(dx, 0, 3); else __keys(0, dy, 3); },
+  popoff: function () { const G = UroCrawl.state, P = UroCrawl.player(); const bs = G.enemies.filter(e => !e.dead && e.id === 'popballoon' && !e.done).sort((a, b) => b.pr / Math.max(0.02, b.rate) * 0 + (b.pr - a.pr)); if (!bs.length) { UroCrawl.input.mouseFire = false; __keys(0, 0); return; } const t = bs[0], d = Math.hypot(t.x - P.x, t.y - P.y); UroCrawl.input.mx = t.x; UroCrawl.input.my = t.y; UroCrawl.input.mouseFire = true; if (d > 180) __keys(t.x - P.x, t.y - P.y); else __keys(0, 0); },
+  torsion: function () { const P = UroCrawl.player(); window.__th = (window.__th === undefined ? -Math.PI / 2 : window.__th) - 0.12; UroCrawl.input.mx = P.x + Math.cos(window.__th) * 120; UroCrawl.input.my = P.y + Math.sin(window.__th) * 120; }
+};
+window.__drill = function (id, maxS) { const G = UroCrawl.state; UroCrawl.input.mode = 'kb'; window.__wi = 0; window.__th = undefined; if (id === 'aim' || id === 'popoff') { G.weapons.length = 0; G.wIndex = 0; UroCrawl.giveWeapon('thulium'); G.swapT = 0; }
+  let f = 0; while (__T() && __T().state !== 'done' && f++ < 60 * (maxS || 40)) { if (__T().state === 'run') window.__bots[id](); UroCrawl.step(1); } __stop(); return __T(); };
+`;
+async function openD(q, w, h, touch) { const o = await openS(q, w, h, touch); await o.p.evaluate(DRILLBOT); return o; }
+
+await block('S. drills', async () => {
+  const allErrs = [];
+  const results = {};
+  for (const id of ['valve', 'tide', 'aim', 'catheter', 'popoff', 'torsion']) {
+    const { p, errs } = await openD('?trial=' + id + '&seed=3'); allErrs.push(errs);
+    const r = await p.evaluate((id) => { const G = UroCrawl.state, m = UroCrawl.meta; const s0 = { sim: G.sim && G.sim.id, running: G.running, peds: G.peds, waves: !!(G.waves && G.waves.trial), doors: G.doors.length, hp: UroCrawl.player().hp };
+      const T = __drill(id, 45); UroCrawl.step(70); const rec = m.peds.trials[id], D = UroCrawl.peds.tables.TRIALS[id];
+      return { s0, state: T.state, final: T.final, medal: T.medal, pen: T.pen, bonus: T.bonus, bonks: T.bonks, got: T.got, learned: T.learned, rec: rec && { best: rec.best, medal: rec.medal, wins: rec.wins, tries: rec.tries }, sticker: T.medal ? m.peds.stickers[id + ':' + T.medal] : null, tech: D.tech ? !!(m.tech[D.tech] && m.tech[D.tech].on) : null, gold: D.tech ? !!(m.tech[D.tech] && m.tech[D.tech].gold) : null, par: D.par,
+        overlay: G.overlay, panel: UroCrawl.hub.state.panel, btns: [...document.querySelectorAll('#hubExtra .btn, #btnHubBack')].map(b => b.textContent).join('|'), hp: UroCrawl.player().hp, saved: m.peds.saved, charted: !!(m.bestiary.torsion && m.bestiary.torsion.kills) }; }, id);
+    results[id] = r;
+    if (id === 'catheter' || id === 'torsion') await shot(p, 's-drill-' + id);
+    // the same drill again: a personal best only moves when it is beaten
+    if (id === 'torsion') {
+      const again = await p.evaluate(() => { document.getElementById('btnSimAgain').click(); const t0 = UroCrawl.meta.peds.trials.torsion.best; const T = UroCrawl.peds.trial(); T.state = 'run'; T.t = 30; T.untwist = 4 * Math.PI; UroCrawl.step(1); UroCrawl.step(70); return { best: UroCrawl.meta.peds.trials.torsion.best, t0, final: __T().final, pb: __T().pb, wins: UroCrawl.meta.peds.trials.torsion.wins }; });
+      check('a slower finish keeps the personal best; the record counts both wins', again.best === again.t0 && again.final > again.t0 && !again.pb && again.wins === 2, JSON.stringify(again));
+    }
+    await p.context().close();
+  }
+  for (const id in results) { const r = results[id];
+    check('drill · ' + id + ': ?trial=' + id + ' opens it in the Sim Lab (no doors, no damage); a bot finishes it; time, medal and personal best are recorded and the medal is a sticker; the result card offers TRY AGAIN / OTHER DRILLS / CALL ROOM', r.s0.sim === id && r.s0.running && r.s0.peds && r.s0.waves && r.s0.doors === 0 && r.state === 'done' && r.final > 0 && r.rec.best === r.final && r.rec.wins === 1 && r.rec.medal === r.medal && (r.medal === 0 || r.sticker === 1) && r.overlay === 'hub' && r.panel === 'simresult' && /TRY AGAIN/.test(r.btns) && /OTHER DRILLS/.test(r.btns) && /CALL ROOM/.test(r.btns), id + ' ' + r.final + ' s · ' + ['no medal', 'bronze', 'silver', 'gold'][r.medal] + ' (par ' + r.par.join('/') + ')' + (r.pen ? ' · +' + r.pen + ' s' : '') + (r.bonus ? ' · −' + r.bonus + ' s' : ''));
+  }
+  check('drills teach their technique on the first finish: Valve Run → Perfect Roll, Tide Dash → Slide, Aim Gallery → Flick Shot, Catheter Course → Roll Cancel (Pop-Off and Torsion teach none)', results.valve.tech && results.valve.learned && results.tide.tech && results.aim.tech && results.catheter.tech && results.popoff.tech === null && results.torsion.tech === null, Object.keys(results).map(k => k + ':' + results[k].tech).join(' '));
+  check('a gold medal adds the technique\'s mastery badge', Object.keys(results).filter(k => results[k].tech !== null).every(k => results[k].gold === (results[k].medal === 3)), Object.keys(results).map(k => k + ' ' + results[k].medal + '/' + results[k].gold).join(' · '));
+  check('Tide Dash: the bot outran the tide and its tokens took time off; Catheter Course: steering down the middle bumps nothing; Torsion: two turns against the twist save it (SAVED!, coins, its bestiary chart)', results.tide.got >= 3 && results.tide.bonus > 0 && results.catheter.bonks === 0 && results.catheter.pen === 0 && results.torsion.saved === 1 && results.torsion.charted, 'tokens ' + results.tide.got + ' · bumps ' + results.catheter.bonks);
+  // fail and restart: the tide catches you, a balloon pops, the torsion clock runs out, a drill's time cap
+  const { p, errs } = await openD('?trial=tide&seed=3'); allErrs.push(errs);
+  let b = await p.evaluate(() => { const G = UroCrawl.state; let f = 0; while (__T().state !== 'fail' && f++ < 60 * 20) UroCrawl.step(1); const fail = { state: __T().state, banner: G.banner && G.banner.text, sub: G.banner && G.banner.sub, hp: UroCrawl.player().hp };
+    UroCrawl.step(110); return { fail, att: __T().att, state: __T().state, tide: __T().tide }; });
+  check('fail and restart: in Tide Dash the tide catches a surgeon who stands still → TRY AGAIN → after a short pause the room resets (attempt 2, the tide back at the start); nobody is hurt', b.fail.state === 'fail' && b.fail.banner === 'TRY AGAIN' && /TIDE/.test(b.fail.sub) && b.fail.hp === 100 && b.att === 2 && b.state === 'ready' && b.tide < 0, JSON.stringify(b));
+  await p.context().close();
+  const { p: q, errs: errs2 } = await openD('?trial=popoff&seed=3'); allErrs.push(errs2);
+  b = await q.evaluate(() => { let f = 0; while (__T().state !== 'fail' && f++ < 60 * 20) UroCrawl.step(1); const why = UroCrawl.state.banner && UroCrawl.state.banner.sub; UroCrawl.step(110); return { why, att: __T().att, floods: UroCrawl.state.hazards.filter(h => h.kind === 'flood').length }; });
+  check('Pop-Off: leave the balloons alone and one pops → the attempt fails and restarts', /POPPED/.test(b.why) && b.att === 2, JSON.stringify(b));
+  await q.context().close();
+  const { p: q2, errs: errs3 } = await openD('?trial=torsion&seed=3'); allErrs.push(errs3);
+  b = await q2.evaluate(() => { UroCrawl.step(70); const T = UroCrawl.peds.trial(); T.via = 0.05; UroCrawl.step(4); const fail = { state: T.state, banner: UroCrawl.state.banner.text, sub: UroCrawl.state.banner.sub }; UroCrawl.step(200); return { fail, att: __T().att, via: __T().via, coins: UroCrawl.state.pickups.length }; });
+  check('Torsion: when the viability ring runs out there is no reward, only a plain fact line (no joke), and the drill restarts', b.fail.state === 'fail' && b.fail.banner === 'TIME' && /six hours/.test(b.fail.sub) && !/!/.test(b.fail.sub) && b.att === 2 && b.via > 59 && b.coins === 0, JSON.stringify(b.fail));
+  await q2.context().close();
+  // in a run: a drill room, its reward, and the attending's mercy after three failures
+  const { p: r, errs: errs4 } = await openD('?dungeon=peds&seed=3&god=1&room=2'); allErrs.push(errs4);
+  b = await r.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state; UroCrawl.step(2); const T0 = __T(); const s = { trial: T0 && T0.id, sim: T0 && T0.sim, doorsOpen: G.doors.some(d => d.open), banner: G.banner && G.banner.text, reward: G.room.reward, waves: G.waves.trial };
+    for (let k = 0; k < 3; k++) { UroCrawl.step(70); if (__T().state === 'run') UroCrawl.peds.fail('test failure'); else { UroCrawl.step(30); UroCrawl.peds.fail('test failure'); } UroCrawl.step(110); }
+    return { s, state: __T().state, medal: __T().medal, cleared: G.cleared, doorsOpen: G.doors.some(d => d.open), banner: G.banner && G.banner.text, rewards: G.rewards.length + G.pickups.filter(x => x.kind === 'iv').length, medals: G.medals.slice() }; });
+  check('in a run, room 2 is a drill: its doors stay shut until it is done and the room\'s reward waits; three failed attempts and the attending waves you through (no medal), the doors open and the reward appears', b.s.trial && !b.s.sim && !b.s.doorsOpen && /TRIAL/.test(b.s.banner) && b.s.waves && b.state === 'done' && b.medal === 0 && b.cleared && b.doorsOpen && b.banner === 'WAVED THROUGH' && b.rewards >= 1 && b.medals.length === 1 && b.medals[0].medal === 0, JSON.stringify(b).slice(0, 300));
+  await shot(r, 's-drill-waved');
+  errCheck('S drills', [].concat(...allErrs));
+});
+
+await block('S. tech', async () => {
+  const { p, errs } = await openS('?seed=4&god=1&room=3');
+  let b = await p.evaluate(() => { const m = UroCrawl.meta; UroCrawl.startRun(); UroCrawl.step(2); __clear(); const G = UroCrawl.state, P = UroCrawl.player(); P.x = 400; P.y = 270; UroCrawl.step(60);
+    const roll = (tele) => { P.rollCd = 0; P.roll = 0; P.perfT = 0; if (tele !== null) G.teles.push({ kind: 'circle', t: tele, dur: 0.7, x: P.x, y: P.y, r: 60 }); UroCrawl.input.edges.roll = true; UroCrawl.step(1); const r = { cd: P.rollCd, perf: P.perfT > 0, mul: UroCrawl.peds.speedMul() }; G.teles.length = 0; UroCrawl.step(40); return r; };
+    const off = roll(0.1); m.tech.perfect = { on: 1, gold: 0 }; const on = roll(0.1), early = roll(0.5); return { off, on, early, n: G.stats.perfects, peds: G.peds }; });
+  check('Perfect Roll (kept for every dungeon: this is a Stones run): roll in the last 0.15 s before a telegraphed hit lands and the roll cooldown comes straight back, +25% speed for 1 s; too early, or without the technique, nothing', !b.peds && b.off.cd > 0.5 && !b.off.perf && b.on.cd <= 0 && b.on.perf && Math.abs(b.on.mul - 1.25) < 1e-9 && b.early.cd > 0.5 && !b.early.perf && b.n === 1, JSON.stringify(b));
+  b = await p.evaluate(() => { const m = UroCrawl.meta, G = UroCrawl.state, P = UroCrawl.player(); G.weapons.length = 0; G.wIndex = 0; UroCrawl.giveWeapon('loop'); G.swapT = 0; const w = G.weapons[0]; P.rollCd = 0;
+    const swing = () => { w.swing = null; UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = P.x + 100; UroCrawl.input.my = P.y; UroCrawl.input.mouseFire = true; UroCrawl.step(2); UroCrawl.input.mouseFire = false; let k = 0; while (w.swing && w.swing.phase !== 2 && k++ < 60) UroCrawl.step(1); const ph = w.swing ? w.swing.phase : -1; P.rollCd = 0; UroCrawl.input.edges.roll = true; UroCrawl.step(1); return { ph, after: w.swing ? w.swing.phase : null }; };
+    const off = swing(); UroCrawl.step(60); m.tech.cancel = { on: 1, gold: 0 }; const on = swing(); UroCrawl.step(60);
+    G.weapons.length = 0; UroCrawl.giveWeapon('eswl'); G.wIndex = 0; G.swapT = 0; const e = G.weapons[0]; e.cd = 1.0; P.rollCd = 0; UroCrawl.input.edges.roll = true; UroCrawl.step(1); return { off, on, eswl: e.cd }; });
+  check('Roll Cancel: a roll ends a Resectoscope Loop\'s recovery at once (without the technique the recovery plays out) and skips 0.4 s of an ESWL recharge', b.off.ph === 2 && b.off.after === 2 && b.on.ph === 2 && b.on.after === null && Math.abs(b.eswl - (1.0 - 0.4 - 1 / 60)) < 0.02, JSON.stringify(b));
+  b = await p.evaluate(() => { const m = UroCrawl.meta, G = UroCrawl.state, P = UroCrawl.player(); __clear(); G.obstacles.length = 0; const go = () => { P.x = 200; P.y = 270; P.rollCd = 0; P.roll = 0; P.slide = 0; UroCrawl.input.keys.KeyD = true; UroCrawl.input.edges.roll = true; UroCrawl.step(1); const x0 = 200; let slid = false; for (let i = 0; i < 40; i++) { UroCrawl.step(1); if (P.slide > 0) slid = true; } UroCrawl.input.keys.KeyD = false; return { dx: P.x - x0, slid }; };
+    const off = go(); m.tech.slide = { on: 1, gold: 0 }; const on = go(); return { off, on }; });
+  check('Slide: hold a direction through the roll and you slide on, fast (it covers more ground than the same roll without it)', !b.off.slid && b.on.slid && b.on.dx > b.off.dx + 40, JSON.stringify(b));
+  b = await p.evaluate(() => { const m = UroCrawl.meta, G = UroCrawl.state, P = UroCrawl.player(); __clear(); G.weapons.length = 0; UroCrawl.giveWeapon('holmium'); G.wIndex = 0; G.swapT = 0; G.obstacles.length = 0; const e = __pin(UroCrawl.spawn('com', 520, 420, { instant: true }));
+    const go = () => { P.x = 200; P.y = 270; P.rollCd = 0; P.roll = 0; P.flick = null; UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = 100; UroCrawl.input.my = 100; UroCrawl.input.keys.KeyD = true; UroCrawl.input.edges.roll = true; UroCrawl.step(1); UroCrawl.input.keys.KeyD = false; let k = 0; while (P.roll > 0 && k++ < 40) UroCrawl.step(1); UroCrawl.input.mx = 100; UroCrawl.input.my = 100; UroCrawl.input.edges.fire = true; UroCrawl.step(1); const a = P.aim, want = Math.atan2(e.y - P.y, e.x - P.x); return { snapped: !!P.flick, off: Math.abs(Math.atan2(Math.sin(a - want), Math.cos(a - want))) }; };
+    const off = go(); m.tech.flick = { on: 1, gold: 0 }; const on = go(); return { off, on }; });
+  check('Flick Shot: fire within 0.45 s after a roll and the aim snaps to the nearest target (the cursor was pointing the other way)', !b.off.snapped && b.off.off > 1 && b.on.snapped && b.on.off < 0.05, JSON.stringify(b));
+  await p.evaluate(() => { UroCrawl.meta.tech.perfect.gold = 1; UroCrawl.state.rewards.length = 0; UroCrawl.hideScreens(); const P = UroCrawl.player(); P.x = 300; P.y = 270; });
+  await p.keyboard.press('Escape'); await p.waitForTimeout(250);
+  b = await p.evaluate(() => ({ overlay: UroCrawl.state.overlay, running: UroCrawl.state.running, over: UroCrawl.state.over, list: document.getElementById('pauseTech').textContent }));
+  check('the pause screen lists the techniques you know, with a ★ for a mastered one', b.overlay === 'pause' && /Perfect Roll ★/.test(b.list) && /Roll Cancel/.test(b.list) && /Slide/.test(b.list) && /Flick Shot/.test(b.list), JSON.stringify(b).slice(0, 220));
+  errCheck('S tech', errs);
+});
+
+await block('S. reflux', async () => {
+  const { p, errs } = await openS('?boss=reflux&seed=3&god=1');
+  let b = await p.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state; UroCrawl.step(2); const s = UroCrawl.reflux.state;
+    return { intro: G.introT, arena: !!G.arena, ports: s.ports.length, tray: s.tray.n, segs: s.segs.length, hp: s.hp, phase: s.phase, name: G.boss.name, sub: G.boss.sub, music: UroCrawl.snd.music.mode, room: G.roomIndex, peds: G.peds, par: G.par && G.par.kind, blocks: G.obstacles.filter(o => o.breakwater).length, wall: !!G.wall }; });
+  check('?boss=reflux: a round playpen with three ports on its wall, a needle tray holding two, four toy-block breakwaters; Reflux (3400 HP: a kidney head, a 7-segment ureter tail) after a title card; the boss par runs', b.arena && !b.wall && b.ports === 3 && b.tray === 2 && b.blocks === 4 && b.segs === 7 && b.hp === 3400 && b.phase === 1 && b.name === 'REFLUX' && /kidney serpent/.test(b.sub) && b.intro > 2 && b.room === 9 && b.peds && b.par === 'boss', JSON.stringify(b));
+  // the loops: ripples first, then the pass; the lump travels down the tail and only the lump hurts
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux; let f = 0; while (G.introT > 0 && f++ < 300) UroCrawl.step(1);
+    let prev = 0; f = 0; while (R.state.state === 'preview' && f++ < 120) { prev++; UroCrawl.step(1); } const st = R.state.state, h0 = R.state.head; let travel = 0, last = h0, lumpOnly = true, lumpIdx = [], frames = 0;
+    for (let i = 0; i < 90; i++) { UroCrawl.step(1); const s = R.state; travel += Math.hypot(s.head.x - last.x, s.head.y - last.y); last = s.head; s.segs.forEach((g, k) => { if (g.contact > 0 && !g.lump) lumpOnly = false; if (g.lump && !g.hidden && lumpIdx[lumpIdx.length - 1] !== k) lumpIdx.push(k); }); }
+    return { prev, st, travel, lumpOnly, lumpIdx, kind: R.state.pathKind, speed: R.state.speed }; });
+  check('it swims passes: 0.7 s of ripples along the coming path (a telegraph), then it follows the path at speed', b.prev >= 40 && b.prev <= 44 && b.st === 'swim' && b.travel > 200 && b.speed === 205 && b.kind === 'pass', JSON.stringify(b));
+  check('a peristaltic wave runs down the tail: the lump moves from segment to segment toward the tail, and only the lump is a contact hazard', b.lumpOnly && b.lumpIdx.length >= 4 && b.lumpIdx.slice(1).some((k, i) => k === b.lumpIdx[i] + 1), b.lumpIdx.join(','));
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(); B.stunT = 0.3; UroCrawl.step(1); const h = B.head, hp0 = h.hp, dh = UroCrawl.dealDamage(h, 10, 'NEUTRAL', {}); const hp1 = h.hp; const seg = B.segs.find(s => !s.hideNow); UroCrawl.dealDamage(seg, 10, 'NEUTRAL', {}); const tail = hp1 - h.hp; return { dh, tail, headHp: h.hp }; });
+  check('the head is the weak point: ×2, and the pediatric scope adds +20% (10 → 24); a hit on the tail lands at ×0.4 (10 → 4)', Math.abs(b.dh - 24) < 1e-6 && Math.abs(b.tail - 4) < 1e-6, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); B.stunT = 0; B.roarT = 0; B.state = 'swim'; UroCrawl.step(1); const h = B.head, fa = h.face, px = P.x, py = P.y;
+    P.x = h.x + Math.cos(fa) * 110; P.y = h.y + Math.sin(fa) * 110; const front = UroCrawl.dealDamage(h, 10, 'NEUTRAL', {});
+    P.x = h.x - Math.cos(fa) * 110; P.y = h.y - Math.sin(fa) * 110; G.texts.length = 0; const back = UroCrawl.dealDamage(h, 10, 'NEUTRAL', {}); const hint = G.texts.some(t => /MAW/.test(t.text));
+    P.x = px; P.y = py; const maw = R.state.maw, md = maw ? Math.hypot(maw.x - h.x, maw.y - h.y) : 0;
+    const due = []; [0, 1, 2].forEach(i => R.unplug(i)); due.push(R.state.passesDue); R.plug(0); due.push(R.state.passesDue); R.plug(1); due.push(R.state.passesDue); R.unplug(0); R.unplug(1); B.state = 'preview'; B.stT = 0.7;
+    return { front, back, hint, md, due }; });
+  check('swimming free, only its maw (the front) is the weak point: head-on 10 → 24, from behind ×1 (10 → 10) with a hint; stranded or stunned the whole head is exposed', Math.abs(b.front - 24) < 1e-6 && Math.abs(b.back - 10) < 1e-6 && b.hint && b.md > 10, JSON.stringify(b));
+  check('plugging takes its hiding places: it swims one pass before a dive, plus one per plugged port (1, 2, 3), so the backwash comes less often', b.due.join() === '1,2,3', b.due.join());
+  // a dive and a pop: backwash both times, a 0.7 s gurgle, the 3-fan
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); P.x = 480; P.y = 282; R.dive(); const use = R.state.usePort; let f = 0, washAt = null; const t0 = G.tides.length;
+    while (R.state.state !== 'under' && f++ < 400) { UroCrawl.step(1); if (!washAt && G.tides.length > t0) washAt = { x: G.tides[G.tides.length - 1].x, y: G.tides[G.tides.length - 1].y }; }
+    const under = R.state.state, port = B.ports[use], dives = R.state.dives; f = 0; let gur = null; while (R.state.state !== 'emerge' && f++ < 400) { UroCrawl.step(1); G.teles.forEach(t => { if (t.kind === 'circle' && !gur && R.state.exitPort !== null) gur = { dur: t.dur, at: R.state.exitPort }; }); }
+    const exit = R.state.exitPort, b0 = G.bullets.filter(x => x.hostile).length, tides0 = G.tides.length; f = 0; let spit = 0; while (R.state.state === 'emerge' && f++ < 200) { UroCrawl.step(1); spit = Math.max(spit, G.bullets.filter(x => x.hostile).length); }
+    return { use, washAt, portAt: { x: port.x, y: port.y }, under, dives, gur, exit, pops: R.state.pops, spit, washes: R.state.washes }; });
+  check('between passes it dives into an open port (a backwash ring rolls out of that port), goes under, then a 0.7 s gurgle at another port, and it pops out spitting a 3-fan with another backwash', b.under === 'under' && b.dives === 1 && b.washAt && Math.hypot(b.washAt.x - b.portAt.x, b.washAt.y - b.portAt.y) < 1 && b.gur && b.gur.dur >= 0.7 - 1e-9 && b.exit !== b.use && b.pops === 1 && b.spit >= 3 && b.washes === 2, JSON.stringify(b));
+  // backwash on the surgeon: shoved and chipped; a roll goes through; a toy block is a breakwater; a FLUID tool pushes it back
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); B.stunT = 999; G.bullets.length = 0; const s0 = Object.assign({}, G.stats);
+    const wash = (px, py, cx, cy, prep) => { P.x = px; P.y = py; P.roll = 0; P.inv = 0; P.pushX = P.pushY = 0; if (prep) prep(); UroCrawl.peds.addTide({ x: cx, y: cy, r0: 10, r1: 260, speed: 260, dmg: 4, push: 300, src: 'backwash' }); let f = 0, pushed = 0; while (f++ < 45) { if (prep) prep(); UroCrawl.step(1); pushed = Math.max(pushed, Math.abs(P.pushX || 0)); } return pushed; };
+    const h0 = G.stats.tideHits || 0, d0 = G.stats.tideDodges || 0, k0 = G.stats.breakwaters || 0, q0 = G.stats.tidePushed || 0; const hit = wash(300, 280, 180, 280), hits = (G.stats.tideHits || 0) - h0;
+    const roll = wash(300, 280, 180, 280, () => { P.roll = 0.3; P.rollDx = 0; P.rollDy = 0; P.inv = 0.25; }), dodges = (G.stats.tideDodges || 0) - d0;
+    const bk = G.obstacles.find(o => o.breakwater); const brk = wash(bk.x + bk.r + 18, bk.y, bk.x - 90, bk.y), blocked = (G.stats.breakwaters || 0) - k0;
+    G.weapons.length = 0; UroCrawl.giveWeapon('irrigation'); G.wIndex = 0; G.swapT = 0; UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = 100; UroCrawl.input.my = 280; UroCrawl.input.mouseFire = true; const fl = wash(300, 280, 180, 280); UroCrawl.input.mouseFire = false;
+    return { hit, hits, roll, dodges, brk, blocked, fl, pushedBack: (G.stats.tidePushed || 0) - q0 }; });
+  check('a backwash ring shoves you along the floor and chips you; a roll goes through it; behind a toy block you are safe (a breakwater); holding a FLUID tool on pushes it back', b.hit > 100 && b.hits === 1 && b.roll === 0 && b.dodges === 1 && b.brk === 0 && b.blocked === 1 && b.fl === 0 && b.pushedBack === 1, JSON.stringify(b));
+  // the bulking needle: tray, carrying, the limits, dropping it, losing it
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); B.stunT = 999; const far = { x: 820, y: 330 }; B.head.x = far.x; B.head.y = far.y; UroCrawl.step(2);
+    G.weapons.length = 0; UroCrawl.giveWeapon('thulium'); G.wIndex = 0; G.swapT = 0; const tray = R.state.tray; P.x = tray.x; P.y = tray.y; UroCrawl.step(2); const took = { carrying: R.state.carrying, n: R.state.tray.n, mul: UroCrawl.peds.speedMul() };
+    const dmg0 = Object.values(G.stats.dmg).reduce((a, c) => a + c, 0); UroCrawl.input.mode = 'kb'; UroCrawl.input.mx = B.head.x; UroCrawl.input.my = B.head.y; UroCrawl.input.mouseFire = true; UroCrawl.step(30); UroCrawl.input.mouseFire = false; const fired = Object.values(G.stats.dmg).reduce((a, c) => a + c, 0) - dmg0;
+    P.x = 300; P.y = 300; UroCrawl.step(1); B.needles.push({ x: P.x, y: P.y, vx: 0, vy: 0, away: true, t: 0 }); UroCrawl.step(4); const limit = { floor: R.state.needles.length, carrying: R.state.carrying };
+    B.needles.length = 0; UroCrawl.input.edges.alt = true; UroCrawl.step(1); const dropped = { carrying: R.state.carrying, floor: R.state.needles.length }; UroCrawl.step(10); const stay = R.state.needles.length;
+    P.x = 380; UroCrawl.step(3); P.x = 300; UroCrawl.step(3); const back = { carrying: R.state.carrying, floor: R.state.needles.length };
+    P.inv = 0; UroCrawl.hurtPlayer(5, 'test', 0); const nd = B.needles[0]; const lost = { carrying: R.state.carrying, floor: R.state.needles.length, v: nd ? Math.hypot(nd.vx, nd.vy) : 0 };
+    B.needles.length = 0; R.give(); P.x = 300; P.y = 300; P.roll = 0; P.inv = 0; UroCrawl.peds.addTide({ x: 200, y: 300, r0: 10, r1: 200, speed: 300, dmg: 2, push: 200, src: 'backwash' }); UroCrawl.step(25); const washed = { carrying: R.state.carrying, floor: R.state.needles.length };
+    const n2 = B.needles[0]; const v0 = n2 ? Math.hypot(n2.vx, n2.vy) : 0; if (n2) { n2.vx = n2.vy = 0; } UroCrawl.peds.addTide({ x: n2.x - 60, y: n2.y, r0: 10, r1: 200, speed: 300, dmg: 0, push: 0, src: 'backwash' }); P.x = 120; P.y = 282; UroCrawl.step(12); const shoved = n2 ? Math.hypot(n2.vx, n2.vy) : 0;
+    B.tray.n = 0; B.tray.t = 0; UroCrawl.step(60 * 10 + 5); const refill = R.state.tray.n;
+    return { took, fired, limit, dropped, stay, back, lost, washed, shoved, refill }; });
+  check('walk onto the tray to carry a bulking needle (the tray keeps the rest); carrying: no weapon fires, 85% speed; you cannot pick up a second one', b.took.carrying && b.took.n === 1 && Math.abs(b.took.mul - 0.85) < 1e-9 && b.fired === 0 && b.limit.carrying && b.limit.floor === 1, JSON.stringify({ took: b.took, fired: b.fired, limit: b.limit }));
+  check('ALT drops it at your feet (your weapons come back) and it stays put until you step away and come back for it', !b.dropped.carrying && b.dropped.floor === 1 && b.stay === 1 && b.back.carrying && b.back.floor === 0, JSON.stringify({ dropped: b.dropped, back: b.back }));
+  check('getting hit knocks it out of your hand and it skids away; a backwash washing over you does the same, and a backwash shoves needles on the floor', !b.lost.carrying && b.lost.floor === 1 && b.lost.v > 150 && !b.washed.carrying && b.washed.floor === 1 && b.shoved > 100, JSON.stringify({ lost: b.lost, washed: b.washed, shoved: b.shoved }));
+  check('the tray refills one needle every 10 s', b.refill === 1, 'tray ' + b.refill);
+  // injecting: the ring of four points
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); B.needles.length = 0; [0, 1, 2].forEach(i => R.unplug(i));
+    const stand = (i) => { const port = B.ports[i], a = Math.atan2(282 - port.y, 480 - port.x); P.x = port.x + Math.cos(a) * 46; P.y = port.y + Math.sin(a) * 46; P.roll = 0; P.inv = 99; };   // P.inv: the parked serpent's tail cannot touch you here
+    // keyboard + mouse: aim at each point in turn
+    R.give(); stand(0); UroCrawl.input.mode = 'kb'; UroCrawl.input.mouseFire = true; let f = 0, ks = []; while (R.state.carrying && f++ < 300) { const pts = R.points(); if (pts) { const k = R.state.inj ? R.state.inj.k : 0; UroCrawl.input.mx = pts[Math.min(3, k)].x; UroCrawl.input.my = pts[Math.min(3, k)].y; if (ks[ks.length - 1] !== k) ks.push(k); } UroCrawl.step(1); } UroCrawl.input.mouseFire = false;
+    const kb = { frames: f, ks: ks.join(''), plug: R.state.ports[0].plug };
+    // touch: hold FIRE, the aim snaps to the points
+    R.give(); stand(1); UroCrawl.input.mode = 'touch'; UroCrawl.input.buttons.fire = 7; f = 0; while (R.state.carrying && f++ < 300) UroCrawl.step(1); delete UroCrawl.input.buttons.fire; const touch = { frames: f, plug: R.state.ports[1].plug };
+    // stopping early: a weak, short plug, and the needle is spent
+    R.give(); stand(2); UroCrawl.input.mode = 'kb'; UroCrawl.input.mouseFire = true; f = 0; while (f++ < 300) { const pts = R.points(); const k = R.state.inj ? R.state.inj.k : 0; if (k >= 2) break; if (pts) { UroCrawl.input.mx = pts[k].x; UroCrawl.input.my = pts[k].y; } UroCrawl.step(1); } UroCrawl.input.mouseFire = false; UroCrawl.step(1);
+    const weak = { carrying: R.state.carrying, plug: R.state.ports[2].plug };
+    return { kb, touch, weak, plugs: R.state.plugs, weakPlugs: R.state.weakPlugs }; });
+  check('injecting: stand by a port and hold FIRE; four injection points ring the orifice and each takes 0.4 s of aim (≈1.6 s); the full ring raises a gel mound that plugs the port for 60 s and uses the needle up', b.kb.ks === '0123' && b.kb.frames >= 96 && b.kb.frames < 140 && b.kb.plug && b.kb.plug.full && Math.abs(b.kb.plug.t - 60) < 0.05, JSON.stringify(b.kb));
+  check('on touch the aim snaps to the next point by itself (just hold FIRE)', b.touch.frames < 140 && b.touch.plug && b.touch.plug.full, JSON.stringify(b.touch));
+  check('stopping early leaves a weaker, shorter plug (2 of 4 points: 4 s) and the needle is spent', !b.weak.carrying && b.weak.plug && !b.weak.plug.full && Math.abs(b.weak.plug.t - 4) < 0.1 && b.weakPlugs === 1, JSON.stringify(b.weak));
+  // it only dives into open ports; all three plugged and it is stranded: head exposed, plug clocks held
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(); B.stunT = 0; [0, 1, 2].forEach(i => R.unplug(i)); R.plug(0); R.plug(1); B.state = 'swim'; R.dive(); const use = R.state.usePort;
+    R.plug(2); B.ports[1].plug.t = 14; UroCrawl.step(2); const s = R.state, t0 = s.ports.map(p => p.plug.t); UroCrawl.step(120); const t1 = R.state.ports.map(p => p.plug ? p.plug.t : 0), strandMul = R.state.head.dmgMul;
+    const h = B.head; const d = UroCrawl.dealDamage(h, 10, 'NEUTRAL', {}); const washes0 = B.washes; let f = 0, tell = null;
+    while (R.state.state === 'stranded' && f++ < 700) { UroCrawl.step(1); if (!tell) { const tl = G.teles.find(t => t.kind === 'circle' && t.r === 46 && Math.hypot(t.x - B.ports[1].x, t.y - B.ports[1].y) < 1); if (tl) tell = { dur: tl.dur, left: R.state.ports[1].plug ? 1 : 0 }; } }
+    const after = { state: R.state.state, mul: R.state.head.dmgMul, frames: f + 122, plugs: R.state.ports.map(p => !!p.plug), blowouts: B.blowouts || 0, washed: B.washes === washes0 + 1 };
+    let again = 0; for (let k = 0; k < 90; k++) { UroCrawl.step(1); if (R.state.state === 'stranded') again++; }
+    // a plug that wears off mid-strand: no blowout, it just swims out
+    [0, 1, 2].forEach(i => R.plug(i)); B.ports[0].plug.t = 3; B.state = 'swim'; UroCrawl.step(1); const s2 = R.state.state; f = 0; while (R.state.state === 'stranded' && f++ < 700) UroCrawl.step(1);
+    const quiet = { s2, state: R.state.state, blowouts: B.blowouts || 0, plugs: R.state.ports.map(p => !!p.plug) };
+    return { use, state: s.state, t0, t1, strandMul, d, tell, after, again, quiet }; });
+  check('it only dives into open ports (ports 1 and 2 plugged: it heads for port 3)', b.use === 2, 'went for port ' + (b.use + 1));
+  check('with all three ports plugged it is STRANDED for 8 s: it swims slowly in the open, its head exposed from every side (×2.5 more: 10 → 60), the plugs still ticking', b.state === 'stranded' && b.t1.every((t, i) => Math.abs(b.t0[i] - t - 2) < 0.02) && b.strandMul === 2.5 && Math.abs(b.d - 60) < 1e-6 && b.after.state === 'preview' && b.after.mul === 1 && b.after.frames >= 470 && b.after.frames <= 490, JSON.stringify(b));
+  check('if all three held it wriggles free by blowing out the weakest plug (a 0.7 s gurgle first, then a backwash), so it is not stranded again until that port is re-plugged; if one already wore off it just swims out', b.tell && b.tell.dur >= 0.7 - 1e-9 && b.tell.left === 1 && b.after.blowouts === 1 && b.after.plugs.join() === 'true,false,true' && b.after.washed && b.again === 0 && b.quiet.s2 === 'stranded' && b.quiet.state === 'preview' && b.quiet.blowouts === 1 && b.quiet.plugs.join() === 'false,true,true', JSON.stringify({ tell: b.tell, after: b.after, again: b.again, quiet: b.quiet }));
+  // the grades
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(); [0, 1, 2].forEach(i => R.unplug(i)); B.state = 'preview'; B.stT = 0.7; R.phase(2); const ph2 = { phase: R.state.phase, segs: R.state.segs.length, roar: R.state.roarT, banner: G.banner && G.banner.text };
+    let spawnIn = 9; const swarm = () => { G.enemies.filter(e => e.id === 'uti').forEach(e => { e.silent = true; e.hp = 0; }); UroCrawl.step(1); R.wash(0); const us = G.enemies.filter(e => !e.dead && e.id === 'uti'); us.forEach(e => { spawnIn = Math.min(spawnIn, e.spawnT); }); return us.length; };
+    const s1 = swarm(); UroCrawl.giveBoon('cap', true); const s2 = swarm(); UroCrawl.dropBoon('cap');
+    R.plug(0, 0.5); R.plug(1); UroCrawl.step(1); const w0 = R.state.ports[0].plug; R.slam(0); const tele = G.teles.find(t => t.kind === 'circle' && t.r === UroCrawl.tuning.REFLUX.SLAM.r); UroCrawl.step(46); const knocked = R.state.ports[0].plug; const f0 = R.state.ports[1].plug.t; R.slam(1); UroCrawl.step(46); const f1 = R.state.ports[1].plug.t + 46 / 60;
+    return { ph2, s1, s2, spawnIn, weak: !!w0, tele: tele ? tele.dur : 0, knocked, cracked: f0 - f1 }; });
+  check('GRADE III at two thirds: it coils (10 segments) after a roar; an E. coli pyelonephritis swarm rides every backwash (2, spawning in over 0.7 s; prophylaxis: 1)', b.ph2.phase === 2 && b.ph2.segs === 10 && b.ph2.roar > 1 && /GRADE III/.test(b.ph2.banner) && b.s1 === 2 && b.s2 === 1 && b.spawnIn >= 0.5, JSON.stringify(b));
+  check('its tail slams (a 0.7 s ring): a weak plug in the slam is knocked out, a full one cracked (−12 s)', b.weak && b.tele >= 0.7 - 1e-9 && b.knocked === null && b.cracked > 11.9 && b.cracked < 12.9, JSON.stringify({ tele: b.tele, knocked: b.knocked, cracked: b.cracked }));
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(); B.stunT = 0; B.roarT = 0; [0, 1, 2].forEach(i => R.plug(i)); B.state = 'swim'; UroCrawl.step(1); const was = R.state.state; B.tray.n = 0; B.needles.length = 0;
+    R.phase(3); const pop = { was, state: R.state.state, plugs: R.state.ports.filter(q => q.plug).length, tray: R.state.tray.n, said: G.texts.some(t => t.text === 'THE PLUGS BLOW OUT') };
+    UroCrawl.step(80); const ph3 = { phase: R.state.phase, segs: R.state.segs.length, tunnel: R.state.tunnel, pop };
+    G.tides.length = 0; R.wash(0); const dbl = G.tides.length; G.tides.length = 0;
+    const h = B.head; B.stunT = 0; const hp0 = h.hp; UroCrawl.dealDamage(h, 10, 'LITHO', {}); const noCut = R.state.tunnel; const hp1 = h.hp; UroCrawl.dealDamage(h, 10, 'CUT', {}); const tun = { tunnel: R.state.tunnel, drop: hp1 - h.hp, stun: R.state.stunT };
+    R.wash(0); const after = G.tides.map(t => t.dmg); UroCrawl.dealDamage(h, 10, 'CUT', {}); return { ph3, dbl, noCut, tun, after, hp: h.hp }; });
+  check('GRADE IV–V at one third: tortuous (12 segments), a double backwash; the real fix shows on its head: the first CUT hit is the one-time ANTIREFLUX TUNNEL (12% of its health, a 2 s stun) and from then on its backwash is single and weak', b.ph3.phase === 3 && b.ph3.segs === 12 && b.dbl === 2 && !b.noCut && b.tun.tunnel && b.tun.drop >= 408 && b.tun.stun > 1.9 && b.after.length === 1 && b.after[0] === 2, JSON.stringify(b));
+  check('a higher grade blows every gel mound out ("THE PLUGS BLOW OUT"), breaks a strand, and refills the tray: each grade is its own plug-up', b.ph3.pop.was === 'stranded' && b.ph3.pop.state === 'preview' && b.ph3.pop.plugs === 0 && b.ph3.pop.tray === 2 && b.ph3.pop.said, JSON.stringify(b.ph3.pop));
+  // the Foley balloon plugs one port for free, once
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(), P = UroCrawl.player(); B.stunT = 999; [0, 1, 2].forEach(i => R.unplug(i)); G.weapons.length = 0; UroCrawl.giveWeapon('foley'); G.wIndex = 0; G.swapT = 0;
+    const port = B.ports[1], a = Math.atan2(282 - port.y, 480 - port.x); P.x = port.x + Math.cos(a) * 40; P.y = port.y + Math.sin(a) * 40; UroCrawl.input.mode = 'kb'; UroCrawl.input.mouseFire = true; UroCrawl.step(70); UroCrawl.input.mouseFire = false; const first = !!R.state.ports[1].plug, used = R.state.foleyUsed;
+    R.unplug(1); UroCrawl.step(200); UroCrawl.input.mouseFire = true; UroCrawl.step(90); UroCrawl.input.mouseFire = false; return { first, used, second: !!R.state.ports[1].plug }; });
+  check('the Foley balloon held over a port plugs it once for free', b.first && b.used && !b.second, JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state, R = UroCrawl.reflux, B = R.boss(); B.stunT = 0; const m = UroCrawl.meta; UroCrawl.dealDamage(B.head, 99999, 'NEUTRAL', {}); UroCrawl.step(260);
+    return { won: G.won, overlay: G.overlay, title: document.getElementById('sumTitle').textContent, sub: document.getElementById('sumSub').textContent, boss: m.peds.boss, medal: G.medals.filter(x => x.kind === 'boss').length, sticker: m.peds.stickers['boss:resolved'], tiles: document.getElementById('sumStats').textContent }; });
+  check('killing it wins the run: "Reflux resolved. Follow-up cystogram scheduled."; the boss par gives its medal; the sticker book counts a resolved reflux', b.won && b.overlay === 'summary' && b.title === 'DISCHARGED!' && b.sub === 'Reflux resolved. Follow-up cystogram scheduled.' && b.boss === 1 && b.medal === 1 && b.sticker === 1 && /Medals/.test(b.tiles), b.sub + ' · ' + b.tiles.slice(0, 120));
+  await shot(p, 's-reflux-won');
+  errCheck('S reflux', errs);
+});
+
+// a player for whole Reflux fights: clears the E. coli swarm first, carries needles to the nearest open port and injects the
+// ring, rolls away from the head and the lumps (and through a backwash with Perfect Roll timing), and otherwise fights the
+// head at Bovie range (the pediatric scope makes that 144 px). Returns the result and every telegraph it saw.
+const REFLUXBOT = `window.__refluxBot = function (maxF) {
+  const G = UroCrawl.state, P = UroCrawl.player(), R = UroCrawl.reflux, I = UroCrawl.input; I.mode = 'kb';
+  const keys = (dx, dy, dz) => { dz = dz || 4; I.keys.KeyD = dx > dz; I.keys.KeyA = dx < -dz; I.keys.KeyS = dy > dz; I.keys.KeyW = dy < -dz; };
+  const bi = G.weapons.findIndex(w => w.id === 'bovie'); if (bi >= 0) UroCrawl.selectWeapon(bi);
+  const seen = new WeakSet(), kinds = {}; let minTele = 9, f = 0, ph = 1; const phaseAt = [], d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  while (!G.over && f++ < maxF) {
+    const B = R.boss(); if (!B || B.kind !== 'reflux') break; const s = R.state, h = B.head;
+    if (s.phase !== ph) { phaseAt.push(Math.round(f / 6) / 10); ph = s.phase; }
+    const open = B.ports.filter(q => !q.plug), busy = q => (q === B.usePort && (B.state === 'dive' && B.inPort || B.state === 'under')) || (q === B.exitPort && (B.state === 'gurgle' || B.state === 'emerge'));
+    const headD = h.hideNow ? 999 : d(h, P); let danger = headD < 60 && h.contactNow > 0;
+    for (const g of B.segs) if (!g.hideNow && g.lump && d(g, P) < g.r + 30) danger = true;
+    const bugs = G.enemies.filter(e => e.id === 'uti' && !e.dead && e.spawnT <= 0.3 && d(e, P) < 260).sort((a, b) => d(a, P) - d(b, P));
+    if (P.rollCd <= 0 && P.roll <= 0 && (danger || UroCrawl.peds.perfect() || (P.needle && bugs.length && d(bugs[0], P) < 60))) I.edges.roll = true;
+    if (P.needle) {
+      const port = open.filter(q => !busy(q)).sort((a, b) => d(a, P) - d(b, P))[0];
+      if (!port) { I.mouseFire = false; if (!open.length) I.edges.alt = true; else keys(480 - P.x, 282 - P.y, 30); }
+      else { const a = Math.atan2(282 - port.y, 480 - port.x), t = { x: port.x + Math.cos(a) * 45, y: port.y + Math.sin(a) * 45 };
+        if (d(t, P) > 12) { keys(t.x - P.x, t.y - P.y); I.mouseFire = false; } else { keys(0, 0); I.mouseFire = true; const pts = R.points(); if (pts) { const k = Math.min(3, s.inj ? s.inj.k : 0); I.mx = pts[k].x; I.my = pts[k].y; } } }
+    } else if (open.length && B.state !== 'stranded' && (s.tray.n > 0 || B.needles.length) && !bugs.length) {
+      const t = B.needles.length ? B.needles[0] : s.tray; keys(t.x - P.x, t.y - P.y); I.mouseFire = !h.hideNow && headD < 140; I.mx = h.x; I.my = h.y;
+    } else if (bugs.length) { const u = bugs[0], ud = d(u, P), w = ud < 90 ? -1 : ud > 130 ? 1 : 0; I.mx = u.x; I.my = u.y; I.mouseFire = ud < 145; keys((u.x - P.x) / ud * w * 10, (u.y - P.y) / ud * w * 10, 2); }
+    else if (!h.hideNow) { const w = headD < 80 ? -1 : headD > 125 ? 1 : 0, ax = (h.x - P.x) / (headD || 1), ay = (h.y - P.y) / (headD || 1); I.mx = h.x; I.my = h.y; I.mouseFire = headD < 140; keys(ax * w * 10 - (w ? 0 : ay * 6), ay * w * 10 + (w ? 0 : ax * 6), 2); }
+    else { I.mouseFire = false; keys(480 - P.x, 282 - P.y, 30); }
+    UroCrawl.step(1);
+    for (const t of G.teles) if (!seen.has(t)) { seen.add(t); minTele = Math.min(minTele, t.dur !== undefined ? t.dur : t.t); kinds[t.kind] = 1; }
+  }
+  I.mouseFire = false; keys(0, 0); const B = G.boss || {};
+  return { won: G.won, over: G.over, secs: Math.round(f / 6) / 10, hp: Math.round(P.hp), taken: Math.round(G.stats.dmgTaken), phaseAt, strands: B.stranded || 0, plugs: G.stats.plugs || 0, needles: G.stats.needles || 0, minTele, kinds };
+};`;
+await block('S. reflux fights', async () => {
+  // two whole fights, played: no god mode, the boss-run loadout, a bot that reads the tells (see REFLUXBOT)
+  let minTele = 9; const kinds = {};
+  for (const seed of [8, 55]) {
+    const { p, errs } = await openS('?boss=reflux&seed=' + seed); await p.evaluate(REFLUXBOT);
+    const r = await p.evaluate(() => { UroCrawl.startRun(); return __refluxBot(60 * 240); });
+    minTele = Math.min(minTele, r.minTele); Object.assign(kinds, r.kinds);
+    check('autoplay seed ' + seed + ': the surgeon plugs, strands and fights it through all three grades and resolves it (no god mode)', r.won && r.hp > 0 && r.phaseAt.length === 2 && r.phaseAt[1] > r.phaseAt[0] + 5 && r.secs > r.phaseAt[1] + 3 && r.secs >= 40 && r.secs <= 200 && r.strands >= 1 && r.plugs >= 3, JSON.stringify(r));
+    errCheck('S reflux fight ' + seed, errs); await p.close();
+  }
+  check('every Reflux attack seen in those fights was telegraphed for at least 0.5 s (the gurgles, the tail slams, the blowout)', minTele >= 0.5 && kinds.circle, 'shortest ' + minTele + ' s · ' + Object.keys(kinds).join(','));
+});
+
+await block('S. call room', async () => {
+  const { p, errs } = await openS('?hub=1&seed=3&cme=300');
+  let b = await p.evaluate(() => { const H = UroCrawl.hub, h = UroCrawl.meta.hub; const un = []; un.push(H.caseUnlocked(4)); h.bosses.staghorn = 1; h.bosses.fournier = 1; h.bosses.bph = 1; un.push(H.caseUnlocked(4)); h.bosses.mibc = 1; un.push(H.caseUnlocked(4));
+    H.use('board'); const btn = document.querySelector('#hubBody [data-case="peds"]'); const txt = btn.textContent, off = btn.disabled; btn.click(); return { un, txt, off, dungeon: H.state.dungeon, line: [...document.querySelectorAll('#hubBody .shopline')].map(x => x.textContent).find(x => /PEDS WING/.test(x)) }; });
+  check('the case board\'s Peds Wing opens only once all four bosses are beaten (Staghorn, Fournier, the Giant TURP, the Invader); taking it puts Reflux on the board', b.un.join() === 'false,false,true' && /TAKE THIS CASE/.test(b.txt) && !b.off && b.dungeon === 'reflux' && /Reflux, the kidney serpent/.test(b.line), JSON.stringify(b).slice(0, 220));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, L = H.tables.LINES.childlife, said = []; H.close(); const first = H.talk('childlife'), pin = !!UroCrawl.meta.hub.owned.pin_stickers; for (let i = 0; i < L.length * 2 + 1; i++) said.push(H.talk('childlife')); let rep = false; for (let i = 1; i < said.length; i++) if (said[i] === said[i - 1]) rep = true;
+    const st = H.state.stations.map(s => s.id), npcs = H.state.npcs.map(n => n.id); H.goto('childlife'); H.step(2); return { first, pin, n: L.length, uniq: new Set(said).size, rep, st, npcs, near: H.state.near }; });
+  check('the kids\' corner: a sticker book and a Sim Lab station, and a child-life specialist (10 lines that rotate, never back to back) whose first hello gives you the Sticker Chart pin', b.st.includes('stickers') && b.st.includes('simlab') && b.npcs.includes('childlife') && /Sticker Chart pin/.test(b.first) && b.pin && b.n >= 8 && b.uniq === b.n && !b.rep && b.near === 'childlife', JSON.stringify({ first: b.first.slice(0, 60), n: b.n, uniq: b.uniq, near: b.near, rep: b.rep, st: b.st.join(), npcs: b.npcs.join() }));
+  await p.waitForTimeout(250); await shot(p, 's-kids-corner');
+  b = await p.evaluate(() => { const H = UroCrawl.hub; H.use('pins'); const pins = [...document.querySelectorAll('#hubBody [data-pin]')].map(e => ({ id: e.getAttribute('data-pin'), locked: e.classList.contains('locked'), txt: e.textContent })); document.querySelector('#hubBody [data-pin="stickers"]').click(); const worn = UroCrawl.meta.hub.pin;
+    H.meet('wilms'); H.use('trophy'); const faces = [...document.querySelectorAll('#hubBody .bentry')].map(e => ({ t: e.textContent, locked: e.classList.contains('locked') })); return { pins, worn, wilms: faces.find(f => /Wilms/.test(f.t)), met: /Patrons met · 1 \/ 9/.test(document.getElementById('hubBody').textContent) }; });
+  check('the lanyard board has ten pins (nine patrons and the child-life specialist\'s Sticker Chart pin: +1 RVU a room cleared); meeting Wilms puts his portrait on the trophy wall', b.pins.length === 10 && !b.pins.find(x => x.id === 'stickers').locked && /\+1 RVU per room cleared/.test(b.pins.find(x => x.id === 'stickers').txt) && b.worn === 'stickers' && b.wilms && !b.wilms.locked && b.met, JSON.stringify({ worn: b.worn, wilms: b.wilms }));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, h = UroCrawl.meta.hub; h.rx = null; h.dungeon = 'staghorn'; H.use('cart'); const off = [...document.querySelectorAll('#hubBody [data-boon]')].map(e => e.getAttribute('data-boon')); h.rx = null; h.dungeon = 'reflux'; H.use('cart'); const on = [...document.querySelectorAll('#hubBody [data-boon]')].map(e => e.getAttribute('data-boon')); return { off, on, B: on.map(id => UroCrawl.tables.BOONS[id].peds) }; });
+  check('the pharmacy cart only stocks Wilms\'s Peds boons when today\'s case is the Peds Wing', b.off.length === 0 && b.on.length === 3 && b.B.every(Boolean), JSON.stringify(b));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta.hub, props0 = H.state.props; const r = [H.buy('mural'), H.buy('toybox'), H.buy('decals')]; return { r, wall: m.decor.wall, kids: m.decor.kids, locker: m.decor.locker, props: H.state.props - props0, slots: H.tables.SLOTS.join() }; });
+  check('Peds decor in the catalog: a crayon mural (wall), a toy box (the kids\' corner), sticker sheets (on the locker)', b.r.every(Boolean) && b.wall === 'mural' && b.kids === 'toybox' && b.locker === 'decals' && b.props === 1 && /kids/.test(b.slots) && /locker/.test(b.slots), JSON.stringify(b));
+  await p.waitForTimeout(250); await shot(p, 's-hub-decor');
+  b = await p.evaluate(() => { const H = UroCrawl.hub; H.use('stickers'); const st = document.querySelectorAll('#hubBody [data-sticker]').length; H.use('simlab'); const cards = [...document.querySelectorAll('#hubBody [data-sim]')].map(e => e.getAttribute('data-sim')); document.querySelector('#hubBody [data-sim="popoff"]').click(); const G = UroCrawl.state;
+    return { st, cards, sim: G.sim && G.sim.id, running: G.running, screen: G.screen, peds: G.peds, trial: G.trial && G.trial.id }; });
+  check('the sticker book lists the six drills; the Sim Lab lists them with the medal ladder, and PLAY starts that drill on its own', b.st === 6 && b.cards.join() === 'valve,tide,aim,catheter,popoff,torsion' && b.sim === 'popoff' && b.running && b.screen === 'run' && b.peds && b.trial === 'popoff', JSON.stringify(b));
+  b = await p.evaluate(() => { const G = UroCrawl.state; UroCrawl.step(70); UroCrawl.skipRoom(); UroCrawl.step(70); const panel = UroCrawl.hub.state.panel; document.getElementById('btnHubBack').click(); return { panel, screen: G.screen, running: G.running, peds: G.peds, on: UroCrawl.hub.state.on, rec: UroCrawl.meta.peds.trials.popoff }; });
+  check('…and its result card\'s CALL ROOM goes back to the room (no run was counted)', b.panel === 'simresult' && b.screen === 'hub' && !b.running && !b.peds && b.on && b.rec.wins === 1, JSON.stringify(b));
+  b = await p.evaluate(() => { const H = UroCrawl.hub, G = UroCrawl.state, P = UroCrawl.player(); const runs0 = UroCrawl.meta.runs || 0; H.scrubIn(); UroCrawl.step(3); const s = { boss: G.bossId, peds: G.peds, pin: G.pin && G.pin.id, runs: (UroCrawl.meta.runs || 0) - runs0 }; const rvu0 = G.rvu; UroCrawl.skipRoom(); UroCrawl.step(1); s.paid = G.rvu - rvu0; s.medal = G.medals.length; return s; });
+  check('SCRUB IN on the Peds case starts a Peds Wing run with the Sticker Chart pin paying +1 RVU on the first clear (on top of its medal)', b.boss === 'reflux' && b.peds && b.pin === 'stickers' && b.runs === 1 && b.medal === 1 && b.paid >= 1, JSON.stringify(b));
+  errCheck('S call room', errs);
+});
+
+await block('S. end to end', async () => {
+  const { p, errs } = await openS('?dungeon=peds&seed=11&god=1');
+  const b = await p.evaluate(() => { UroCrawl.startRun(); const G = UroCrawl.state, P = UroCrawl.player(), log = []; let crate = null;
+    for (let guard = 0; guard < 12 && G.roomIndex < 9; guard++) {
+      UroCrawl.step(80); if (G.overlay) UroCrawl.hideScreens();
+      log.push(G.roomIndex + ':' + (G.room.trial ? 'drill-' + G.room.trial : G.room.kind));
+      if (G.room.kind === 'rest') { const c = G.rewards.find(r => r.kind === 'crate'); crate = c && c.item.id; }
+      if (!G.cleared) UroCrawl.skipRoom(); UroCrawl.step(5); if (G.overlay) UroCrawl.hideScreens(); G.rewards.forEach(r => r.used = true);
+      const d = G.doors[0]; if (!d) break; const r0 = G.roomIndex; P.x = d.x + d.w / 2 + (d.side === 'E' ? -16 : 0); P.y = d.y + d.h / 2 + (d.side === 'N' ? 16 : d.side === 'S' ? -16 : 0); let k = 0; while (G.roomIndex === r0 && k++ < 120) UroCrawl.step(1);
+    }
+    const atBoss = { room: G.roomIndex, boss: G.boss && G.boss.kind };
+    let f = 0; while (!G.over && f++ < 60 * 200) { UroCrawl.step(1); if (f % 15 === 0 && G.boss && G.boss.head && !G.boss.head.hideNow) UroCrawl.dealDamage(G.boss.head, 60, 'CUT', {}); }
+    UroCrawl.step(260); const lr = UroCrawl.hub.state.lastRun;
+    return { log, crate, atBoss, won: G.won, overlay: G.overlay, sub: document.getElementById('sumSub').textContent, tiles: document.getElementById('sumStats').textContent, cme: lr && lr.parts.join('|'), medals: G.medals.map(m => m.kind[0] + m.medal), visited: G.visited.length }; });
+  check('end to end: ?dungeon=peds runs the Peds Wing through all nine rooms (drills on 2, 4 and 6 unless an elite or a shop door was taken), the rest room\'s crate is a Foley balloon, and room 9 is Reflux', b.atBoss.room === 9 && b.atBoss.boss === 'reflux' && b.log.filter(x => /drill/.test(x)).length >= 2 && b.crate === 'foley' && b.visited === 9, b.log.join(' → ') + ' · crate ' + b.crate);
+  check('…and beating it ends the run: the summary has the win line, the medals and the drills; the CME pays for the medals', b.won && b.overlay === 'summary' && /Reflux resolved/.test(b.sub) && /Medals/.test(b.tiles) && /Drills/.test(b.tiles) && /medals \d+/.test(b.cme), b.cme + ' · ' + b.medals.join(','));
+  await shot(p, 's-e2e-summary');
+  errCheck('S end to end', errs);
+  for (const cx of browser.contexts()) await cx.close();   // the frame rate below should be this page's own
+  const { p: q, errs: errs2 } = await openS('?boss=reflux&seed=3', 844, 390, true);
+  await q.evaluate(() => UroCrawl.startRun()); await q.waitForTimeout(3600);
+  let r = await q.evaluate(() => ({ fps: UroCrawl.state.fps, running: UroCrawl.state.running, mode: UroCrawl.input.mode }));
+  check('phone (844×390, touch): the Reflux fight draws at a playable frame rate', r.running && r.fps >= 40, 'fps ' + r.fps);
+  await shot(q, 's-phone-reflux');
+  await q.context().close();
+  const { p: q2, errs: errs3 } = await openS('?trial=catheter&seed=3', 844, 390, true);
+  await q2.waitForTimeout(2600);
+  r = await q2.evaluate(() => ({ fps: UroCrawl.state.fps, trial: UroCrawl.peds.state.trial.id }));
+  check('phone (844×390, touch): a drill (the Catheter Course, the busiest to draw) runs at a playable frame rate', r.trial === 'catheter' && r.fps >= 40, 'fps ' + r.fps);
+  errCheck('S phone', errs2.concat(errs3));
 });
 
 await browser.close();

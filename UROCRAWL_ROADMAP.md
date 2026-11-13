@@ -1,6 +1,6 @@
 # Path of Pathology (Uro Crawl) — roadmap for the next sessions
 
-`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~7.6k lines, no dependencies so far) that
+`games/uro-crawl.html` is a top-down roguelike dungeon crawler (one file, ~9.1k lines, no dependencies so far) that
 the Arcade hosts in a frame. Players see the name **Path of Pathology**; the file, `window.UroCrawl`, the `crawl:*`
 messages and the storage key keep the working name Uro Crawl on purpose. This file is the build plan. **How to use it:** the owner tells a session
 *"read UROCRAWL_ROADMAP.md and do Step N"* or *"…and do the next step"* (= the first unchecked box below).
@@ -10,7 +10,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 - [x] **Step 1** — Staghorn becomes a mobile head-on duelist (Minotaur-style). Done 2026-11-11 (as built: the note at the end of Step 1)
 - [x] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon. Done 2026-11-12 (as built: the note at the end of Step 2)
 - [x] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes). Done 2026-11-12 (as built: the note at the end of Step 3)
-- [ ] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss
+- [x] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss. Done 2026-11-13 (as built: the note at the end of Step 4)
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
 - Parked (only when asked): true isometric view, RCC thrombus boss — see the end of this file.
@@ -37,7 +37,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–R, 387 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room; Step 4 adds block S). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–S, 480 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room, S is Step 4's Peds Wing). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -433,6 +433,38 @@ covers the pediatric-scope modifier, the par-time medals and sticker book, each 
 record, the movement tech unlocks and their effects (Perfect Roll refund, Roll Cancel, Slide, Flick Shot), the elite, the gates,
 hydronephrosis decompression vs popping, the serpent's loops, port dive/pop, backwash and breakwaters, needle pick-up, carry limits, drop and loss to backwash, the injection ring, port
 plugging and the vulnerable window, the three phases, the Sim Lab replay, and the new boons; earlier blocks pass.
+
+**As built (2026-11-13):** the dungeon is §14g of the game file (`peds*`, `trial*`, `gate*`, `tide*` functions; numbers in `PEDS`,
+`TRIALS`, `TECH`), the boss is §14h (`reflux*`; every number in `REFLUX`), the Call Room parts are in §17b. All four tables are
+under `UroCrawl.tuning`; hooks are `UroCrawl.peds.*` and `UroCrawl.reflux.*`. Saved state: `META.peds` (`pedsDefaults`: trial
+records, medals, stickers, boss wins) and `META.tech`. Where the build reads the spec one way or adds to it:
+- **Getting there.** `?dungeon=peds` or the case board's Peds row (open once Staghorn, Fournier, the Giant TURP and the Invader
+  are beaten); `?boss=reflux` starts at the serpent. A normal run never rolls Reflux from its seed. The pool is eight toy-box
+  rooms (`PEDS_POOL`) with Peds-only enemies; the elites are Wilms and the Spasm Bladder.
+- **Drills sit in rooms 2, 4 and 6** (three of the six, shuffled per run), on a combat or heal door only (an elite or shop door
+  keeps its room); the door wears a stopwatch. A drill never hurts you; three fails and you are waved through with no medal.
+  The six run on their own from the Sim Lab or `?trial=`, with personal bests in `META.peds.trials`.
+- **Movement tech:** each technique is taught by one drill (Perfect Roll: Valve Run, Slide: Tide Dash, Flick Shot: Aim Gallery,
+  Roll Cancel: Catheter Course) and kept in `META.tech`; gold on that drill is the mastery badge. Flick Shot falls back to the
+  nearest target in reach when nothing is in front. `?tech=…|all` turns them on for a session.
+- **Pediatric scope:** −15% range (weapon range, the aim clamp and bullet life), +20% on weak points and weak-point bodies, and
+  rooms framed tighter by a toy-block border; the HUD says so. 40% of fight rooms with a hydronephrotic kidney are ultrasound
+  rooms (`?us=1`). Medals pay RVU (3 / 6 / 10) and CME, and each one is a sticker in the sticker book.
+- **Boons:** the twelve listed plus Young's two valve boons (Valve Hook, Young's Classification). Teddy absorbs one hit a room,
+  the Lollipop heals 10, CIC drains the first meter past 75% once a room. Peds boons only appear in the Peds Wing; Wilms
+  (Peds only) is weighted ×2 there.
+- **Reflux, as tuned with bots.** HP 3400, three ports, a tray of two refilling one per 10 s. Plugs last **60 s**, not ~15: at
+  15-24 s a bot that plays it straight almost never had all three plugged at once (0-2 strands a fight, fights of 150-200 s).
+  Free-swimming, **only the maw** (the front of the kidney, a lime weak-point orb) takes the ×2; side and back hits land at ×1.
+  **Stranded**, the whole head is exposed at ×2.5 more for 8 s. It dives after one pass plus one per plugged port, so plugging
+  takes its hiding places and its backwash. When a strand ends with all three plugs held it blows out the weakest (0.7 s tell
+  and a backwash); a grade change blows out every plug, breaks a strand and refills the tray, so each grade is its own plug-up.
+  The swarm is 2 per backwash (cap 6, a 0.7 s spawn-in); slams crack a full plug by 12 s. Contact: head 10, tail lump 7.
+  Result over eight seeds: a bot that plugs wins 8/8 in 99-166 s (mean ≈ 125 s, ≈ 50 damage taken, about one strand a
+  grade); a bot that only chases the head wins half its fights.
+- **Call Room:** Wilms's keepsake is a Kidney pin (+5/8/11% weak-point damage); the Sticker Chart pin (+1/2/3 RVU a room)
+  comes from the child-life specialist on the first talk. Two new decor slots (kids' corner, locker) for the toy box and
+  locker decals; the mural takes the wall slot. A Foley sits in the rest crate before the serpent.
 
 ---------------------------------------------------------------------------------------------------
 
