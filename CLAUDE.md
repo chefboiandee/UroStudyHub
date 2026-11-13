@@ -45,6 +45,8 @@ inside another workspace; nothing here depends on that one any more.)
   In-app Anki reviewer (Anki page > Review tab): `node tools/anki-sched.test.mjs` (pure Node; run it under `TZ=America/Chicago`, `UTC`
   and `Pacific/Auckland`, the 4am study-day rollover is the part that bites) and `node tools/anki-study.drive.mjs` (headless E2E on a
   phone viewport; needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir` saves screenshots).
+  AI Tutor's AI panel (provider / model / reasoning effort; every provider's API is stubbed in the page and the request
+  body checked): `node tools/ai-pick.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
 
 ## Run and verify
 

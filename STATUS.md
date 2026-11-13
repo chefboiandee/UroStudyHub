@@ -3,6 +3,37 @@
 **Updated:** 2026-11-13
 **Tool:** Claude Code
 
+## 2026-11-13 (later) — 🧠 AI Tutor: reasoning effort, and switching provider / model without leaving the tab
+
+Andrew: can people set the model's reasoning effort through the API, ideally from the AI Tutor tab, and switch models or
+providers there too, without leaving the tab?
+**Done:**
+- **Reasoning effort**, one saved setting (`lm.effort`, "" = the model's default) sent the way each API takes it:
+  Claude `output_config.effort` (low → max; Opus 5.5 / Haiku 5.5 default to medium, the others high), OpenAI and Gemini
+  (OpenAI-compatible endpoint) and local servers `reasoning_effort`, OpenRouter `reasoning.effort`. `effortLevels()`
+  says which levels a model takes (none for GPT-4o / 4.1, Gemini 2.0, or an OpenRouter model listed without
+  `reasoning`); a level a model doesn't offer is sent as its nearest one, and the picker says so. Higher levels get more
+  output room (16k, 32k for X-High / Max when streamed, and for Gemini High), since thinking shares the answer's budget.
+  Applies to every AI feature that goes through `callAI`, like the model choice does.
+- **The tutor's AI chip** (top left of the tutor toolbar) is now a button: `Claude · claude-opus-5-5 · High`. It opens
+  an in-tab panel (`AiQuickPanel`): provider buttons (one with no saved key opens Settings on that tab, over the tutor),
+  the model (Claude / OpenAI lists; Gemini and Local with a ↻ List button; OpenRouter a searchable catalog), the effort
+  buttons, and "⚙ All AI settings". Changes apply from the next message; the chat stays.
+- **Settings** has the same effort control (🧠 Reasoning effort). Changing it there doesn't remount the modal, so it
+  doesn't jump back to the top (the memo ignores `effort`; other AI-settings changes still remount it, as before).
+- **Fixes on the way:** OpenAI's reasoning models (o3-mini / o4-mini, now also GPT-5 / GPT-5 Mini in the list) refuse
+  `max_tokens` and a non-default temperature, so connecting to or chatting with them failed; they now get
+  `max_completion_tokens` and no temperature. LM Studio's model is kept in its own field (`localModel`) so switching to
+  Claude and back doesn't lose it. The OpenRouter catalog is parsed once per stored copy (the chip reads it each second).
+**Verified:** new `node tools/ai-pick.drive.mjs` (headless, every AI endpoint stubbed, request bodies checked): 57 checks,
+all pass, including that the Settings scroll check fails when the remount fix is removed. `ise-plan.drive` 150,
+`arcade-cards.drive` 119, `anki-study.drive` 63: all pass. Added code uses no syntax newer than what the app already uses.
+**Not verified:** no real API calls (no keys here, and the providers' docs weren't reachable from this session); the
+OpenAI / Gemini / OpenRouter level lists follow their docs as found by web search. If a provider rejects a level, the
+tutor shows its error message.
+**Next steps:** try High / Max on a real Claude key and Low on Gemini from the live site.
+**Open questions:** should effort apply only to the tutor (and Quick Ask) instead of every AI feature?
+
 ## 2026-11-13 (roadmap) — 🧑‍⚕️ Uro Crawl roadmap: Step 5, character select and the wardrobe
 
 Andrew: pick a male or female main character for inclusivity, and later spend CME on outfits (scrub caps and colours, white
