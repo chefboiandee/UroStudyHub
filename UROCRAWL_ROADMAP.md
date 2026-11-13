@@ -11,7 +11,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 - [x] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon. Done 2026-11-12 (as built: the note at the end of Step 2)
 - [x] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes). Done 2026-11-12 (as built: the note at the end of Step 3)
 - [x] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss. Done 2026-11-13 (as built: the note at the end of Step 4)
-- [ ] **Step 5** — Character select and the wardrobe: pick your surgeon's look, spend CME on outfits (retro surgeon, plague doctor, ...)
+- [x] **Step 5** — Character select and the wardrobe: pick your surgeon's look, spend CME on outfits (retro surgeon, plague doctor, ...). Done 2026-11-13 (as built: the note at the end of Step 5)
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
 - Parked (only when asked): true isometric view, RCC thrombus boss — see the end of this file.
@@ -38,7 +38,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–S, 480 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room, S is Step 4's Peds Wing; Step 5 takes T). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–T: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room, S is Step 4's Peds Wing, T is Step 5's wardrobe; the next step takes U). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -519,6 +519,41 @@ attending and the janitor in the Call Room, and a bestiary-style "wardrobe" page
 summary; the mirror reopens the choice; every catalogue item can be bought with CME, tried on, equipped and unequipped, and
 persists; deed-unlocked items unlock on their deed; NPC outfit lines fire; hitboxes and every gameplay number are
 unchanged (assert it in the harness); harness block (T) covers all of that, with a screenshot of the default and three outfits; earlier blocks pass.
+
+**As built (2026-11-13):** the rig is `drawSurgeon` in §15 (`drawPlayer` now only does the run's extras around it); everything
+else is §17c of the game file (`WARDROBE`, `WARDROBE_SETS`, `WARDROBE_DEEDS`, `HERO_*` tables, `resolveLook` / `heroLook`, the two
+panels, the mirror prop, `HUB_OUTFIT_LINES`). Hooks: `UroCrawl.wardrobe.*`; URL params `?hero=build:skin:hair[:colour]`,
+`?wear=id,set,...`, `?sepia=1`. Where the build reads the spec its own way or adds to it:
+- **Builds:** all three (Male, Female, Neutral), kept as the spec suggests: shoulders, waist taper, hair volume, lashes (Female)
+  and brow weight (Male). Default is Neutral with the original skin tone and hair under the cap, so an untouched save looks
+  exactly as before. 8 skin tones, 6 hair styles (covered/bald, crop, ponytail, bun, curls, long), 10 hair colours (two silly:
+  hospital teal, highlighter pink). A light cheek rim keeps the face readable on the darkest tones.
+- **"Who are you?"** opens the first time you walk into the Call Room (from PLAY, or from a summary after QUICK START runs);
+  debug boots (`?hub=1`, `?hero=`, `?trial=`, `?wear=`) skip it. Closing it in any way keeps the current look. A cheval mirror by
+  the scrub cabinet reopens it, and shows your reflection when you stand close.
+- **Slots:** six, not five: cap, outfit, coat, mask, headlamp, and **extras** (the lanyard with your PGY on the badge, a
+  stethoscope), because a lanyard in the outfit slot would replace the scrubs. Loupes sit in the mask slot and keep the
+  surgical mask under them. The scrub colour stays its own choice (now nine: Ceil blue, Charcoal and Lavender added) and is
+  worn under the lead apron and on the plain cap.
+- **Buying:** tap = try on (the preview changes, nothing is spent), tap again = buy (or wear, if owned), tap what you wear =
+  take it off (the slot goes back to its default). Deed items follow the scrub-colour pattern: free on the deed, or bought early
+  for their price. Sets are bought once (Retro surgeon 70, Plague doctor 80) and worn whole with one tap (no white coat over
+  them). Prices: 10-25 CME for small items, 40-80 for themed ones. 31 items in all: 22 to earn (16 on their own and two sets of
+  three; the catalogue tab lists them as 18 entries, silhouettes until unlocked), 9 free basics (the defaults, and no cap,
+  no coat, no mask, nothing round the neck), plus the 9 scrub colours.
+- **Deeds:** the plague doctor for beating Fournier's; the retro surgeon for Young's favour (two of his boons in one run); the
+  lead apron for clearing a room of nothing but stones (three or more) or Nitze's favour; the attending coat at PGY-6; the
+  cap of shame for finishing a run with continence lost. A fresh unlock is named on the summary, toasted in the room, and puts
+  a gold dot on the scrub cabinet until you look.
+- **Old photograph:** a toggle once the retro set is yours; every colour of the look goes through a sepia print (the instrument
+  in your hand keeps its class colour, it is gameplay information).
+- **The cast:** one remark per speaker per new look (plague, retro, cap of shame, lead apron, sepia, rainbow lamp, loupes,
+  attending coat), then their usual lines: 10 for the attending, 8 for the janitor, 9 shared by the reps, 3 for the child-life
+  specialist. The spec's three plague lines are in, word for word.
+- **Portraits:** the HUD has a round bust left of the HP bar (cached per look; it looks worried below 25% HP); the summary has
+  the same bust next to its title.
+- **Numbers:** block T plays one seeded room with the same scripted bot in five looks and compares position, HP, RVU, kills,
+  damage taken and enemy HP: identical; `P.r` stays 13.
 
 ---------------------------------------------------------------------------------------------------
 

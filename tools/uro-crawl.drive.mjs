@@ -32,6 +32,11 @@
 // the peristaltic lump, dive / pop / backwash, the bulking needle and the injection ring, the maw, stranding and the blowout,
 // the grades, the tunnel, the Foley), two full fights played by a bot with no god mode, the Call Room pieces, a run end to end
 // and phone-size frame rates. BLOCKS=S runs only it (the letter before the dot).
+// Block T: character select and the wardrobe (roadmap Step 5): "Who are you?" on the first visit and the mirror after it (build,
+// skin, hair, colour; seen in the room, the HUD portrait and the summary by sampling pixels), every wardrobe item tried on, bought,
+// worn, taken off and put back on, sets, the old photograph, the nine scrub colours, the catalogue's silhouettes, persistence,
+// each deed unlock (Fournier's, Young's favour, continence lost, a room of stones, Nitze's favour, PGY-6), the cast's outfit
+// lines, and the same seeded room played by a bot in five looks with identical numbers (hitbox r 13).
 //
 //   python3 -m http.server 2043          (repo root, in another terminal)
 //   node tools/uro-crawl.drive.mjs
@@ -1649,8 +1654,10 @@ await block('R. call room', async () => {
   await p.click('#btnPlay'); await p.waitForTimeout(100);
   const helpFirst = await p.evaluate(() => UroCrawl.state.overlay);
   await p.click('#btnHelpOk'); await p.waitForTimeout(150);
+  const who = await p.evaluate(() => UroCrawl.state.overlay + ':' + UroCrawl.hub.state.panel);   // the first time in, "Who are you?" (block T) comes first
+  await p.click('#btnHeroOk'); await p.waitForTimeout(100);
   b = await p.evaluate(() => { const G = UroCrawl.state, s = UroCrawl.hub.state; return { screen: G.screen, overlay: G.overlay, running: G.running, on: s.on, ids: s.stations.map(x => x.id), npcs: s.npcs.map(x => x.id), music: UroCrawl.snd.music.mode, enemies: G.enemies.length, held: G.weapons.map(w => w.id).join() }; });
-  check('PLAY (after the first-time How to play) lands in the Call Room: G.screen "hub", no run, no overlay, nothing to fight, the hub music mode', helpFirst === 'help' && b.screen === 'hub' && b.overlay === null && !b.running && b.on && b.enemies === 0 && b.music === 'hub', b.screen + ' · music ' + b.music);
+  check('PLAY (after the first-time How to play, and "Who are you?" from block T) lands in the Call Room: G.screen "hub", no run, no overlay, nothing to fight, the hub music mode', helpFirst === 'help' && who === 'hub:mirror' && b.screen === 'hub' && b.overlay === null && !b.running && b.on && b.enemies === 0 && b.music === 'hub', b.screen + ' · music ' + b.music);
   check('every station of the roadmap is in the room (OR door, case board, locker, cart, pins, whiteboard, chart rack, trophy wall, coffee, scrub cabinet, decor desk, rep table); the cast is the attending, the janitor and the four reps', need.every(id => b.ids.includes(id)) && cast.every(id => b.npcs.includes(id)), b.ids.join(','));
   const hints0 = await p.evaluate(() => UroCrawl.hub.state.hints.join());
   await p.waitForTimeout(300); await shot(p, 'r-hub-first');
@@ -1728,10 +1735,10 @@ await block('R. call room', async () => {
   check('the coffee machine pours drip or decaf (espresso needs the machine from the decor catalog) and has something to say', b.cups === 'drip,decaf' && b.quip.length > 8, b.quip);
   await p.click('#hubBody [data-cup="drip"]'); await p.waitForTimeout(60);
   b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta, cup = H.state.cup; H.use('scrubs'); const sw = [...document.querySelectorAll('#hubBody [data-scrub]')], pager = document.querySelector('#hubBody .bubble').textContent, cme0 = m.hub.cme;
-    const lockedTxt = sw[1].textContent; sw[1].click(); const bought = { scrub: m.settings.scrub, owned: !!m.hub.owned.scrub1, paid: cme0 - m.hub.cme }; document.querySelector('#hubBody [data-scrub="0"]').click(); const back0 = m.settings.scrub; document.querySelector('#hubBody [data-scrub="1"]').click(); const again = { scrub: m.settings.scrub, paid: cme0 - m.hub.cme };
+    const lockedTxt = sw[1].textContent; sw[1].click(); document.querySelector('#hubBody [data-scrub="1"]').click(); const bought = { scrub: m.settings.scrub, owned: !!m.hub.owned.scrub1, paid: cme0 - m.hub.cme }; document.querySelector('#hubBody [data-scrub="0"]').click(); const back0 = m.settings.scrub; document.querySelector('#hubBody [data-scrub="1"]').click(); const again = { scrub: m.settings.scrub, paid: cme0 - m.hub.cme };
     return { cup, n: sw.length, pager, lockedTxt, bought, back0, again }; });
-  check('a cup of drip goes in your hand; the scrub cabinet shows six colours and a pager message', b.cup === 'drip' && b.n === 6 && /PAGER/.test(b.pager), b.pager);
-  check('a locked scrub colour (PGY-2) can be bought early for 15 CME and worn; switching between owned colours is free', /PGY-2/.test(b.lockedTxt) && b.bought.scrub === 1 && b.bought.owned && b.bought.paid === 15 && b.back0 === 0 && b.again.scrub === 1 && b.again.paid === 15, JSON.stringify(b.bought));
+  check('a cup of drip goes in your hand; the scrub cabinet shows nine colours (six, plus three from block T) and a pager message', b.cup === 'drip' && b.n === 9 && /PAGER/.test(b.pager), b.pager);
+  check('a locked scrub colour (PGY-2) can be bought early for 15 CME and worn (a first tap tries it on, the second buys it); switching between owned colours is free', /PGY-2/.test(b.lockedTxt) && b.bought.scrub === 1 && b.bought.owned && b.bought.paid === 15 && b.back0 === 0 && b.again.scrub === 1 && b.again.paid === 15, JSON.stringify(b.bought));
 
   // ── decor: bought with CME, into fixed slots ──
   await p.evaluate(() => UroCrawl.hub.use('decor'));
@@ -1801,7 +1808,7 @@ await block('R. call room', async () => {
   check('the Call Room\'s state persists across a reload: CME, perks, decor and what is on display, owned items, the pin, patrons met, the loadout, the case, the speakers\' places', b.json === before && h1.cme === h0.cme && h1.perks.hp === 3 && h1.decor.corner === 'greg' && h1.decor.wall === 'poster' && h1.decor.counter === 'espresso' && h1.owned.diplomas === 1 && h1.pin === 'civiale' && h1.met.civiale === 1 && h1.load.join() === 'scalpel,bovie' && h1.dungeon === 'fournier' && Object.keys(h1.lines).length >= 6 && / CME$/.test(b.xpLine), h1.cme + ' CME · decor ' + JSON.stringify(h1.decor));
   await p.click('#btnPlay'); await p.waitForTimeout(250);
   b = await p.evaluate(() => { const s = UroCrawl.hub.state; return { on: s.on, overlay: UroCrawl.state.overlay, coffee: s.stations.find(x => x.id === 'coffee').name, props: s.props, dungeon: s.dungeon, loadout: s.loadout.join() }; });
-  check('after the reload PLAY goes straight to the room (How to play is only shown once) and the decor is still standing', b.on && b.overlay === null && b.coffee === 'ESPRESSO MACHINE' && b.props === 10 && b.dungeon === 'fournier' && b.loadout === 'scalpel,bovie', b.props + ' props');
+  check('after the reload PLAY goes straight to the room (How to play is only shown once) and the decor is still standing', b.on && b.overlay === null && b.coffee === 'ESPRESSO MACHINE' && b.props === 11 && b.dungeon === 'fournier' && b.loadout === 'scalpel,bovie', b.props + ' props');
   await p.waitForTimeout(300); await shot(p, 'r-hub-furnished');
   await p.keyboard.press('Escape'); await p.waitForTimeout(100);
   b = await p.evaluate(() => ({ panel: UroCrawl.hub.state.panel, btns: [...document.querySelectorAll('#hubBody .btn')].map(x => x.textContent).join('|') }));
@@ -1845,7 +1852,7 @@ await block('R. call room', async () => {
   // ── phone: touch, the stick, the one big INTERACT button ──
   for (const cx of browser.contexts()) await cx.close();   // the frame rate below should be this page's own
   const { p: p5, errs: errs5 } = await open('?seed=4', 844, 390, true); allErrs.push(errs5);
-  await p5.tap('#btnPlay'); await p5.waitForTimeout(100); await p5.tap('#btnHelpOk'); await p5.waitForTimeout(200);
+  await p5.tap('#btnPlay'); await p5.waitForTimeout(100); await p5.tap('#btnHelpOk'); await p5.waitForTimeout(200); await p5.tap('#btnHeroOk'); await p5.waitForTimeout(100);
   b = await p5.evaluate(() => ({ on: UroCrawl.hub.state.on, mode: UroCrawl.input.mode }));
   check('touch: PLAY lands in the room in touch mode', b.on && b.mode === 'touch');
   box = await canvasBox(p5);
@@ -2333,6 +2340,225 @@ await block('S. end to end', async () => {
   r = await q2.evaluate(() => ({ fps: UroCrawl.state.fps, trial: UroCrawl.peds.state.trial.id }));
   check('phone (844×390, touch): a drill (the Catheter Course, the busiest to draw) runs at a playable frame rate', r.trial === 'catheter' && r.fps >= 40, 'fps ' + r.fps);
   errCheck('S phone', errs2.concat(errs3));
+});
+
+// ───────── T. character select and the wardrobe (roadmap Step 5): the mirror, the wardrobe, deeds, outfit lines, numbers unchanged ─────────
+const TLIB = `
+window.__hex = function (hex) { const n = parseInt(hex.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+window.__count = function (cv, hex, x0, y0, w, h, tol) { const d = cv.getContext('2d').getImageData(Math.max(0, Math.round(x0)), Math.max(0, Math.round(y0)), Math.round(w), Math.round(h)).data, c = __hex(hex); let k = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && Math.abs(d[i] - c[0]) <= tol && Math.abs(d[i + 1] - c[1]) <= tol && Math.abs(d[i + 2] - c[2]) <= tol) k++; return k; };
+window.__game = function (hex, gx, gy, gw, gh, tol) { const cv = document.getElementById('game'), s = cv.width / 960; return __count(cv, hex, gx * s, gy * s, gw * s, gh * s, tol === undefined ? 12 : tol); };
+window.__ink = function (cv) { const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let k = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) k++; return k; };
+`;
+async function openT(q, w, h, touch) { const o = await open(q, w, h, touch); await o.p.evaluate(TLIB); return o; }
+
+await block('T. hero', async () => {
+  const allErrs = [];
+  const { p, errs } = await openT('?seed=3&god=1'); allErrs.push(errs);
+  let b = await p.evaluate(() => { const W = UroCrawl.wardrobe, T = W.tables, s = W.state; return { hero: JSON.parse(JSON.stringify(s.hero)), eq: JSON.parse(JSON.stringify(s.equipped)), def: T.DEFAULT, owned: Object.keys(s.owned).length, sepia: s.sepia,
+    hooks: ['equip', 'unequip', 'own', 'buy', 'hero', 'openMirror'].every(k => typeof W[k] === 'function'), builds: Object.keys(T.BUILDS).join(), skins: T.SKINS.length, hairs: Object.keys(T.HAIRS), cols: T.HAIR_COLORS.length,
+    items: Object.keys(T.WARDROBE).filter(id => !(T.WARDROBE[id].cost === 0 && !T.WARDROBE[id].set && !T.WARDROBE[id].deed)).length, sets: Object.keys(T.SETS).length, scrubs: T.SCRUBS.length, slots: T.SLOTS.join() }; });
+  check('a fresh save: META.hero is the original look (neutral build, the original skin tone, hair under the cap, not yet chosen) and META.wardrobe wears the defaults, owns nothing, no sepia; the wardrobe hooks exist', b.hooks && b.hero.build === 'neutral' && b.hero.skin === 1 && b.hero.hairStyle === 'covered' && b.hero.set === false && JSON.stringify(b.eq) === JSON.stringify(b.def) && b.owned === 0 && !b.sepia, JSON.stringify(b.hero));
+  check('the tables: Male / Female / Neutral builds, 8 skin tones, 6 hair styles (bald/covered, a crop, a ponytail, a bun, curls, long), 10 hair colours (two silly), six slots (outfit, cap, coat, mask, headlamp, extras)', b.builds === 'male,female,neutral' && b.skins >= 6 && b.hairs.length >= 5 && ['covered', 'crop', 'ponytail', 'curls', 'long'].every(k => b.hairs.includes(k)) && b.cols >= 7 && b.slots === 'outfit,cap,coat,mask,lamp,neck', b.skins + ' skins · ' + b.hairs.length + ' hairs · ' + b.cols + ' colours');
+  check('the catalogue has ≥ 14 things to earn: ' + b.items + ' items to buy or unlock (two of them sets of three) plus 9 scrub colours', b.items >= 14 && b.sets === 2 && b.scrubs === 9, b.items + ' items · ' + b.sets + ' sets');
+  // ── first launch: PLAY → How to play → "Who are you?" ──
+  await p.click('#btnPlay'); await p.waitForTimeout(80); await p.click('#btnHelpOk'); await p.waitForTimeout(250);
+  b = await p.evaluate(() => ({ ov: UroCrawl.state.overlay, panel: UroCrawl.hub.state.panel, title: document.getElementById('hubTitle').textContent, ok: document.getElementById('btnHubBack').textContent, ok2: !!document.getElementById('btnHeroOk'),
+    builds: document.querySelectorAll('#hubBody [data-build]').length, skins: document.querySelectorAll('#hubBody [data-skin]').length, hairs: document.querySelectorAll('#hubBody [data-hair]').length, cols: document.querySelectorAll('#hubBody [data-haircol]').length,
+    on: [...document.querySelectorAll('#hubBody .on')].map(e => e.getAttribute('data-build') || e.getAttribute('data-skin') || e.getAttribute('data-hair') || e.getAttribute('data-haircol')).join(), ink: __ink(document.getElementById('lookPrev')) }));
+  check('the first time in the Call Room, "Who are you?" opens over it: build, skin tone, hair and hair colour pickers with the current look marked, a live preview, and THAT\'S ME (also inside the preview, so a phone never scrolls to it)', b.ov === 'hub' && b.panel === 'mirror' && b.title === 'Who are you?' && b.ok === 'THAT’S ME' && b.ok2 && b.builds === 3 && b.skins === 8 && b.hairs === 6 && b.cols === 10 && b.on === 'neutral,1,covered,1' && b.ink > 500, JSON.stringify(b));
+  const ink0 = await p.evaluate(() => document.getElementById('lookPrev').toDataURL());
+  await p.waitForTimeout(400);
+  const spun = await p.evaluate((a) => document.getElementById('lookPrev').toDataURL() !== a, ink0);
+  check('the preview is live: it redraws (the sprite turns on the spot) while the screen is open', spun);
+  await p.click('#hubBody [data-build="female"]'); await p.click('#hubBody [data-skin="6"]'); await p.click('#hubBody [data-hair="ponytail"]'); await p.click('#hubBody [data-haircol="8"]'); await p.waitForTimeout(120);
+  b = await p.evaluate(() => { const L = UroCrawl.wardrobe.look(); return { hero: JSON.parse(JSON.stringify(UroCrawl.meta.hero)), build: L.build.name, skin: L.skin, hair: L.hair, hs: L.hairStyle, on: [...document.querySelectorAll('#hubBody .on')].map(e => e.getAttribute('data-build') || e.getAttribute('data-skin') || e.getAttribute('data-hair') || e.getAttribute('data-haircol')).join(), skinPrev: __count(document.getElementById('lookPrev'), L.skin, 0, 0, 240, 300, 2) }; });
+  check('picking Female, skin tone 7 of 8, a ponytail and hospital-teal hair changes META.hero and the rig\'s resolved look at once, and the preview shows that skin', b.hero.build === 'female' && b.hero.skin === 6 && b.hero.hairStyle === 'ponytail' && b.hero.hairColor === 8 && b.build === 'Female' && b.skin === '#6a3d24' && b.hair === '#2fe0c8' && b.hs === 'ponytail' && b.on === 'female,6,ponytail,8' && b.skinPrev > 40, JSON.stringify(b));
+  await p.waitForTimeout(300); await shot(p, 't-who-are-you');
+  await p.click('#btnHeroOk'); await p.waitForTimeout(150);
+  b = await p.evaluate(() => { const P = UroCrawl.player(); P.x = 480; P.y = 300; UroCrawl.hub.step(1); return { ov: UroCrawl.state.overlay, set: UroCrawl.meta.hero.set, toast: UroCrawl.hub.state.toast, saved: JSON.parse(localStorage.getItem('urocrawl.v1')).hero }; });
+  await p.waitForTimeout(150);
+  const seen = await p.evaluate(() => ({ skin: __game('#6a3d24', 455, 260, 50, 45), hair: __game('#2fe0c8', 455, 255, 50, 50), old: __game('#f4c89a', 455, 260, 50, 45) }));
+  check('THAT\'S ME closes it and saves the choice (set: true, in localStorage); the surgeon walking the room has the new skin and hair, and none of the old skin tone', b.ov === null && b.set && /NICE TO MEET YOU/.test(b.toast || '') && b.saved.build === 'female' && b.saved.set === true && seen.skin > 20 && seen.hair > 5 && seen.old === 0, JSON.stringify(seen));
+  await shot(p, 't-hub-new-look');
+  // ── the mirror reopens it ──
+  b = await p.evaluate(() => { const H = UroCrawl.hub; const st = H.state.stations.find(s => s.id === 'mirror'); H.goto('mirror'); H.step(2); return { st: !!st, near: H.state.near, name: st && st.name }; });
+  await p.keyboard.press('KeyE'); await p.waitForTimeout(120);
+  b = Object.assign(b, await p.evaluate(() => ({ panel: UroCrawl.hub.state.panel, title: document.getElementById('hubTitle').textContent, on: [...document.querySelectorAll('#hubBody .on')].map(e => e.getAttribute('data-build') || e.getAttribute('data-skin') || e.getAttribute('data-hair') || e.getAttribute('data-haircol')).join() })));
+  await p.click('#hubBody [data-build="male"]'); await p.click('#hubBody [data-hair="curls"]'); await p.keyboard.press('Escape'); await p.waitForTimeout(100);
+  b.after = await p.evaluate(() => ({ ov: UroCrawl.state.overlay, hero: UroCrawl.meta.hero.build + ':' + UroCrawl.meta.hero.hairStyle }));
+  check('a mirror stands by the scrub cabinet: using it reopens the same choices ("The mirror"), with the current look marked; changes stick and Esc closes it', b.st && b.near === 'mirror' && b.panel === 'mirror' && b.title === 'The mirror' && b.on === 'female,6,ponytail,8' && b.after.ov === null && b.after.hero === 'male:curls', JSON.stringify(b));
+  // ── the HUD portrait and the summary ──
+  b = await p.evaluate(() => { const H = UroCrawl.hub; H.scrubIn(); UroCrawl.step(30); const pc = UroCrawl.wardrobe.portrait(); return { running: UroCrawl.state.running, pskin: __count(pc, '#6a3d24', 0, 0, 96, 96, 2), phair: __count(pc, '#2fe0c8', 0, 0, 96, 96, 2) }; });
+  await p.waitForTimeout(200);
+  b.hud = await p.evaluate(() => ({ skin: __game('#6a3d24', 12, 6, 32, 32, 14), hair: __game('#2fe0c8', 12, 6, 32, 32, 14) }));
+  check('in a run the HUD has a portrait left of the HP bar: the surgeon\'s head with the chosen skin and hair', b.running && b.pskin > 100 && b.phair > 20 && b.hud.skin > 15 && b.hud.hair > 3, JSON.stringify(b));
+  await shot(p, 't-hud-portrait');
+  b = await p.evaluate(() => { const G = UroCrawl.state; G.over = true; G.won = false; G.endT = 0; UroCrawl.step(5); const cv = document.getElementById('sumHero'); return { ov: UroCrawl.state.overlay, skin: __count(cv, '#6a3d24', 0, 0, 144, 144, 2), hair: __count(cv, '#2fe0c8', 0, 0, 144, 144, 2) }; });
+  check('the run summary shows the same surgeon next to the title', b.ov === 'summary' && b.skin > 100 && b.hair > 20, JSON.stringify(b));
+  await p.waitForTimeout(150); await shot(p, 't-summary');
+  // ── persistence; PLAY goes straight in afterwards ──
+  await p.reload(); await p.waitForFunction(() => !!window.UroCrawl);
+  await p.click('#btnPlay'); await p.waitForTimeout(200);
+  b = await p.evaluate(() => ({ hero: JSON.parse(JSON.stringify(UroCrawl.meta.hero)), ov: UroCrawl.state.overlay, on: UroCrawl.hub.state.on }));
+  check('the choice persists across a reload, and PLAY now walks straight into the room (no question twice)', b.hero.build === 'male' && b.hero.skin === 6 && b.hero.hairStyle === 'curls' && b.hero.hairColor === 8 && b.hero.set && b.ov === null && b.on, JSON.stringify(b.hero));
+  // ── QUICK START players get the question the first time they walk in from a summary; ?hero= sets it ──
+  const { p: p2, errs: e2 } = await openT('?seed=3&god=1&room=2'); allErrs.push(e2);
+  await p2.click('#btnQuick'); await p2.waitForTimeout(80); await p2.click('#btnHelpOk'); await p2.waitForTimeout(100);
+  b = await p2.evaluate(() => { UroCrawl.hurtPlayer(5000, 'test', 0, true); UroCrawl.step(300); document.getElementById('btnSumHub').click(); return { panel: UroCrawl.hub.state.panel, on: UroCrawl.hub.state.on }; });
+  check('a QUICK START player is asked "Who are you?" the first time they walk into the Call Room from a summary', b.on && b.panel === 'mirror', JSON.stringify(b));
+  const { p: p3, errs: e3 } = await openT('?hero=female:7:long:9&hub=1'); allErrs.push(e3);
+  b = await p3.evaluate(() => ({ hero: JSON.parse(JSON.stringify(UroCrawl.meta.hero)), ov: UroCrawl.state.overlay, L: UroCrawl.wardrobe.look().hairStyle }));
+  check('?hero=build:skin:hair[:colour] sets the look (and skips the question)', b.hero.build === 'female' && b.hero.skin === 7 && b.hero.hairStyle === 'long' && b.hero.hairColor === 9 && b.hero.set && b.ov === null && b.L === 'long', JSON.stringify(b.hero));
+  errCheck('T hero', [].concat(...allErrs));
+});
+
+await block('T. wardrobe', async () => {
+  const allErrs = [];
+  const { p, errs } = await openT('?hub=1&seed=3&cme=2000'); allErrs.push(errs);
+  let b = await p.evaluate(() => { const H = UroCrawl.hub; H.goto('scrubs'); H.step(2); const near = H.state.near; H.use('scrubs');
+    return { near, name: H.state.stations.find(s => s.id === 'scrubs').name, panel: H.state.panel, tabs: [...document.querySelectorAll('#hubBody [data-wtab]')].map(e => e.getAttribute('data-wtab')).join(), scrubs: document.querySelectorAll('#hubBody [data-scrub]').length, sets: document.querySelectorAll('#hubBody [data-set]').length, outfits: [...document.querySelectorAll('#hubBody [data-item]')].map(e => e.getAttribute('data-item')).join(), pager: /PAGER/.test(document.querySelector('#hubBody .bubble').textContent), done: !!document.getElementById('btnWardDone') }; });
+  check('the scrub cabinet is the wardrobe: a pager message, a live preview, tabs per slot plus a catalogue, the nine scrub colours, the two sets and the outfits', b.near === 'scrubs' && /WARDROBE/.test(b.name) && b.panel === 'scrubs' && b.tabs === 'outfit,cap,coat,mask,lamp,neck,catalog' && b.scrubs === 9 && b.sets === 2 && b.outfits === 'scrubs,lead_apron,retro_gown,plague_coat' && b.pager && b.done, JSON.stringify(b));
+  await p.waitForTimeout(250); await shot(p, 't-wardrobe');
+  // every item: try it on (nothing is spent), buy it (tap again), wear it, take it off, put it back on
+  const res = await p.evaluate(() => {
+    const W = UroCrawl.wardrobe, T = W.tables, m = UroCrawl.meta, out = [], q = (s) => document.querySelector('#hubBody ' + s);
+    for (const slot of T.SLOTS) {
+      q('[data-wtab="' + slot + '"]').click();
+      for (const id of Object.keys(T.WARDROBE).filter(k => T.WARDROBE[k].slot === slot)) {
+        const d = T.WARDROBE[id], free = d.cost === 0 && !d.set && !d.deed, r = { id, free };
+        r.unlocked0 = W.unlocked(id);
+        if (!r.unlocked0) {
+          const cme0 = m.hub.cme; q('[data-item="' + id + '"]').click();
+          r.try = W.state.tryOn === id && m.hub.cme === cme0 && !m.wardrobe.owned[id] && /TRYING ON/.test(document.querySelector('.lookprev').textContent) && UroCrawl.state.overlay === 'hub';
+          q('[data-item="' + id + '"]').click();
+          r.paid = cme0 - m.hub.cme; r.cost = d.set ? T.SETS[d.set].cost : d.cost; r.owned = !!m.wardrobe.owned[id]; r.worn = m.wardrobe.equipped[slot] === id;
+        } else { q('[data-item="' + id + '"]').click(); r.worn = m.wardrobe.equipped[slot] === id; r.paid = 0; r.cost = 0; r.try = true; r.owned = true; }
+        if (id !== T.DEFAULT[slot]) { q('[data-item="' + id + '"]').click(); r.off = m.wardrobe.equipped[slot] === T.DEFAULT[slot]; q('[data-item="' + id + '"]').click(); r.on = m.wardrobe.equipped[slot] === id; }
+        else { r.off = true; r.on = true; }
+        r.lookOk = W.look().ids[slot] === id;
+        out.push(r);
+      }
+      q('[data-item="' + T.DEFAULT[slot] + '"]').click();
+    }
+    return { out, cme: m.hub.cme, owned: Object.keys(m.wardrobe.owned).length, eq: JSON.parse(JSON.stringify(m.wardrobe.equipped)) };
+  });
+  const bad = res.out.filter(r => !(r.try && r.worn && r.off && r.on && r.lookOk && (r.free || r.owned) && r.paid === (r.unlocked0 ? 0 : r.cost)));
+  const setsPaid = res.out.filter(r => r.paid && /retro|plague|gauze|beak|mirror/.test(r.id)).length;
+  check('every catalogue item: a tap tries it on (preview only, nothing spent), a second tap buys it for its price and wears it, a tap on what you wear takes it off, another puts it back; a set piece buys the whole set once (' + res.out.length + ' items)', bad.length === 0 && setsPaid === 2 && res.owned >= 20, bad.map(r => JSON.stringify(r)).join(' ') || (res.owned + ' owned · ' + res.cme + ' CME left'));
+  const spent = await p.evaluate(() => { const T = UroCrawl.wardrobe.tables; let s = 0; for (const id in T.WARDROBE) { const d = T.WARDROBE[id]; if (!d.set) s += d.cost || 0; } for (const k in T.SETS) s += T.SETS[k].cost; return s; });
+  check('…and the CME spent is exactly the catalogue\'s price list (' + spent + ' CME); every slot went back to its default', res.cme === 2000 - spent && JSON.stringify(res.eq) === JSON.stringify({ outfit: 'scrubs', cap: 'cap_solid', coat: 'coat_short', mask: 'mask_surgical', lamp: 'lamp_white', neck: 'neck_none' }), res.cme + ' left');
+  // sets, sepia, scrub colours
+  await p.click('#hubBody [data-wtab="outfit"]');
+  await p.click('#hubBody [data-set="plague"]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => ({ eq: JSON.parse(JSON.stringify(UroCrawl.meta.wardrobe.equipped)), tag: UroCrawl.wardrobe.tag(), sep: !!document.querySelector('#hubBody [data-sepia]') }));
+  check('an owned set is worn whole with one tap (coat, beak, hat, and no white coat over them); the old-photograph toggle shows once the retro set is yours', b.eq.outfit === 'plague_coat' && b.eq.mask === 'mask_beak' && b.eq.cap === 'cap_plague' && b.eq.coat === 'coat_none' && b.tag === 'plague' && b.sep, JSON.stringify(b.eq));
+  await p.waitForTimeout(250); await shot(p, 't-plague-doctor');
+  await p.click('#hubBody [data-set="retro"]'); await p.click('#hubBody [data-sepia]'); await p.waitForTimeout(60);
+  b = await p.evaluate(() => { const L = UroCrawl.wardrobe.look(); return { sepia: UroCrawl.meta.wardrobe.sepia, Ls: L.sepia, skin: L.skin, want: UroCrawl.wardrobe.sepiaHex(UroCrawl.wardrobe.tables.SKINS[UroCrawl.meta.hero.skin]), eq: UroCrawl.meta.wardrobe.equipped.outfit }; });
+  check('the old photograph renders the surgeon in sepia (every colour of the look goes through the sepia print)', b.sepia && b.Ls && b.skin === b.want && b.eq === 'retro_gown', JSON.stringify(b));
+  await p.evaluate(() => UroCrawl.hub.close()); await p.evaluate(() => { const P = UroCrawl.player(); P.x = 560; P.y = 300; }); await p.waitForTimeout(250); await shot(p, 't-retro-sepia');
+  b = await p.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta; H.use('scrubs'); const c0 = m.hub.cme; document.querySelector('#hubBody [data-scrub="7"]').click(); const tried = { scrub: m.settings.scrub, prevScrub: UroCrawl.wardrobe.state.tryOn, owned: !!m.hub.owned.scrub7 }; document.querySelector('#hubBody [data-scrub="7"]').click(); return { tried, scrub: m.settings.scrub, owned: !!m.hub.owned.scrub7, paid: c0 - m.hub.cme, look: UroCrawl.wardrobe.look().scrub }; });
+  check('the three new scrub colours work like the old six: a tap tries Charcoal on, a second buys it for 15 CME and wears it', b.tried.scrub === 0 && !b.tried.owned && b.scrub === 7 && b.owned && b.paid === 15, JSON.stringify(b));
+  // a lead apron, loupes, the cap of shame and the rainbow lamp: the third outfit for the screenshots
+  await p.evaluate(() => { const W = UroCrawl.wardrobe, m = UroCrawl.meta; m.wardrobe.sepia = false; ['lead_apron', 'mask_loupes', 'cap_shame', 'lamp_rainbow', 'neck_lanyard', 'coat_long'].forEach(id => W.equip(id)); UroCrawl.hub.close(); const P = UroCrawl.player(); P.x = 560; P.y = 300; });
+  await p.waitForTimeout(250); await shot(p, 't-lead-apron');
+  // persistence
+  const before = await p.evaluate(() => JSON.stringify(UroCrawl.meta.wardrobe));
+  await p.reload(); await p.waitForFunction(() => !!window.UroCrawl);
+  b = await p.evaluate(() => ({ json: JSON.stringify(UroCrawl.meta.wardrobe), look: UroCrawl.wardrobe.look().ids }));
+  check('what you own and what you wear persist across a reload', b.json === before && b.look.outfit === 'lead_apron' && b.look.cap === 'cap_shame' && b.look.lamp === 'lamp_rainbow', JSON.stringify(b.look));
+  // nothing for nothing: with 0 CME a locked item is only tried on
+  const { p: p2, errs: e2 } = await openT('?hub=1&seed=3&cme=5'); allErrs.push(e2);
+  b = await p2.evaluate(() => { const H = UroCrawl.hub, m = UroCrawl.meta; H.use('scrubs'); document.querySelector('#hubBody [data-wtab="mask"]').click(); document.querySelector('#hubBody [data-item="mask_loupes"]').click(); document.querySelector('#hubBody [data-item="mask_loupes"]').click();
+    return { owned: !!m.wardrobe.owned.mask_loupes, cme: m.hub.cme, eq: m.wardrobe.equipped.mask, tryOn: UroCrawl.wardrobe.state.tryOn, free: UroCrawl.wardrobe.equip('mask_none'), buyHook: UroCrawl.hub.buy('mask_loupes'), locked: UroCrawl.wardrobe.equip('cap_plague') }; });
+  check('short of CME, a second tap buys nothing (the item stays tried on); free basics are always wearable; locked items cannot be equipped through the hooks either', !b.owned && b.cme === 5 && b.eq === 'mask_surgical' && b.tryOn === 'mask_loupes' && b.free && b.buyHook === false && b.locked === false, JSON.stringify(b));
+  // the catalogue page: silhouettes with their unlock
+  b = await p2.evaluate(() => { const H = UroCrawl.hub; H.use('scrubs'); document.querySelector('#hubBody [data-wtab="catalog"]').click(); const es = [...document.querySelectorAll('#hubBody [data-cat]')];
+    const sil = es.filter(e => e.classList.contains('locked')).every(e => { const cv = e.querySelector('canvas'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let ink = 0, other = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) { if (Math.abs(d[i] - 0x3d) <= 3 && Math.abs(d[i + 1] - 0x56) <= 3 && Math.abs(d[i + 2] - 0x6a) <= 3) ink++; else other++; } return ink > 300 && other === 0; });
+    return { n: es.length, locked: es.filter(e => e.classList.contains('locked')).length, sil, plague: es.find(e => e.getAttribute('data-cat') === 'set_plague').textContent, shame: es.find(e => e.getAttribute('data-cat') === 'cap_shame').textContent, mine: es.find(e => !e.classList.contains('locked')) }; });
+  check('the catalogue lists everything to earn, bestiary-style: what is locked is a flat silhouette with its unlock (the plague doctor: "Beat Fournier\'s gangrene · or 80 CME")', b.n >= 16 && b.locked === b.n && b.sil && /Beat Fournier’s gangrene · or 80 CME/.test(b.plague) && /continence lost/.test(b.shame), b.n + ' entries');
+  await p2.waitForTimeout(200); await shot(p2, 't-catalogue');
+  errCheck('T wardrobe', [].concat(...allErrs));
+});
+
+await block('T. deeds', async () => {
+  const allErrs = [];
+  // beating Fournier's: the plague doctor
+  const { p, errs } = await openT('?seed=5&god=1&boss=fournier&hub=1'); allErrs.push(errs);
+  let b = await p.evaluate(() => { const W = UroCrawl.wardrobe, H = UroCrawl.hub, G = UroCrawl.state; const before = W.setUnlocked('plague'); H.scrubIn(); UroCrawl.step(120); UroCrawl.skipRoom(); UroCrawl.step(400);
+    return { before, won: G.won, boss: G.bossId, after: W.setUnlocked('plague'), pieces: ['plague_coat', 'mask_beak', 'cap_plague'].every(id => W.unlocked(id)), owned: Object.keys(UroCrawl.meta.wardrobe.owned).length, line: document.getElementById('sumWard').textContent, fresh: W.state.fresh.join() }; });
+  check('beating Fournier\'s gangrene unlocks the plague doctor (all three pieces, free), and the summary says it is waiting in the wardrobe', !b.before && b.won && b.boss === 'fournier' && b.after && b.pieces && b.owned === 0 && /New in the wardrobe: Plague doctor/.test(b.line) && b.fresh === 'set_plague', b.line);
+  await p.click('#btnSumHub'); await p.waitForTimeout(120);
+  b = await p.evaluate(() => { const H = UroCrawl.hub; const r = { toast: H.state.toast, hint: H.state.hints.includes('scrubs') }; H.use('scrubs'); r.fresh = UroCrawl.wardrobe.state.fresh.length; H.close(); r.hint2 = H.state.hints.includes('scrubs'); return r; });
+  check('back in the room: a toast and a gold dot over the scrub cabinet, both gone once you have looked', /NEW CLOTHES IN THE SCRUB CABINET/.test(b.toast || '') && b.hint && b.fresh === 0 && !b.hint2, JSON.stringify(b));
+  // Young's favour: the retro surgeon
+  b = await p.evaluate(() => { const W = UroCrawl.wardrobe, H = UroCrawl.hub, G = UroCrawl.state; const before = W.setUnlocked('retro'); H.scrubIn(); UroCrawl.step(60); G.favor = { young: 2 }; UroCrawl.skipRoom(); UroCrawl.step(400); return { before, after: W.setUnlocked('retro'), line: document.getElementById('sumWard').textContent }; });
+  check('two boons from Young in one run (his favour) unlock the retro surgeon', !b.before && b.after && /Retro surgeon/.test(b.line), b.line);
+  // the cap of shame: a run that ends with continence lost (and not one where it was fixed)
+  const { p: p2, errs: e2 } = await openT('?seed=4&god=1&boss=bph'); allErrs.push(e2);
+  b = await p2.evaluate(() => { const W = UroCrawl.wardrobe, G = UroCrawl.state; UroCrawl.startRun(); UroCrawl.step(60); UroCrawl.injureSphincter(); UroCrawl.cureSphincter(); G.over = true; G.won = false; G.endT = 0; UroCrawl.step(5); const fixed = W.unlocked('cap_shame');
+    UroCrawl.hideScreens(); UroCrawl.startRun(); UroCrawl.step(60); const inj = UroCrawl.injureSphincter(); G.over = true; G.won = false; G.endT = 0; UroCrawl.step(5); return { fixed, inj: !!inj, after: W.unlocked('cap_shame'), deeds: UroCrawl.meta.wardrobe.deeds, ov: G.overlay, line: document.getElementById('sumWard').textContent }; });
+  check('a run that ends with continence lost unlocks the cap of shame (a run where it was fixed does not)', !b.fixed && b.after && b.deeds.leak === 1 && b.ov === 'summary' && /cap of shame/.test(b.line), JSON.stringify(b.deeds) + ' · ' + b.line);
+  // a room of nothing but stones: the lead apron (a mixed room does not count). The same room 2, twice: once with a microbe in it, once without
+  const stoneRoom = async (ids) => { const o = await openT('?seed=3&god=1&room=2'); allErrs.push(o.errs);
+    const r = await o.p.evaluate((ids) => { const W = UroCrawl.wardrobe, G = UroCrawl.state; UroCrawl.startRun(); UroCrawl.step(2); G.enemies.forEach(e => { e.silent = true; e.hp = 0; }); UroCrawl.step(1); G.waves.next = 99;
+      ids.forEach((id, i) => UroCrawl.spawn(id, 600 + i * 80, 150, { instant: true }));
+      for (let k = 0; k < 8; k++) { G.enemies.filter(z => !z.dead).forEach(z => UroCrawl.dealDamage(z, 99999, 'LITHO', {})); UroCrawl.step(2); }   // a broken stone leaves fragments: they are stones too
+      UroCrawl.step(30); return { cleared: G.cleared, lead: W.unlocked('lead_apron'), deeds: UroCrawl.meta.wardrobe.deeds }; }, ids);
+    await o.ctx.close(); return r; };
+  b = { mixed: await stoneRoom(['com', 'ecoli', 'uric', 'cystine']) }; Object.assign(b, await stoneRoom(['com', 'uric', 'cystine']));
+  check('clearing a room of nothing but stones (three or more) unlocks the lead apron; a room with a microbe in it does not', b.mixed.cleared && !b.mixed.lead && b.cleared && b.lead && b.deeds.stoneRoom === 1, JSON.stringify(b));
+  // PGY-6: the attending coat; Nitze's favour is the apron's other way in; deed items can also be bought early
+  const { p: p4, errs: e4 } = await openT('?hub=1&seed=3&cme=100'); allErrs.push(e4);
+  b = await p4.evaluate(() => { const W = UroCrawl.wardrobe, m = UroCrawl.meta; const c0 = W.unlocked('coat_long'), a0 = W.unlocked('lead_apron'); m.hub.fav.nitze = 2; const a1 = W.unlocked('lead_apron'); m.hub.fav.nitze = 0; m.xp = 99999; const c1 = W.unlocked('coat_long'); m.xp = 0;
+    const early = UroCrawl.hub.buy('lead_apron'), cme = m.hub.cme, worn = m.wardrobe.equipped.outfit; return { c0, c1, a0, a1, early, cme, worn }; });
+  check('PGY-6 unlocks the attending coat; Nitze\'s favour also unlocks the lead apron; a deed item can be bought early for its price (40 CME)', !b.c0 && b.c1 && !b.a0 && b.a1 && b.early && b.cme === 60 && b.worn === 'lead_apron', JSON.stringify(b));
+  errCheck('T deeds', [].concat(...allErrs));
+});
+
+await block('T. lines', async () => {
+  const { p, errs } = await openT('?hub=1&seed=3&wear=plague');
+  const b = await p.evaluate(() => { const H = UroCrawl.hub, W = UroCrawl.wardrobe, L = W.tables.LINES;
+    const att = H.talk('attending'), jan = H.talk('janitor'); H.goto('reps'); H.step(2); const rep = H.talk(H.state.npcs.filter(n => ['brax', 'kiki', 'rex', 'sunny'].includes(n.id)).sort((a, b) => Math.hypot(a.x - UroCrawl.player().x, a.y - UroCrawl.player().y) - Math.hypot(b.x - UroCrawl.player().x, b.y - UroCrawl.player().y))[0].id);
+    const att2 = H.talk('attending'), bubble = H.state.bubble;
+    W.own('retro'); W.equip('retro'); const att3 = H.talk('attending'); W.equip('cap_solid'); W.equip('scrubs'); W.equip('mask_surgical'); W.own('lamp_rainbow'); W.equip('lamp_rainbow'); const jan2 = H.talk('janitor');
+    const count = (g) => Object.keys(L[g]).reduce((n, k) => n + L[g][k].length, 0);
+    return { att, jan, rep, att2, bubble, att3, jan2, nAtt: count('attending'), nJan: count('janitor'), nRep: count('rep'), base: att2.length > 10 && !Object.keys(L.attending).some(k => L.attending[k].includes(att2)) }; });
+  check('the cast notices the plague doctor: the attending says "Please take that off.", the janitor "Seen worse.", a rep "Love the beak, very on-brand for infectious disease."', b.att === 'Please take that off.' && b.jan === 'Seen worse.' && b.rep === 'Love the beak, very on-brand for infectious disease.', [b.att, b.jan, b.rep].join(' | '));
+  check('…once per look: the next line is their usual one, and a new look (the retro set, a rainbow lamp) gets a new remark; ≥ 3 outfit lines each for the attending, the janitor and the reps', b.base && b.bubble && b.bubble.who === 'attending' && /gown|archive|head mirror/.test(b.att3) && /lamp/.test(b.jan2) && b.nAtt >= 3 && b.nJan >= 3 && b.nRep >= 3, b.att3 + ' | ' + b.jan2 + ' · ' + b.nAtt + '/' + b.nJan + '/' + b.nRep);
+  errCheck('T lines', errs);
+});
+
+await block('T. numbers', async () => {
+  // the same seeded room, played by the same scripted bot, in five looks: every number must match, and the hitbox stays r 13
+  const looks = ['', '&wear=plague', '&wear=retro&sepia=1&hero=female:7:long:9', '&wear=lead_apron,mask_loupes,cap_shame,lamp_rainbow,neck_lanyard,coat_long&hero=male:0:curls:8', '&wear=cap_bouffant,coat_none,mask_none,cap_none&hero=female:3:bun:4'];
+  const digests = [];
+  for (const q of looks) {
+    const { p, errs } = await openT('?seed=7&room=3' + q);
+    const d = await p.evaluate(() => {
+      UroCrawl.startRun(); const G = UroCrawl.state, P = UroCrawl.player(), I = UroCrawl.input, L = UroCrawl.wardrobe.look(); const r0 = P.r;
+      for (let f = 0; f < 900; f++) {
+        I.keys = {}; const ph = Math.floor(f / 70) % 4; I.keys[['KeyD', 'KeyS', 'KeyA', 'KeyW'][ph]] = true;
+        const t = G.enemies.filter(e => !e.dead).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y))[0];
+        if (t) { I.mx = t.x; I.my = t.y; } I.mouseFire = true;
+        UroCrawl.step(1); if (G.overlay || G.over) break;
+      }
+      I.keys = {}; I.mouseFire = false;
+      const s = UroCrawl.spawn('com', P.x + 120, P.y, { instant: true }), lit = s ? UroCrawl.dealDamage(s, 10, 'LITHO', {}) : null;
+      return { look: L.ids.outfit + '/' + L.ids.cap + '/' + L.build.name, r0, r: P.r, x: +P.x.toFixed(3), y: +P.y.toFixed(3), hp: +P.hp.toFixed(3), maxHp: P.maxHp, speed: P.speed, rvu: G.rvu, kills: G.stats.kills, dmg: Math.round(G.stats.dmgTaken * 1000), ehp: Math.round(G.enemies.reduce((a, e) => a + (e.dead ? 0 : e.hp), 0) * 1000), n: G.enemies.length, room: G.roomIndex, time: +G.time.toFixed(3), lit };
+    });
+    digests.push(d); errCheck('T numbers ' + (q || 'default'), errs); await p.context().close();
+  }
+  const key = (d) => JSON.stringify(Object.assign({}, d, { look: '' }));
+  check('hitboxes and every gameplay number are unchanged by the look: the same seeded room played by the same bot gives identical position, HP, RVU, kills, damage taken and enemy HP in all five looks (default, plague doctor, retro + sepia, apron + loupes + cap of shame, bouffant / no coat / no mask), P.r stays 13, LITHO × stone stays 17.5', digests.every(d => key(d) === key(digests[0])) && digests.every(d => d.r0 === 13 && d.r === 13 && d.speed === 190 && d.maxHp === 100 && Math.abs(d.lit - 17.5) < 1e-9) && digests[0].kills > 0, digests.map(d => d.look + ' → x ' + d.x + ' hp ' + d.hp + ' kills ' + d.kills).join(' | '));
+  // phone: the room with the plague doctor and the rainbow lamp still draws at 60
+  for (const cx of browser.contexts()) await cx.close();
+  const { p, errs } = await openT('?seed=3&room=4&god=1&wear=plague,lamp_rainbow&hero=female:6:long:9', 844, 390, true);
+  await p.evaluate(() => UroCrawl.startRun()); await p.waitForTimeout(2600);
+  const r = await p.evaluate(() => ({ fps: UroCrawl.state.fps, running: UroCrawl.state.running }));
+  check('phone (844×390, touch): a fight room with a costumed surgeon draws at a playable frame rate', r.running && r.fps >= 40, 'fps ' + r.fps);
+  await shot(p, 't-phone-run');
+  errCheck('T phone', errs);
 });
 
 await browser.close();

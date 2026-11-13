@@ -32,7 +32,9 @@ inside another workspace; nothing here depends on that one any more.)
   `?aspects=`, `UroCrawl.giveMod()`; patron altars `PATRONS`, the reps cast `REPS`, antibiotic stewardship §6c and the
   Antibiotic Dropper weapon; enemy type reads from the family rim colour + face language in §7, slams go through `groundSlam`;
   between runs the Call Room, a walkable hub, §17b: PLAY lands there, QUICK START skips it, `?hub=1`, `?cme=N`, saved in
-  `META.hub`, tables `HUB_PERKS` / `HUB_PINS` / `HUB_DECOR` / `HUB_CUPS` / `HUB_CASES` / `HUB_CME` / `HUB_LINES`, hooks `UroCrawl.hub.*`).
+  `META.hub`, tables `HUB_PERKS` / `HUB_PINS` / `HUB_DECOR` / `HUB_CUPS` / `HUB_CASES` / `HUB_CME` / `HUB_LINES`, hooks `UroCrawl.hub.*`;
+  the look, §17c: "Who are you?" and the mirror (`META.hero`: build, skin, hair), the scrub cabinet's wardrobe (`META.wardrobe`,
+  tables `WARDROBE` / `WARDROBE_SETS` / `WARDROBE_DEEDS`, cosmetic only), the rig is `drawSurgeon`, `?hero=` / `?wear=`, hooks `UroCrawl.wardrobe.*`).
 - `prototypes/` — prototypes + the Lab page (served on Pages for testers, noindex).
 - `tools/` — headless-Chrome harnesses: `node tools/preop-please.drive.mjs`, `node tools/uro-rush.drive.mjs`
   (need the `urostudyhub` server; `CHROME=/path` picks the browser for the Rush one), `node prototypes/squadron3d_drive.mjs all` (needs `squadron3d-proto`).
