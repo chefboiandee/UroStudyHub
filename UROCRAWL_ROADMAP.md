@@ -11,6 +11,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
 - [x] **Step 2** — Giant TURP boss (BPH, three sections) + landmarks, warnings, Kegel boon. Done 2026-11-12 (as built: the note at the end of Step 2)
 - [x] **Step 3** — The Call Room: a walkable hub between runs (boons, unlocks, decor, jokes). Done 2026-11-12 (as built: the note at the end of Step 3)
 - [x] **Step 4** — Dungeon 5, the Peds Wing: action time-trial rooms and movement tech, the Wilms elite, the Reflux kidney-serpent boss. Done 2026-11-13 (as built: the note at the end of Step 4)
+- [ ] **Step 5** — Character select and the wardrobe: pick your surgeon's look, spend CME on outfits (retro surgeon, plague doctor, ...)
 - [x] **The Invader** — Muscle-Invasive Bladder Tumor boss (`?boss=mibc`), the generic wall + perforation system and the
   Oncology dungeon. Done 2026-11-11, asked for directly, ahead of the numbered steps (STATUS has the details).
 - Parked (only when asked): true isometric view, RCC thrombus boss — see the end of this file.
@@ -37,7 +38,7 @@ messages and the storage key keep the working name Uro Crawl on purpose. This fi
    `crawl:claim` / `crawl:exit` / `crawl:result`) must behave as before. Every attack is telegraphed ≥ 0.5 s.
 5. **Verify headless.** `python3 -m http.server 2043` (repo root), then `node tools/uro-crawl.drive.mjs`
    (Playwright is preinstalled). Add a new lettered block to the harness for the step and keep all earlier blocks green
-   (currently A–S, 480 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room, S is Step 4's Peds Wing). Also confirm no console errors on load. No `build.py` run is needed unless
+   (currently A–S, 480 checks: O is the Invader, P is Step 1's Staghorn duel, Q is Step 2's Giant TURP, R is Step 3's Call Room, S is Step 4's Peds Wing; Step 5 takes T). Also confirm no console errors on load. No `build.py` run is needed unless
    `UroStudyHub.html` itself changes.
 6. **Finish the step:** top `STATUS.md` entry (Done / Next steps / Open questions), tick the box above, add any new
    URL params and hooks to the file's header comment, commit, push the working branch, open the PR and merge it to
@@ -465,6 +466,59 @@ records, medals, stickers, boss wins) and `META.tech`. Where the build reads the
 - **Call Room:** Wilms's keepsake is a Kidney pin (+5/8/11% weak-point damage); the Sticker Chart pin (+1/2/3 RVU a room)
   comes from the child-life specialist on the first talk. Two new decor slots (kids' corner, locker) for the toy box and
   locker decals; the mural takes the wall slot. A Foley sits in the rest crate before the serpent.
+
+---------------------------------------------------------------------------------------------------
+
+## Step 5 — Character select and the wardrobe
+
+Can run any time (it only needs the Call Room). Goal: let the player choose who they are, and spend CME on a funny,
+growing wardrobe. **Cosmetic only: no stats, no hitbox change (r 13 at the chest), no gameplay differences between looks.**
+Extend what exists instead of rebuilding it: `drawPlayer` (the chibi resident, `SKIN`, `COAT`, `PLAYER_SCALE`), the scrub
+colours (`SCRUBS`, `scrubNeed`, `scrubUnlocked`, `SCRUB_COST`, `META.hub.owned['scrub' + i]`, `SET.scrub`), the Call Room's
+**Pager / scrub cabinet** station and the CME shop (`buy`, `META.hub`), and the reps' / attending's outfit-blind jokes.
+
+### 5a. Character select (first launch, and any time at the hub's mirror)
+- Choose a **build**: *Male*, *Female*, or *Neutral* (the same rig drawn with a different silhouette: shoulders, waist, hair
+  volume; stats identical). If you prefer only the first two, drop Neutral, but it costs almost nothing once the rig is parametrised.
+- Choose a **skin tone** (at least 6, from very light to very dark; the rim, outline and headlamp stay readable on all of them),
+  a **hair style** (at least 5, including bald/covered, a ponytail, curls, a short crop, long) and **hair colour** (at least 6 plus a silly one).
+- First time into the Call Room: a small "who are you?" screen with a live preview. Afterwards the hub's **mirror** (a new
+  prop/station) reopens it. The choice shows on the run summary, the hub and the HUD portrait.
+- Persist in `META.hero = { build, skin, hairStyle, hairColor }` (default Neutral or the player's pick, never forced).
+  `drawPlayer` takes these as parameters; collision and coordinates are untouched. The existing look is the default.
+
+### 5b. Wardrobe (the scrub cabinet becomes a locker room)
+Slots: **cap**, **top/outfit**, **coat**, **mask**, **headlamp colour**. Everything is bought with CME (reuse the shop pattern:
+`META.hub.owned`, a try-on preview that rotates the sprite, equip/unequip) and some items are also **unlocked by deeds** so there are goals.
+Starting catalogue (≥ 14 items, all cosmetic):
+| Item | Slot | Notes / unlock |
+|---|---|---|
+| Scrub colours | outfit | existing 6; add a few more |
+| Scrub caps | cap | solid, bouffant, a skull cap with prints (rubber ducks, flames, little kidneys, stones, stripes) |
+| White coat | coat | classic; embroidered name tag; a short "resident" coat vs a long "attending" coat (the attending one unlocks at PGY-6) |
+| **Retro surgeon** | outfit + mask + cap | early-1900s look from old black-and-white photographs: long white gown, round gauze mask, head mirror on a band, rubber gloves. Optional **"old photograph"** toggle that renders the player in sepia/greyscale. Unlocks with Young's favour (the pioneer of the specialty) |
+| **Plague doctor** | outfit + mask + cap | pure comedy: long dark coat, wide hat, the beaked mask (the beak extends in front, the headlamp becomes a lantern). Unlocks by beating Fournier's. NPCs react (the attending: "Please take that off."; a rep: "Love the beak, very on-brand for infectious disease."; the janitor: "Seen worse.") |
+| **Lead apron + thyroid shield** | outfit | the fluoroscopy classic (grey, heavy, a little too big); unlocks with the first Stone Squadron-style stone-room clear or Nitze's favour |
+| Loupes | mask slot | magnifying surgical glasses with a shiny lens glint |
+| Headlamp colours | headlamp | white, warm, teal, a rainbow strobe |
+| Surgeon's cap of shame | cap | a deliberately goofy hat unlocked by the Sphincter-injury joke ("Continence: lost" run) |
+| Lanyard | top | shows your best PGY |
+Prices: small items 10-25 CME, themed outfits 40-80, none gated by power. Add outfit-aware lines (≥ 3 each) for the reps, the
+attending and the janitor in the Call Room, and a bestiary-style "wardrobe" page listing locked items as silhouettes with their unlock.
+
+### 5c. Constraints
+- Cosmetic layers are drawn inside `drawPlayer` in a fixed order (body → outfit → coat → mask → cap → headlamp) so every
+  combination looks right; the silhouette must stay readable against enemies and keep the family-rim contrast.
+- 60 fps on a phone: no per-frame allocations, cache the layered sprite per equipment hash if drawing gets heavy.
+- No real people, no real brands; the plague doctor and retro surgeon are historical costumes played for laughs, not for
+  mockery of any real group. Never gate cosmetics behind real-money anything.
+- Persist `META.hero`, `META.wardrobe = { owned: {}, equipped: {cap, outfit, coat, mask, lamp}, sepia: bool }` with defaults merged in
+  `loadMeta`; try/catch around storage. Debug hooks: `UroCrawl.wardrobe.equip(id)`, `.own(id)`, `.state`, and `?hero=build:skin:hair`.
+
+**Done when:** a first-time player picks a build, skin, hair and colour and sees it in the hub, the HUD portrait and the
+summary; the mirror reopens the choice; every catalogue item can be bought with CME, tried on, equipped and unequipped, and
+persists; deed-unlocked items unlock on their deed; NPC outfit lines fire; hitboxes and every gameplay number are
+unchanged (assert it in the harness); harness block (T) covers all of that, with a screenshot of the default and three outfits; earlier blocks pass.
 
 ---------------------------------------------------------------------------------------------------
 

@@ -3,6 +3,16 @@
 **Updated:** 2026-11-13
 **Tool:** Claude Code
 
+## 2026-11-13 (roadmap) — 🧑‍⚕️ Uro Crawl roadmap: Step 5, character select and the wardrobe
+
+Andrew: pick a male or female main character for inclusivity, and later spend CME on outfits (scrub caps and colours, white
+coat, a retro surgeon from old black-and-white photos, a comedic plague doctor). Docs only; no game code changed.
+**Done:** `UROCRAWL_ROADMAP.md` Step 5: character select (Male / Female / an optional Neutral on the same rig, 6+ skin tones,
+hair styles and colours, a hub mirror), a wardrobe with slots and ≥ 14 cosmetic items (some bought with CME, some unlocked by
+deeds: plague doctor by beating Fournier's, retro surgeon by Young's favour, lead apron), NPC outfit jokes, and harness block T.
+Cosmetic only; hitboxes and gameplay numbers unchanged.
+**Next steps:** Step 5 (it can run any time). **Open questions:** keep Neutral as a third build or only Male/Female?
+
 ## 2026-11-13 — 🧸 Path of Pathology: the Peds Wing and Reflux, the kidney serpent (roadmap Step 4)
 
 Andrew: "read urocrawl.md and do step 4" (`UROCRAWL_ROADMAP.md`, Step 4). The fifth dungeon and its boss, all in
