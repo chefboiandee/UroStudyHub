@@ -230,7 +230,7 @@ async function open(viewport, mode) {
   }, null, { timeout: 90000 });
   await p.waitForTimeout(400);
   const ok = await p.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find((x) => /🧠\s*Tutor/.test(x.textContent) && x.getClientRects().length);
+    const b = [...document.querySelectorAll('button[data-nav="chat"]')].find((x) => x.getClientRects().length);
     if (b) { b.click(); return true; } return false;
   });
   if (!ok) throw new Error('no Tutor tab');
@@ -294,6 +294,7 @@ await block('A. Phone, light: prompt, table, inline markdown', async () => {
       strongInTable: tb.querySelectorAll('strong').length, em: [...m.querySelectorAll('em')].map((e) => e.textContent),
       text: m.innerText, heading: [...m.querySelectorAll('div')].some((d) => d.textContent === 'Two roads to penile SCC' && +getComputedStyle(d).fontWeight >= 700),
       katex: m.querySelectorAll('.katex').length, bubbleW: m.getBoundingClientRect().width, tableW: tb.getBoundingClientRect().width,
+      paneW: (function (el) { const cs = getComputedStyle(el); return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); })(m.parentElement),
     };
   });
   check('table: 3 header cells, 5 rows', t.th === 3 && t.rows === 5, t.th + ' / ' + t.rows);
@@ -304,7 +305,7 @@ await block('A. Phone, light: prompt, table, inline markdown', async () => {
   check('"## heading" → bold line', t.heading);
   check('"* item" → bullet', /• Neonatal circumcision/.test(t.text));
   check('math still typeset next to bold', t.katex === 1, String(t.katex));
-  check('table fits the bubble (wide bubble)', t.tableW <= t.bubbleW && t.bubbleW > 412 * 0.85, Math.round(t.tableW) + ' ≤ ' + Math.round(t.bubbleW));
+  check('table fits the bubble, and the bubble takes the full width', t.tableW <= t.bubbleW && t.bubbleW >= t.paneW - 40, Math.round(t.tableW) + ' ≤ ' + Math.round(t.bubbleW) + ' of ' + Math.round(t.paneW));
   await shot(p, 'phone-table', '[data-chat-msg]');
   errCheck('table', errs);
 
@@ -348,14 +349,14 @@ await block('A. Phone, light: prompt, table, inline markdown', async () => {
   await p.waitForTimeout(150);
 
   // Bookmarked replies draw the same way in 📚 Saved
-  await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /📚 Saved/.test(b.textContent)).click(); });
+  await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /(^|\s)Saved( \(\d+\))?$/.test(b.textContent.trim()) && b.getClientRects().length).click(); });
   await p.waitForTimeout(300);
   await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /Show more/.test(x.textContent)); if (b) b.click(); });
   await p.waitForFunction(() => document.querySelectorAll('[data-flowchart] [data-flow-node]').length === 8 && !document.querySelector('[data-chat-msg]'), null, { timeout: 5000 });
   const sg = await flowGeom(p);
   check('bookmark in 📚 Saved: the flowchart draws there too', sg.nodes.length === 8 && !noOverlaps(sg.nodes, 1), sg.nodes.length + ' boxes');
   await shot(p, 'phone-saved', '[data-flowchart]');
-  await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /📚 Saved/.test(b.textContent)).click(); });
+  await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /(^|\s)Saved( \(\d+\))?$/.test(b.textContent.trim()) && b.getClientRects().length).click(); });
   await p.waitForSelector('[data-chat-msg]', { timeout: 5000 });
   errCheck('flowcharts', errs);
 

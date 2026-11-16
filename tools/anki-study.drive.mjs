@@ -109,7 +109,7 @@ const btn = (p, re) => p.getByRole('button', { name: re });
 const body = (p) => p.locator('body').innerText();
 const errCheck = (label, errs) => check('no console errors · ' + label, errs.length === 0, errs.slice(0, 3).join(' | '));
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: join(SHOTS, name + '.png') }); };
-async function goAnki(p) { await btn(p, /^📇\s*Anki$/).first().click(); await p.waitForTimeout(250); }
+async function goAnki(p) { await p.locator('button[data-nav="anki"]').first().click(); await p.waitForTimeout(250); }
 const card = (prog, id) => prog.ankiCards.find((c) => c.id === id);
 async function reveal(p) { await btn(p, /^Show answer$/).click(); await p.waitForTimeout(80); }
 async function grade(p, name) { await btn(p, new RegExp('^' + name)).click(); await p.waitForTimeout(120); }
@@ -204,7 +204,7 @@ await block('A. session', async () => {
   await p.waitForTimeout(150);
   t = await body(p);
   check('home after clearing: all done, 0 due', /All done for today/.test(t) && /\n0\nReview\n\d\nLearning\n0\nNew/.test(t));
-  check('hub row gone once the queue is empty', (await (async () => { await btn(p, /^🏠\s*Hub$/).first().click(); await p.waitForTimeout(250); return body(p); })()).match(/cards? to review/) === null);
+  check('hub row gone once the queue is empty', (await (async () => { await p.locator('button[data-nav="hub"]').first().click(); await p.waitForTimeout(250); return body(p); })()).match(/cards? to review/) === null);
   check('hub check-in bar uses today (9/5 shown as goal met)', /9\/5/.test(await body(p)));
   // persists across a reload
   await p.reload();
@@ -277,7 +277,7 @@ await block('C. empty deck and daily goal', async () => {
   await btn(p, /^📖 Review$/).click();
   await p.waitForTimeout(150);
   check('Review tab explains how to get cards', /No cards to review yet/.test(await body(p)));
-  await btn(p, /^🏠\s*Hub$/).first().click();
+  await p.locator('button[data-nav="hub"]').first().click();
   await p.waitForTimeout(250);
   const xp0 = (await getProg(p)).xp;
   await btn(p, /^\+25$/).click();

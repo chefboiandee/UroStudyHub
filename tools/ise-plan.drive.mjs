@@ -184,7 +184,8 @@ async function clickText(p, re, sel = 'button') {
   if (!ok) throw new Error('no ' + sel + ' matching ' + re);
   await p.waitForTimeout(250);
 }
-const navTo = (p, which) => clickText(p, which === 'hub' ? /🏠\s*Hub/ : which === 'study' ? /📚\s*Study/ : /🧠\s*Tutor/);
+// Tab bar buttons carry data-nav=<page id> (their icons are SVG, so no emoji in the text)
+const navTo = (p, which) => clickText(p, /\S/, 'button[data-nav="' + (which === 'hub' ? 'hub' : which === 'study' ? 'tracker' : 'chat') + '"]');
 
 // ISE elements: a real (pointer) click on the first visible [data-ise=name]
 const ISE = (name, extra = '') => '[data-ise="' + name + '"]' + extra;

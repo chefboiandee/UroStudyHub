@@ -75,6 +75,18 @@ The user/creator is Andrew, a urology trainee.
 
 Provider config stored in localStorage as `uroStudyHub_lmSettings`.
 
+**Look and design system (2026-11-16 overhaul):** Apple-HIG-style. Colour tokens are CSS variables in the head `<style>`
+(`--c-*` structural greys, `--a-*` accents, plus `--c-fill` / `--c-fill2` control fills, `--c-sep` hairlines, `--c-bar`
+frosted bars, `--c-mut2` dim text, `--c-focus`), swapped by `[data-theme="light"]`; `THEMES` (6-digit hex, alpha gets
+appended) carries each theme's `bg` / `cd` / accent `a` / `a2`, Night Shift = clinical blue. **Type scale:** never write a
+bare small `fontSize: 9`; write `fontSize: "var(--f9)"` (`--f7` … `--f16`), so Settings > Text size (Compact = the old
+sizes, Standard, Large; `uroStudyHub_text`, applied pre-paint as `data-text`) resizes everything. Primary buttons are a
+solid `c.a`, not a gradient. Chrome icons are `Icon(name, size, strokeWidth)` (line SVGs in `ICON_PATHS`). Classes:
+`ush-bar` (frosted header/tab bar), `ush-tbar` (tutor toolbars: buttons ≥ 36px, 40 on touch), `ush-wide` (the tutor
+column widens to `min(1320px, 96vw)` on screens ≥ 1000px), `ush-tscroll` (tutor actions: one swipe row under 700px),
+`ush-hide-narrow`. Tab bar buttons carry `data-nav=<page>` (the harnesses use it). Buttons get a soft press + hover
+globally, except inside `[data-ise-view]` and under reduced-motion / `(update: slow)`: keep e-ink views motion-free.
+
 **Storage:** All data in a single localStorage blob under key `uroStudyHub_v5` (the `s` state object). Settings stored separately in `uroStudyHub_lmSettings`. Custom study plans in `uroStudyHub_customPlans`. Active plan ID in `uroStudyHub_activePlan`.
 
 **Hosting:** Served from Andrew's Mac:
@@ -361,7 +373,7 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 ### Other Features
 - **Pomodoro Timer** — Hub page (full card) + Tutor page (compact strip). Configurable: 15/25/45 min.
 - **SurgiLog Integration** — toggle via `ENABLE_SURGILOG` constant
-- **Dark mode** — always on with 5 color themes: Night Shift, Surgical Green, Renal Sunset, Cryoablation, Board Certified Gold
+- **Dark / light mode** (header sun/moon button) with 5 color themes: Night Shift, Surgical Green, Renal Sunset, Cryoablation, Board Certified Gold; **Text size** (Compact / Standard / Large) in Settings
 - **Export** — CSV export of study data
 - **Gate Questions** — knowledge-check popups as engagement mechanism
 - **PWA-ready** — inline manifest + service worker pattern available
