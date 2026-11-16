@@ -151,12 +151,13 @@
   @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     .ush-bar { -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
   }
-  /* Tutor: every toolbar control is at least a fingertip tall (more on touch screens) */
+  /* Tutor: every toolbar control is at least a fingertip tall */
   .ush-tbar button { min-height: 36px; }
-  @media (pointer: coarse) { .ush-tbar button { min-height: 40px; } }
   /* Wide screens (iPad landscape, laptops): the tutor uses the width, so long replies scroll less */
   @media (min-width: 1000px) { .ush-wide { max-width: min(1320px, 96vw) !important; } }
-  @media (max-width: 520px) { .ush-hide-narrow { display: none; } }
+  @media (max-width: 520px) { .ush-hide-narrow { display: none !important; } }
+  /* 700px and up: the timer and actions flow one by one with the model chip, so they fill rows instead of wrapping as a block */
+  @media (min-width: 700px) { .ush-tscroll { display: contents !important; } }
   @media (max-width: 699px) {
     .ush-tscroll { flex-wrap: nowrap !important; overflow-x: auto; flex: 0 0 calc(100% + 28px) !important; margin: 0 -14px; padding: 0 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .ush-tscroll::-webkit-scrollbar { display: none; }
@@ -10386,12 +10387,19 @@ var header = (
 {page !== "hub" && <button aria-label="Back to Hub" title="Back to Hub" onClick={function() { setPage("hub"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 36, marginLeft: -6, background: "none", border: "none", cursor: "pointer", color: c.a, padding: 0, flexShrink: 0 }}>{Icon("back", 26, 2.3)}</button>}
 <h1 onClick={handleAdminTap} style={{ flex: 1, minWidth: 0, margin: 0, fontSize: page === "chat" ? 22 : 26, fontWeight: 700, lineHeight: 1.2, color: "var(--c-tx0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "default", userSelect: "none" }}>{hdrTitle}</h1>
 {isAdmin && <span onClick={function() { setShowAdmin(true); }} style={{ fontSize: "var(--f8)", color: "var(--a-or2)", cursor: "pointer", padding: "3px 7px", background: "#f9731618", borderRadius: 6, fontWeight: 700, flexShrink: 0 }}>ADMIN</span>}
+{page === "chat" && ff.gamification !== false && (
+<div className="ush-hide-narrow" style={{ display: "flex", gap: 6, marginRight: 4 }}>
+<span title={streak + "-day streak" + (streakMult > 1 ? " · " + streakMult + "× XP" : "")} style={Object.assign({}, hdrChip, { color: "var(--a-or2)" })}>{"🔥 " + streak + (streakMult > 1 ? " · " + streakMult + "×" : "")}</span>
+<span title="Coins" style={Object.assign({}, hdrChip, { color: "var(--a-am)" })}>{"💰 " + s.coins}</span>
+<span title="Tokens" style={Object.assign({}, hdrChip, { color: "var(--a-am)" })}>{"🪙 " + (s.tokens || 0)}</span>
+</div>
+)}
 <button aria-label="Import shared content" title="Import shared content" onClick={function() { setImportModal(true); setImportText(""); setImportPreview(null); }} style={hdrBtn}>{Icon("inbox", 19)}</button>
 <button aria-label={lightMode ? "Dark mode" : "Light mode"} title={lightMode ? "Switch to dark mode" : "Switch to light mode (easier on e-ink readers)"} onClick={toggleLightMode} style={hdrBtn}>{Icon(lightMode ? "moon" : "sun", 19)}</button>
 <button aria-label="Settings" title="Settings" onClick={function() { setShowSet(true); }} style={hdrBtn}>{Icon("gear", 20, 1.6)}</button>
 </div>
-{ff.gamification !== false && (
-<div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: page === "chat" ? 6 : 10 }}>
+{ff.gamification !== false && page !== "chat" && (
+<div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10 }}>
 <div title={nRank ? (nRank.minXP - s.xp) + " XP to " + nRank.icon + " " + nRank.name : "Top rank"} style={{ flex: 1, minWidth: 0 }}>
 <div style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 4 }}>
 <span style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--c-tx)" }}>{rank.icon} {rank.name}</span>
@@ -12363,7 +12371,7 @@ return (
 );
 })()}
 <div className="ush-tscroll" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: "1 1 auto", minWidth: 0 }}>
-<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "3px 6px 3px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 44, flexShrink: 0, whiteSpace: "nowrap" }}>
+<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "2px 5px 2px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40, flexShrink: 0, whiteSpace: "nowrap" }}>
 <span style={{ fontSize: "var(--f15)" }}>{"🍅"}</span>
 <span style={{ fontSize: "var(--f16)", fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
 {Math.floor(pomoTime / 60).toString().padStart(2, "0") + ":" + (pomoTime % 60).toString().padStart(2, "0")}
@@ -12543,16 +12551,16 @@ return (
 </div>
 )}
 {masteryMode && (
-<div className="ush-tbar" style={{ borderBottom: "1px solid var(--c-sep)", background: c.cd + "60", padding: "6px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+<div data-mastery-bar style={{ borderBottom: "1px solid var(--c-sep)", background: c.cd + "60", padding: "7px 14px", display: "flex", alignItems: "center", gap: 8 }}>
 <span style={{ fontSize: "var(--f12)", fontWeight: 700, color: c.a, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "45%" }}>{"🎯 " + (lectureTopic || "Mastery Drill")}</span>
-<span style={{ fontSize: "var(--f9)", color: "var(--c-br2)", flex: 1 }}>pass the check to advance</span>
-<button onClick={function() { sendChat("MAP"); }} disabled={chatLoad} style={{ background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 9, padding: "0 12px", cursor: chatLoad ? "default" : "pointer", color: c.a, fontSize: "var(--f11)", fontWeight: 600 }}>{"🗺️ Map"}</button>
+<span style={{ fontSize: "var(--f10)", color: "var(--c-mut2)", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>pass the check to advance</span>
+<button onClick={function() { sendChat("MAP"); }} disabled={chatLoad} style={{ minHeight: 32, background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 9, padding: "0 11px", cursor: chatLoad ? "default" : "pointer", color: c.a, fontSize: "var(--f11)", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>{"🗺️ Map"}</button>
 <button onClick={function() {
 saveLectureSession(lectureTopic, chatMsgs);
 earnTokens("lecture", lectureTopic || "Mastery drill");
 setSaveFeedback("Session saved! +3 tokens");
 setTimeout(function() { setSaveFeedback(""); }, 2000);
-}} style={{ background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 6, padding: "2px 8px", cursor: "pointer", color: "var(--a-grn)", fontSize: "var(--f9)", fontWeight: 600 }}>{"💾 Save"}</button>
+}} style={{ minHeight: 32, background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 9, padding: "0 11px", cursor: "pointer", color: "var(--a-grn)", fontSize: "var(--f11)", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>{"💾 Save"}</button>
 </div>
 )}
 {lectureMode && (function() {
@@ -12564,32 +12572,34 @@ if (ltLower.indexOf(ft) >= 0 || ft.indexOf(ltLower) >= 0 || (ltLower.length > 5 
 matchedTopic = FLAT[mi]; break;
 }
 }
+var lb = function(bg, bd, col, w) { return { minHeight: 32, padding: "0 11px", background: bg, border: "1px solid " + bd, borderRadius: 9, color: col, fontSize: "var(--f11)", fontWeight: w || 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }; };
+var ph = LECTURE_PHASES[lecturePhase];
 return (
-<div className="ush-tbar" style={{ borderBottom: "1px solid var(--c-sep)", background: c.cd + "60" }}>
-<div style={{ padding: "8px 14px" }}>
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
-<span style={{ fontSize: "var(--f12)", fontWeight: 700, color: c.a, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lectureTopic}</span>
-<div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-<button onClick={function() { setShowTutorNotes(!showTutorNotes); if (!showTutorNotes) { setTutorNoteText((s.notes || {})[matchedTopic ? matchedTopic.key : "tutor_" + lectureTopic] || ""); } }} style={{ background: showTutorNotes ? "#3b82f620" : "transparent", border: "1px solid " + (showTutorNotes ? "#3b82f650" : "var(--c-br-50)"), borderRadius: 9, padding: "0 12px", cursor: "pointer", color: showTutorNotes ? "var(--a-blu)" : "var(--c-mut2)", fontSize: "var(--f11)", fontWeight: 600 }}>{"📝"}</button>
-<button onClick={function() {
+<div data-lecture-bar style={{ borderBottom: "1px solid var(--c-sep)", background: c.cd + "60" }}>
+<div style={{ padding: "7px 14px 8px" }}>
+<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+<span data-lecture-topic title={matchedTopic && matchedTopic.t !== lectureTopic ? lectureTopic + " (study plan: " + matchedTopic.t + ")" : lectureTopic} style={{ flex: 1, minWidth: 0, fontSize: "var(--f12)", fontWeight: 700, color: c.a, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lectureTopic}</span>
+{matchedTopic && (s.done[matchedTopic.key]
+? <span data-lecture-done title={"“" + matchedTopic.t + "” is done in your study plan"} style={{ fontSize: "var(--f11)", color: "var(--a-grn)", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, padding: "0 4px" }}>{"✓ Done"}</span>
+: <button data-lecture-markdone title={"Mark “" + matchedTopic.t + "” done in your study plan"} onClick={function() { markDone(matchedTopic.key); setSaveFeedback("Marked done! +XP +tokens"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={Object.assign(lb(c.a, c.a, "#fff", 700), { border: "none" })}>{"✓ Mark Done"}</button>)}
+<button title="Session notes" onClick={function() { setShowTutorNotes(!showTutorNotes); if (!showTutorNotes) { setTutorNoteText((s.notes || {})[matchedTopic ? matchedTopic.key : "tutor_" + lectureTopic] || ""); } }} style={lb(showTutorNotes ? "#3b82f620" : "transparent", showTutorNotes ? "#3b82f650" : "var(--c-br)", showTutorNotes ? "var(--a-blu)" : "var(--c-mut2)")}>{"📝"}</button>
+<button title="Save this session (+3 tokens)" onClick={function() {
 saveLectureSession(lectureTopic, chatMsgs);
 earnTokens("lecture", lectureTopic || "Lecture session");
 setSaveFeedback("Session saved! +3 tokens");
 setTimeout(function() { setSaveFeedback(""); }, 2000);
-}} style={{ background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 9, padding: "0 12px", cursor: "pointer", color: "var(--a-grn)", fontSize: "var(--f11)", fontWeight: 600 }}>{"💾 Save"}</button>
+}} style={lb("#4ade8020", "#4ade8040", "var(--a-grn)")}>{"💾"}<span className="ush-hide-narrow">{" Save"}</span></button>
 {s.ankiEnabled !== false && upText && !ankiGen && (
-<button onClick={function() {
+<button title="Make Anki cards from this chapter" onClick={function() {
 setAnkiBatchDoc(upText);
 setAnkiBatchName(lectureTopic);
 setAnkiPreGenSource("manual");
 if (!ankiSubDeck) setAnkiSubDeck(lectureTopic.substring(0, 40));
 setShowAnkiPreGen(true);
-}} style={{ background: "#fb923c20", border: "1px solid #fb923c40", borderRadius: 9, padding: "0 12px", cursor: "pointer", color: "var(--a-or)", fontSize: "var(--f11)", fontWeight: 600 }}>{"📇 Anki Cards"}</button>
+}} style={lb("#fb923c20", "#fb923c40", "var(--a-or)")}>{"📇"}<span className="ush-hide-narrow">{" Anki Cards"}</span></button>
 )}
-<span style={{ fontSize: "var(--f9)", color: "var(--c-mut2)" }}>Phase {lecturePhase + 1}/{LECTURE_PHASES.length}</span>
 </div>
-</div>
-<div style={{ display: "flex", gap: 2, marginBottom: 6 }}>
+<div style={{ display: "flex", gap: 2, margin: "7px 0" }}>
 {LECTURE_PHASES.map(function(p, i) {
 var active = i === lecturePhase;
 var done = i < lecturePhase;
@@ -12599,30 +12609,20 @@ return (
 })}
 </div>
 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-<span style={{ fontSize: "var(--f10)", color: "var(--c-mut)" }}>{LECTURE_PHASES[lecturePhase].icon} {LECTURE_PHASES[lecturePhase].name}</span>
-<span style={{ fontSize: "var(--f9)", color: "var(--c-br2)", flex: 1 }}>{LECTURE_PHASES[lecturePhase].desc}</span>
+<button onClick={function() { sendChat("NEXT"); }} disabled={chatLoad} style={Object.assign(lb(c.a + "20", c.a + "40", c.a, 700), { cursor: chatLoad ? "default" : "pointer" })}>NEXT {"→"}</button>
+<button onClick={function() { sendChat("Go deeper into this section. Give me more detail, more examples, more board-relevant nuance."); }} disabled={chatLoad} style={Object.assign(lb("#4ade8020", "#4ade8040", "var(--a-grn)"), { cursor: chatLoad ? "default" : "pointer" })}>DEEP</button>
+<button onClick={function() { sendChat("SKIP this phase and move to the next one."); }} disabled={chatLoad} style={Object.assign(lb("transparent", "var(--c-br)", "var(--c-mut2)", 500), { cursor: chatLoad ? "default" : "pointer" })}>SKIP</button>
+<span data-lecture-phase title={ph.desc} style={{ flex: 1, minWidth: 0, marginLeft: 4, fontSize: "var(--f10)", color: "var(--c-mut2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+<span style={{ fontWeight: 600, color: "var(--c-tx2)" }}>{"Phase " + (lecturePhase + 1) + "/" + LECTURE_PHASES.length + " · " + ph.icon + " " + ph.name}</span>
+<span className="ush-hide-narrow">{" — " + ph.desc}</span>
+</span>
 </div>
-<div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-<button onClick={function() { sendChat("NEXT"); }} disabled={chatLoad} style={{ padding: "0 12px", background: c.a + "20", border: "1px solid " + c.a + "40", borderRadius: 9, cursor: chatLoad ? "default" : "pointer", color: c.a, fontSize: "var(--f11)", fontWeight: 700 }}>NEXT {"→"}</button>
-<button onClick={function() { sendChat("Go deeper into this section. Give me more detail, more examples, more board-relevant nuance."); }} disabled={chatLoad} style={{ padding: "0 12px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 9, cursor: chatLoad ? "default" : "pointer", color: "var(--a-grn)", fontSize: "var(--f11)", fontWeight: 600 }}>DEEP</button>
-<button onClick={function() { sendChat("SKIP this phase and move to the next one."); }} disabled={chatLoad} style={{ padding: "0 12px", background: "transparent", border: "1px solid var(--c-br)", borderRadius: 9, cursor: chatLoad ? "default" : "pointer", color: "var(--c-mut2)", fontSize: "var(--f11)" }}>SKIP</button>
-</div>
-{matchedTopic && (
-<div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, padding: "5px 0", borderTop: "1px solid var(--c-br-44)" }}>
-<span style={{ fontSize: "var(--f9)", color: "var(--c-mut)", flex: 1 }}>{"📋 "}{matchedTopic.t}</span>
-{s.done[matchedTopic.key] ? (
-<span style={{ fontSize: "var(--f9)", color: "var(--a-grn)", fontWeight: 600 }}>{"✓ Done"}</span>
-) : (
-<button onClick={function() { markDone(matchedTopic.key); setSaveFeedback("Marked done! +XP +tokens"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "0 12px", background: c.a, border: "none", borderRadius: 9, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }}>{"✓ Mark Done"}</button>
-)}
-</div>
-)}
 </div>
 {showTutorNotes && (
 <div style={{ padding: "8px 12px", borderTop: "1px solid var(--c-br-44)", background: "var(--c-bg-40)" }}>
 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
 <span style={{ fontSize: "var(--f9)", fontWeight: 700, color: "var(--a-blu)" }}>{"📝 Session Notes"}</span>
-<button onClick={function() { var noteKey = matchedTopic ? matchedTopic.key : "tutor_" + lectureTopic; setS(function(p) { var nn = Object.assign({}, p.notes || {}); nn[noteKey] = tutorNoteText; return Object.assign({}, p, { notes: nn }); }); setSaveFeedback("Notes saved!"); setTimeout(function() { setSaveFeedback(""); }, 1500); }} style={{ padding: "0 12px", background: "#3b82f620", border: "1px solid #3b82f640", borderRadius: 9, color: "var(--a-blu)", fontSize: "var(--f11)", cursor: "pointer", fontWeight: 600 }}>Save</button>
+<button onClick={function() { var noteKey = matchedTopic ? matchedTopic.key : "tutor_" + lectureTopic; setS(function(p) { var nn = Object.assign({}, p.notes || {}); nn[noteKey] = tutorNoteText; return Object.assign({}, p, { notes: nn }); }); setSaveFeedback("Notes saved!"); setTimeout(function() { setSaveFeedback(""); }, 1500); }} style={{ minHeight: 30, padding: "0 12px", background: "#3b82f620", border: "1px solid #3b82f640", borderRadius: 9, color: "var(--a-blu)", fontSize: "var(--f11)", cursor: "pointer", fontWeight: 600 }}>Save</button>
 </div>
 <textarea value={tutorNoteText} onChange={function(e) { setTutorNoteText(e.target.value); }} placeholder="Type notes as you study..." style={{ width: "100%", height: 70, background: "var(--c-cd)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx)", fontSize: "var(--f10)", padding: 8, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5 }} />
 </div>
