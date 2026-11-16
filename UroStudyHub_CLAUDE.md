@@ -193,6 +193,13 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - **Regenerate response** button (🔄) on last assistant message
 - Auto-generate Anki cards from lectures (configurable tags)
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF
+- **Rich replies (2026-11-16):** `renderRich()` draws every tutor / Quick Ask / saved / bookmarked reply: markdown pipe
+  tables, `**bold**` / `*italic*` / `# headings`, KaTeX (via `renderMathText`'s fmt hook), a ```` ```mermaid ```` flowchart
+  (a forgiving subset of Mermaid's flowchart syntax, laid out by the app's own layered layout in `<FlowChart>`: no library,
+  so it stays Boox-safe) and a ```` ```chart ```` JSON line / bar chart (`<MiniChart>`, inline SVG, `--viz-1..4` colours;
+  series also differ by dash, marker and texture for e-ink). `DIAGRAM_RULE` teaches the models the formats; it is appended
+  to the tutor and Quick Ask prompts. A flowchart or chart shows a placeholder until its closing fence streams in. Harness:
+  `node tools/tutor-rich.drive.mjs`.
 
 ### Anki Cards (`page === "anki"`, toggleable)
 - **📖 Review tab (in-app reviewer, 2026-11-11; internal id `study`, default tab once you have cards)** — phone-first: due queue
