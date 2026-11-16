@@ -49,6 +49,9 @@ inside another workspace; nothing here depends on that one any more.)
   phone viewport; needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir` saves screenshots).
   AI Tutor's AI panel (provider / model / reasoning effort; every provider's API is stubbed in the page and the request
   body checked): `node tools/ai-pick.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
+  AI Tutor's rich replies (tables, bold, Mermaid-style flowcharts and ```` ```chart ```` charts drawn by `renderRich`; canned
+  replies from a stubbed API, streaming included): `node tools/tutor-rich.drive.mjs` (needs the `urostudyhub` server; same
+  `CDN_DIR` trick; `SHOTS=dir` for phone light / dark and desktop shots).
 
 ## Run and verify
 

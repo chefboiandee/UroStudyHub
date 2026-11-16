@@ -62,6 +62,8 @@
     --a-vio: #a78bfa; --a-vio2: #8b5cf6; --a-pur: #c084fc; --a-pur2: #a855f7;
     --a-ind: #818cf8; --a-ind2: #6366f1; --a-pnk: #f472b6; --a-pnk2: #ec4899;
     --a-fux: #e879f9;
+    /* chart series (tutor charts): validated categorical slots, dark steps */
+    --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500;
     /* ═══ TYPE SCALE ═══ Every small `fontSize: N` in the app is `fontSize: "var(--fN)"`, so one
        setting (Settings > Appearance > Text size, localStorage uroStudyHub_text, applied pre-paint
        as data-text) resizes the whole app. Standard is the default; Compact is the old sizes. */
@@ -103,6 +105,7 @@
     --a-vio: #7c3aed; --a-vio2: #6d28d9; --a-pur: #9333ea; --a-pur2: #7e22ce;
     --a-ind: #4f46e5; --a-ind2: #4338ca; --a-pnk: #db2777; --a-pnk2: #be185d;
     --a-fux: #c026d3;
+    --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; width: 100%; overflow: hidden; background: var(--c-bg); color: var(--c-tx); font-family: var(--font); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; -webkit-text-size-adjust: 100%; }
@@ -2346,12 +2349,15 @@ function hookKey(h) { return (h.topic + " " + h.hook).toLowerCase().replace(/[^a
 
 var MATH_FORMAT_RULE = "\n\nMATH & SYMBOLS: This app typesets LaTeX. Write any formula, equation, or ratio in LaTeX delimited with \\( \\) for inline math or \\[ \\] for display math, e.g. \\( FENa = \\frac{U_{Na} \\times P_{Cr}}{P_{Na} \\times U_{Cr}} \\times 100 \\). Never emit bare LaTeX commands outside those delimiters. Simple values in prose (doses, stages, percentages) stay plain text.";
 
-function renderMathText(text) {
+// fmt (optional): formats the plain-text runs between formulas (renderRich passes its **bold** etc.).
+function renderMathText(text, fmt) {
   if (text == null) return text;
   var s = String(text);
   if (s.indexOf("[[") !== -1) s = stripHooks(s);
+  var tk = 0;
+  function txt(x) { return fmt ? <React.Fragment key={"tx" + (tk++)}>{fmt(x, "t" + tk)}</React.Fragment> : x; }
   // Fast path: no KaTeX or nothing math-shaped in the message.
-  if (!window.katex || (s.indexOf("\\(") === -1 && s.indexOf("\\[") === -1 && s.indexOf("$") === -1)) return s;
+  if (!window.katex || (s.indexOf("\\(") === -1 && s.indexOf("\\[") === -1 && s.indexOf("$") === -1)) return fmt ? fmt(s, "t") : s;
   var re = /\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
   var out = [], last = 0, k = 0, m;
   while ((m = re.exec(s)) !== null) {
@@ -2361,17 +2367,1012 @@ function renderMathText(text) {
     // char inside. On a miss, resume just past the opening $ so a real \(..\)
     // or $..$ later in the message still matches.
     if (m[4] != null && !/[\\^_{]/.test(m[4])) { re.lastIndex = m.index + 1; continue; }
-    if (m.index > last) out.push(s.slice(last, m.index));
+    if (m.index > last) out.push(txt(s.slice(last, m.index)));
     var html = null;
     try { html = window.katex.renderToString(tex.trim(), { throwOnError: false, displayMode: display }); } catch (e) {}
     if (html) out.push(<span key={"kx" + (k++)} style={{ whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: html }} />);
     else out.push(m[0]);
     last = m.index + m[0].length;
   }
-  if (k === 0) return s;
-  if (last < s.length) out.push(s.slice(last));
+  if (k === 0) return fmt ? fmt(s, "t") : s;
+  if (last < s.length) out.push(txt(s.slice(last)));
   return out;
 }
+
+// ═══ RICH REPLIES: tables, bold, flowcharts, charts ═══
+// Replies used to be plain text + KaTeX: a markdown table came through as raw pipes, **bold** as
+// asterisks, and a flowchart had no way to exist. renderRich() (every surface that shows tutor output:
+// the chat, Quick Ask, saved sessions, bookmarks) splits a reply into blocks:
+//   ```mermaid / ```flowchart → <FlowChart>: a forgiving subset of Mermaid's flowchart syntax (the models
+//                               already know it), laid out and drawn by the app. No library: nothing new
+//                               to load on the Boox, and a slightly-off block still draws instead of erroring.
+//   ```chart (one JSON object) → <MiniChart>: a line or bar chart in inline SVG.
+//   pipe tables → <table>;  # headings → bold lines;  --- → a rule;
+//   the rest → inline text: **bold**, *italic*, `code`, and KaTeX (renderMathText's fmt hook).
+// DIAGRAM_RULE (appended to the tutor and Quick Ask prompts) teaches the models these formats.
+// Grayscale-safe on purpose (the Boox is e-ink): a decision is a different SHAPE, chart series differ by
+// dash pattern, marker and texture as well as colour, and every series is named next to its line.
+var RICH_MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+var RICH_CODE = { fontFamily: RICH_MONO, fontSize: "0.9em", background: "var(--c-br-40)", padding: "0 3px", borderRadius: 3 };
+
+// **bold**, `code`, *italic* in a run of plain text (never inside math: renderMathText calls this
+// only on the text between formulas).
+function richInline(str, kp) {
+  var re = /\*\*(\S(?:[^\n]*?\S)?)\*\*|`([^`\n]+)`|(^|[\s(\[\/"'“‘])\*([^*\s](?:[^*\n]*?[^*\s])?)\*(?=$|[\s).,;:!?\]\/"'”’])/g;
+  var out = [], last = 0, k = 0, m;
+  kp = kp || "i";
+  while ((m = re.exec(str)) !== null) {
+    var at = m.index + (m[3] ? m[3].length : 0);
+    if (at > last) out.push(str.slice(last, at));
+    var key = kp + "-" + (k++);
+    if (m[1] != null) out.push(<strong key={key} style={{ fontWeight: 700 }}>{richInline(m[1], key)}</strong>);
+    else if (m[2] != null) out.push(<code key={key} style={RICH_CODE}>{m[2]}</code>);
+    else out.push(<em key={key}>{m[4]}</em>);
+    last = m.index + m[0].length;
+  }
+  if (!k) return str;
+  if (last < str.length) out.push(str.slice(last));
+  return out;
+}
+// Prose: "* item" bullets read as "• item" (the asterisk would otherwise sit there raw).
+function richTextFmt(str, kp) { return richInline(str.replace(/(^|\n)([ \t]*)[*+][ \t]+(?=\S)/g, "$1$2• "), kp); }
+
+// Does this reply hold a block that wants the bubble's full width (a fence or a table)?
+function richWide(text) {
+  return /(^|\n)[ \t]*(```|~~~)|(^|\n)[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*\|/.test(String(text || ""));
+}
+
+var RICH_TABLE_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$|^\s*\|\s*:?-+:?\s*\|\s*$/;
+function richBlocks(s) {
+  var lines = s.split("\n"), out = [], buf = [], i = 0, m;
+  function flush() { if (buf.length) { out.push({ t: "text", s: buf.join("\n") }); buf = []; } }
+  while (i < lines.length) {
+    var ln = lines[i];
+    if ((m = /^\s*(`{3,}|~{3,})\s*([A-Za-z0-9_+-]*)[^`]*$/.exec(ln))) {
+      var close = new RegExp("^\\s*" + (m[1].charAt(0) === "`" ? "`" : "~") + "{" + m[1].length + ",}\\s*$");
+      var body = [], j = i + 1, closed = false;
+      for (; j < lines.length; j++) { if (close.test(lines[j])) { closed = true; break; } body.push(lines[j]); }
+      flush();
+      out.push(richFence(m[2].toLowerCase(), body.join("\n"), closed));
+      i = closed ? j + 1 : lines.length;
+      continue;
+    }
+    if (ln.indexOf("|") !== -1 && i + 1 < lines.length && RICH_TABLE_SEP.test(lines[i + 1])) {
+      var rows = [ln], j2 = i + 2;
+      while (j2 < lines.length && lines[j2].indexOf("|") !== -1 && lines[j2].trim()) { rows.push(lines[j2]); j2++; }
+      flush();
+      out.push({ t: "table", rows: rows, sep: lines[i + 1] });
+      i = j2;
+      continue;
+    }
+    if ((m = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(ln))) { flush(); out.push({ t: "h", n: m[1].length, s: m[2] }); i++; continue; }
+    if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(ln)) { flush(); out.push({ t: "hr" }); i++; continue; }
+    buf.push(ln);
+    i++;
+  }
+  flush();
+  return out;
+}
+// What a fenced block is: a flowchart, a chart, or plain code.
+function richFence(lang, body, closed) {
+  var head = body.replace(/^\s*---[\s\S]*?\n\s*---\s*\n/, "").replace(/^(\s*%%[^\n]*\n)+/, "").trim();
+  var isFlow = /^(flowchart|graph)\b/i.test(head);
+  if (lang === "flowchart" || lang === "flow" || ((lang === "mermaid" || lang === "mmd" || lang === "graph" || lang === "") && isFlow))
+    return { t: "flow", src: body, closed: closed };
+  if (lang === "mermaid" && /^pie\b/i.test(head)) return { t: "chart", src: body, pie: true, closed: closed };
+  if (lang === "chart" || ((lang === "json" || lang === "") && /"series"\s*:/.test(body) && /"type"\s*:/.test(body)))
+    return { t: "chart", src: body, closed: closed };
+  return { t: "code", src: body, closed: closed, note: lang === "mermaid" && closed ? "This kind of diagram isn't drawn in the app (flowcharts are). Its source:" : "" };
+}
+
+function renderRich(text) {
+  if (text == null) return text;
+  var s = String(text);
+  if (s.indexOf("[[") !== -1) s = stripHooks(s);
+  var blocks = richBlocks(s), out = [];
+  blocks.forEach(function(b, i) {
+    var key = "rb" + i;
+    if (b.t === "text") {
+      var t = b.s;
+      if (i > 0) t = t.replace(/^\n+/, "");
+      if (i < blocks.length - 1) t = t.replace(/\n+$/, "");
+      if (t) out.push(<React.Fragment key={key}>{renderMathText(t, richTextFmt)}</React.Fragment>);
+    } else if (b.t === "h") {
+      out.push(<div key={key} style={{ fontWeight: 800, fontSize: b.n <= 2 ? "1.08em" : "1em", margin: "8px 0 2px", whiteSpace: "normal" }}>{renderMathText(b.s, richInline)}</div>);
+    } else if (b.t === "hr") {
+      out.push(<div key={key} style={{ borderTop: "1px solid var(--c-br2)", margin: "10px 0" }} />);
+    } else if (b.t === "table") {
+      out.push(<RichTable key={key} rows={b.rows} sep={b.sep} />);
+    } else if (b.t === "flow") {
+      out.push(b.closed ? <FlowChart key={key} src={b.src} /> : <RichPending key={key} what="flowchart" />);
+    } else if (b.t === "chart") {
+      out.push(b.closed ? <MiniChart key={key} src={b.src} pie={!!b.pie} /> : <RichPending key={key} what="chart" />);
+    } else {
+      out.push(<RichCode key={key} src={b.src} note={b.note} />);
+    }
+  });
+  return out;
+}
+
+function RichPending(props) {
+  return <div data-rich-pending style={{ margin: "8px 0", padding: "10px 12px", border: "1px dashed var(--c-br2)", borderRadius: 10, color: "var(--c-mut)", fontSize: "0.92em", whiteSpace: "normal" }}>{"✏️ Drawing the " + props.what + "…"}</div>;
+}
+function RichCode(props) {
+  return (
+    <div style={{ margin: "8px 0", whiteSpace: "normal" }}>
+      {props.note ? <div style={{ fontSize: "0.85em", color: "var(--c-mut)", marginBottom: 4 }}>{props.note}</div> : null}
+      <pre style={{ margin: 0, padding: "8px 10px", background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, overflowX: "auto", fontFamily: RICH_MONO, fontSize: "0.86em", lineHeight: 1.45, whiteSpace: "pre", color: "var(--c-tx2)" }}>{props.src}</pre>
+    </div>
+  );
+}
+
+// ─── Tables ───
+function richRow(line) {
+  var t = line.trim().replace(/\\\|/g, "\u0001");
+  if (t.charAt(0) === "|") t = t.slice(1);
+  if (t.charAt(t.length - 1) === "|") t = t.slice(0, -1);
+  return t.split("|").map(function(c) { return c.replace(/\u0001/g, "|").trim(); });
+}
+function richCell(txt) {
+  return String(txt || "").split(/<br\s*\/?>/i).map(function(p, i) {
+    return <React.Fragment key={i}>{i ? <br /> : null}{renderMathText(p, richInline)}</React.Fragment>;
+  });
+}
+function RichTable(props) {
+  var head = richRow(props.rows[0]), body = props.rows.slice(1).map(richRow);
+  var aligns = richRow(props.sep).map(function(c) { var l = c.charAt(0) === ":", r = c.charAt(c.length - 1) === ":"; return l && r ? "center" : r ? "right" : "left"; });
+  var n = head.length;
+  body.forEach(function(r) { n = Math.max(n, r.length); });
+  var cols = [];
+  for (var i = 0; i < n; i++) cols.push(i);
+  var rowHead = !head[0];  // an empty corner cell: the first column names the rows
+  return (
+    <div data-rich-table style={{ overflowX: "auto", margin: "8px 0", whiteSpace: "normal" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.95em", lineHeight: 1.45 }}>
+        <thead><tr>{cols.map(function(ci) {
+          return <th key={ci} style={{ textAlign: aligns[ci] || "left", padding: "5px 7px", borderBottom: "2px solid var(--c-br2)", fontWeight: 800, verticalAlign: "bottom" }}>{richCell(head[ci])}</th>;
+        })}</tr></thead>
+        <tbody>{body.map(function(r, ri) {
+          return <tr key={ri}>{cols.map(function(ci) {
+            var first = ci === 0 && rowHead;
+            return <td key={ci} style={{ textAlign: first ? "left" : (aligns[ci] || "left"), padding: "5px 7px", borderBottom: "1px solid var(--c-br)", verticalAlign: "top", fontWeight: first ? 700 : 400 }}>{richCell(r[ci])}</td>;
+          })}</tr>;
+        })}</tbody>
+      </table>
+    </div>
+  );
+}
+
+// Text width for layout, measured once per string on a shared canvas (bold markers and math delimiters
+// are dropped: close enough for sizing a box that wraps anyway).
+var _richCtx = null, _richFont = "";
+function richTextWidth(text, px, weight) {
+  var lines = String(text).replace(/\*\*|`|\\\(|\\\)/g, "").split("\n");
+  try {
+    if (!_richCtx) { _richCtx = document.createElement("canvas").getContext("2d"); _richFont = getComputedStyle(document.body).fontFamily || "sans-serif"; }
+    _richCtx.font = (weight || 500) + " " + px + "px " + _richFont;
+    return Math.max.apply(null, lines.map(function(l) { return _richCtx.measureText(l).width; }));
+  } catch (e) {
+    return Math.max.apply(null, lines.map(function(l) { return l.length * px * 0.56; }));
+  }
+}
+// Watches an element's width (and font size): the layout depends on both. Returns null until measured.
+function useRichBox(ref) {
+  var st = useState(null), box = st[0], setBox = st[1];
+  React.useLayoutEffect(function() {
+    var el = ref.current;
+    if (!el) return;
+    function measure() {
+      var w = el.clientWidth, fs = parseFloat(getComputedStyle(el).fontSize) || 12;
+      setBox(function(b) { return b && Math.abs(b.w - w) < 4 && b.fs === fs ? b : { w: w, fs: fs }; });
+    }
+    measure();
+    var ro = window.ResizeObserver ? new ResizeObserver(measure) : null;
+    if (ro) ro.observe(el); else window.addEventListener("resize", measure);
+    return function() { if (ro) ro.disconnect(); else window.removeEventListener("resize", measure); };
+  }, []);
+  return box;
+}
+
+// ─── Flowcharts: parse ───
+// [opener, closers, shape]. Longest openers first; a multi-character opener whose closer doesn't match
+// falls back to the plain one, so "A[(optional) step]" is a box labelled "(optional) step".
+var FLOW_OPEN = [
+  ["(((", [")))"], "pill"], ["((", ["))"], "pill"], ["([", ["])"], "pill"], ["[[", ["]]"], "sub"], ["[(", [")]"], "rect"],
+  ["{{", ["}}"], "decision"], ["[/", ["/]", "\\]"], "rect"], ["[\\", ["\\]", "/]"], "rect"],
+  ["[", ["]"], "rect"], ["(", [")"], "round"], ["{", ["}"], "decision"], [">", ["]"], "rect"]
+];
+var FLOW_PAIR = { "(": ")", "[": "]", "{": "}" };
+var FLOW_LINK = /^(<?)(-{2,}>|-{3,}|={2,}>|={3,}|-\.+->|-\.+-|--[ox](?![A-Za-z0-9_])|==[ox](?![A-Za-z0-9_])|~{3,})\s*(?:\|([^|]*)\|)?/;
+var FLOW_LINK_TXT = /^(<?)(--|==|-\.)\s*([^\n]+?)\s*(-{2,}>|-{3,}|={2,}>|={3,}|\.-+>|\.-+)/;
+
+function flowClean(t) {
+  return String(t == null ? "" : t).trim()
+    .replace(/^"([\s\S]*)"$/, "$1").replace(/^`([\s\S]*)`$/, "$1")
+    .replace(/<br\s*\/?>/gi, "\n").replace(/\\n/g, "\n")
+    .replace(/<\/?(b|strong)>/gi, "**").replace(/<\/?[a-z][^>]*>/gi, "")
+    .replace(/#quot;|&quot;/g, "\"").replace(/&amp;/g, "&").replace(/&lt;|#lt;/g, "<").replace(/&gt;|#gt;/g, ">").replace(/&#39;|#39;/g, "'")
+    .replace(/&#(\d+);|#(\d+);/g, function(_, a, b) { return String.fromCharCode(+(a || b)); })
+    .replace(/[ \t]*\n[ \t]*/g, "\n").trim();
+}
+// One statement per line or ";" (not inside a label, quotes or an edge's |label|).
+function flowStatements(src) {
+  var out = [], cur = "", q = false, d = 0, pipe = false;
+  for (var i = 0; i < src.length; i++) {
+    var ch = src.charAt(i);
+    if (ch === "\n") { out.push(cur); cur = ""; q = false; d = 0; pipe = false; continue; }
+    if (ch === "\"") q = !q;
+    else if (!q && (ch === "[" || ch === "(" || ch === "{")) d++;
+    else if (!q && (ch === "]" || ch === ")" || ch === "}")) d = Math.max(0, d - 1);
+    else if (!q && !d && ch === "|") pipe = !pipe;
+    else if (!q && !d && !pipe && ch === ";") { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+// The label inside a shape that opens at t[p]; null when this opener's closer doesn't match.
+function flowScan(t, p, o) {
+  var open = o[0], start = p + open.length, oc = open.charAt(0), cc = FLOW_PAIR[oc] || null, depth = 0, q = false, j;
+  for (var k = 0; k < open.length; k++) if (open.charAt(k) === oc) depth++;
+  for (j = start; j < t.length; j++) {
+    var ch = t.charAt(j);
+    if (ch === "\"") { q = !q; continue; }
+    if (q) continue;
+    if (!cc) { if (ch === "]") break; continue; }
+    if (ch === oc) depth++;
+    else if (ch === cc && --depth === 0) break;
+  }
+  if (j >= t.length) return o[1][0].length === 1 ? { label: t.slice(start).replace(/[\])}]+\s*$/, ""), next: t.length } : null;
+  for (var c = 0; c < o[1].length; c++) {
+    var cl = o[1][c], at = j + 1 - cl.length;
+    if (at >= start && t.slice(at, j + 1) === cl) return { label: t.slice(start, at), next: j + 1 };
+  }
+  return null;
+}
+function flowChain(t, node, edges) {
+  var p = 0;
+  function ws() { while (p < t.length && /\s/.test(t.charAt(p))) p++; }
+  function ref() {
+    ws();
+    var m = /^[A-Za-z0-9_À-ɏ]+/.exec(t.slice(p)), id = m ? m[0] : null;
+    if (id) p += id.length;
+    for (var i = 0; i < FLOW_OPEN.length; i++) {
+      var o = FLOW_OPEN[i];
+      if (t.substr(p, o[0].length) !== o[0] || (!id && o[0] === ">")) continue;
+      var r = flowScan(t, p, o);
+      if (!r) continue;
+      var label = flowClean(r.label);
+      p = r.next;
+      if (!id) id = "_" + label;
+      node(id, label, o[2]);
+      break;
+    }
+    if (id) {
+      if (i === FLOW_OPEN.length) node(id);
+      if (t.substr(p, 3) === ":::") { p += 3; while (p < t.length && /[\w-]/.test(t.charAt(p))) p++; }
+    }
+    return id;
+  }
+  function group() {
+    var ids = [], id = ref();
+    if (id == null) return ids;
+    ids.push(id);
+    for (;;) { ws(); if (t.charAt(p) !== "&") break; p++; id = ref(); if (id == null) break; ids.push(id); }
+    return ids;
+  }
+  var left = group();
+  while (left.length) {
+    ws();
+    var rest = t.slice(p), m = FLOW_LINK.exec(rest), tok, lab, both;
+    if (m) { tok = m[2]; lab = m[3]; both = !!m[1]; }
+    else if ((m = FLOW_LINK_TXT.exec(rest))) { tok = m[2] + m[4]; lab = m[3]; both = !!m[1]; }
+    else break;
+    p += m[0].length;
+    var right = group();
+    if (!right.length) break;
+    var e0 = { label: lab ? flowClean(lab) : "", dotted: tok.indexOf(".") !== -1, thick: tok.charAt(0) === "=", arrow: /[>ox]$/.test(tok), both: both && /[>ox]$/.test(tok) };
+    left.forEach(function(a) { right.forEach(function(b) {
+      if (a !== b) edges.push({ a: a, b: b, label: e0.label, dotted: e0.dotted, thick: e0.thick, arrow: e0.arrow, both: e0.both });
+    }); });
+    left = right;
+  }
+}
+function parseFlow(src) {
+  var g = { nodes: {}, order: [], edges: [], title: "" };
+  var lines = String(src).replace(/\r/g, "").split("\n"), li = 0;
+  while (li < lines.length && !lines[li].trim()) li++;
+  if (li < lines.length && lines[li].trim() === "---") {  // front matter: title only
+    for (var j = li + 1; j < lines.length; j++) {
+      if (lines[j].trim() === "---") { lines = lines.slice(j + 1); break; }
+      var tm = /^\s*title\s*:\s*(.+)$/.exec(lines[j]);
+      if (tm) g.title = flowClean(tm[1]);
+    }
+  }
+  function node(id, label, shape) {
+    var n = g.nodes[id];
+    if (!n) { n = g.nodes[id] = { id: id, label: id, shape: "rect" }; g.order.push(id); }
+    if (label != null) { n.label = label; n.shape = shape; }
+  }
+  flowStatements(lines.map(function(l) { return l.replace(/%%.*$/, ""); }).join("\n")).forEach(function(st) {
+    var t = st.trim(), tt;
+    if (!t || /^(flowchart|graph)\b/i.test(t) || /^end$/.test(t)) return;
+    if (/^(subgraph|classDef|class|style|linkStyle|click|direction|accTitle|accDescr)\b/.test(t)) return;
+    if ((tt = /^title\s+(.+)$/.exec(t))) { g.title = flowClean(tt[1]); return; }
+    flowChain(t, node, g.edges);
+  });
+  return g;
+}
+
+// ─── Flowcharts: layout (layered, top-down) ───
+// Cycles broken by DFS (a loop-back edge is laid out reversed and drawn with its arrow pointing up),
+// longest-path layers with source nodes pulled down to sit just above their first child, long edges
+// threaded through dummy points so they pass between boxes, barycenter sweeps to cut crossings.
+function flowStructure(g) {
+  var n = g.order.length, ix = {}, i;
+  g.order.forEach(function(id, k) { ix[id] = k; });
+  var E = g.edges.map(function(e) { return { a: ix[e.a], b: ix[e.b], e: e, back: false }; });
+  var out = [], indeg = [];
+  for (i = 0; i < n; i++) { out.push([]); indeg.push(0); }
+  E.forEach(function(x) { out[x.a].push(x); indeg[x.b]++; });
+  var st = [];
+  for (i = 0; i < n; i++) st.push(0);
+  function dfs(u) { st[u] = 1; out[u].forEach(function(x) { if (st[x.b] === 1) x.back = true; else if (!st[x.b]) dfs(x.b); }); st[u] = 2; }
+  for (i = 0; i < n; i++) if (!indeg[i] && !st[i]) dfs(i);
+  for (i = 0; i < n; i++) if (!st[i]) dfs(i);
+  var din = [], dout = [], layer = [];
+  for (i = 0; i < n; i++) { din.push([]); dout.push([]); layer.push(0); }
+  var dag = E.map(function(x) { return x.back ? { u: x.b, v: x.a, x: x } : { u: x.a, v: x.b, x: x }; });
+  dag.forEach(function(d) { dout[d.u].push(d); din[d.v].push(d); });
+  var deg = din.map(function(l) { return l.length; }), queue = [], topo = [];
+  for (i = 0; i < n; i++) if (!deg[i]) queue.push(i);
+  while (queue.length) {
+    var u = queue.shift();
+    topo.push(u);
+    dout[u].forEach(function(d) { layer[d.v] = Math.max(layer[d.v], layer[u] + 1); if (!--deg[d.v]) queue.push(d.v); });
+  }
+  topo.slice().reverse().forEach(function(u) {
+    if (din[u].length || !dout[u].length) return;
+    var mn = Infinity;
+    dout[u].forEach(function(d) { mn = Math.min(mn, layer[d.v]); });
+    layer[u] = mn - 1;
+  });
+  var V = [];
+  for (i = 0; i < n; i++) V.push({ id: g.order[i], layer: layer[i], dummy: false });
+  var routes = [], segs = [];
+  dag.forEach(function(d) {
+    var path = [d.u];
+    for (var l = layer[d.u] + 1; l < layer[d.v]; l++) { V.push({ layer: l, dummy: true }); path.push(V.length - 1); }
+    path.push(d.v);
+    for (var k = 0; k + 1 < path.length; k++) segs.push([path[k], path[k + 1]]);
+    routes.push({ e: d.x.e, back: d.x.back, path: path });
+  });
+  var nv = V.length, pred = [], succ = [], L = 0;
+  for (i = 0; i < nv; i++) { pred.push([]); succ.push([]); L = Math.max(L, V[i].layer + 1); }
+  segs.forEach(function(s) { succ[s[0]].push(s[1]); pred[s[1]].push(s[0]); });
+  // First order: depth-first from the sources, in the order the text introduced them.
+  var seen = [], walk = [];
+  function visit(v) { if (seen[v]) return; seen[v] = 1; walk.push(v); succ[v].forEach(visit); }
+  for (i = 0; i < nv; i++) if (!pred[i].length) visit(i);
+  for (i = 0; i < nv; i++) visit(i);
+  var layers = [];
+  for (i = 0; i < L; i++) layers.push([]);
+  walk.forEach(function(v) { layers[V[v].layer].push(v); });
+  function posOf(ls) { var P = []; ls.forEach(function(row) { row.forEach(function(v, k) { P[v] = k; }); }); return P; }
+  function crossings(ls) {
+    var P = posOf(ls), c = 0;
+    for (var a = 0; a < segs.length; a++) for (var b = a + 1; b < segs.length; b++) {
+      var s = segs[a], t = segs[b];
+      if (V[s[0]].layer === V[t[0]].layer && (P[s[0]] - P[t[0]]) * (P[s[1]] - P[t[1]]) < 0) c++;
+    }
+    return c;
+  }
+  function sweep(ls, down) {
+    var P = posOf(ls);
+    for (var step = 0; step < L - 1; step++) {
+      var l = down ? step + 1 : L - 2 - step, nb = down ? pred : succ;
+      var key = {};
+      ls[l].forEach(function(v) {
+        var adj = nb[v];
+        key[v] = adj.length ? adj.reduce(function(s, w) { return s + P[w]; }, 0) / adj.length : P[v];
+      });
+      ls[l] = ls[l].slice().sort(function(a, b) { return key[a] - key[b] || P[a] - P[b]; });
+      ls[l].forEach(function(v, k) { P[v] = k; });
+    }
+    return ls;
+  }
+  var best = layers.map(function(r) { return r.slice(); }), bestC = crossings(best), cur = best;
+  for (var it = 0; it < 6 && bestC > 0; it++) {
+    for (var dir = 0; dir < 2; dir++) {
+      cur = sweep(cur.map(function(r) { return r.slice(); }), dir === 0);
+      var c = crossings(cur);
+      if (c < bestC) { bestC = c; best = cur.map(function(r) { return r.slice(); }); }
+    }
+  }
+  return { V: V, layers: best, pred: pred, succ: succ, routes: routes, L: L, real: g.order.slice(), nodes: g.nodes };
+}
+// Isotonic regression (pool adjacent violators): the closest non-decreasing sequence to t.
+function richPav(t) {
+  var blocks = [];
+  t.forEach(function(v) {
+    blocks.push({ s: v, n: 1 });
+    while (blocks.length > 1 && blocks[blocks.length - 2].s / blocks[blocks.length - 2].n > blocks[blocks.length - 1].s / blocks[blocks.length - 1].n) {
+      var b = blocks.pop(), a = blocks[blocks.length - 1];
+      a.s += b.s; a.n += b.n;
+    }
+  });
+  var out = [];
+  blocks.forEach(function(b) { for (var k = 0; k < b.n; k++) out.push(b.s / b.n); });
+  return out;
+}
+// x of every vertex: each layer is packed in order (box widths + gaps) as close as possible to where
+// its neighbours want it (mean x of the layer above, then of the layer below, then above again).
+function flowXs(S, wOf, gapX) {
+  var x = [], placed = [];
+  function gap(a, b) { return S.V[a].dummy && S.V[b].dummy ? 8 : S.V[a].dummy || S.V[b].dummy ? 12 : gapX; }
+  function mean(list) { var s = 0, k = 0; list.forEach(function(v) { if (placed[v]) { s += x[v]; k++; } }); return k ? s / k : null; }
+  function place(l, want) {
+    var row = S.layers[l], c = [0], d = [], k;
+    for (k = 1; k < row.length; k++) c[k] = c[k - 1] + (wOf(row[k - 1]) + wOf(row[k])) / 2 + gap(row[k - 1], row[k]);
+    for (k = 0; k < row.length; k++) d[k] = want(row[k]);
+    var any = -1;
+    for (k = 0; k < row.length; k++) if (d[k] != null) { any = k; break; }
+    if (any < 0) { for (k = 0; k < row.length; k++) d[k] = c[k] - c[row.length - 1] / 2; }
+    else {
+      for (k = any - 1; k >= 0; k--) d[k] = d[k + 1] - (c[k + 1] - c[k]);
+      for (k = any + 1; k < row.length; k++) if (d[k] == null) d[k] = d[k - 1] + (c[k] - c[k - 1]);
+    }
+    var y = richPav(d.map(function(v, i) { return v - c[i]; }));
+    for (k = 0; k < row.length; k++) { x[row[k]] = y[k] + c[k]; placed[row[k]] = 1; }
+  }
+  var l;
+  for (l = 0; l < S.L; l++) place(l, function(v) { return mean(S.pred[v]); });
+  for (l = S.L - 2; l >= 0; l--) place(l, function(v) { var m = mean(S.succ[v]); return m == null ? x[v] : m; });
+  for (l = 1; l < S.L; l++) place(l, function(v) { var m = mean(S.pred[v]); return m == null ? x[v] : m; });
+  return x;
+}
+
+var FLOW_HEX = "polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%)";
+function flowBox(shape, w, fs) {
+  var base = { position: "absolute", width: w, boxSizing: "border-box", textAlign: "center", fontSize: fs, lineHeight: 1.3, color: "var(--c-tx)", overflowWrap: "break-word", whiteSpace: "pre-line" };
+  if (shape === "decision") return Object.assign(base, { background: "var(--c-tx2)", clipPath: FLOW_HEX, WebkitClipPath: FLOW_HEX, padding: 1.6, fontWeight: 700 });
+  return Object.assign(base, {
+    background: "var(--c-cd)", padding: shape === "pill" ? "6px 12px" : "6px 9px", fontWeight: shape === "pill" ? 700 : 500,
+    border: shape === "sub" ? "3.5px double var(--c-br2)" : shape === "pill" ? "2px solid var(--c-tx2)" : "1.5px solid var(--c-br2)",
+    borderRadius: shape === "pill" ? 999 : shape === "round" ? 14 : 6
+  });
+}
+function flowLabel(n) { return renderMathText(n.label, richInline); }
+
+var FlowChart = React.memo(function FlowChart(props) {
+  var src = props.src;
+  var wrap = useRef(null), boxEls = useRef({});
+  var box = useRichBox(wrap);
+  var hsState = useState(null), hs = hsState[0], setHs = hsState[1];
+  var srcState = useState(false), showSrc = srcState[0], setShowSrc = srcState[1];
+  var S = useMemo(function() {
+    try { var g = parseFlow(src); return g.order.length ? Object.assign(flowStructure(g), { title: g.title }) : null; } catch (e) { return null; }
+  }, [src]);
+  // Box widths for this width and font: a box is as wide as its text wants, capped so the busiest layer fits.
+  var W = useMemo(function() {
+    if (!S || !box) return null;
+    var fs = Math.round(box.fs * 0.95 * 10) / 10, gapX = 14, k = 1;
+    S.layers.forEach(function(row) { var c = 0; row.forEach(function(v) { c += S.V[v].dummy ? 0.25 : 1; }); k = Math.max(k, c); });
+    var cap = Math.max(92, Math.min(220, Math.floor((box.w - 8 - (Math.ceil(k) - 1) * gapX) / k)));
+    var w = {};
+    S.real.forEach(function(id) {
+      var nd = S.nodes[id], dec = nd.shape === "decision", pill = nd.shape === "pill";
+      var wt = dec || pill ? 700 : 500, padX = dec ? 38 : pill ? 30 : 24, longest = 0;
+      var nat = richTextWidth(nd.label, fs, wt) + padX;
+      // Never narrower than the longest word: a box may wrap between words, never inside one.
+      nd.label.replace(/\*\*|`/g, "").split(/\s+/).forEach(function(wd) { longest = Math.max(longest, richTextWidth(wd, fs, wt)); });
+      w[id] = Math.round(Math.max(dec ? 76 : 56, Math.ceil(longest) + padX, Math.min(cap, nat)));
+    });
+    return { w: w, fs: fs, gapX: gapX, key: box.w + "/" + box.fs };
+  }, [S, box]);
+  React.useLayoutEffect(function() {
+    if (!W || (hs && hs.key === W.key)) return;
+    var h = {};
+    S.real.forEach(function(id) { var el = boxEls.current[id]; h[id] = el ? el.offsetHeight : 30; });
+    setHs({ key: W.key, h: h });
+  });
+  var G = useMemo(function() {
+    if (!W || !hs || hs.key !== W.key) return null;
+    var V = S.V;
+    function wOf(v) { return V[v].dummy ? 2 : W.w[V[v].id]; }
+    var x = flowXs(S, wOf, W.gapX);
+    var minX = Infinity, maxX = -Infinity;
+    V.forEach(function(v, i) { minX = Math.min(minX, x[i] - wOf(i) / 2); maxX = Math.max(maxX, x[i] + wOf(i) / 2); });
+    var pad = 4;
+    V.forEach(function(v, i) { x[i] = x[i] - minX + pad; });
+    var width = Math.ceil(maxX - minX + pad * 2);
+    // Rows: as tall as their tallest box; the gap below a row grows when an edge leaving it has a label.
+    var rowTop = [], rowH = [], y = pad, labelled = [];
+    S.routes.forEach(function(r) { if (r.e.label) labelled[V[r.back ? r.path[r.path.length - 2] : r.path[0]].layer] = 1; });
+    for (var l = 0; l < S.L; l++) {
+      var h = 0;
+      S.layers[l].forEach(function(v) { if (!V[v].dummy) h = Math.max(h, hs.h[V[v].id]); });
+      rowTop[l] = y; rowH[l] = Math.max(h, 6);
+      y += rowH[l] + (l < S.L - 1 ? (labelled[l] ? 48 : 30) : 0);
+    }
+    var height = Math.ceil(y + pad);
+    function top(v) { return V[v].dummy ? rowTop[V[v].layer] : rowTop[V[v].layer] + (rowH[V[v].layer] - hs.h[V[v].id]) / 2; }
+    function bottom(v) { return V[v].dummy ? rowTop[V[v].layer] + rowH[V[v].layer] : top(v) + hs.h[V[v].id]; }
+    // Spread several edges leaving (or entering) one box across its middle.
+    var outPorts = {}, inPorts = {};
+    S.routes.forEach(function(r, ri) {
+      var a = r.path[0], b = r.path[r.path.length - 1];
+      (outPorts[a] = outPorts[a] || []).push({ ri: ri, to: x[r.path[1]] });
+      (inPorts[b] = inPorts[b] || []).push({ ri: ri, to: x[r.path[r.path.length - 2]] });
+    });
+    // Boxes with two or more labelled branches leaving them (a decision): wider ports, and those labels
+    // sit further down their branch, where the branches have fanned apart.
+    var fan = {};
+    S.routes.forEach(function(r) { if (r.e.label) { var src = r.back ? r.path[r.path.length - 1] : r.path[0]; fan[src] = (fan[src] || 0) + 1; } });
+    function spread(map, isOut) {
+      var off = {};
+      Object.keys(map).forEach(function(v) {
+        var list = map[v].sort(function(p, q) { return p.to - q.to; }), k = list.length;
+        var span = isOut && fan[v] > 1 ? Math.min(wOf(+v) * 0.6, (k - 1) * 22) : Math.min(wOf(+v) * 0.5, (k - 1) * 16);
+        list.forEach(function(p, i) { off[p.ri] = k > 1 ? -span / 2 + span * i / (k - 1) : 0; });
+      });
+      return off;
+    }
+    var oo = spread(outPorts, true), io = spread(inPorts, false);
+    var edges = S.routes.map(function(r, ri) {
+      var P = r.path, pts = [{ x: x[P[0]] + oo[ri], y: bottom(P[0]) }];
+      for (var k = 1; k < P.length - 1; k++) { pts.push({ x: x[P[k]], y: top(P[k]) }); pts.push({ x: x[P[k]], y: bottom(P[k]) }); }
+      pts.push({ x: x[P[P.length - 1]] + io[ri], y: top(P[P.length - 1]) });
+      var headEnd = r.e.arrow && !r.back, headStart = r.e.arrow && (r.back || r.e.both);
+      if (r.back && r.e.both) headEnd = true;
+      var s0 = { x: pts[0].x, y: pts[0].y + (headStart ? 7 : 0) }, last = pts.length - 1;
+      var s1 = { x: pts[last].x, y: pts[last].y - (headEnd ? 7 : 0) };
+      var d = "M" + s0.x + " " + s0.y, prev = s0;
+      for (k = 1; k <= last; k++) {
+        var q = k === last ? s1 : pts[k];
+        if (Math.abs(q.x - prev.x) < 0.5) d += " L" + q.x + " " + q.y;
+        else { var my = (prev.y + q.y) / 2; d += " C" + prev.x + " " + my + " " + q.x + " " + my + " " + q.x + " " + q.y; }
+        prev = q;
+      }
+      return { d: d, e: r.e, back: r.back, pts: pts, fan: fan[r.back ? P[P.length - 1] : P[0]] > 1, headEnd: headEnd ? pts[last] : null, headStart: headStart ? pts[0] : null, label: null };
+    });
+    // Edge labels: the first spot along the edge, starting next to its real source (the bottom end for
+    // a loop-back), where the label covers no box and no label already placed: on the line, else just
+    // beside it; failing all of those, the spot that covers the least.
+    var lf = W.fs * 0.88, taken = S.real.map(function(id, i) { return { l: x[i] - W.w[id] / 2, r: x[i] + W.w[id] / 2, t: top(i), b: top(i) + hs.h[id] }; });
+    function cover(rc) {
+      var a = 0;
+      for (var i = 0; i < taken.length; i++) {
+        var o = taken[i], ow = Math.min(rc.r, o.r + 2) - Math.max(rc.l, o.l - 2), oh = Math.min(rc.b, o.b + 2) - Math.max(rc.t, o.t - 2);
+        if (ow > 0 && oh > 0) a += ow * oh;
+      }
+      return a;
+    }
+    function along(p, q, t) {
+      if (Math.abs(p.x - q.x) < 0.5) return { x: p.x, y: p.y + (q.y - p.y) * t };
+      var u = 1 - t, a = u * u * u + 3 * u * u * t, my = (p.y + q.y) / 2;
+      return { x: p.x * a + q.x * (1 - a), y: u * u * u * p.y + (3 * u * u * t + 3 * u * t * t) * my + t * t * t * q.y };
+    }
+    edges.forEach(function(e) {
+      if (!e.e.label) return;
+      var tw = richTextWidth(e.e.label, lf, 700) + 10, lw = Math.min(120, tw), lh = Math.ceil(tw / 120) * lf * 1.2 + 2;
+      var segs = [], ts = e.fan ? [0.72, 0.6, 0.84, 0.5] : [0.5, 0.66, 0.34, 0.8], pick = null, best = null, bestA = Infinity;
+      for (var k = 0; k + 1 < e.pts.length; k++) segs.push(e.back ? [e.pts[k + 1], e.pts[k]] : [e.pts[k], e.pts[k + 1]]);
+      if (e.back) segs.reverse();
+      for (var si = 0; si < segs.length && !pick; si++) for (var side = 0; side < 3 && !pick; side++) for (var ti = 0; ti < ts.length && !pick; ti++) {
+        var c = along(segs[si][0], segs[si][1], ts[ti]), cx = c.x + (side === 1 ? -(lw / 2 + 5) : side === 2 ? lw / 2 + 5 : 0);
+        var rc = { l: cx - lw / 2, r: cx + lw / 2, t: c.y - lh / 2, b: c.y + lh / 2 }, a = cover(rc);
+        if (!a) pick = rc;
+        else if (a < bestA) { bestA = a; best = rc; }
+      }
+      pick = pick || best;
+      taken.push(pick);
+      e.label = { x: (pick.l + pick.r) / 2, y: (pick.t + pick.b) / 2 };
+    });
+    var nodes = S.real.map(function(id, i) { return { id: id, left: x[i] - W.w[id] / 2, top: top(i) }; });
+    return { width: width, height: height, edges: edges, nodes: nodes };
+  }, [S, W, hs]);
+
+  if (!S) return <RichCode src={src} note="Couldn't draw this flowchart. Its source:" />;
+  var stroke = "var(--c-mut)";
+  var body;
+  if (!G) {
+    body = W ? (
+      <div style={{ position: "relative", height: 40, visibility: "hidden", overflow: "hidden" }}>
+        {S.real.map(function(id) {
+          var nd = S.nodes[id], st = flowBox(nd.shape, W.w[id], W.fs);
+          return <div key={id} ref={function(el) { boxEls.current[id] = el; }} style={Object.assign(st, { left: 0, top: 0 })}>{nd.shape === "decision" ? <div style={{ background: "var(--c-cd)", clipPath: FLOW_HEX, WebkitClipPath: FLOW_HEX, padding: "6px 15px" }}>{flowLabel(nd)}</div> : flowLabel(nd)}</div>;
+        })}
+      </div>
+    ) : <div style={{ height: 40 }} />;
+  } else {
+    body = (
+      <div style={{ position: "relative", width: G.width, height: G.height, margin: "0 auto" }}>
+        <svg width={G.width} height={G.height} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }} aria-hidden="true">
+          {G.edges.map(function(e, i) {
+            return (
+              <g key={i}>
+                <path d={e.d} style={{ fill: "none", stroke: stroke, strokeWidth: e.e.thick ? 2.6 : 1.6, strokeDasharray: e.e.dotted ? "5 4" : "none", strokeLinecap: "round" }} />
+                {e.headEnd ? <polygon points={(e.headEnd.x - 4.5) + "," + (e.headEnd.y - 8) + " " + (e.headEnd.x + 4.5) + "," + (e.headEnd.y - 8) + " " + e.headEnd.x + "," + e.headEnd.y} style={{ fill: stroke }} /> : null}
+                {e.headStart ? <polygon points={(e.headStart.x - 4.5) + "," + (e.headStart.y + 8) + " " + (e.headStart.x + 4.5) + "," + (e.headStart.y + 8) + " " + e.headStart.x + "," + e.headStart.y} style={{ fill: stroke }} /> : null}
+              </g>
+            );
+          })}
+        </svg>
+        {G.nodes.map(function(p) {
+          var nd = S.nodes[p.id], st = flowBox(nd.shape, W.w[p.id], W.fs);
+          return <div key={p.id} data-flow-node={nd.shape} style={Object.assign(st, { left: p.left, top: p.top })}>{nd.shape === "decision" ? <div style={{ background: "var(--c-cd)", clipPath: FLOW_HEX, WebkitClipPath: FLOW_HEX, padding: "6px 15px" }}>{flowLabel(nd)}</div> : flowLabel(nd)}</div>;
+        })}
+        {G.edges.map(function(e, i) {
+          if (!e.label) return null;
+          return <div key={"l" + i} data-flow-label style={{ position: "absolute", left: e.label.x, top: e.label.y, transform: "translate(-50%, -50%)", background: "var(--c-bg)", color: "var(--c-tx2)", fontSize: W.fs * 0.88, fontWeight: 700, lineHeight: 1.2, padding: "1px 5px", borderRadius: 4, maxWidth: 120, textAlign: "center", whiteSpace: "normal", overflowWrap: "break-word" }}>{renderMathText(e.e.label, richInline)}</div>;
+        })}
+      </div>
+    );
+  }
+  return (
+    <div data-flowchart style={{ margin: "8px 0", padding: "8px 6px 4px", background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, whiteSpace: "normal" }}>
+      {S.title ? <div style={{ fontWeight: 800, fontSize: "0.98em", margin: "0 4px 6px" }}>{renderMathText(S.title, richInline)}</div> : null}
+      <div ref={wrap} style={{ overflowX: "auto", overflowY: "hidden", paddingBottom: 2 }}>{body}</div>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={function() { setShowSrc(!showSrc); }} style={{ background: "none", border: "none", color: "var(--c-mut)", fontSize: 10, cursor: "pointer", padding: "2px 4px", minHeight: 22 }}>{showSrc ? "hide source" : "source"}</button>
+      </div>
+      {showSrc ? <RichCode src={src} /> : null}
+    </div>
+  );
+});
+
+// ─── Charts ───
+// ```chart holds one JSON object:
+//   {"type":"line","title","x","y","series":[{"name","points":[[x,y],…]}],"marks":[{"y"|"x","label"}],"note"}
+//   {"type":"bar","title","y","labels":[…],"series":[{"name","values":[…]}],"note"}
+// Forgiving: trailing commas and // comment lines are dropped; {x,y} points, bare value lists and
+// [label, value] pairs are accepted. A Mermaid pie becomes a one-series bar chart.
+var CHART_MAX = 4;
+var CHART_DASH = ["none", "7 4", "2 3", "9 3 2 3"];
+function chartStr(v) {
+  if (v == null) return "";
+  if (typeof v === "object") return chartStr(v.label || v.title || v.text || v.name);
+  return String(v);
+}
+function chartFromPie(src) {
+  var o = { type: "bar", labels: [], series: [{ name: "", values: [] }] };
+  String(src).split("\n").forEach(function(l) {
+    var m, t = l.trim();
+    if ((m = /^pie\b(?:\s+showData)?(?:\s+title\s+(.+))?$/i.exec(t))) { if (m[1]) o.title = m[1]; return; }
+    if ((m = /^title\s+(.+)$/i.exec(t))) { o.title = m[1]; return; }
+    if ((m = /^"([^"]*)"\s*:\s*(-?[\d.]+)/.exec(t))) { o.labels.push(m[1]); o.series[0].values.push(+m[2]); }
+  });
+  return o.labels.length ? o : null;
+}
+function chartSpec(src, pie) {
+  var o = null;
+  if (pie) o = chartFromPie(src);
+  else {
+    var t = String(src), a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a < 0 || b < a) return null;
+    t = t.slice(a, b + 1).replace(/^\s*\/\/.*$/gm, "").replace(/,\s*([}\]])/g, "$1");
+    try { o = JSON.parse(t); } catch (e) { return null; }
+  }
+  if (!o || typeof o !== "object") return null;
+  var tp = String(o.type || o.kind || "line").toLowerCase();
+  var spec = { type: /bar|column|hist/.test(tp) ? "bar" : "line", dots: /scatter|point|dot/.test(tp), title: chartStr(o.title),
+    x: chartStr(o.x || o.xLabel || o.xAxis), y: chartStr(o.y || o.yLabel || o.yAxis), note: chartStr(o.note || o.caption || o.source),
+    series: [], marks: [], cats: null, extra: 0 };
+  var ser = o.series || o.datasets;
+  if (!Array.isArray(ser)) ser = (o.values || o.points || o.data) ? [{ name: o.name || "", values: o.values, points: o.points || o.data }] : [];
+  var labels = o.labels || o.categories || o.xLabels || null;
+  var cats = Array.isArray(labels) ? labels.map(chartStr) : [];
+  ser.forEach(function(s) {
+    if (!s || spec.series.length >= CHART_MAX) { if (s) spec.extra++; return; }
+    var name = chartStr(s.name || s.label), raw = s.points || s.data || s.values;
+    if (!Array.isArray(raw)) return;
+    if (spec.type === "bar") {
+      var vals = [];
+      raw.forEach(function(v, k) {
+        var lab = null, y;
+        if (Array.isArray(v)) { lab = chartStr(v[0]); y = +v[1]; }
+        else if (v && typeof v === "object") { lab = chartStr(v.label || v.x || v.name); y = +(v.y != null ? v.y : v.value); }
+        else y = +v;
+        var at = k;
+        if (lab) { at = cats.indexOf(lab); if (at < 0) { cats.push(lab); at = cats.length - 1; } }
+        if (isFinite(y)) vals[at] = y;
+      });
+      spec.series.push({ name: name, values: vals });
+    } else {
+      var pts = [];
+      raw.forEach(function(p, k) {
+        var x, y;
+        if (Array.isArray(p)) { x = p[0]; y = p[1]; }
+        else if (p && typeof p === "object") { x = p.x; y = p.y; }
+        else { x = k; y = p; }
+        if (typeof x === "string" && !isFinite(+x)) { var at = cats.indexOf(x); if (at < 0) { cats.push(x); at = cats.length - 1; } x = at; }
+        x = +x; y = +y;
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      });
+      pts.sort(function(p, q) { return p[0] - q[0]; });
+      if (pts.length) spec.series.push({ name: name, points: pts });
+    }
+  });
+  if (!spec.series.length) return null;
+  if (spec.type === "bar") {
+    var nc = cats.length;
+    spec.series.forEach(function(s) { nc = Math.max(nc, s.values.length); });
+    for (var c = cats.length; c < nc; c++) cats.push(String(c + 1));
+    spec.cats = cats;
+  } else if (cats.length) spec.cats = cats;
+  (o.marks || o.lines || o.refs || o.annotations || []).forEach(function(m) {
+    if (!m || typeof m !== "object") return;
+    if (m.y != null && isFinite(+m.y)) spec.marks.push({ axis: "y", v: +m.y, label: chartStr(m.label || m.text) });
+    else if (m.x != null && isFinite(+m.x)) spec.marks.push({ axis: "x", v: +m.x, label: chartStr(m.label || m.text) });
+  });
+  return spec;
+}
+function chartTicks(lo, hi, n) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  var span = hi - lo, step = Math.pow(10, Math.floor(Math.log(span / n) / Math.LN10)), err = span / n / step;
+  step *= err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+  var out = [], a = Math.floor(lo / step + 1e-9) * step, b = Math.ceil(hi / step - 1e-9) * step;
+  for (var v = a; v <= b + step / 2; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function chartNum(v) {
+  var a = Math.abs(v);
+  var s = a >= 100 ? String(Math.round(v)) : a >= 10 ? String(+v.toFixed(1)) : String(+v.toFixed(2));
+  return a >= 10000 ? Math.round(v).toLocaleString() : s;
+}
+function chartMarker(k, cx, cy, r, color) {
+  var st = { fill: color, stroke: "var(--c-bg)", strokeWidth: 2 };
+  if (k === 1) return <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} style={st} />;
+  if (k === 2) return <polygon points={cx + "," + (cy - r - 1) + " " + (cx + r + 1) + "," + (cy + r) + " " + (cx - r - 1) + "," + (cy + r)} style={st} />;
+  if (k === 3) return <polygon points={cx + "," + (cy - r - 1.5) + " " + (cx + r + 1.5) + "," + cy + " " + cx + "," + (cy + r + 1.5) + " " + (cx - r - 1.5) + "," + cy} style={st} />;
+  return <circle cx={cx} cy={cy} r={r} style={st} />;
+}
+var _chartSeq = 0;
+
+var MiniChart = React.memo(function MiniChart(props) {
+  var wrap = useRef(null);
+  var box = useRichBox(wrap);
+  var spec = useMemo(function() { try { return chartSpec(props.src, props.pie); } catch (e) { return null; } }, [props.src, props.pie]);
+  var hovState = useState(null), hov = hovState[0], setHov = hovState[1];
+  var tblState = useState(false), showTable = tblState[0], setShowTable = tblState[1];
+  var uid = useMemo(function() { return "rc" + (++_chartSeq); }, []);
+  if (!spec) return <RichCode src={props.src} note="Couldn't draw this chart. Its source:" />;
+  var bar = spec.type === "bar", nS = spec.series.length;
+  function color(i) { return "var(--viz-" + (i + 1) + ")"; }
+  function legendKey(i) {
+    return bar
+      ? <svg width="12" height="12" style={{ flexShrink: 0 }}><rect x="0" y="0" width="12" height="12" rx="2" style={{ fill: color(i) }} />{i ? <rect x="0" y="0" width="12" height="12" rx="2" style={{ fill: "url(#" + uid + "h" + i + ")" }} /> : null}</svg>
+      : <svg width="24" height="12" style={{ flexShrink: 0 }}><line x1="1" y1="6" x2="23" y2="6" style={{ stroke: color(i), strokeWidth: 2, strokeDasharray: CHART_DASH[i] }} />{chartMarker(i, 12, 6, 3.5, color(i))}</svg>;
+  }
+  var svg = null;
+  if (box) {
+    var fs = box.fs, tf = Math.round(fs * 0.85 * 10) / 10, Wd = box.w, H = Math.round(Math.max(170, Math.min(270, Wd * 0.56)));
+    var ys = [], xs = [];
+    spec.series.forEach(function(s) {
+      if (bar) s.values.forEach(function(v) { if (v != null) ys.push(v); });
+      else s.points.forEach(function(p) { xs.push(p[0]); ys.push(p[1]); });
+    });
+    spec.marks.forEach(function(m) { (m.axis === "y" ? ys : xs).push(m.v); });
+    var yLo = Math.min.apply(null, ys.concat([0])), yHi = Math.max.apply(null, ys.concat([0]));
+    var yT = chartTicks(yLo, yHi, H < 200 ? 4 : 5), y0 = yT[0], y1 = yT[yT.length - 1];
+    var padL = Math.ceil(Math.max.apply(null, yT.map(function(v) { return richTextWidth(chartNum(v), tf, 400); }))) + 8;
+    var padT = spec.y ? tf + 12 : 8, padB = tf + 10 + (spec.x ? fs + 6 : 0);
+    var names = !bar && nS > 1 ? spec.series.map(function(s) { return richTextWidth(s.name, tf, 600); }) : [];
+    var nameW = names.length ? Math.max.apply(null, names) + 14 : 0;
+    var ph = Math.max(60, H - padT - padB);
+    var sy = function(v) { return padT + ph - (v - y0) / (y1 - y0) * ph; };
+    // Names at the line ends only when they fit and the ends are apart (curves that all end at
+    // zero would stack them in a heap: the legend names them instead).
+    var direct = nameW > 0 && nameW <= Wd * 0.3;
+    if (direct) {
+      var endY = spec.series.map(function(s) { return sy(s.points[s.points.length - 1][1]); }).sort(function(a, b) { return a - b; });
+      for (var ei = 1; ei < endY.length; ei++) if (endY[ei] - endY[ei - 1] < tf + 2) direct = false;
+    }
+    var padR = direct ? nameW : 12;
+    var pw = Math.max(40, Wd - padL - padR);
+    var grid = yT.map(function(v, i) {
+      return (
+        <g key={"y" + i}>
+          <line x1={padL} x2={padL + pw} y1={sy(v)} y2={sy(v)} style={{ stroke: v === 0 || i === 0 ? "var(--c-br2)" : "var(--c-br)", strokeWidth: 1 }} />
+          <text x={padL - 6} y={sy(v)} dy="0.35em" textAnchor="end" style={{ fontSize: tf, fill: "var(--c-mut)" }}>{chartNum(v)}</text>
+        </g>
+      );
+    });
+    var marks = [], plot = [], xAxis = [], over = null, tip = null;
+    if (bar) {
+      var nc = spec.cats.length, band = pw / nc, gw = Math.min(band * 0.8, nS * 24 + (nS - 1) * 2), bw = (gw - (nS - 1) * 2) / nS;
+      var labelsOn = nc * nS <= 16 && bw >= 12;
+      spec.cats.forEach(function(cat, ci) {
+        var gx = padL + band * ci + (band - gw) / 2;
+        spec.series.forEach(function(s, si) {
+          var v = s.values[ci];
+          if (v == null) return;
+          var bx = gx + si * (bw + 2), ya = sy(Math.max(0, Math.min(v, y1))), yb = sy(Math.max(y0, Math.min(0, v)));
+          var hgt = Math.max(0, yb - ya), r = Math.min(4, hgt, bw / 2), up = v >= 0;
+          var d = up
+            ? "M" + bx + " " + yb + " V" + (ya + r) + " Q" + bx + " " + ya + " " + (bx + r) + " " + ya + " H" + (bx + bw - r) + " Q" + (bx + bw) + " " + ya + " " + (bx + bw) + " " + (ya + r) + " V" + yb + " Z"
+            : "M" + bx + " " + ya + " V" + (yb - r) + " Q" + bx + " " + yb + " " + (bx + r) + " " + yb + " H" + (bx + bw - r) + " Q" + (bx + bw) + " " + yb + " " + (bx + bw) + " " + (yb - r) + " V" + ya + " Z";
+          var on = hov && hov.c === ci && hov.s === si;
+          plot.push(
+            <g key={"b" + ci + "-" + si} onMouseEnter={function() { setHov({ c: ci, s: si }); }} onClick={function() { setHov({ c: ci, s: si }); }}>
+              <path d={d} style={{ fill: color(si), opacity: hov && !on ? 0.55 : 1 }} />
+              {si ? <path d={d} style={{ fill: "url(#" + uid + "h" + si + ")" }} /> : null}
+              <rect x={bx - 1} y={padT} width={bw + 2} height={ph} style={{ fill: "transparent" }} />
+              {labelsOn ? <text x={bx + bw / 2} y={up ? ya - 4 : yb + tf + 2} textAnchor="middle" style={{ fontSize: tf * 0.95, fill: "var(--c-tx2)", fontWeight: 600 }}>{chartNum(v)}</text> : null}
+            </g>
+          );
+        });
+        var words = String(cat).split(/\s+/), lines = [String(cat)];
+        if (richTextWidth(cat, tf, 400) > band - 4 && words.length > 1) {
+          var half = Math.ceil(words.length / 2);
+          lines = [words.slice(0, half).join(" "), words.slice(half).join(" ")];
+        }
+        xAxis.push(<text key={"c" + ci} x={padL + band * (ci + 0.5)} y={padT + ph + tf + 4} textAnchor="middle" style={{ fontSize: tf, fill: "var(--c-mut)" }}>{lines.map(function(t, li) { return <tspan key={li} x={padL + band * (ci + 0.5)} dy={li ? tf + 1 : 0}>{t}</tspan>; })}</text>);
+      });
+      if (hov && spec.series[hov.s]) {
+        var hvx = padL + band * (hov.c + 0.5);
+        tip = { x: hvx, rows: [[spec.cats[hov.c], ""], [spec.series[hov.s].name || spec.y || "Value", chartNum(spec.series[hov.s].values[hov.c])]] };
+      }
+    } else {
+      var xLo = Math.min.apply(null, xs), xHi = Math.max.apply(null, xs);
+      if (!(xHi > xLo)) { xHi = xLo + 1; }
+      var sx = function(v) { return padL + (v - xLo) / (xHi - xLo) * pw; };
+      if (spec.cats) {
+        var every = Math.max(1, Math.ceil(spec.cats.length * 60 / pw));
+        spec.cats.forEach(function(c, i) { if (i % every === 0 && i >= xLo && i <= xHi) xAxis.push(<text key={"x" + i} x={sx(i)} y={padT + ph + tf + 4} textAnchor="middle" style={{ fontSize: tf, fill: "var(--c-mut)" }}>{c}</text>); });
+      } else {
+        chartTicks(xLo, xHi, pw < 260 ? 4 : 6).forEach(function(v, i) {
+          if (v < xLo - 1e-9 || v > xHi + 1e-9) return;
+          xAxis.push(<g key={"x" + i}><line x1={sx(v)} x2={sx(v)} y1={padT + ph} y2={padT + ph + 4} style={{ stroke: "var(--c-br2)", strokeWidth: 1 }} /><text x={sx(v)} y={padT + ph + tf + 5} textAnchor="middle" style={{ fontSize: tf, fill: "var(--c-mut)" }}>{chartNum(v)}</text></g>);
+        });
+      }
+      spec.series.forEach(function(s, si) {
+        var d = s.points.map(function(p, k) { return (k ? "L" : "M") + sx(p[0]).toFixed(1) + " " + sy(p[1]).toFixed(1); }).join(" ");
+        if (!spec.dots) plot.push(<path key={"s" + si} d={d} style={{ fill: "none", stroke: color(si), strokeWidth: 2, strokeDasharray: CHART_DASH[si], strokeLinejoin: "round", strokeLinecap: "round" }} />);
+        var showAll = spec.dots || s.points.length <= 12;
+        s.points.forEach(function(p, k) {
+          if (showAll || k === s.points.length - 1) plot.push(<g key={"m" + si + "-" + k}>{chartMarker(si, sx(p[0]), sy(p[1]), 4, color(si))}</g>);
+        });
+      });
+      if (direct) {
+        var ends = spec.series.map(function(s, si) { var p = s.points[s.points.length - 1]; return { si: si, y: sy(p[1]), x: sx(p[0]), ly: sy(p[1]) }; });
+        ends.sort(function(a, b) { return a.y - b.y; });
+        for (var e = 1; e < ends.length; e++) if (ends[e].ly - ends[e - 1].ly < tf + 2) ends[e].ly = ends[e - 1].ly + tf + 2;
+        ends.forEach(function(en) {
+          var lx = padL + pw + 8;
+          plot.push(
+            <g key={"dl" + en.si}>
+              {Math.abs(en.ly - en.y) > 3 || en.x < padL + pw - 2 ? <line x1={en.x + 5} y1={en.y} x2={lx - 2} y2={en.ly} style={{ stroke: "var(--c-br2)", strokeWidth: 1 }} /> : null}
+              <text x={lx} y={en.ly} dy="0.35em" style={{ fontSize: tf, fill: "var(--c-tx2)", fontWeight: 600 }}>{spec.series[en.si].name}</text>
+            </g>
+          );
+        });
+      }
+      spec.marks.forEach(function(m, i) {
+        if (m.axis === "y") {
+          // Its label goes at whichever end of the line has less data in the way.
+          var mw = richTextWidth(m.label, tf * 0.95, 400) + 8, my = sy(m.v), crowd = function(xa, xb) {
+            var n = 0;
+            spec.series.forEach(function(s) { s.points.forEach(function(p, k) {
+              var q = k ? s.points[k - 1] : p;
+              [p, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]].forEach(function(z) { var zx = sx(z[0]), zy = sy(z[1]); if (zx >= xa && zx <= xb && zy >= my - tf - 8 && zy <= my + 2) n++; });
+            }); });
+            return n;
+          };
+          var right = crowd(padL + pw - mw, padL + pw) <= crowd(padL, padL + mw);
+          marks.push(<g key={"k" + i}><line x1={padL} x2={padL + pw} y1={my} y2={my} style={{ stroke: "var(--c-mut)", strokeWidth: 1, strokeDasharray: "4 3" }} />{m.label ? <text x={right ? padL + pw - 2 : padL + 4} y={my - 4} textAnchor={right ? "end" : "start"} style={{ fontSize: tf * 0.95, fill: "var(--c-mut)" }}>{m.label}</text> : null}</g>);
+        }
+        else marks.push(<g key={"k" + i}><line x1={sx(m.v)} x2={sx(m.v)} y1={padT} y2={padT + ph} style={{ stroke: "var(--c-mut)", strokeWidth: 1, strokeDasharray: "4 3" }} />{m.label ? <text x={sx(m.v) + 4} y={padT + tf} style={{ fontSize: tf * 0.95, fill: "var(--c-mut)" }}>{m.label}</text> : null}</g>);
+      });
+      // Crosshair: the nearest x that has data; every series' point at (or nearest to) it.
+      var ux = [];
+      spec.series.forEach(function(s) { s.points.forEach(function(p) { if (ux.indexOf(p[0]) < 0) ux.push(p[0]); }); });
+      ux.sort(function(a, b) { return a - b; });
+      var pick = function(ev) {
+        var r = ev.currentTarget.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+        var v = xLo + (px / r.width) * (xHi - xLo), best = ux[0];
+        ux.forEach(function(u) { if (Math.abs(u - v) < Math.abs(best - v)) best = u; });
+        setHov({ x: best });
+      };
+      over = <rect x={padL} y={padT} width={pw} height={ph} style={{ fill: "transparent", cursor: "crosshair" }} onMouseMove={pick} onClick={pick} />;
+      if (hov && hov.x != null) {
+        var tol = (xHi - xLo) * 0.04, rows = [[spec.cats ? spec.cats[hov.x] : (spec.x ? spec.x + " " : "") + chartNum(hov.x), ""]];
+        spec.series.forEach(function(s, si) {
+          var bp = null;
+          s.points.forEach(function(p) { if (Math.abs(p[0] - hov.x) <= tol && (!bp || Math.abs(p[0] - hov.x) < Math.abs(bp[0] - hov.x))) bp = p; });
+          if (bp) { rows.push([s.name || spec.y || "Value", chartNum(bp[1]), si]); marks.push(<g key={"h" + si}>{chartMarker(si, sx(bp[0]), sy(bp[1]), 5, color(si))}</g>); }
+        });
+        marks.push(<line key="cross" x1={sx(hov.x)} x2={sx(hov.x)} y1={padT} y2={padT + ph} style={{ stroke: "var(--c-mut)", strokeWidth: 1 }} />);
+        tip = { x: sx(hov.x), rows: rows };
+      }
+    }
+    var tipEl = null;
+    if (tip) {
+      var tw = 150, tl = tip.x + 10 + tw > Wd ? tip.x - 10 - tw : tip.x + 10;
+      tipEl = (
+        <div data-chart-tip style={{ position: "absolute", left: Math.max(0, tl), top: padT, width: tw, background: "var(--c-cd)", border: "1px solid var(--c-br2)", borderRadius: 6, padding: "4px 7px", fontSize: tf, lineHeight: 1.35, pointerEvents: "none", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}>
+          {tip.rows.map(function(r, i) { return <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 6, fontWeight: i ? 400 : 700, color: i ? "var(--c-tx2)" : "var(--c-tx)" }}><span>{r[0]}</span><span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{r[1]}</span></div>; })}
+        </div>
+      );
+    }
+    svg = (
+      <div style={{ position: "relative" }} onMouseLeave={function() { setHov(null); }}>
+        <svg width={Wd} height={H + (bar && lines2(spec.cats, pw / spec.cats.length, tf) ? tf : 0)} style={{ display: "block", overflow: "visible" }} role="img" aria-label={spec.title || "chart"}>
+          <defs>
+            {[1, 2, 3].map(function(i) {
+              return <pattern key={i} id={uid + "h" + i} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform={"rotate(" + (i === 2 ? -45 : 45) + ")"}><line x1="0" y1="0" x2="0" y2="6" style={{ stroke: "var(--c-bg)", strokeWidth: i === 3 ? 3 : 2 }} />{i === 3 ? <line x1="0" y1="3" x2="6" y2="3" style={{ stroke: "var(--c-bg)", strokeWidth: 1.5 }} /> : null}</pattern>;
+            })}
+          </defs>
+          {spec.y ? <text x={2} y={tf} style={{ fontSize: tf, fill: "var(--c-mut)", fontWeight: 600 }}>{spec.y}</text> : null}
+          {grid}{marks.filter(function(m) { return m.key.charAt(0) === "k"; })}{plot}{xAxis}{marks.filter(function(m) { return m.key.charAt(0) !== "k"; })}{over}
+          {spec.x ? <text x={padL + pw / 2} y={H - 4 + (bar && lines2(spec.cats, pw / spec.cats.length, tf) ? tf : 0)} textAnchor="middle" style={{ fontSize: tf, fill: "var(--c-mut)", fontWeight: 600 }}>{spec.x}</text> : null}
+        </svg>
+        {tipEl}
+      </div>
+    );
+  }
+  var table = null;
+  if (showTable) {
+    var rowsT = bar
+      ? spec.cats.map(function(c, ci) { return [c].concat(spec.series.map(function(s) { return s.values[ci] == null ? "" : chartNum(s.values[ci]); })); })
+      : (function() {
+          var ux2 = [];
+          spec.series.forEach(function(s) { s.points.forEach(function(p) { if (ux2.indexOf(p[0]) < 0) ux2.push(p[0]); }); });
+          ux2.sort(function(a, b) { return a - b; });
+          return ux2.map(function(xv) { return [spec.cats ? spec.cats[xv] : chartNum(xv)].concat(spec.series.map(function(s) { var p = s.points.filter(function(q) { return q[0] === xv; })[0]; return p ? chartNum(p[1]) : ""; })); });
+        })();
+    table = (
+      <div style={{ overflowX: "auto", marginTop: 6 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.9em" }}>
+          <thead><tr><th style={{ textAlign: "left", padding: "3px 6px", borderBottom: "2px solid var(--c-br2)" }}>{bar ? "" : (spec.x || "x")}</th>{spec.series.map(function(s, i) { return <th key={i} style={{ textAlign: "right", padding: "3px 6px", borderBottom: "2px solid var(--c-br2)" }}>{s.name || spec.y || "Value"}</th>; })}</tr></thead>
+          <tbody>{rowsT.map(function(r, ri) { return <tr key={ri}>{r.map(function(c, ci) { return <td key={ci} style={{ textAlign: ci ? "right" : "left", padding: "3px 6px", borderBottom: "1px solid var(--c-br)", fontVariantNumeric: "tabular-nums" }}>{c}</td>; })}</tr>; })}</tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <div data-chart={spec.type} style={{ margin: "8px 0", padding: "8px 8px 4px", background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, whiteSpace: "normal" }}>
+      {spec.title ? <div style={{ fontWeight: 800, fontSize: "0.98em", marginBottom: 4 }}>{renderMathText(spec.title, richInline)}</div> : null}
+      {nS > 1 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginBottom: 4, fontSize: "0.88em", color: "var(--c-tx2)" }}>
+          {spec.series.map(function(s, i) { return <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{legendKey(i)}{s.name || ("Series " + (i + 1))}</span>; })}
+        </div>
+      ) : null}
+      <div ref={wrap} style={{ width: "100%" }}>{svg}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: "0.85em", color: "var(--c-mut)", fontStyle: "italic" }}>{spec.note}{spec.extra ? (spec.note ? " · " : "") + "showing " + CHART_MAX + " of " + (CHART_MAX + spec.extra) + " series" : ""}</div>
+        <button onClick={function() { setShowTable(!showTable); }} style={{ background: "none", border: "none", color: "var(--c-mut)", fontSize: 10, cursor: "pointer", padding: "2px 4px", minHeight: 22, flexShrink: 0 }}>{showTable ? "hide data" : "data"}</button>
+      </div>
+      {table}
+    </div>
+  );
+});
+// Bar charts: does any category name need a second line at this band width?
+function lines2(cats, band, tf) {
+  return (cats || []).some(function(c) { return /\s/.test(String(c)) && richTextWidth(c, tf, 400) > band - 4; });
+}
+
+// Appended to the tutor + Quick Ask system prompts (after MATH_FORMAT_RULE).
+var DIAGRAM_RULE = "\n\n" + [
+  "DIAGRAMS & TABLES — this app draws flowcharts and charts and renders tables. Use one when a picture beats prose, and keep teaching in prose around it:",
+  "- FLOWCHART for a management algorithm, a decision pathway, a pathophysiology cascade, or two pathways side by side. Write a fenced code block tagged mermaid, in this subset:",
+  "```mermaid",
+  "flowchart TD",
+  "  A([Microhematuria: 3+ RBC/HPF]) --> B{AUA risk group?}",
+  "  B -->|Low| C[Repeat UA within 6 mo, or cystoscopy + renal US]",
+  "  B -->|Intermediate| D[Cystoscopy + renal US]",
+  "  B -->|High| E[Cystoscopy + CT urogram]",
+  "```",
+  "  Always flowchart TD. Short ids (A, B, C…). [ ] a step, { } a decision, ([ ]) a start or end point. Edge labels go in pipes: -->|Yes|. Quote a label that holds brackets, parentheses or quotes: A[\"Cr > 2 (or eGFR < 30)\"]. Labels 2-8 words: the chart is the skeleton, the detail stays in your prose. 4-14 nodes, at most 4 arrows out of one node. Two parallel pathways = two chains in one chart (A1 --> B1 --> C1 and A2 --> B2 --> C2). No subgraph, style, classDef, click or %% lines. Never draw a diagram as ASCII art or with arrow characters in plain text.",
+  "- CHART for a curve or comparison whose shape is the point (uroflow patterns, PSA kinetics, survival curves, a rate by stage). A fenced code block tagged chart holding ONE JSON object:",
+  "```chart",
+  "{\"type\":\"line\",\"title\":\"Uroflow curves (schematic)\",\"x\":\"Time (s)\",\"y\":\"Flow (mL/s)\",\"series\":[{\"name\":\"Normal\",\"points\":[[0,0],[3,18],[6,24],[10,15],[14,3],[16,0]]},{\"name\":\"Obstructed\",\"points\":[[0,0],[4,6],[10,8],[20,7],[30,3],[34,0]]}],\"marks\":[{\"y\":15,\"label\":\"Qmax 15 mL/s\"}]}",
+  "```",
+  "  or {\"type\":\"bar\",\"title\":\"…\",\"y\":\"…\",\"labels\":[\"…\",\"…\"],\"series\":[{\"name\":\"…\",\"values\":[0,0]}]}. Up to 4 series, short names. Real numbers only when you know them; otherwise draw the shape and put (schematic) in the title.",
+  "- TABLE (markdown pipes: a header row, then a |---|---| row) for side-by-side comparisons: 2-4 columns, short cells. **bold** and # headings render too.",
+  "- At most one flowchart or chart per message, and don't give the same content as both a table and a flowchart. When the learner asks for a flowchart, algorithm or diagram, always use the mermaid block.",
+].join("\n");
 
 var SYSTEM_PROMPT_LECTURE = [
   "You are a urology attending running a one-on-one board prep session with a resident.",
@@ -2496,7 +3497,7 @@ var SYSTEM_PROMPT_DEEPDIVE = [
 var SYSTEM_PROMPT_MASTERY = [
   "You are a urology attending running a MASTERY DRILL: a strict, adaptive, micro-step tutoring loop for board prep. You do not lecture. You map the learner's knowledge, teach one atomic concept at a time, and gate every advance behind a comprehension check. The learner is a urology resident — talk to them like a colleague.",
   "",
-  "OUTPUT FORMAT — the app renders raw text: plain text only. No markdown headers, no bold/italic markers, no tables, no code fences. Short paragraphs and simple '- ' bullets are fine. The only special notation is the map glyphs and '____' cloze blanks described below.",
+  "OUTPUT FORMAT — plain text: no markdown headers, no bold/italic markers, no tables. Short paragraphs and simple '- ' bullets are fine. The only special notation is the map glyphs and '____' cloze blanks described below, plus a flowchart or chart (see DIAGRAMS & TABLES at the end) when the learner asks for one or the active node is a pathway that reads better drawn.",
   "",
   "THE LOOP:",
   "",
@@ -7728,7 +8729,7 @@ export default function UroStudyHub() {
     } else {
       sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
     }
-    sysContent += MATH_FORMAT_RULE + MNEMONIC_RULE + myHooksPrompt();
+    sysContent += MATH_FORMAT_RULE + DIAGRAM_RULE + MNEMONIC_RULE + myHooksPrompt();
 
     // One reply at a time: a newer send (or Clear) drops and aborts this one.
     var reqId = nextReply(chatReq, chatAbort);
@@ -7831,6 +8832,7 @@ export default function UroStudyHub() {
       "- If the lecture said something that conflicts with current guidelines, answer correctly and flag the discrepancy in one clause.",
       "- No medical-advice disclaimers. This is board prep between colleagues.",
       "- Formulas in LaTeX delimited with \\( \\) (inline) or \\[ \\] (display) — the panel typesets them. Never bare LaTeX outside delimiters.",
+      "- The panel also draws flowcharts and charts and renders tables (formats under DIAGRAMS & TABLES below). Use one only when the learner asks for it, or when a small table is plainly the answer.",
     ];
     if (lectureTopic) lines.push("", "SESSION TOPIC: " + lectureTopic);
     if (skillsCtx && skillsCtx.id) {
@@ -7845,7 +8847,7 @@ export default function UroStudyHub() {
     }
     var tail = sidekickTranscriptTail();
     if (tail) lines.push("", "LECTURE TRANSCRIPT (most recent part — what the learner is reading right now):", "", tail);
-    return lines.join("\n") + MNEMONIC_RULE + myHooksPrompt();
+    return lines.join("\n") + DIAGRAM_RULE + MNEMONIC_RULE + myHooksPrompt();
   }
 
   function sendSide(text) {
@@ -13239,9 +14241,9 @@ export default function UroStudyHub() {
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 400, overflowY: "auto" }}>
                             {item.messages.map(function(m, mi) {
                               return (
-                                <div key={mi} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "90%" }}>
+                                <div key={mi} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "90%", width: m.role === "assistant" && richWide(m.content) ? "90%" : undefined }}>
                                   <div style={{ background: m.role === "user" ? c.a + "25" : "var(--c-bg)", borderRadius: 12, padding: "8px 12px", color: "var(--c-tx)", fontSize: "var(--f11)", lineHeight: 1.6, whiteSpace: "pre-wrap", border: "1px solid var(--c-br)" }}>
-                                    {renderMathText(m.content)}
+                                    {m.role === "assistant" ? renderRich(m.content) : renderMathText(m.content)}
                                   </div>
                                 </div>
                               );
@@ -13262,7 +14264,7 @@ export default function UroStudyHub() {
                           {item.phase && <span style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", background: "var(--c-br)", padding: "1px 6px", borderRadius: 4 }}>{item.phase}</span>}
                         </div>
                         <div style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", marginBottom: 6 }}>{dateStr}</div>
-                        <div style={{ fontSize: "var(--f11)", color: "var(--c-tx)", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: expanded ? "none" : 120, overflow: "hidden" }}>{renderMathText(item.content)}</div>
+                        <div style={{ fontSize: "var(--f11)", color: "var(--c-tx)", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: expanded ? "none" : 120, overflow: "hidden" }}>{renderRich(item.content)}</div>
                         {item.content && item.content.length > 300 && (
                           <button onClick={toggleExp} style={{ background: "none", border: "none", color: "var(--a-vio)", cursor: "pointer", fontSize: "var(--f10)", marginTop: 4, padding: 0 }}>{expanded ? "Show less" : "Show more..."}</button>
                         )}
@@ -13327,9 +14329,9 @@ export default function UroStudyHub() {
                 return <div key={i} style={{ fontSize: "var(--f10)", color: "var(--c-mut2)", textAlign: "center", background: c.cd + "80", padding: "4px 12px", borderRadius: 12, alignSelf: "center" }}>{msg.content}</div>;
               }
               return (
-                <div key={i} data-chat-msg style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: msg.role === "user" ? "82%" : "calc(100% - 34px)", position: "relative" }}>
+                <div key={i} data-chat-msg style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: msg.role === "user" ? "82%" : "calc(100% - 34px)", width: msg.role === "assistant" && richWide(msg.content) ? "100%" : undefined, position: "relative" }}>
                   <div style={{ background: msg.role === "user" ? c.a : c.cd, borderRadius: msg.role === "user" ? "20px 20px 6px 20px" : "20px 20px 20px 6px", padding: msg.role === "user" ? "10px 16px" : "13px 17px", color: msg.role === "user" ? "#fff" : "var(--c-tx)", fontSize: "var(--f12)", lineHeight: 1.65, whiteSpace: "pre-wrap", border: msg.role === "assistant" ? "1px solid var(--c-br)" : "none", boxShadow: msg.role === "assistant" ? "var(--sh-card)" : "none" }}>
-                    {renderMathText(msg.content)}
+                    {msg.role === "assistant" ? renderRich(msg.content) : renderMathText(msg.content)}
                     {chatLoad && msg.role === "assistant" && i === chatMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}
                     {msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && parseHooks(msg.content).map(function(h, hi) { return hookCard(h, hi, false); })}
                   </div>
@@ -13461,8 +14463,8 @@ export default function UroStudyHub() {
                 )}
                 {sideMsgs.map(function(m, i) {
                   return (
-                    <div key={i} data-side-msg style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%" }}>
-                      <div style={{ background: m.role === "user" ? c.a : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "16px 16px 5px 16px" : "16px 16px 16px 5px", padding: "8px 12px", color: m.role === "user" ? "#fff" : "var(--c-tx)", fontSize: sideBig ? "var(--f13)" : "var(--f12)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{renderMathText(m.content)}{sideLoad && m.role === "assistant" && i === sideMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}{m.role === "assistant" && !(sideLoad && i === sideMsgs.length - 1) && parseHooks(m.content).map(function(h, hi) { return hookCard(h, hi, true); })}</div>
+                    <div key={i} data-side-msg style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: m.role === "assistant" && richWide(m.content) ? "100%" : "88%", width: m.role === "assistant" && richWide(m.content) ? "100%" : undefined }}>
+                      <div style={{ background: m.role === "user" ? c.a : c.cd, border: m.role === "assistant" ? "1px solid var(--c-br)" : "none", borderRadius: m.role === "user" ? "16px 16px 5px 16px" : "16px 16px 16px 5px", padding: "8px 12px", color: m.role === "user" ? "#fff" : "var(--c-tx)", fontSize: sideBig ? "var(--f13)" : "var(--f12)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.role === "assistant" ? renderRich(m.content) : renderMathText(m.content)}{sideLoad && m.role === "assistant" && i === sideMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}{m.role === "assistant" && !(sideLoad && i === sideMsgs.length - 1) && parseHooks(m.content).map(function(h, hi) { return hookCard(h, hi, true); })}</div>
                     </div>
                   );
                 })}

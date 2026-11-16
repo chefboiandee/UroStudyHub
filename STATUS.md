@@ -3,6 +3,37 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later 2) — 🧠 Tutor: readable tables, flowcharts and charts
+
+Andrew: is there a way to make the tutor produce flowcharts and graphs that are readable? A DeepSeek reply that was "meant to
+be a flowchart" came out as a markdown table (raw pipes on screen), and Gemini's diagrams have been unintelligible.
+**Cause:** the tutor showed replies as plain text plus KaTeX. No markdown was rendered, so a table was a wall of `|` and `**`,
+and there was no way for any model to draw a diagram at all.
+**Done:**
+- **`renderRich()`** (UroStudyHub.html, after `renderMathText`) now draws every tutor reply: the chat, Quick Ask, 📚 Saved
+  sessions and bookmarks. Markdown pipe tables become real tables (an empty corner cell makes the first column bold row
+  labels), `**bold**`, `*italic*`, `` `code` ``, `# headings`, `---` and `* bullets` render, and KaTeX still typesets.
+- **Flowcharts:** a ```` ```mermaid ```` block in Mermaid's flowchart syntax (which every model already knows) is laid out and
+  drawn by the app (`parseFlow` / `flowStructure` / `flowXs` / `<FlowChart>`): top-down layers, crossings reduced, long edges
+  routed between boxes, loop-backs drawn with an upward arrow, branch labels placed where they cover no box or other label,
+  decisions as hexagons and start/end points as pills (shapes, not colours, so they read on the Boox). The parser is forgiving
+  where real Mermaid errors: parentheses inside `[ ]`, `graph LR` (always drawn top-down for a narrow screen), `-- text -->`,
+  `;`, chains, `&`, and subgraph / style / classDef / click lines (ignored). A "source" link under each chart shows the code.
+  No library is loaded, so it costs the Boox nothing.
+- **Charts:** a ```` ```chart ```` block with one JSON object draws a line or bar chart in SVG: legend, names at the line ends
+  when they don't collide, reference lines (`marks`), a tap / hover readout, a "data" table view, and series that differ by
+  dash pattern, marker shape and bar texture as well as colour (validated palette, `--viz-1..4` in both themes). A Mermaid
+  `pie` becomes a bar chart; other Mermaid types show their source with a note.
+- **Prompts:** `DIAGRAM_RULE` (formats, when to use one, at most one per message, "(schematic)" unless the numbers are real) is
+  appended to the tutor prompts and Quick Ask; the Mastery drill's "plain text only" line now allows a diagram.
+- While a reply streams, a half-written flowchart or chart shows "Drawing the flowchart…" until its closing fence arrives.
+**Verified:** new `node tools/tutor-rich.drive.mjs` (headless Chromium, stubbed API, phone light + dark, desktop, a resize):
+57 checks pass: your penile-SCC table, a two-pathway chart, an algorithm with a merge / long edge / loop-back (no box or label
+overlaps), a Gemini-style block, line + bar + pie charts, the streaming placeholder, bookmarks in 📚 Saved. `node
+tools/ai-pick.drive.mjs` still passes (57). The new code was scanned for syntax newer than the Boox's engine (none).
+**Next steps:** try a few real replies on the live site (ask for "a flowchart of …" from DeepSeek and Gemini) and on the Boox.
+**Open questions:** none.
+
 ## 2026-11-16 (later) — 💬 Quick ask minimizes when you tap the tutor behind it
 
 Andrew: when the side chat (Quick ask) is open on the Tutor tab, clicking the main area should minimize it instead of
