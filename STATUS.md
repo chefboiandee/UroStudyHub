@@ -3,6 +3,32 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later 5) — 📄 The Rapid Review cheat sheet of each lecture saves itself
+
+Andrew: auto-save the Rapid Review cheat sheet for each lecture so it's there for easy review close to test day; manual
+saves (and saving mid-lecture) must keep working. He'd been bookmarking every cheat sheet by hand.
+**Done** (`UroStudyHub.html`; written up in `UroStudyHub_CLAUDE.md` > AI Tutor):
+- **Auto-save:** when a structured lecture's phase-9 reply lands, it's filed into Saved as a normal bookmark (marked
+  `auto` + `cheat`), toast "📄 Cheat sheet saved", and the reply shows a tappable "✓ Saved to your cheat sheets" line.
+  Detection (`isRapidReview`, CHEAT block) needs the Rapid Review / One-Page Summary / Phase 9 heading at the top and a
+  real body, so the tail of phase 8 ("NEXT for the rapid review") and a Phase 1 mention don't trigger it. Lecture mode only
+  (not Deep Dive, Mastery, OR Skills or plain chat). Works for voice-mode lectures (the sheet after `ON SCREEN:`).
+- **Manual saves untouched:** 🔖 on any reply, 💾 Save session (mid-lecture too), 📝 notes all work as before. 🔖 on a sheet that's
+  already saved says "Already saved ✓" instead of filing a copy. Regenerating a sheet (🔄) replaces its auto-saved copy
+  (a hand-bookmarked one is never touched). Saving a sheet earns no tokens. Re-doing a topic keeps the older sheet too
+  (🗑 to remove).
+- **Saved page:** filter chips All / 📄 Cheat sheets / Sessions / Bookmarks (counts add up), a search box (topic or text),
+  and Expand all / Collapse all on the cheat-sheet list, which is A to Z by topic. **The sheets Andrew already
+  bookmarked by hand show up under Cheat sheets too** (label "One-Page Summary", or text that reads like one).
+**Verified:** `node tools/cheat-save.test.mjs` (19, pure Node) and `node tools/cheat-save.drive.mjs` (40, headless phone +
+desktop, API stubbed: a lecture to phase 9, saved once, the phase-8 tail not saved, 🔖 / 💾 / regenerate next to it, a plain
+chat saves nothing, filters / search / expand all, survives a reload, delete sticks). Regression: `voice-text.test` 18,
+`voice-tutor.drive` 75, `tutor-rich.drive` 57.
+**Next steps:** none needed; try a real lecture through to phase 9 on the live site.
+**Open questions:**
+- If the tutor ever splits the cheat sheet into two messages, only the one with the heading is auto-saved (🔖 the other).
+  Say so if that happens and it can be handled.
+
 ## 2026-11-16 (later 4) — 🎙 Voice mode for the AI Tutor (a spoken back-and-forth)
 
 Andrew: build the free, browser-based voice tutor: more natural sounding, no minutes-long blocks read out, more of an

@@ -2077,6 +2077,66 @@ var LECTURE_PHASES = [
 { id: "boards", name: "Board-Style Qs", icon: "📋", desc: "5 realistic board-style MCQs with full explanations and why wrong answers are wrong." },
 { id: "summary", name: "One-Page Summary", icon: "📄", desc: "Everything compressed to one rapid-review page you could read the morning of the exam." },
 ];
+function isRapidReview(text) {
+if (typeof text !== "string" || text.replace(/\s+/g, " ").length < 200) return false;
+var head = text.slice(0, 300);
+if (/📄\s*\**\s*(?:phase\s*9\b|rapid[\s-]*review|one[\s-]*page|cheat)/i.test(head)) return true;
+var lines = head.split("\n");
+for (var i = 0, seen = 0; i < lines.length && seen < 4; i++) {
+var ln = lines[i].replace(/^[^A-Za-z0-9]+/, "");   // drop the emoji / # / * / > / dash in front
+if (!ln) continue;
+seen++;
+if (/^(?:phase\s*9\b|(?:the\s+)?(?:rapid[\s-]*review|one[\s-]*page\s+summary|cheat[\s-]*sheet)\b)/i.test(ln)) return true;
+}
+return false;
+}
+function isCheatItem(item) {
+if (!item || item.type !== "bookmark") return false;
+return !!item.cheat || item.phase === "One-Page Summary" || isRapidReview(item.content);
+}
+function savedHas(list, content) {
+var text = String(content || "").trim();
+for (var i = 0; i < (list || []).length; i++) {
+if (list[i].type === "bookmark" && String(list[i].content || "").trim() === text) return true;
+}
+return false;
+}
+function cheatAdd(list, topic, content, id, dateIso) {
+list = list || [];
+if (savedHas(list, content)) return list;
+return list.concat([{ id: id, type: "bookmark", topic: topic || "Lecture", phase: "One-Page Summary", content: String(content || "").trim(), role: "assistant", date: dateIso, auto: true, cheat: true }]);
+}
+function cheatDropAuto(list, content) {
+var text = String(content || "").trim();
+return (list || []).filter(function (l) { return !(l.auto && l.cheat && String(l.content || "").trim() === text); });
+}
+function savedView(list, filter, query) {
+var q = String(query || "").trim().toLowerCase();
+var out = [];
+for (var i = (list || []).length - 1; i >= 0; i--) {
+var l = list[i], cheat = isCheatItem(l);
+if (filter === "cheat" && !cheat) continue;
+if (filter === "session" && l.type !== "session") continue;
+if (filter === "bookmark" && (l.type === "session" || cheat)) continue;
+if (q && String(l.topic || "").toLowerCase().indexOf(q) < 0 && !(l.type !== "session" && String(l.content || "").toLowerCase().indexOf(q) >= 0)) continue;
+out.push(l);
+}
+if (filter === "cheat") {
+out = out.map(function (l, n) { return { l: l, n: n }; }).sort(function (a, b) {
+var ta = String(a.l.topic || "").toLowerCase(), tb = String(b.l.topic || "").toLowerCase();
+return ta < tb ? -1 : ta > tb ? 1 : a.n - b.n;
+}).map(function (o) { return o.l; });
+}
+return out;
+}
+function savedCounts(list) {
+var n = { all: 0, cheat: 0, session: 0, bookmark: 0 };
+for (var i = 0; i < (list || []).length; i++) {
+n.all++;
+if (list[i].type === "session") n.session++; else if (isCheatItem(list[i])) n.cheat++; else n.bookmark++;
+}
+return n;
+}
 var MNEMONIC_RULE = "\n\n" + [
 "MNEMONICS — these rules override anything else in this prompt about making mnemonics:",
 "- Only offer an ESTABLISHED mnemonic: one that is widely taught (board-review books, common resident lore), and say it's a standard one. If you aren't confident it's standard, treat it as not established. Never present an invented one as if it were known.",
@@ -6260,6 +6320,8 @@ var [showTutorNotes, setShowTutorNotes] = useState(false);
 var [tutorNoteText, setTutorNoteText] = useState("");
 var [saveFeedback, setSaveFeedback] = useState(""); // brief confirmation text
 var [expandedSaved, setExpandedSaved] = useState({}); // { id: true/false }
+var [savedFilter, setSavedFilter] = useState("all"); // Saved page: all | cheat | session | bookmark
+var [savedQuery, setSavedQuery] = useState("");
 var [showAnkiPreGen, setShowAnkiPreGen] = useState(false); // show tag config before generating
 var [ankiPreGenSource, setAnkiPreGenSource] = useState(""); // "auto" or "manual" — what triggered the pre-gen panel
 var [autoAnki, setAutoAnki] = useState(function() {
@@ -7060,7 +7122,17 @@ setPage("chat");
 setSaveFeedback("📖 Resumed: " + (item.topic || "session"));
 setTimeout(function() { setSaveFeedback(""); }, 2000);
 }
+function autoSaveCheat(topic, reply) {
+var now = new Date().toISOString(), id = Date.now() + Math.random();
+setS(function(p) {
+var next = cheatAdd(p.savedLectures, topic, reply, id, now);
+return next === p.savedLectures ? p : Object.assign({}, p, { savedLectures: next });
+});
+setSaveFeedback("📄 Cheat sheet saved");
+setTimeout(function() { setSaveFeedback(""); }, 2200);
+}
 function bookmarkMessage(topic, message, phaseLabel) {
+if (savedHas(savedLectures, message.content)) return null;   // this exact reply is already saved (an auto-saved cheat sheet, say)
 var bm = {
 id: Date.now() + Math.random(),
 type: "bookmark",
@@ -8232,6 +8304,7 @@ setChatLoad(false);
 saveHooks(parseHooks(reply));
 if (talk) talk.finish(reply || "", "reply");
 if (!skills && lectureMode && reply) { var dp = detectPhase(reply, !!talk); if (dp >= 0) setLecturePhase(dp); }
+if (!skills && lectureMode && reply && isRapidReview(reply)) autoSaveCheat(lectureTopic, reply);
 }, function(err) {
 if (chatReq.current !== reqId) return;
 if (live) live.cancel();
@@ -8255,10 +8328,16 @@ VE.stopAll();
 }
 function regenerateResponse() {
 var msgs = chatMsgs.slice();
+var dropped = [];
 while (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
-msgs.pop();
+dropped.push(msgs.pop().content);
 }
 if (msgs.length === 0) return;
+var oldSheets = dropped.filter(isRapidReview);
+if (oldSheets.length) setS(function(p) {
+var next = oldSheets.reduce(cheatDropAuto, p.savedLectures || []);
+return next.length === (p.savedLectures || []).length ? p : Object.assign({}, p, { savedLectures: next });
+});
 setChatMsgs(msgs);
 setChatLoad(true);
 _sendFromMsgs(msgs);
@@ -13338,10 +13417,35 @@ return <button key={n} onClick={function(e) { e.stopPropagation(); setSkillProg(
 {savedLectures.length === 0 && (
 <div style={{ textAlign: "center", padding: 30, color: "var(--c-mut2)" }}>
 <div style={{ fontSize: 28, marginBottom: 8 }}>{"📚"}</div>
-<p style={{ fontSize: "var(--f12)", lineHeight: 1.6 }}>Nothing saved yet. During a lecture session, use <b>💾 Save Session</b> in the header to save the full session, or hover over any AI response and click <b>🔖</b> to bookmark individual responses.</p>
+<p style={{ fontSize: "var(--f12)", lineHeight: 1.6 }}>Nothing saved yet. The <b>📄 Rapid Review cheat sheet</b> at the end of each lecture saves here by itself. To keep more, use <b>💾 Save</b> in the lecture bar for the whole session, or click <b>🔖</b> beside any AI response to bookmark it.</p>
 </div>
 )}
-{savedLectures.slice().reverse().map(function(item) {
+{savedLectures.length > 0 && (function() {
+var counts = savedCounts(savedLectures);
+var view = savedView(savedLectures, savedFilter, savedQuery);
+var allOpen = view.length > 0 && view.every(function(it) { return !!expandedSaved[it.id]; });
+var chips = [["all", "All"], ["cheat", "📄 Cheat sheets"], ["session", "Sessions"], ["bookmark", "Bookmarks"]];
+return (
+<div data-saved-tools style={{ marginBottom: 10 }}>
+<div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+{chips.map(function(ch) {
+var on = savedFilter === ch[0];
+return <button key={ch[0]} data-saved-filter={ch[0]} onClick={function() { setSavedFilter(ch[0]); }} style={{ minHeight: 32, padding: "0 12px", background: on ? "#a78bfa25" : "transparent", border: "1px solid " + (on ? "#a78bfa80" : "var(--c-br)"), borderRadius: 16, color: on ? "var(--a-vio)" : "var(--c-mut)", fontSize: "var(--f11)", fontWeight: on ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap" }}>{ch[1] + " (" + counts[ch[0]] + ")"}</button>;
+})}
+</div>
+<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+<input data-saved-search value={savedQuery} onChange={function(e) { setSavedQuery(e.target.value); }} placeholder="Search by topic or text…" style={{ flex: 1, minWidth: 0, minHeight: 34, padding: "0 12px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: "var(--f12)", outline: "none" }} />
+{savedFilter === "cheat" && view.length > 0 && (
+<button data-saved-expand-all onClick={function() { setExpandedSaved(function(p) { var n = Object.assign({}, p); view.forEach(function(it) { n[it.id] = !allOpen; }); return n; }); }} style={{ minHeight: 34, padding: "0 12px", background: "transparent", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-mut)", fontSize: "var(--f11)", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{allOpen ? "Collapse all" : "Expand all"}</button>
+)}
+</div>
+{view.length === 0 && (
+<p style={{ textAlign: "center", padding: "22px 10px", color: "var(--c-mut2)", fontSize: "var(--f12)", lineHeight: 1.6, margin: 0 }}>{savedQuery.trim() ? "Nothing matches “" + savedQuery.trim() + "”." : savedFilter === "cheat" ? "No cheat sheets yet. The Rapid Review at the end of each lecture saves here by itself." : "Nothing here yet."}</p>
+)}
+</div>
+);
+})()}
+{savedView(savedLectures, savedFilter, savedQuery).map(function(item) {
 var dateStr = "";
 try { var d = new Date(item.date); dateStr = d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) {}
 var expanded = !!expandedSaved[item.id];
@@ -13383,12 +13487,13 @@ return (
 );
 }
 return (
-<div key={item.id} style={{ marginBottom: 10, background: c.cd, borderRadius: 12, border: "1px solid #a78bfa30", overflow: "hidden" }}>
+<div key={item.id} data-saved-item={isCheatItem(item) ? "cheat" : "bookmark"} style={{ marginBottom: 10, background: c.cd, borderRadius: 12, border: "1px solid #a78bfa30", overflow: "hidden" }}>
 <div style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-<div style={{ flex: 1 }}>
-<div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
-<span style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--a-vio)" }}>{"🔖 "}{item.topic}</span>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
+<span style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--a-vio)" }}>{(isCheatItem(item) ? "📄 " : "🔖 ")}{item.topic}</span>
 {item.phase && <span style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", background: "var(--c-br)", padding: "1px 6px", borderRadius: 4 }}>{item.phase}</span>}
+{item.auto && <span style={{ fontSize: "var(--f9)", color: "var(--a-grn)", border: "1px solid #4ade8050", padding: "0 6px", borderRadius: 4 }}>{"auto-saved"}</span>}
 </div>
 <div style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", marginBottom: 6 }}>{dateStr}</div>
 <div style={{ fontSize: "var(--f11)", color: "var(--c-tx)", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: expanded ? "none" : 120, overflow: "hidden" }}>{renderRich(item.content)}</div>
@@ -13477,13 +13582,16 @@ return (
 {msg.role === "assistant" ? renderRich(msg.content) : renderMathText(msg.content)}
 {chatLoad && msg.role === "assistant" && i === chatMsgs.length - 1 && <span style={{ color: c.a, fontWeight: 700 }}>{" ▍"}</span>}
 {msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && parseHooks(msg.content).map(function(h, hi) { return hookCard(h, hi, false); })}
+{msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && isRapidReview(msg.content) && savedHas(savedLectures, msg.content) && (
+<button data-cheat-saved onClick={function() { setSavedFilter("cheat"); setSavedQuery(""); setChatView("saved"); }} title="Open your saved cheat sheets" style={{ display: "block", marginTop: 10, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--a-grn)", fontSize: "var(--f10)", fontWeight: 700 }}>{"✓ Saved to your cheat sheets (tap to open)"}</button>
+)}
 </div>
 {msg.role === "assistant" && (
 <div style={{ position: "absolute", top: 4, right: -28, display: "flex", flexDirection: "column", gap: 2 }}>
 <button onClick={function() {
 var phase = masteryMode ? "Mastery Drill" : (lectureMode && LECTURE_PHASES[lecturePhase] ? LECTURE_PHASES[lecturePhase].name : "");
-bookmarkMessage(lectureTopic || "Deep Dive", msg, phase);
-setSaveFeedback("Bookmarked!");
+var bmId = bookmarkMessage(lectureTopic || "Deep Dive", msg, phase);
+setSaveFeedback(bmId === null ? "Already saved ✓" : "Bookmarked!");
 setTimeout(function() { setSaveFeedback(""); }, 1500);
 }} title="Bookmark this response" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--f14)", opacity: 0.4, padding: 2 }} onMouseOver={function(e) { e.target.style.opacity = 1; }} onMouseOut={function(e) { e.target.style.opacity = 0.4; }}>{"🔖"}</button>
 {vOn && !(chatLoad && i === chatMsgs.length - 1) && (

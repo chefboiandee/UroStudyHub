@@ -201,7 +201,14 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
   - 😎 Chill — relaxed, supportive, low-pressure
 - **Custom learner note** — free-text field injected as "ADDITIONAL CONTEXT FROM THE LEARNER" in system prompt
 - **Save & Resume sessions** — save full conversation + lecture phase to Saved Lectures; resume button restores all state
-- Bookmark any AI response for later review
+- Bookmark any AI response for later review (🔖; an exact duplicate isn't filed twice)
+- **Rapid Review cheat sheets save themselves (2026-11-16).** When a structured lecture's phase-9 reply arrives, it is filed
+  into `savedLectures` as an ordinary bookmark (`type: "bookmark"`, `phase: "One-Page Summary"`, `auto: true`, `cheat: true`;
+  no tokens, only 💾 earns those). Detection is `isRapidReview` in the CHEAT block (heading must open the reply; the tail
+  of phase 8, "NEXT for the rapid review", doesn't count), lecture mode only. 🔖 / 💾 work as before; regenerating a
+  sheet swaps its auto-saved copy; the reply shows a tappable "✓ Saved to your cheat sheets" line. The Saved page has
+  All / 📄 Cheat sheets / Sessions / Bookmarks filters, a search box, and Expand / Collapse all on the cheat-sheet list (A to Z by topic);
+  bookmarks saved by hand from phase 9 count as cheat sheets too. Tests: `tools/cheat-save.test.mjs`, `tools/cheat-save.drive.mjs`.
 - **Regenerate response** button (🔄) on last assistant message
 - Auto-generate Anki cards from lectures (configurable tags)
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF
