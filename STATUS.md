@@ -3,7 +3,7 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
-## 2026-11-16 (later) — 🎙 Voice mode for the AI Tutor (a spoken back-and-forth)
+## 2026-11-16 (later 4) — 🎙 Voice mode for the AI Tutor (a spoken back-and-forth)
 
 Andrew: build the free, browser-based voice tutor: more natural sounding, no minutes-long blocks read out, more of an
 explain-a-concept-then-quiz-you conversation, and work in the Engaging style's way of explaining.
@@ -12,7 +12,7 @@ explain-a-concept-then-quiz-you conversation, and work in the Engaging style's w
   shows on engines without the Web Speech API (the Boox, if NeoBrowser lacks it).
 - **It talks:** replies are read aloud sentence by sentence as they stream in, so it starts within a sentence of the reply
   arriving (even with "show replies as they're written" off). What's read is cleaned: no markdown, emoji, hook tags or
-  LaTeX (formulas become words), units / catheter sizes / "65M" spelled out ("0.4 milligrams", "22 French", "a 65-year-old
+  LaTeX (formulas become words) and no flowchart / chart blocks (they stay on screen), units / catheter sizes / "65M" spelled out ("0.4 milligrams", "22 French", "a 65-year-old
   man"), "E. coli" not split. Mastery-map lines and anything after an `ON SCREEN:` line stay on screen only.
 - **Short spoken turns:** while voice is on, a voice rule goes last in the system prompt: 40-120 words a turn (about
   15-45 s, never over ~150), one idea, then ONE question to answer out loud, then wait; feedback in a sentence and a new
@@ -28,10 +28,10 @@ explain-a-concept-then-quiz-you conversation, and work in the Engaging style's w
   premium, novelty voices last; "Best available" picks for you), speed 0.9-1.35×, hands-free, chime, Test button, and
   where to get better voices on iPhone / Android / Windows. Per device (`uroStudyHub_voice`). Screen kept awake while voice
   is on in the Tutor; leaving the Tutor stops it.
-**Verified:** `node tools/voice-text.test.mjs` (17, pure Node: cleaning, streaming chunk stability, commands, voice
+**Verified:** `node tools/voice-text.test.mjs` (18, pure Node: cleaning, streaming chunk stability, commands, voice
 ranking) and `node tools/voice-tutor.drive.mjs` (75, headless phone viewport, speech + recognition stubbed, Claude
 streamed: no-speech browser, speak-only browser, the full loop, cut-in, Stop, repeat / slower / stop, settings, leaving
-the tab, voice off, a voice lecture with next / go deeper and steady phases, starters, a blocked mic). Regression:
+the tab, voice off, a voice lecture with next / go deeper and steady phases, starters, a blocked mic). Regression (after merging main's rich replies and toolbar changes: `tutor-rich` 57, `ai-pick` 67):
 `ai-pick`, `anki-study`, `ise-plan.drive`, `arcade-cards`, `ise-plan.test`, `anki-sched.test` (3 time zones).
 **Next steps:** try it on the iPhone / iPad and the Boox (real voices and real recognition can't be tested headless).
 On iPhone, download an Enhanced or Premium voice first (Settings › Accessibility › Spoken Content › Voices).
@@ -39,6 +39,87 @@ On iPhone, download an Enhanced or Premium voice first (Settings › Accessibili
 - iOS sometimes plays speech quieter (through the earpiece) after the mic has been used. If that happens, say so.
 - 2 s of quiet ends your answer. If it cuts you off mid-thought, it can wait longer (or switch to tap-to-send).
 - Fast models feel most conversational; a slow thinking model leaves a gap before each spoken reply.
+
+## 2026-11-16 (later 3) — 📏 Tutor: Style chips share the toolbar row with Saved / Clear
+
+Andrew: move the style buttons onto the same row as Saved and Clear to make the iPad's reading window bigger.
+**Done:** the style picker (Style, the four styles, Preview, ✏️) is one group inside the tutor toolbar (`data-style-row`,
+`ush-sscroll`) instead of its own row. On iPad landscape it sits after Saved and Clear; on iPad portrait it fills the
+toolbar's third row (still one row less than before, no extra divider and padding); on phones it's its own swipeable row
+like the actions. The style preview and personal-note panels open under the toolbar as before.
+**Measured** (chat pane, same viewports as the entry below): iPad landscape lecture 317 → **368**, plain chat 415 →
+**466** (the pre-overhaul build: 317 / 434); iPad portrait 677 → 686 / 775 → 784; phone 231 → 240 / 329 → 338.
+**Verified:** screenshots on the three sizes; `ai-pick` 67, `tutor-rich` 57, `ise-plan.drive` 150, `anki-study` 63,
+`arcade-cards` 119, all pass.
+
+## 2026-11-16 (later 2) — 📏 Tutor: the chat gets its height back (compact lecture bar)
+
+Andrew: on the iPad the chat part is now not very tall, so it reads worse than before; the part under the Style row is too
+big; "maybe change the part where it says the subject and marking done".
+**Measured** (chat pane height, headless, Safari-sized viewports; old = before the 11-16 overhaul):
+
+| | iPad landscape 1180×750 | iPad portrait 820×1110 | phone 390×664 |
+|---|---|---|---|
+| lecture, old → overhaul → now | 317 → 187 → **317** | 677 → 503 → **677** | 174 → 88 → **231** |
+| plain chat, old → overhaul → now | 434 → 379 → **415** | 794 → 695 → **775** | 301 → 293 → **329** |
+
+**Done:**
+- **Lecture bar, five rows → three** (192px → ~98; it was 117 before the overhaul): the subject, **Mark Done** (or "✓ Done"),
+  notes, Save and Anki Cards share the first row (the separate "📋 subject / Mark Done" row is gone: it repeated the
+  subject); then the thin phase bar; then NEXT / DEEP / SKIP beside "Phase 1/9 · Big Picture — description". Its buttons are
+  32px. On phones Save and Anki Cards are icon-only and the description is hidden. Hooks `data-lecture-bar`,
+  `data-lecture-markdone`, `data-lecture-done`, `data-lecture-phase`.
+- **Mastery bar:** the same 32px buttons (its Save button was still 9px text).
+- **Tutor header:** one row. Streak, coins and tokens sit beside the title on screens over 520px; the XP strip shows on the
+  other pages only.
+- Tutor toolbar buttons are 36px on touch screens too (were 40), the timer pill 40 (was 44), and from 700px up the timer and
+  actions flow one by one with the model chip, so iPad portrait has two toolbar rows instead of three.
+**Verified:** the table above; screenshots on the three sizes. Harnesses: `ai-pick` 67, `tutor-rich` 57, `ise-plan.drive` 150, `anki-study` 63, `arcade-cards` 119; all pass.
+
+## 2026-11-16 (later 2) — 🧠 Tutor: readable tables, flowcharts and charts
+
+Andrew: is there a way to make the tutor produce flowcharts and graphs that are readable? A DeepSeek reply that was "meant to
+be a flowchart" came out as a markdown table (raw pipes on screen), and Gemini's diagrams have been unintelligible.
+**Cause:** the tutor showed replies as plain text plus KaTeX. No markdown was rendered, so a table was a wall of `|` and `**`,
+and there was no way for any model to draw a diagram at all.
+**Done:**
+- **`renderRich()`** (UroStudyHub.html, after `renderMathText`) now draws every tutor reply: the chat, Quick Ask, 📚 Saved
+  sessions and bookmarks. Markdown pipe tables become real tables (an empty corner cell makes the first column bold row
+  labels), `**bold**`, `*italic*`, `` `code` ``, `# headings`, `---` and `* bullets` render, and KaTeX still typesets.
+- **Flowcharts:** a ```` ```mermaid ```` block in Mermaid's flowchart syntax (which every model already knows) is laid out and
+  drawn by the app (`parseFlow` / `flowStructure` / `flowXs` / `<FlowChart>`): top-down layers, crossings reduced, long edges
+  routed between boxes, loop-backs drawn with an upward arrow, branch labels placed where they cover no box or other label,
+  decisions as hexagons and start/end points as pills (shapes, not colours, so they read on the Boox). The parser is forgiving
+  where real Mermaid errors: parentheses inside `[ ]`, `graph LR` (always drawn top-down for a narrow screen), `-- text -->`,
+  `;`, chains, `&`, and subgraph / style / classDef / click lines (ignored). A "source" link under each chart shows the code.
+  No library is loaded, so it costs the Boox nothing.
+- **Charts:** a ```` ```chart ```` block with one JSON object draws a line or bar chart in SVG: legend, names at the line ends
+  when they don't collide, reference lines (`marks`), a tap / hover readout, a "data" table view, and series that differ by
+  dash pattern, marker shape and bar texture as well as colour (validated palette, `--viz-1..4` in both themes). A Mermaid
+  `pie` becomes a bar chart; other Mermaid types show their source with a note.
+- **Prompts:** `DIAGRAM_RULE` (formats, when to use one, at most one per message, "(schematic)" unless the numbers are real) is
+  appended to the tutor prompts and Quick Ask; the Mastery drill's "plain text only" line now allows a diagram.
+- While a reply streams, a half-written flowchart or chart shows "Drawing the flowchart…" until its closing fence arrives.
+**Verified:** new `node tools/tutor-rich.drive.mjs` (headless Chromium, stubbed API, phone light + dark, desktop, a resize):
+57 checks pass: your penile-SCC table, a two-pathway chart, an algorithm with a merge / long edge / loop-back (no box or label
+overlaps), a Gemini-style block, line + bar + pie charts, the streaming placeholder, bookmarks in 📚 Saved. `node
+tools/ai-pick.drive.mjs` still passes (57). The new code was scanned for syntax newer than the Boox's engine (none).
+**Next steps:** try a few real replies on the live site (ask for "a flowchart of …" from DeepSeek and Gemini) and on the Boox.
+**Open questions:** none.
+
+## 2026-11-16 (later) — 💬 Quick ask minimizes when you tap the tutor behind it
+
+Andrew: when the side chat (Quick ask) is open on the Tutor tab, clicking the main area should minimize it instead of
+having to press ✕.
+**Done:** a tap or click anywhere in the tutor outside the panel minimizes it, exactly like ✕ (the side chat is kept and
+the button shows its count; a reply still being written keeps going). The tapped control still works (tap the typing box
+and it gets focus). Not counted: taps inside the panel (including a suggestion chip that disappears as you tap it),
+scrolling, and the click that ends a drag-select of lecture text, so selecting text to quote it in Quick ask still works.
+Escape still closes it. Code: the `sideOpen` effect next to the visual-viewport one; hooks `data-tutor-col`,
+`data-side-open`.
+**Verified:** `node tools/ai-pick.drive.mjs`, new block G (10 checks, phone viewport, real taps and a mouse drag-select):
+67 passed, 0 failed.
+**Next steps / open questions:** none.
 
 ## 2026-11-16 — ✨ Visual overhaul (Apple-style look), bigger Tutor controls, wide Tutor on iPad landscape
 

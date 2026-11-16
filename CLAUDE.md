@@ -51,6 +51,9 @@ inside another workspace; nothing here depends on that one any more.)
   body checked): `node tools/ai-pick.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
   AI Tutor's voice mode (speech + recognition stubbed, Claude streamed): `node tools/voice-text.test.mjs` (pure Node: what gets
   said, chunking, spoken commands) and `node tools/voice-tutor.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
+  AI Tutor's rich replies (tables, bold, Mermaid-style flowcharts and ```` ```chart ```` charts drawn by `renderRich`; canned
+  replies from a stubbed API, streaming included): `node tools/tutor-rich.drive.mjs` (needs the `urostudyhub` server; same
+  `CDN_DIR` trick; `SHOTS=dir` for phone light / dark and desktop shots).
 
 ## Run and verify
 

@@ -14,7 +14,8 @@
 //
 // Hooks used: [data-aipick] (the chip), [data-aipick-panel], [data-aipick-prov=id], [data-aipick-model],
 // [data-aipick-refresh], [data-aipick-search], [data-aipick-or=id], [data-aipick-settings],
-// [data-effort-opt=level|default], [data-effort-none], [data-effort-clamp], [data-set-effort] (Settings).
+// [data-effort-opt=level|default], [data-effort-none], [data-effort-clamp], [data-set-effort] (Settings);
+// Quick ask: [data-side-open] (the launcher), [data-quickask] (the panel), [data-side-msg], [data-chat-msg].
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -333,6 +334,61 @@ await block('F. Settings from the tutor, and the effort control in Settings', as
   await tap(p, sel('aipick-prov', 'claude'));
   check('the tutor chip and panel show it', / · Low/.test(await chip(p)) && (await p.locator(sel('aipick-panel') + ' ' + sel('effort-opt', 'low')).getAttribute('style')).indexOf('font-weight: 800') >= 0);
   errCheck('F', errs);
+  await ctx.close();
+});
+
+// ───────── G. Quick ask (side chat): a tap anywhere else in the tutor minimizes it ─────────
+await block('G. Quick ask closes on a tap outside it', async () => {
+  const { ctx, p, errs } = await open({ uroStudyHub_progress: PROG, uroStudyHub_lmSettings: LM_ALL });
+  await goTutor(p);
+  await tap(p, sel('aipick'));
+  await tap(p, sel('aipick-prov', 'claude'));
+  await tap(p, sel('aipick'));
+  await send(p, 'Explain the Bosniak classification.');
+  const panel = sel('quickask'), launcher = sel('side-open');
+  const isOpen = () => visible(p, panel);
+  await p.locator(launcher).tap();
+  await p.waitForTimeout(150);
+  check('Quick ask opens from its button', await isOpen());
+  await p.locator(panel + ' input').tap();
+  await p.waitForTimeout(150);
+  check('a tap inside the panel keeps it open', await isOpen());
+  const n0 = (await reqs(p)).length;
+  await p.locator(panel + ' button:has-text("Define that last term")').tap();
+  await p.waitForFunction((n) => window.__aiReqs.length > n, n0, { timeout: 5000 });
+  await p.waitForTimeout(300);
+  check('a suggestion chip (gone once tapped) asks and keeps the panel open', (await isOpen()) && (await p.locator(panel + ' [data-side-msg]').count()) === 2);
+  await shot(p, 'g1-quickask-open');
+
+  // On a phone the panel covers most of the lecture: tap what's still showing above it (the first message)
+  await p.locator(sel('chat-msg')).first().tap();
+  await p.waitForTimeout(200);
+  check('a tap on the lecture minimizes it', !(await isOpen()) && (await visible(p, launcher)));
+  check('the side chat is kept (count on the button)', /Quick ask\s*2/.test(await p.locator(launcher).innerText()), await p.locator(launcher).innerText());
+  await p.locator(launcher).tap();
+  await p.waitForTimeout(150);
+  check('reopening shows the same side chat', (await isOpen()) && (await p.locator(panel + ' [data-side-msg]').count()) === 2);
+
+  // Select lecture text with a mouse drag: the click that ends the selection must not close the panel
+  const msgBox = await p.locator(sel('chat-msg')).first().boundingBox();
+  await p.mouse.move(msgBox.x + 18, msgBox.y + 14);
+  await p.mouse.down();
+  await p.mouse.move(msgBox.x + msgBox.width - 30, msgBox.y + 14, { steps: 6 });
+  await p.mouse.up();
+  await p.waitForTimeout(150);
+  const selected = await p.evaluate(() => window.getSelection().toString().trim().length);
+  check('drag-selecting lecture text leaves it open (for quoting)', selected > 0 && (await isOpen()), 'selected ' + selected + ' chars');
+  await p.evaluate(() => window.getSelection().removeAllRanges());
+
+  await p.locator('input[placeholder^="Ask about any urology topic"]').tap();
+  await p.waitForTimeout(150);
+  check('a tap on the main typing box minimizes it too', !(await isOpen()));
+  await p.locator(launcher).tap();
+  await p.waitForTimeout(150);
+  await p.locator(panel + ' input').press('Escape');
+  await p.waitForTimeout(150);
+  check('Escape still closes it', !(await isOpen()));
+  errCheck('G', errs);
   await ctx.close();
 });
 

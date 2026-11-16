@@ -51,6 +51,12 @@ test("mastery-map lines are not read, but warnings and checks are", () => {
   for (const bad of ["MAP", "Alpha receptors", "Surgery", "Prostate zones"]) lacks(s, bad);
   has(s, "Right, now 5-ARIs."); has(s, "Classic trap: PSA halves on finasteride."); has(s, "First-line for blank is blank.");
 });
+test("flowchart and chart blocks are drawn, not read; an unfinished one hides the rest", () => {
+  const s = say("Here's the pathway.\n```mermaid\nflowchart TD\n  A[Hematuria] --> B{Risk?}\n```\nWhich risk group is he?\n```chart\n{\"type\":\"line\"}\n```\nDone.");
+  lacks(s, "flowchart"); lacks(s, "-->"); lacks(s, "type"); lacks(s, "`");
+  has(s, "Here's the pathway."); has(s, "Which risk group is he?"); has(s, "Done.");
+  assert.equal(say("Look at this.\n```mermaid\nflowchart TD\n  A[Start").trim(), "Look at this.");
+});
 test("LaTeX becomes words; an unclosed formula hides the rest", () => {
   const s = say("Use \\( FENa = \\frac{U_{Na} \\times P_{Cr}}{P_{Na} \\times U_{Cr}} \\times 100 \\) here.");
   lacks(s, "\\"); lacks(s, "{"); has(s, "FENa equals"); has(s, "over"); has(s, "times 100");
