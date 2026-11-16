@@ -3,6 +3,30 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later 2) — 📏 Tutor: the chat gets its height back (compact lecture bar)
+
+Andrew: on the iPad the chat part is now not very tall, so it reads worse than before; the part under the Style row is too
+big; "maybe change the part where it says the subject and marking done".
+**Measured** (chat pane height, headless, Safari-sized viewports; old = before the 11-16 overhaul):
+
+| | iPad landscape 1180×750 | iPad portrait 820×1110 | phone 390×664 |
+|---|---|---|---|
+| lecture, old → overhaul → now | 317 → 187 → **317** | 677 → 503 → **677** | 174 → 88 → **231** |
+| plain chat, old → overhaul → now | 434 → 379 → **415** | 794 → 695 → **775** | 301 → 293 → **329** |
+
+**Done:**
+- **Lecture bar, five rows → three** (192px → ~98; it was 117 before the overhaul): the subject, **Mark Done** (or "✓ Done"),
+  notes, Save and Anki Cards share the first row (the separate "📋 subject / Mark Done" row is gone: it repeated the
+  subject); then the thin phase bar; then NEXT / DEEP / SKIP beside "Phase 1/9 · Big Picture — description". Its buttons are
+  32px. On phones Save and Anki Cards are icon-only and the description is hidden. Hooks `data-lecture-bar`,
+  `data-lecture-markdone`, `data-lecture-done`, `data-lecture-phase`.
+- **Mastery bar:** the same 32px buttons (its Save button was still 9px text).
+- **Tutor header:** one row. Streak, coins and tokens sit beside the title on screens over 520px; the XP strip shows on the
+  other pages only.
+- Tutor toolbar buttons are 36px on touch screens too (were 40), the timer pill 40 (was 44), and from 700px up the timer and
+  actions flow one by one with the model chip, so iPad portrait has two toolbar rows instead of three.
+**Verified:** the table above; screenshots on the three sizes. Harnesses: `ai-pick` 67, `tutor-rich` 57, `ise-plan.drive` 150, `anki-study` 63, `arcade-cards` 119; all pass.
+
 ## 2026-11-16 (later 2) — 🧠 Tutor: readable tables, flowcharts and charts
 
 Andrew: is there a way to make the tutor produce flowcharts and graphs that are readable? A DeepSeek reply that was "meant to
