@@ -205,6 +205,19 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - **Regenerate response** button (🔄) on last assistant message
 - Auto-generate Anki cards from lectures (configurable tags)
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF
+- **🎙 Voice mode (2026-11-16)** — the toolbar's Voice button (only where the browser can speak; not on the Boox):
+  a spoken back-and-forth. Replies are read aloud sentence by sentence as they stream in (`speechSynthesis`); after each
+  reply it listens for the answer (`SpeechRecognition`, hands-free by default, a soft chime first) and sends it. While on,
+  `VOICE_RULE` is appended last to the tutor's system prompt: 40-120-word spoken turns, one idea then one check question,
+  the Engaging style's way of explaining whatever style is picked, units / formulas in words, screen-only material
+  (flowcharts, charts, mastery map, tables, cheat sheet) after an `ON SCREEN:` line; fenced blocks are never read aloud. Spoken commands: next / go deeper / skip (lecture),
+  hint / skip / map (drill), repeat that, slower / faster, stop. Mic button cuts in mid-reply; 🔊 replays a message;
+  empty chat offers "Explain a topic" / "Quiz me" starters. Settings (gear on the voice bar): voice (ranked: natural /
+  neural / enhanced / premium first), speed, hands-free, chime; per device in `uroStudyHub_voice`. Screen kept awake
+  (Wake Lock) while on in the Tutor. In voice mode the lecture's phase detection skips its loose keyword pass.
+  Pure text logic (what gets said, utterance chunking while streaming, commands, voice ranking) = the
+  `VOICE-TEXT-BEGIN/END` block (`node tools/voice-text.test.mjs`); engine = `makeVoiceEngine()`; E2E with stubbed
+  speech + streamed Claude: `node tools/voice-tutor.drive.mjs`.
 - **Rich replies (2026-11-16):** `renderRich()` draws every tutor / Quick Ask / saved / bookmarked reply: markdown pipe
   tables, `**bold**` / `*italic*` / `# headings`, KaTeX (via `renderMathText`'s fmt hook), a ```` ```mermaid ```` flowchart
   (a forgiving subset of Mermaid's flowchart syntax, laid out by the app's own layered layout in `<FlowChart>`: no library,

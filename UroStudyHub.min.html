@@ -1559,7 +1559,9 @@ doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 17.
 bookmark: "M6.5 3.5h11v17L12 16.5l-5.5 4z",
 compose: "M12 4.5H6a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h11.5a2 2 0 0 0 2-2v-6M17.6 3.4a1.9 1.9 0 0 1 2.7 2.7L12.6 13.8 9 14.8l1-3.6z",
 chevDown: "M6 9.5l6 6 6-6",
-stop: "M7.5 6.5h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"
+stop: "M7.5 6.5h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z",
+mic: "M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM5.8 11.2a6.2 6.2 0 0 0 12.4 0M12 17.4v3.1M8.8 20.5h6.4",
+speaker: "M4 9.4h3.4L12 5.6v12.8l-4.6-3.8H4zM15.6 9.2a3.9 3.9 0 0 1 0 5.6M18.1 6.7a7.4 7.4 0 0 1 0 10.6"
 };
 function Icon(name, size, sw) {
 return (
@@ -3236,6 +3238,350 @@ preview: "BPH is super common in older guys — the prostate just gets bigger an
 inject: "\n\nSTYLE: Be relaxed and supportive. Explain things clearly without intensity or pressure. Use a conversational, friendly tone like a senior resident helping a friend study. It's okay to go at a slower pace, repeat things, and reassure. Still be accurate and thorough, but keep the vibe low-stress."
 }
 };
+var VOICE_RULE = "\n\n" + [
+"VOICE MODE: the learner is listening to you through text-to-speech and answering out loud. These rules override anything above about formatting, length, LaTeX, or how many questions to give at once.",
+"",
+"SOUND LIKE A PERSON TALKING:",
+"- Teach like a great attending explaining it over coffee: warm, energetic, plain-spoken. Use contractions and a natural rhythm, and mix short sentences with longer ones.",
+"- Plain words first, then the precise term or number the boards want. Mechanism before fact, so the fact feels obvious once they hear why.",
+"- Make it stick with a quick patient story or an everyday analogy, and a little humor when it helps. One vivid image beats three extra facts.",
+"- Write only words meant to be heard: no markdown, headers, bullets, numbered lists, tables, bold, emoji or LaTeX. Say formulas and symbols in words (\"urine sodium times plasma creatinine, over plasma sodium times urine creatinine\"). Write units out (\"0.4 milligrams\", \"greater than 10\"). A patient is \"a 65-year-old man\", never \"65M\". Spell out an abbreviation the first time if a listener might not catch it.",
+"- No throat-clearing, no 'great question', no announcing what you're about to do. Just do it.",
+"",
+"SHORT TURNS, THEN HAND IT BACK:",
+"- Each reply is about 40 to 120 words (15 to 45 seconds out loud), never more than about 150. If there's more to say, say the first part and keep the rest for the next turn.",
+"- One idea per turn. End almost every turn with ONE short question they can answer out loud: check the idea you just taught, ask for the next step in a quick case, or have them predict before you explain. Then stop and wait. Never stack questions, never answer your own.",
+"- Vary the checks: explain it back in your own words, what would you do next, why does that happen, what's the classic trap.",
+"- When they answer, react in a sentence (what was right and why, or what's off, said directly and kindly), fill the gap, then move on to the next idea. If they're lost, come at it from a new angle (a different analogy or case), not the same words again.",
+"- Their answers come through speech recognition, so expect misheard words (\"four near\" for Fournier, \"nephrostomy\" for \"nephrectomy\"). Go with what they clearly meant; if a key word really is ambiguous, ask in a few words.",
+"- Spoken commands: \"next\" moves on, \"go deeper\", \"skip\", \"hint\". On \"next\", move on without a recap.",
+"",
+"STRUCTURED SESSIONS:",
+"- Phases, maps and drills still apply, but each phase is a run of short spoken turns (teach a piece, check, continue), not one long block. When a phase is done, say so in a sentence and ask if they're ready. Where the instructions above say to end with 'type or tap NEXT', say \"say next when you're ready\" instead, and only when the phase is done.",
+"- When a new phase starts, open with its emoji, number and name (\"🔬 Phase 3, Core Details.\"): the app shows the emoji and reads the rest.",
+"- Question rounds: one question per turn. Multiple choice only when every option is a few words, read as \"A, ... B, ...\". After an answer, cover why the right one is right and the most tempting wrong one, not every option.",
+"- Anything that only works on a screen (a flowchart, a chart, a mastery map, a staging table, the final cheat sheet) goes at the very end, after a line that says exactly ON SCREEN: (the app shows that part and doesn't read it aloud). Keep it short, and say its key point out loud too. Hook tags ([[HOOK ...]]) work as usual and aren't read aloud.",
+].join("\n");
+var VOICE_SAMPLE = "Alright, picture a 65-year-old man who's up four times a night to pee. His prostate is squeezing the urethra, and a big part of that squeeze is smooth muscle tone, not just size. So what kind of drug would you reach for first?";
+var VOICE_MAP_LINE = /^\s*(?:✅|⬜|⚠|🔵)️?\s*\d+[a-z]?[.)]\s|^\s*🗺️?\s*MAP\b/;
+var VOICE_UNIT = { mg: "milligram", mcg: "microgram", "µg": "microgram", "μg": "microgram", g: "gram", kg: "kilogram",
+ml: "milliliter", dl: "deciliter", l: "liter", mm: "millimeter", cm: "centimeter", mmhg: "millimeters of mercury",
+cmh2o: "centimeters of water", meq: "milliequivalent", mmol: "millimole", ng: "nanogram", hr: "hour", hrs: "hour", h: "hour",
+min: "minute", mins: "minute", wk: "week", wks: "week", mo: "month", mos: "month", yr: "year", yrs: "year", day: "day", d: "day" };
+var VOICE_UNIT_RE = /(\d(?:[\d,]*\d)?(?:\.\d+)?)\s?(mcg|µg|μg|mg|kg|g|mL|ml|dL|L|mmHg|cmH2O|mmol|mm|cm|mEq|ng|hrs|hr|h|mins|min|wks|wk|mos|mo|yrs|yr)(?:\/(mL|ml|dL|L|kg|min|hr|h|day|d|wk))?(?![A-Za-z0-9])/g;
+function voiceUnit(u, one) {
+var w = VOICE_UNIT[u.toLowerCase()] || u;
+return one || / of /.test(w) ? w : w + "s";
+}
+function voiceTex(t) {
+var s = (" " + t + " ").replace(/\\(?:text|mathrm|mathbf|mathit|operatorname|mbox)\s*\{([^{}]*)\}/g, " $1 ")
+.replace(/\^\s*\{\s*2\s*\}|\^\s*2(?!\d)/g, " squared ").replace(/\^\s*\{\s*3\s*\}|\^\s*3(?!\d)/g, " cubed ")
+.replace(/\^\s*\{([^{}]*)\}/g, " to the $1 ").replace(/\^\s*([A-Za-z0-9])/g, " to the $1 ")
+.replace(/_\s*\{([^{}]*)\}/g, " $1 ").replace(/_\s*([A-Za-z0-9])/g, " $1 ");
+for (var i = 0; i < 4; i++) s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, " $1 over $2 ");
+var words = { times: " times ", cdot: " times ", div: " divided by ", geq: " at least ", ge: " at least ", leq: " at most ", le: " at most ",
+approx: " about ", sim: " about ", pm: " plus or minus ", to: " to ", rightarrow: " leads to ", Rightarrow: " leads to ", neq: " is not ",
+sqrt: " the square root of ", sum: " the sum of ", Delta: " delta ", alpha: " alpha ", beta: " beta ", mu: " micro ", "%": " percent " };
+s = s.replace(/\\([A-Za-z]+|%)/g, function(m, w) { return words[w] != null ? words[w] : " "; })
+.replace(/[{}]/g, " ").replace(/\s*=\s*/g, " equals ").replace(/\s*\+\s*/g, " plus ").replace(/\s-\s/g, " minus ")
+.replace(/\s*\/\s*/g, " over ").replace(/\s*>\s*/g, " greater than ").replace(/\s*<\s*/g, " less than ");
+return s.replace(/\s+/g, " ");
+}
+function voiceSpeechText(raw) {
+var s = String(raw == null ? "" : raw).replace(/\r/g, "");
+s = s.replace(/```[\s\S]*?```/g, "");
+var cut = s.indexOf("```");
+if (cut >= 0) s = s.slice(0, cut);
+s = s.replace(/\[\[HOOK[^\]]*\]\]/g, "");
+cut = s.indexOf("[[");
+if (cut >= 0) s = s.slice(0, cut);
+cut = s.search(/(?:^|\n)[^\nA-Za-z0-9]{0,6}ON SCREEN\b/);
+if (cut >= 0) s = s.slice(0, cut);
+s = s.replace(/\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$/g, function(m, a, b, c) { return voiceTex(a != null ? a : b != null ? b : c); });
+cut = s.search(/\\[\[(]|\$\$/);
+if (cut >= 0) s = s.slice(0, cut);
+s = s.split("\n").map(function(line) {
+if (VOICE_MAP_LINE.test(line)) return "";
+if (/^\s*\|?(?:\s*:?-{3,}:?\s*\|?)+\s*$/.test(line) || /^\s*(?:[-*_=]\s*){3,}$/.test(line)) return "";
+var t = line.replace(/^\s*#{1,6}\s+/, "").replace(/^\s*>\s?/, "").replace(/^\s*(?:[-*•+]|\d{1,2}[.)])\s+/, "");
+if (t.indexOf("|") >= 0) t = t.replace(/^\s*\|/, "").replace(/\|\s*$/, "").replace(/\s*\|\s*/g, ", ");
+return t;
+}).join("\n");
+s = s.replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1").replace(/`+/g, "").replace(/\*+/g, "").replace(/_{3,}/g, " blank ").replace(/__/g, "").replace(/~~/g, "")
+.replace(/\be\.g\.,?\s*/gi, "for example, ").replace(/\bi\.e\.,?\s*/gi, "that is, ").replace(/\bvs\.?(?=\s)/gi, "versus")
+.replace(/\betc\./gi, "and so on.").replace(/\bapprox\.?(?=\s)/gi, "about").replace(/\band\/or\b/gi, "and or")
+.replace(/\b([1-9]\d)\s?(?:yo|y\/o|y\.o\.)(?![A-Za-z])/g, "$1-year-old")
+.replace(/\b([1-9]\d)(?:-year-old)?\s?M(?=,|\s+(?:with|who|presents|presenting|has|comes|complains)\b)/g, "$1-year-old man")
+.replace(/\b(an?|An?)\s+([1-9]\d)\s?M(?![A-Za-z0-9'\u2019-])/g, "$1 $2-year-old man")  // "a 65M up at night" (not F: "a 16F Foley")
+.replace(/\b([1-9]\d)(?:-year-old)?\s?F(?=\s+(?:with|who|presents|presenting|has|comes|complains)\b)/g, "$1-year-old woman")
+.replace(/(\d)\s?Fr\b\.?/g, "$1 French")
+.replace(VOICE_UNIT_RE, function(m, n, u, per) { return n + " " + voiceUnit(u, n === "1") + (per ? " per " + voiceUnit(per, true) : ""); })
+.replace(/\s*(?:->|→|⇒|⟶)\s*/g, " leads to ").replace(/↑/g, " increased ").replace(/↓/g, " decreased ")
+.replace(/\s*(?:≥|>=)\s*/g, " at least ").replace(/\s*(?:≤|<=)\s*/g, " at most ")
+.replace(/\s*>\s*(?=[\d.])/g, " greater than ").replace(/\s*<\s*(?=[\d.])/g, " less than ")
+.replace(/[~≈]\s?(?=\d)/g, "about ").replace(/±/g, " plus or minus ")
+.replace(/(\d)\s?[x×]\s?(\d)/g, "$1 by $2").replace(/(\d)x\b/g, "$1 times").replace(/×/g, " times ")
+.replace(/(\d)\s?\+\s?(\d)/g, "$1 plus $2").replace(/([A-Za-z0-9])\s?=\s?([A-Za-z0-9])/g, "$1 equals $2")
+.replace(/(\d)\s?[–]\s?(\d)/g, "$1 to $2").replace(/(\d)-(\d)(?![\d-])/g, "$1 to $2")
+.replace(/\s*[—]\s*/g, ", ").replace(/\s–\s/g, ", ").replace(/\s*[•·]\s*/g, ", ").replace(/&/g, " and ").replace(/#\s?(\d)/g, "number $1")
+.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "").replace(/[←-⇿⌀-⏿①-⓿■-➿⬀-⯿️‍⃣]/g, "")
+.replace(/[#\\^|]/g, " ")
+.replace(/[ \t ]+/g, " ").replace(/ +([,.;:!?])/g, "$1").replace(/([,;:])(?:\s*[,;:])+/g, "$1")
+.replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").replace(/^\s+/, "");
+return s;
+}
+var VOICE_ABBR = /(?:^|[^A-Za-z])(?:[A-Za-z]|Dr|Mr|Mrs|Ms|St|No|Fig|vs|al|Jr|Sr)$/;
+function voiceEnds(s, from) {
+var ends = [];
+for (var i = from || 0; i < s.length; i++) {
+var ch = s.charAt(i);
+if (ch === "\n") { ends.push(i + 1); continue; }
+if (ch !== "." && ch !== "!" && ch !== "?") continue;
+var j = i + 1;
+while (j < s.length && /["'”’)\]]/.test(s.charAt(j))) j++;
+if (j >= s.length || !/\s/.test(s.charAt(j))) continue;
+if (ch === "." && VOICE_ABBR.test(s.slice(Math.max(0, i - 6), i))) continue;
+ends.push(j);
+}
+return ends;
+}
+function voiceSplitLong(t) {
+var out = [];
+while (t.length > 220) {
+var cut = -1, best = 1e9, mid = Math.min(t.length / 2, 170), re = /[,;:]\s|\s[—-]\s/g, m;
+while ((m = re.exec(t))) {
+var at = m.index + 1;
+if (at < 40 || at > 210 || t.length - at < 30) continue;
+if (Math.abs(at - mid) < best) { best = Math.abs(at - mid); cut = at; }
+}
+if (cut < 0) { cut = t.lastIndexOf(" ", 200); if (cut < 40) cut = 200; }
+out.push(t.slice(0, cut).trim());
+t = t.slice(cut).trim();
+}
+if (t) out.push(t);
+return out;
+}
+function voiceChunks(s, from, final) {
+s = s || ""; from = from || 0;
+var ends = voiceEnds(s, from);
+var upto = final ? s.length : (ends.length ? ends[ends.length - 1] : from);
+if (upto <= from) return { chunks: [], next: from };
+var pieces = [], a = from, k;
+for (k = 0; k < ends.length && ends[k] <= upto; k++) { pieces.push(s.slice(a, ends[k])); a = ends[k]; }
+if (a < upto) pieces.push(s.slice(a, upto));
+var chunks = [], cur = "";
+function flush() { if (/[A-Za-z0-9]/.test(cur)) chunks.push(cur); cur = ""; }
+for (k = 0; k < pieces.length; k++) {
+var t = pieces[k].replace(/\s+/g, " ").trim();
+if (t) {
+if (t.length > 220) { flush(); chunks.push.apply(chunks, voiceSplitLong(t).filter(function(x) { return /[A-Za-z0-9]/.test(x); })); }
+else { if (cur && cur.length + 1 + t.length > 180) flush(); cur = cur ? cur + " " + t : t; }
+}
+if (/\n/.test(pieces[k])) flush();
+}
+flush();
+return { chunks: chunks, next: upto };
+}
+function voiceCommand(heard, mode) {
+var raw = String(heard || "").trim();
+var t = raw.toLowerCase().replace(/[.,!?;:"“”]+/g, " ").replace(/\s+/g, " ").trim();
+t = t.replace(/^(?:(?:ok(?:ay)?|alright|all right|um+|uh+|so|and|please|hey|yeah|yes|sure)\s+)+/, "").replace(/\s+(?:please|now|then)$/, "").trim();
+if (/^(?:repeat(?: that| it| the question| yourself)?|(?:can you |could you )?(?:repeat|say) (?:that|it) again|say again|come again|again|what|pardon|sorry what|one more time)$/.test(t)) return { local: "repeat" };
+if (/^(?:stop(?: talking| listening)?|pause|be quiet|quiet|hold on|wait|hang on|shut up)$/.test(t)) return { local: "stop" };
+if (/^(?:slow(?:er| down| it down)|(?:speak|talk|go) slower|too fast)$/.test(t)) return { local: "slower" };
+if (/^(?:faster|speed (?:it )?up|(?:speak|talk|go) faster|too slow)$/.test(t)) return { local: "faster" };
+if (mode === "lecture") {
+if (/^(?:next(?: section| phase| part| one)?|go on|keep going|continue|move on|let'?s move on|go ahead|ready|i'?m ready)$/.test(t)) return { say: "NEXT" };
+if (/^skip(?: it| this| that| this phase| this section| ahead)?$/.test(t)) return { say: "SKIP this phase and move to the next one." };
+if (/^(?:(?:go )?deeper|go deep|more detail|tell me more|more on that)$/.test(t)) return { say: "Go deeper into this section. Give me more detail, more examples, more board-relevant nuance." };
+}
+if (mode === "mastery") {
+if (/^(?:(?:give me |can i (?:get|have) |i need )?a? ?hint)$/.test(t)) return { say: "HINT" };
+if (/^skip(?: it| this| that)?$/.test(t)) return { say: "SKIP" };
+if (/^(?:show (?:me )?)?(?:the )?map$/.test(t)) return { say: "MAP" };
+}
+return { say: raw };
+}
+var VOICE_NOVELTY = /^(?:albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|pipe organ|superstar|trinoids|whisper|wobble|zarvox|deranged|hysterical|fred|junior|ralph|kathy|princess|grandma|grandpa|rocko|shelley|flo|eddy|reed|sandy)\b/i;
+function voiceScore(v, navLang) {
+var name = (v && v.name) || "", lang = ((v && v.lang) || "").replace("_", "-"), sc = 0;
+if (!/^en(?:-|$)/i.test(lang)) return -1000;
+if (/natural/i.test(name)) sc += 60;
+if (/neural|wavenet|studio|journey/i.test(name)) sc += 50;
+if (/premium/i.test(name)) sc += 45;
+if (/enhanced/i.test(name)) sc += 35;
+if (/^google\b/i.test(name)) sc += 25;
+if (/siri/i.test(name)) sc += 20;
+if (/^(?:samantha|ava|alex|allison|susan|tom|zoe|evan|nathan|joelle|noelle|aria|jenny|guy)\b/i.test(name)) sc += 12;
+if (v.localService === false) sc += 5;
+if (/espeak|robot/i.test(name)) sc -= 40;
+if (VOICE_NOVELTY.test(name)) sc -= 100;
+if (/^en-US$/i.test(lang)) sc += 8; else if (/^en-(?:GB|AU|CA|IE|NZ)$/i.test(lang)) sc += 4;
+if (navLang && lang.toLowerCase() === String(navLang).toLowerCase()) sc += 6;
+if (v["default"]) sc += 3;
+return sc;
+}
+function voiceRank(voices, navLang) {
+var list = [];
+for (var i = 0; i < (voices || []).length; i++) { var sc = voiceScore(voices[i], navLang); if (sc > -500) list.push({ v: voices[i], sc: sc }); }
+list.sort(function(a, b) { return b.sc - a.sc || (a.v.name < b.v.name ? -1 : a.v.name > b.v.name ? 1 : 0); });
+return list.map(function(x) { return x.v; });
+}
+function makeVoiceEngine() {
+var W = typeof window !== "undefined" ? window : {};
+var synth = W.speechSynthesis || null;
+var Rec = W.SpeechRecognition || W.webkitSpeechRecognition || null;
+var E = { tts: !!(synth && W.SpeechSynthesisUtterance), stt: !!Rec, cb: {}, opts: { uri: "", rate: 1, beep: true }, state: "idle" };
+var gen = 0, active = false, raw = "", spokenTo = 0, finished = false, queued = 0, ended = 0, keep = [], kind = "reply", errs = "";
+var poll = null, quiet = 0, rec = null, recGen = 0, recTimer = null, recWait = null, unlocked = false, actx = null;
+function emit(st) { E.state = st; if (E.cb.state) E.cb.state(st); }
+function cancelSynth() { try { if (synth) synth.cancel(); } catch (e) {  } }
+E.voices = function() { try { return (synth && synth.getVoices()) || []; } catch (e) { return []; } };
+E.voice = function() {
+var list = E.voices(), i;
+if (E.opts.uri) for (i = 0; i < list.length; i++) if (list[i].voiceURI === E.opts.uri) return list[i];
+return voiceRank(list, W.navigator && W.navigator.language)[0] || null;
+};
+if (synth) {
+var onVoices = function() { if (E.cb.voices) E.cb.voices(); };
+try { if (synth.addEventListener) synth.addEventListener("voiceschanged", onVoices); else synth.onvoiceschanged = onVoices; } catch (e) {  }
+}
+E.unlock = function() {
+var ua = W.navigator && W.navigator.userActivation;
+if (ua && !ua.isActive) return;  // not inside a tap (e.g. a session started from an effect): try again on the next one
+E.prime();
+if (unlocked || !E.tts) return;
+unlocked = true;
+try { var u = new W.SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); } catch (e) {  }
+};
+E.prime = function() {
+try {
+var AC = W.AudioContext || W.webkitAudioContext;
+if (!AC) return;
+if (!actx) actx = new AC();
+if (actx.state === "suspended") actx.resume().catch(function() {});
+} catch (e) { actx = null; }
+};
+E.beep = function() {
+var c = actx;
+if (!c) return;
+try {
+if (c.state === "suspended") c.resume().catch(function() {});
+var t0 = c.currentTime + 0.01;
+[[660, 0], [880, 0.09]].forEach(function(n) {
+var o = c.createOscillator(), g = c.createGain(), st = t0 + n[1];
+o.type = "sine"; o.frequency.value = n[0];
+g.gain.setValueAtTime(0.0001, st); g.gain.exponentialRampToValueAtTime(0.07, st + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, st + 0.12);
+o.connect(g); g.connect(c.destination); o.start(st); o.stop(st + 0.15);
+});
+} catch (e) {  }
+};
+function stopPoll() { if (poll) clearInterval(poll); poll = null; }
+function reset(k) { gen++; cancelSynth(); stopPoll(); raw = ""; spokenTo = 0; finished = false; queued = 0; ended = 0; keep = []; active = true; kind = k || "reply"; errs = ""; }
+function done() {
+if (!active) return;
+active = false; stopPoll(); keep = [];
+var k = kind, er = errs;
+emit("idle");
+if (er && queued > 0 && E.cb.speakError) E.cb.speakError(er);
+else if (E.cb.spoken) E.cb.spoken(k);
+}
+function check() { if (active && finished && ended >= queued) done(); }
+function speakChunk(text) {
+var g = gen, u = new W.SpeechSynthesisUtterance(text), v = E.voice();
+if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-US";
+u.rate = E.opts.rate || 1;
+u.onend = function() { if (g !== gen) return; ended++; check(); };
+u.onerror = function(e) { if (g !== gen) return; var er = e && e.error; if (er && er !== "interrupted" && er !== "canceled") errs = er; ended++; check(); };
+keep.push(u);  // a dropped reference can lose its end event in Chrome
+queued++;
+try { synth.speak(u); } catch (e) { ended++; errs = "speak-failed"; }
+if (E.state !== "speaking") emit("speaking");
+}
+function pump(final) {
+var r = voiceChunks(voiceSpeechText(raw), spokenTo, final);
+spokenTo = r.next;
+for (var i = 0; i < r.chunks.length && active; i++) speakChunk(r.chunks[i]);
+}
+E.begin = function() { if (!E.tts) return; E.stopListening(); reset("reply"); emit("thinking"); };
+E.feed = function(text) { if (!active || finished) return; raw = String(text || ""); pump(false); };
+E.finish = function(text, k) {
+if (!active || finished) return;
+if (k) kind = k;
+if (text != null) raw = String(text);
+finished = true;
+pump(true);
+if (ended >= queued) { done(); return; }
+quiet = 0;
+poll = setInterval(function() {
+if (!active) { stopPoll(); return; }
+var busy = true;
+try { busy = synth.speaking || synth.pending; } catch (e) {  }
+if (busy) quiet = 0; else if (++quiet >= 3) done();
+}, 400);
+};
+E.say = function(text, k) { if (!E.tts) return; E.stopListening(); reset(k || "say"); E.finish(text); };
+E.stopSpeaking = function() {
+var was = active || E.state === "speaking" || E.state === "thinking";
+active = false; gen++; stopPoll(); cancelSynth(); keep = [];
+if (was) emit("idle");
+};
+function clearRec() { if (recTimer) clearInterval(recTimer); recTimer = null; if (recWait) clearTimeout(recWait); recWait = null; }
+E.listen = function(lang, beep) {
+if (!Rec) return false;
+E.stopSpeaking(); E.stopListening();
+var g = ++recGen;
+emit("listening");
+if (beep && E.opts.beep) { E.beep(); recWait = setTimeout(function() { recWait = null; if (g === recGen) startRec(g, lang); }, 260); }
+else startRec(g, lang);
+return true;
+};
+function startRec(g, lang) {
+var r, finals = "", interim = "", err = "", heardAt = 0, startedAt = Date.now();
+function fail(why) { rec = null; clearRec(); emit("idle"); if (E.cb.listenEnd) E.cb.listenEnd(why); }
+try { r = new Rec(); } catch (e) { fail("start-failed"); return; }
+rec = r;
+r.lang = lang || "en-US";
+r.interimResults = true;
+r.maxAlternatives = 1;
+r.continuous = !/Android/i.test((W.navigator && W.navigator.userAgent) || "");  // Android's continuous mode repeats itself
+r.onresult = function(e) {
+if (g !== recGen) return;
+finals = ""; interim = "";
+for (var i = 0; i < e.results.length; i++) {
+var res = e.results[i], tx = (res[0] && res[0].transcript) || "";
+if (res.isFinal) finals += " " + tx; else interim += " " + tx;
+}
+heardAt = Date.now();
+if (E.cb.heard) E.cb.heard((finals + " " + interim).replace(/\s+/g, " ").trim());
+};
+r.onerror = function(e) { if (g === recGen) err = (e && e.error) || "error"; };
+r.onend = function() {
+if (g !== recGen) return;
+recGen++; rec = null; clearRec();
+var tx = (finals + " " + interim).replace(/\s+/g, " ").trim();
+emit("idle");
+if (tx) { if (E.cb.final) E.cb.final(tx); }
+else if (E.cb.listenEnd) E.cb.listenEnd(err || "no-speech");
+};
+try { r.start(); } catch (e) { fail("start-failed"); return; }
+recTimer = setInterval(function() {
+if (g !== recGen) { clearRec(); return; }
+var now = Date.now();
+if (heardAt ? now - heardAt > 2000 : now - startedAt > 10000) { clearRec(); try { r.stop(); } catch (e) {  } }
+}, 200);
+}
+E.stopListening = function(send) {
+if (send && rec) { clearRec(); try { rec.stop(); } catch (e) {  } return; }
+if (!rec && !recWait) return;
+recGen++; clearRec();
+var r = rec; rec = null;
+if (r) { try { r.abort(); } catch (e) {  } }
+if (E.state === "listening") emit("idle");
+};
+E.stopAll = function() { E.stopListening(); E.stopSpeaking(); };
+return E;
+}
 var SURGICAL_SKILLS = [
 {
 id: "sterile", n: 1, icon: "🧼", color: "#38bdf8",
@@ -5956,6 +6302,23 @@ try { return JSON.parse(localStorage.getItem("uroStudyHub_prices") || "{}") || {
 });
 var [showCost, setShowCost] = useState(false);
 var [showAiPick, setShowAiPick] = useState(false);  // the tutor's AI panel: provider, model, reasoning effort
+var vEng = useRef(null);
+if (!vEng.current) vEng.current = makeVoiceEngine();
+var VE = vEng.current;
+var [voice, setVoice] = useState(function() {
+var d = { on: false, hands: true, beep: true, uri: "", rate: 1 };
+try { var j = JSON.parse(localStorage.getItem("uroStudyHub_voice") || "null"); if (j && typeof j === "object") d = Object.assign(d, j); } catch (e) {  }
+return d;
+});
+useEffect(function() { try { localStorage.setItem("uroStudyHub_voice", JSON.stringify(voice)); } catch (e) {  } }, [voice]);
+VE.opts = { uri: voice.uri, rate: voice.rate, beep: voice.beep };
+var vOn = !!(voice.on && VE.tts);
+var [vState, setVState] = useState("idle");  // idle | thinking | speaking | listening
+var [vNote, setVNote] = useState("");        // a hint or problem shown in the voice bar
+var [vVoices, setVVoices] = useState(function() { return VE.voices(); });
+var [showVoiceSet, setShowVoiceSet] = useState(false);
+var [vStart, setVStart] = useState("");      // "explain" / "quiz": the next thing heard is the topic for that opener
+var vBase = useRef("");                      // what was in the box before the mic started
 var settingsTab = useRef(null);  // provider tab the Settings modal opens on (null = the connected one)
 useEffect(function() { if (!showSet) settingsTab.current = null; }, [showSet]);
 function setEffort(v) { setLm(function(p) { return Object.assign({}, p, { effort: v }); }); }
@@ -7783,7 +8146,7 @@ t.est = true;
 });
 return t;
 }
-function detectPhase(text) {
+function detectPhase(text, strict) {
 var upper = text.toUpperCase();
 for (var i = LECTURE_PHASES.length - 1; i >= 0; i--) {
 var p = LECTURE_PHASES[i];
@@ -7798,6 +8161,7 @@ var head = text.substring(0, 100);
 for (var k = LECTURE_PHASES.length - 1; k >= 0; k--) {
 if (head.indexOf(LECTURE_PHASES[k].icon) !== -1) return k;
 }
+if (strict) return -1;
 var keywords = [
 ["BIG PICTURE", "ORIENTATION"],
 ["CONCEPTUAL FRAMEWORK", "FRAMEWORK", "SCAFFOLDING"],
@@ -7818,6 +8182,7 @@ return -1;
 }
 function sendChat(text) {
 if (!text || !text.trim()) return;
+if (vOn) { VE.unlock(); setVNote(""); setVStart(""); }
 var userMsg = { role: "user", content: text };
 var msgs = chatMsgs.concat([userMsg]);
 setChatMsgs(msgs);
@@ -7849,22 +8214,29 @@ sysContent = SYSTEM_PROMPT_SURGICAL + _modeInject + styleInject + customInject +
 sysContent = (masteryMode ? SYSTEM_PROMPT_MASTERY : lectureMode ? SYSTEM_PROMPT_LECTURE : SYSTEM_PROMPT_DEEPDIVE) + styleInject + customInject + (upText ? "\n\nUploaded curriculum content (Markdown):\n\n" + upText : "");
 }
 sysContent += MATH_FORMAT_RULE + DIAGRAM_RULE + MNEMONIC_RULE + myHooksPrompt();
+if (vOn) sysContent += VOICE_RULE;  // last, so it overrides the formatting and length rules above
 var reqId = nextReply(chatReq, chatAbort);
 var ctrl = chatAbort.current;
 var live = s.tutorStream === false ? null : streamBatcher(function(t) {
 if (chatReq.current === reqId) setChatMsgs(msgs.concat([{ role: "assistant", content: t }]));
 });
-callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined, kind: "tutor" }, function(reply) {
+var talk = vOn ? VE : null;
+var heard = "";
+if (talk) talk.begin();
+var onDelta = live || talk ? function(t) { heard = t; if (chatReq.current !== reqId) return; if (live) live.push(t); if (talk) talk.feed(t); } : null;
+callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: onDelta, signal: ctrl ? ctrl.signal : undefined, kind: "tutor" }, function(reply) {
 if (chatReq.current !== reqId) return;
 if (live) live.cancel();
 setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
 setChatLoad(false);
 saveHooks(parseHooks(reply));
-if (!skills && lectureMode && reply) { var dp = detectPhase(reply); if (dp >= 0) setLecturePhase(dp); }
+if (talk) talk.finish(reply || "", "reply");
+if (!skills && lectureMode && reply) { var dp = detectPhase(reply, !!talk); if (dp >= 0) setLecturePhase(dp); }
 }, function(err) {
 if (chatReq.current !== reqId) return;
 if (live) live.cancel();
-var streamed = live && !err.refusal ? live.text : "";
+var streamed = live ? (!err.refusal ? live.text : "") : (!err.refusal ? heard : "");
+if (talk) { if (streamed) talk.finish(streamed, "partial"); else { talk.stopSpeaking(); setVNote("The reply didn't come through. Tap 🔄 to try again."); } }
 var provNames = { claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "OpenRouter", lmstudio: "LM Studio" };
 var errMsg = streamed
 ? streamed + "\n\n⚠ Reply cut off (" + (err.message || "connection lost") + ") — tap 🔄 to regenerate."
@@ -7879,6 +8251,7 @@ setChatLoad(false);
 function stopChatReply() {
 dropReply(chatReq, chatAbort);
 setChatLoad(false);
+VE.stopAll();
 }
 function regenerateResponse() {
 var msgs = chatMsgs.slice();
@@ -7890,6 +8263,91 @@ setChatMsgs(msgs);
 setChatLoad(true);
 _sendFromMsgs(msgs);
 }
+function voiceMode() { return masteryMode ? "mastery" : lectureMode && !skillsCtx ? "lecture" : "other"; }
+function voiceLang() { var l = (navigator.language || ""); return /^en(?:-|$)/i.test(l) ? l : "en-US"; }
+function lastTutorText() {
+for (var i = chatMsgs.length - 1; i >= 0; i--) if (chatMsgs[i].role === "assistant") return chatMsgs[i].content || "";
+return "";
+}
+function voiceListen(auto) {
+if (!VE.stt) return;
+setVNote("");
+vBase.current = chatIn.trim();
+VE.listen(voiceLang(), !!auto);
+}
+function micTap() {
+VE.unlock();
+if (vState === "listening") { VE.stopListening(true); return; }
+voiceListen(false);
+}
+function setVoiceRate(r) {
+r = Math.round(Math.max(0.6, Math.min(1.8, r)) * 100) / 100;
+VE.opts.rate = r;
+setVoice(function(p) { return Object.assign({}, p, { rate: r }); });
+}
+function toggleVoice() {
+var on = !voice.on;
+if (on) { VE.unlock(); setVNote(""); setVVoices(VE.voices()); }
+else { VE.stopAll(); setVStart(""); setShowVoiceSet(false); setVNote(""); }
+setVoice(function(p) { return Object.assign({}, p, { on: on }); });
+}
+var VOICE_OPENER = {
+explain: function(t) { return "Talk me through " + t + ". Explain it the way you'd teach it out loud, and check my understanding as we go."; },
+quiz: function(t) { return "Quiz me out loud on " + t + ". One question at a time: tell me if I'm right, fill the gap if I'm not, then ask the next one."; }
+};
+function voiceHeard(t) {
+var base = vBase.current;
+vBase.current = "";
+var full = ((base ? base + " " : "") + t).trim();
+if (!vOn) { setChatIn(full); return; }
+if (vStart && VOICE_OPENER[vStart]) { var how = vStart; setVStart(""); sendChat(VOICE_OPENER[how](full)); return; }
+var cmd = voiceCommand(full, voiceMode());
+if (!cmd.local) { sendChat(cmd.say); return; }
+setChatIn(base);
+if (cmd.local === "repeat") { var last = lastTutorText(); VE.say(last || "Nothing to repeat yet. Ask me anything.", "repeat"); }
+else if (cmd.local === "stop") setVNote("Paused. Tap the mic when you're ready.");
+else {
+setVoiceRate((voice.rate || 1) + (cmd.local === "slower" ? -0.1 : 0.1));
+VE.say(cmd.local === "slower" ? "Okay, slowing down." : "Okay, speeding up.", "ack");
+}
+}
+VE.cb = {
+state: setVState,
+heard: function(t) { var b = vBase.current; setChatIn((b ? b + " " : "") + t); },
+final: voiceHeard,
+listenEnd: function(why) {
+setChatIn(vBase.current);
+vBase.current = "";
+setVNote(why === "no-speech" || why === "aborted" ? "Didn't catch that. Tap the mic to answer, or type."
+: why === "not-allowed" || why === "service-not-allowed" ? "The microphone is blocked for this site. Allow it in the browser's site settings, then tap the mic."
+: why === "audio-capture" ? "No microphone found on this device."
+: why === "network" ? "Listening needs an internet connection (the browser sends your voice to its speech service)."
+: "Couldn't listen (" + why + "). Tap the mic to try again.");
+},
+spoken: function(k) {
+if (!vOn || page !== "chat" || k === "test" || k === "replay" || k === "partial") return;
+if (voice.hands && VE.stt && !document.hidden) voiceListen(true);
+},
+speakError: function(er) { setVNote("Couldn't play speech (" + er + "). Try another voice under the gear, or check the volume."); },
+voices: function() { setVVoices(VE.voices()); }
+};
+useEffect(function() { if (page !== "chat") { VE.stopAll(); setVStart(""); } }, [page]);
+useEffect(function() {
+if (!(vOn && page === "chat") || !navigator.wakeLock || !navigator.wakeLock.request) return;
+var lock = null, dead = false;
+function grab() {
+if (dead || document.hidden || lock) return;
+navigator.wakeLock.request("screen").then(function(l) {
+if (dead) { l.release().catch(function() {}); return; }
+lock = l;
+l.addEventListener("release", function() { if (lock === l) lock = null; });
+}).catch(function() {  });
+}
+function onVis() { if (!document.hidden) grab(); }
+grab();
+document.addEventListener("visibilitychange", onVis);
+return function() { dead = true; document.removeEventListener("visibilitychange", onVis); if (lock) lock.release().catch(function() {}); lock = null; };
+}, [vOn, page]);
 function stopSideReply() {
 dropReply(sideReq, sideAbort);
 setSideLoad(false);
@@ -12371,6 +12829,7 @@ return (
 );
 })()}
 <div className="ush-tscroll" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: "1 1 auto", minWidth: 0 }}>
+{VE.tts && <button data-voice-toggle onClick={toggleVoice} aria-pressed={vOn} style={tutBtn(vOn)} title={vOn ? "Voice mode is on: replies are read aloud" + (VE.stt ? " and it listens for your answer" : "") + ". Tap to turn it off." : "Voice mode: a spoken back-and-forth. The tutor explains a bit at a time out loud, quizzes you, and you answer by talking."}>{Icon("mic", 17, 2)}{"Voice " + (vOn ? "on" : "off")}</button>}
 <div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "2px 5px 2px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40, flexShrink: 0, whiteSpace: "nowrap" }}>
 <span style={{ fontSize: "var(--f15)" }}>{"🍅"}</span>
 <span style={{ fontSize: "var(--f16)", fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
@@ -12487,6 +12946,71 @@ return <button key={key} onClick={function() { setS(function(p) { return Object.
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", flexShrink: 0, minHeight: 34, minWidth: 40 }} title="Tutor settings: personal note, live replies, my hooks">{"✏️"}</button>
 </div>
 </div>
+{vOn && (function() {
+var status = vState === "thinking" ? "Thinking…"
+: vState === "speaking" ? (VE.stt ? "Speaking. Tap the mic to cut in." : "Speaking…")
+: vState === "listening" ? (vStart ? "Listening: say a topic…" : "Listening… go ahead. Tap the mic when you're done.")
+: vNote || (!VE.stt ? "Replies are read aloud. This browser can't listen, so type your answers."
+: vStart ? "Tap the mic and say a topic."
+: voice.hands ? "Your turn: tap the mic or type. After each reply it listens on its own." : "Your turn: tap the mic or type.");
+var dot = vState === "listening" ? "var(--a-red0)" : vState === "speaking" ? c.a : vState === "thinking" ? "var(--a-am)" : "var(--c-mut2)";
+return (
+<div data-voice-bar data-voice-state={vState} className="ush-tbar" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderBottom: "1px solid var(--c-sep)", background: c.a + "0d", flexWrap: "wrap" }}>
+<div style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0, background: dot, animation: vState === "listening" || vState === "speaking" ? "pulse 1.2s infinite" : "none" }} />
+<span data-voice-status style={{ flex: "1 1 170px", minWidth: 0, fontSize: "var(--f12)", color: vNote && vState === "idle" ? "var(--a-or2)" : "var(--c-tx2)", lineHeight: 1.4 }}>{status}</span>
+{vState === "speaking" && <button data-voice-stop onClick={function() { VE.stopSpeaking(); }} style={tutBtn(false)} title="Stop talking">{Icon("stop", 15)}{"Stop"}</button>}
+<button data-voice-set aria-label="Voice settings" aria-pressed={showVoiceSet} onClick={function() { setVVoices(VE.voices()); setShowVoiceSet(!showVoiceSet); }} style={Object.assign(tutBtn(showVoiceSet), { padding: "0 10px" })} title="Voice, speed, hands-free, chime">{Icon("gear", 17)}</button>
+</div>
+);
+})()}
+{vOn && showVoiceSet && (function() {
+var nav = navigator.language || "";
+var ranked = voiceRank(vVoices, nav);
+var best = ranked[0];
+var picked = voice.uri && ranked.some(function(v) { return v.voiceURI === voice.uri; }) ? voice.uri : "";
+var lab = { fontSize: "var(--f11)", fontWeight: 600, color: "var(--c-mut2)", minWidth: 44 };
+return (
+<div data-voice-panel style={{ padding: "10px 14px 12px", borderBottom: "1px solid var(--c-sep)", background: c.cd + "40", display: "flex", flexDirection: "column", gap: 10 }}>
+<div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+<span style={lab}>{"Voice"}</span>
+{ranked.length ? (
+<select data-voice-pick value={picked} onChange={function(e) { var u = e.target.value; VE.opts.uri = u; setVoice(function(p) { return Object.assign({}, p, { uri: u }); }); }} style={{ flex: "1 1 200px", minWidth: 0, minHeight: 38, padding: "0 10px", background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: "var(--f12)" }}>
+<option value="">{"Best available" + (best ? " (" + best.name + ")" : "")}</option>
+{ranked.map(function(v) { return <option key={v.voiceURI + "|" + v.lang} value={v.voiceURI}>{v.name + " · " + v.lang}</option>; })}
+</select>
+) : <span style={{ flex: "1 1 200px", fontSize: "var(--f11)", color: "var(--c-mut)" }}>{"No English voices found on this device yet (some browsers load them after a moment)."}</span>}
+<button data-voice-test onClick={function() { VE.unlock(); VE.say(VOICE_SAMPLE, "test"); }} style={tutBtn(false)} title="Hear the voice">{Icon("speaker", 16)}{"Test"}</button>
+</div>
+<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+<span style={lab}>{"Speed"}</span>
+{[0.9, 1, 1.1, 1.2, 1.35].map(function(r) {
+var on = Math.abs((voice.rate || 1) - r) < 0.001;
+return <button key={r} data-voice-rate={r} onClick={function() { setVoiceRate(r); }} style={{ minHeight: 34, padding: "0 12px", background: on ? c.a + "1f" : "transparent", border: "1px solid " + (on ? c.a + "70" : "var(--c-br)"), borderRadius: 17, color: on ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: on ? 700 : 500, cursor: "pointer" }}>{r + "×"}</button>;
+})}
+{[0.9, 1, 1.1, 1.2, 1.35].every(function(r) { return Math.abs((voice.rate || 1) - r) >= 0.001; }) && <span style={{ fontSize: "var(--f11)", color: c.a, fontWeight: 700 }}>{(voice.rate || 1) + "×"}</span>}
+</div>
+{VE.stt && (
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--f12)", color: "var(--c-tx2)", cursor: "pointer", minHeight: 30 }}>
+<input data-voice-hands type="checkbox" checked={!!voice.hands} onChange={function(e) { var on = e.target.checked; setVoice(function(p) { return Object.assign({}, p, { hands: on }); }); }} style={{ width: 17, height: 17, margin: 0 }} />
+{"Hands-free: listen for my answer after each reply"}
+</label>
+)}
+{VE.stt && (
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--f12)", color: "var(--c-tx2)", cursor: "pointer", minHeight: 30 }}>
+<input data-voice-beep type="checkbox" checked={!!voice.beep} onChange={function(e) { var on = e.target.checked; setVoice(function(p) { return Object.assign({}, p, { beep: on }); }); }} style={{ width: 17, height: 17, margin: 0 }} />
+{"Chime when it's your turn to talk"}
+</label>
+)}
+<div style={{ fontSize: "var(--f11)", color: "var(--c-mut)", lineHeight: 1.55 }}>
+{VE.stt ? "Say “next”, “go deeper”, “skip”, “hint”, “repeat that”, “slower”, “faster” or “stop”. Tap the mic while it's talking to cut in. " : ""}
+{"Replies start sooner with a quick model (Haiku, Flash, or Low effort)."}
+</div>
+<div style={{ fontSize: "var(--f11)", color: "var(--c-mut2)", lineHeight: 1.55 }}>
+{"More natural voices: on iPhone or iPad, Settings › Accessibility › Spoken Content › Voices › English, download an Enhanced or Premium voice (Ava, Zoe, Evan…), then pick it here. On Android, Settings › Text-to-speech with Speech Services by Google. On Windows, the Edge browser has Natural voices (Aria, Jenny, Guy)."}
+</div>
+</div>
+);
+})()}
 {s.showStylePreview && (
 <div style={{ padding: "8px 12px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "30" }}>
 <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)", marginBottom: 6 }}>How each style would teach a BPH question — tap to switch:</div>
@@ -12888,6 +13412,22 @@ return (
 )}
 {chatMsgs.length === 0 && !lectureMode && (
 <div style={{ textAlign: "center", padding: "30px 16px", color: "var(--c-mut2)" }}>
+{vOn && (VE.stt || lectureTopic) && (
+<div data-voice-start style={{ background: c.a + "10", border: "1px solid " + c.a + "40", borderRadius: 14, padding: 16, margin: "0 auto 18px", maxWidth: 360 }}>
+<div style={{ fontSize: "var(--f14)", fontWeight: 700, color: c.a, marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>{Icon("mic", 19, 2)}{"Voice session"}</div>
+<p style={{ fontSize: "var(--f11)", lineHeight: 1.6, color: "var(--c-mut)", margin: "0 0 12px" }}>{(lectureTopic ? "" : "Tap one, then say a topic. ") + "The tutor explains a piece at a time and checks your understanding as it goes. Answer out loud" + (VE.stt ? "" : " by typing") + "."}</p>
+<div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+{["explain", "quiz"].map(function(how) {
+return <button key={how} data-voice-starter={how} onClick={function() {
+VE.unlock();
+if (lectureTopic) { sendChat(VOICE_OPENER[how](lectureTopic)); return; }
+setVStart(how);
+voiceListen(false);
+}} style={{ minHeight: 40, padding: "0 16px", background: how === "explain" ? c.a : c.cd, border: how === "explain" ? "none" : "1px solid " + c.a + "55", borderRadius: 11, color: how === "explain" ? "#fff" : c.a, fontSize: "var(--f12)", fontWeight: 700, cursor: "pointer" }}>{how === "explain" ? "🗣 Explain " + (lectureTopic ? "it" : "a topic") : "🎯 Quiz me" + (lectureTopic ? "" : " on a topic")}</button>;
+})}
+</div>
+</div>
+)}
 <div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div>
 <h3 style={{ color: "var(--c-mut)", margin: "0 0 8px", fontSize: "var(--f14)" }}>{lectureTopic ? "Ready to Study" : "Urology Board Tutor"}</h3>
 {lectureTopic ? (
@@ -12946,6 +13486,9 @@ bookmarkMessage(lectureTopic || "Deep Dive", msg, phase);
 setSaveFeedback("Bookmarked!");
 setTimeout(function() { setSaveFeedback(""); }, 1500);
 }} title="Bookmark this response" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--f14)", opacity: 0.4, padding: 2 }} onMouseOver={function(e) { e.target.style.opacity = 1; }} onMouseOut={function(e) { e.target.style.opacity = 0.4; }}>{"🔖"}</button>
+{vOn && !(chatLoad && i === chatMsgs.length - 1) && (
+<button data-voice-say onClick={function() { VE.unlock(); VE.say(msg.content, "replay"); }} title="Read this aloud" aria-label="Read this aloud" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-tx2)", opacity: 0.55, padding: 2 }}>{Icon("speaker", 17)}</button>
+)}
 {i === chatMsgs.length - 1 && !chatLoad && (
 <button onClick={regenerateResponse} title="Regenerate response" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--f13)", opacity: 0.4, padding: 2 }} onMouseOver={function(e) { e.target.style.opacity = 1; }} onMouseOut={function(e) { e.target.style.opacity = 0.4; }}>{"🔄"}</button>
 )}
@@ -12976,7 +13519,12 @@ setTimeout(function() { setSaveFeedback(""); }, 1500);
 {chatView !== "skills" && <div style={{ padding: "10px 14px", borderTop: "1px solid var(--c-sep)", background: c.bg, flexShrink: 0 }}>
 {upText && !lectureMode && !skillsCtx && <div style={{ fontSize: "var(--f10)", color: c.a, marginBottom: 6 }}>📄 Content loaded <button onClick={function() { setUpText(""); }} style={{ background: "none", border: "none", color: "var(--a-red0)", cursor: "pointer", fontSize: "var(--f10)" }}>x Remove</button></div>}
 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-<input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={skillsCtx ? "Answer, or ask about this skill..." : masteryMode ? "Answer the check — or HINT / SKIP / MAP..." : (lectureMode ? "Ask a question, or type/tap NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, minWidth: 0, minHeight: 46, padding: "0 18px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 23, color: "var(--c-tx)", fontSize: "var(--f15)", outline: "none" }} />
+<input data-chat-input value={chatIn} onChange={function(e) { setChatIn(e.target.value); }} onKeyDown={function(e) { if (e.key === "Enter") { e.preventDefault(); sendChat(chatIn); } }} placeholder={vOn && vState === "listening" ? "Listening…" : skillsCtx ? "Answer, or ask about this skill..." : masteryMode ? "Answer the check — or HINT / SKIP / MAP..." : (lectureMode ? "Ask a question, or type/tap NEXT..." : "Ask about any urology topic...")} style={{ flex: 1, minWidth: 0, minHeight: 46, padding: "0 18px", background: c.cd, border: "1px solid var(--c-br)", borderRadius: 23, color: "var(--c-tx)", fontSize: "var(--f15)", outline: "none" }} />
+{vOn && VE.stt && (
+<button data-voice-mic aria-label={vState === "listening" ? "Done talking: send it" : "Answer out loud"} title={vState === "listening" ? "Listening. Tap when you're done (it also stops by itself after a short pause)." : vState === "speaking" ? "Cut in: stop the tutor and answer" : "Answer out loud"} onClick={micTap} style={{ width: 46, height: 46, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: vState === "listening" ? "var(--a-red0)" : c.a + "1f", border: "1px solid " + (vState === "listening" ? "transparent" : c.a + "70"), borderRadius: 23, padding: 0, cursor: "pointer", color: vState === "listening" ? "#fff" : c.a, animation: vState === "listening" ? "pulse 1.2s infinite" : "none" }}>
+{Icon("mic", 22, 2)}
+</button>
+)}
 <button aria-label="Send" title="Send" onClick={function() { sendChat(chatIn); }} disabled={chatLoad || !chatIn.trim()} style={{ width: 46, height: 46, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: (chatLoad || !chatIn.trim()) ? "var(--c-fill)" : c.a, border: "none", borderRadius: 23, padding: 0, cursor: (chatLoad || !chatIn.trim()) ? "default" : "pointer", color: (chatLoad || !chatIn.trim()) ? "var(--c-mut2)" : "#fff" }}>
 {Icon("send", 22, 2.4)}
 </button>
