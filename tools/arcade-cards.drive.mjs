@@ -88,7 +88,7 @@ async function open(seed) {
 const getProg = async (p) => JSON.parse((await p.evaluate(() => localStorage.getItem('uroStudyHub_progress'))) || 'null');
 const btn = (p, re) => p.getByRole('button', { name: re });
 async function openArcade(p) {
-  await btn(p, /^🎮\s*Games$/).first().click();
+  await p.locator('button[data-nav="games"]').first().click();
   await p.getByText('🎮 Arcade').waitFor({ timeout: 5000 });
 }
 const errCheck = (label, errs) => check('no console errors · ' + label, errs.length === 0, errs.slice(0, 3).join(' | '));
