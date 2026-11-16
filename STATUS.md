@@ -1,7 +1,43 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-13
+**Updated:** 2026-11-16
 **Tool:** Claude Code
+
+## 2026-11-16 — ✨ Visual overhaul (Apple-style look), bigger Tutor controls, wide Tutor on iPad landscape
+
+Andrew: make the app look less like an early-AI HTML app (UWorld or a slick Apple-designed app), the Tutor tab's buttons are
+a little small, and in landscape (iPad) let the chat take more width so there's less scrolling.
+**Done** (all in `UroStudyHub.html`; the design system is written up in `UroStudyHub_CLAUDE.md` > Architecture):
+- **Palette:** Apple system greys (dark: near-black base, #1c1c1e cards, hairline separators; light: #f2f2f7 base, white
+  cards). Night Shift's accent is now a clinical blue (it was indigo-to-purple); the four paid themes moved to Apple's system
+  colours. Primary buttons are solid instead of two-colour gradients; the title is plain text, not gradient text.
+- **Type scale:** every 7-16px font size is now a CSS variable (`fontSize: "var(--f9)"`), Standard is about 2px bigger at
+  the small end (8px text becomes 10, 9 becomes 11...). **Settings > Text size**: Compact (the old sizes), Standard, Large;
+  per device (`uroStudyHub_text`), applied before first paint.
+- **Header:** back chevron, plain title, round line-icon buttons (import, light/dark, settings), and one status strip
+  underneath (rank + XP bar, streak, coins, tokens) instead of six wrapping boxes.
+- **Tab bar:** frosted, with drawn line icons instead of emoji. Buttons carry `data-nav`; the AI picker, In-Service, Anki and
+  arcade harnesses now find tabs by it.
+- **Tutor:** every toolbar control is 36px tall (40 on touch screens) with 13.5px text (was 8-10px text in ~24px buttons):
+  model chip, cost, timer, Auto-Anki (now says "Auto-Anki on/off"), Upload, OR Skills, Saved, Clear, the style chips, the
+  lecture bar (NEXT / DEEP / SKIP / Save / Anki Cards / Mark Done) and the mastery bar. On phones the timer and actions are
+  one swipeable row so the chat keeps its height. Pill-shaped input, round send button, iMessage-style bubbles (white text on
+  the accent for your messages).
+- **Wide Tutor:** on screens 1000px and wider (iPad landscape, laptops) the Tutor column is `min(1320px, 96vw)` instead of
+  820px, and replies use the full column (1071px wide on an 1180px iPad, was ~700).
+- **Feel:** soft press and hover on buttons, accent focus rings on inputs. None of that inside the In-Service sprint view
+  (built for e-ink; its harness checks there's no motion), or with reduced motion.
+**Verified:** headless Chromium, phone (390), iPad portrait (820), iPad landscape (1180) and laptop (1440), light and dark,
+all three text sizes; every main page and the Settings and Arcade overlays screenshotted for overflow. Harnesses:
+`ai-pick` 57, `ise-plan.drive` 150, `anki-study` 63, `arcade-cards` 119, `ise-plan.test` 45, `anki-sched.test` 32 under
+three time zones; all pass, no console errors.
+**Next steps:** look at it on the iPad and the Boox. The Boox gets the same light palette (contrast kept at e-ink levels)
+and can use Compact if Standard feels too big.
+**Open questions:**
+- Content inside pages (hub cards, guide tiles, game cards) still uses emoji icons; only the app chrome got line icons.
+  Worth a second pass on the hub tiles?
+- The paid themes with light accents (Gold, Surgical Green, Cryo) still put white text on light buttons in dark mode, as
+  before. Switch those buttons to dark text?
 
 ## 2026-11-13 (later 3) — 👟 Path of Pathology: wardrobe follow-up (med student coat, OR scrubs, jogger scrubs, OR shoes)
 

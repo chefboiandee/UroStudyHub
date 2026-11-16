@@ -139,7 +139,7 @@ const effortOpts = (p) => p.locator(sel('aipick-panel') + ' ' + sel('effort-opt'
 
 async function goTutor(p) {
   const ok = await p.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find((x) => /🧠\s*Tutor/.test(x.textContent) && x.getClientRects().length);
+    const b = [...document.querySelectorAll('button[data-nav="chat"]')].find((x) => x.getClientRects().length);
     if (b) { b.click(); return true; } return false;
   });
   if (!ok) throw new Error('no Tutor tab');
