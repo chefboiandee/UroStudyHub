@@ -3,6 +3,18 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later 3) — 📏 Tutor: Style chips share the toolbar row with Saved / Clear
+
+Andrew: move the style buttons onto the same row as Saved and Clear to make the iPad's reading window bigger.
+**Done:** the style picker (Style, the four styles, Preview, ✏️) is one group inside the tutor toolbar (`data-style-row`,
+`ush-sscroll`) instead of its own row. On iPad landscape it sits after Saved and Clear; on iPad portrait it fills the
+toolbar's third row (still one row less than before, no extra divider and padding); on phones it's its own swipeable row
+like the actions. The style preview and personal-note panels open under the toolbar as before.
+**Measured** (chat pane, same viewports as the entry below): iPad landscape lecture 317 → **368**, plain chat 415 →
+**466** (the pre-overhaul build: 317 / 434); iPad portrait 677 → 686 / 775 → 784; phone 231 → 240 / 329 → 338.
+**Verified:** screenshots on the three sizes; `ai-pick` 67, `tutor-rich` 57, `ise-plan.drive` 150, `anki-study` 63,
+`arcade-cards` 119, all pass.
+
 ## 2026-11-16 (later 2) — 📏 Tutor: the chat gets its height back (compact lecture bar)
 
 Andrew: on the iPad the chat part is now not very tall, so it reads worse than before; the part under the Style row is too

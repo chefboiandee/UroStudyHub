@@ -159,9 +159,9 @@
   /* 700px and up: the timer and actions flow one by one with the model chip, so they fill rows instead of wrapping as a block */
   @media (min-width: 700px) { .ush-tscroll { display: contents !important; } }
   @media (max-width: 699px) {
-    .ush-tscroll { flex-wrap: nowrap !important; overflow-x: auto; flex: 0 0 calc(100% + 28px) !important; margin: 0 -14px; padding: 0 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-    .ush-tscroll::-webkit-scrollbar { display: none; }
-    .ush-tscroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+    .ush-tscroll, .ush-sscroll { flex-wrap: nowrap !important; overflow-x: auto; flex: 0 0 calc(100% + 28px) !important; max-width: none !important; margin: 0 -14px; padding: 0 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .ush-tscroll::-webkit-scrollbar, .ush-sscroll::-webkit-scrollbar { display: none; }
+    .ush-tscroll, .ush-sscroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   }
   /* Loading screen */
   #loading { position: fixed; inset: 0; background: var(--c-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
@@ -12476,8 +12476,7 @@ reader.readAsText(file);
 <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={tutBtn(chatView === "saved", "#a78bfa", "var(--a-vio)")}>{Icon("bookmark", 17)}{"Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
 <button onClick={function() { stopChatReply(); setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={tutBtn(false)} title="Clear the chat and start fresh">{Icon("compose", 17)}{"Clear"}</button>
 </div>
-</div>
-<div className="ush-tbar" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderBottom: "1px solid var(--c-sep)", overflowX: "auto" }}>
+<div className="ush-sscroll" data-style-row style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: "100%", overflowX: "auto" }}>
 <span style={{ fontSize: "var(--f11)", fontWeight: 600, color: "var(--c-mut2)", flexShrink: 0 }}>Style</span>
 {Object.keys(TUTOR_STYLES).map(function(key) {
 var st = TUTOR_STYLES[key];
@@ -12485,8 +12484,8 @@ var isActive = (s.tutorStyle || "engaging") === key;
 return <button key={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key, showStylePreview: p.tutorStyle === key ? !p.showStylePreview : true }); }); }} title={st.desc} style={{ padding: "0 14px", background: isActive ? c.a + "1f" : "transparent", border: "1px solid " + (isActive ? c.a + "70" : "var(--c-br)"), borderRadius: 18, color: isActive ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: isActive ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }}>{st.icon + " " + st.label}</button>;
 })}
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
-<div style={{ flex: 1 }} />
 <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", flexShrink: 0, minHeight: 34, minWidth: 40 }} title="Tutor settings: personal note, live replies, my hooks">{"✏️"}</button>
+</div>
 </div>
 {s.showStylePreview && (
 <div style={{ padding: "8px 12px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "30" }}>
