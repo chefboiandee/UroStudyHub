@@ -54,6 +54,9 @@ inside another workspace; nothing here depends on that one any more.)
   AI Tutor's rich replies (tables, bold, Mermaid-style flowcharts and ```` ```chart ```` charts drawn by `renderRich`; canned
   replies from a stubbed API, streaming included): `node tools/tutor-rich.drive.mjs` (needs the `urostudyhub` server; same
   `CDN_DIR` trick; `SHOTS=dir` for phone light / dark and desktop shots).
+  AI Tutor's Rapid Review cheat-sheet auto-save (a lecture's phase-9 reply files itself into Saved; the Saved page's Cheat sheets
+  filter): `node tools/cheat-save.test.mjs` (pure Node: what counts as the sheet, de-dupe, regenerate, filter / search) and
+  `node tools/cheat-save.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
 
 ## Run and verify
 
