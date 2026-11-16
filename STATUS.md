@@ -3,6 +3,20 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later) — 💬 Quick ask minimizes when you tap the tutor behind it
+
+Andrew: when the side chat (Quick ask) is open on the Tutor tab, clicking the main area should minimize it instead of
+having to press ✕.
+**Done:** a tap or click anywhere in the tutor outside the panel minimizes it, exactly like ✕ (the side chat is kept and
+the button shows its count; a reply still being written keeps going). The tapped control still works (tap the typing box
+and it gets focus). Not counted: taps inside the panel (including a suggestion chip that disappears as you tap it),
+scrolling, and the click that ends a drag-select of lecture text, so selecting text to quote it in Quick ask still works.
+Escape still closes it. Code: the `sideOpen` effect next to the visual-viewport one; hooks `data-tutor-col`,
+`data-side-open`.
+**Verified:** `node tools/ai-pick.drive.mjs`, new block G (10 checks, phone viewport, real taps and a mouse drag-select):
+67 passed, 0 failed.
+**Next steps / open questions:** none.
+
 ## 2026-11-16 — ✨ Visual overhaul (Apple-style look), bigger Tutor controls, wide Tutor on iPad landscape
 
 Andrew: make the app look less like an early-AI HTML app (UWorld or a slick Apple-designed app), the Tutor tab's buttons are
