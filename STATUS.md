@@ -3,6 +3,43 @@
 **Updated:** 2026-11-16
 **Tool:** Claude Code
 
+## 2026-11-16 (later) — 🎙 Voice mode for the AI Tutor (a spoken back-and-forth)
+
+Andrew: build the free, browser-based voice tutor: more natural sounding, no minutes-long blocks read out, more of an
+explain-a-concept-then-quiz-you conversation, and work in the Engaging style's way of explaining.
+**Done** (all in `UroStudyHub.html`; written up in `UroStudyHub_CLAUDE.md` > AI Tutor):
+- **Voice button** in the Tutor toolbar (first in the swipe row on phones). Only where the browser can speak, so nothing
+  shows on engines without the Web Speech API (the Boox, if NeoBrowser lacks it).
+- **It talks:** replies are read aloud sentence by sentence as they stream in, so it starts within a sentence of the reply
+  arriving (even with "show replies as they're written" off). What's read is cleaned: no markdown, emoji, hook tags or
+  LaTeX (formulas become words), units / catheter sizes / "65M" spelled out ("0.4 milligrams", "22 French", "a 65-year-old
+  man"), "E. coli" not split. Mastery-map lines and anything after an `ON SCREEN:` line stay on screen only.
+- **Short spoken turns:** while voice is on, a voice rule goes last in the system prompt: 40-120 words a turn (about
+  15-45 s, never over ~150), one idea, then ONE question to answer out loud, then wait; feedback in a sentence and a new
+  angle when you're lost; the Engaging way of explaining (attending over coffee, plain words first, a patient story or
+  analogy, mechanism before fact) whatever style chip is picked. Lectures, Deep Dives, drills and OR Skills all keep their
+  structure, delivered as short turns; question rounds one at a time; the cheat sheet / map / tables go ON SCREEN.
+- **It listens:** hands-free by default: after each reply a soft chime, then it listens; ~2 s of quiet sends what it heard.
+  The mic button in the input row answers, sends early, or **cuts in** mid-reply. Spoken commands: "next", "go deeper",
+  "skip" (lecture), "hint", "skip", "map" (drill), "repeat that" (no AI call), "slower" / "faster", "stop".
+- **Starters:** on an empty chat, "Explain a topic" / "Quiz me on a topic" (tap, then say the topic); with a topic
+  already picked (Study Now) they start on it directly. 🔊 on any tutor message reads it again.
+- **Settings** (gear on the voice bar): voice (the device's English voices, best first: natural / neural / enhanced /
+  premium, novelty voices last; "Best available" picks for you), speed 0.9-1.35×, hands-free, chime, Test button, and
+  where to get better voices on iPhone / Android / Windows. Per device (`uroStudyHub_voice`). Screen kept awake while voice
+  is on in the Tutor; leaving the Tutor stops it.
+**Verified:** `node tools/voice-text.test.mjs` (17, pure Node: cleaning, streaming chunk stability, commands, voice
+ranking) and `node tools/voice-tutor.drive.mjs` (75, headless phone viewport, speech + recognition stubbed, Claude
+streamed: no-speech browser, speak-only browser, the full loop, cut-in, Stop, repeat / slower / stop, settings, leaving
+the tab, voice off, a voice lecture with next / go deeper and steady phases, starters, a blocked mic). Regression:
+`ai-pick`, `anki-study`, `ise-plan.drive`, `arcade-cards`, `ise-plan.test`, `anki-sched.test` (3 time zones).
+**Next steps:** try it on the iPhone / iPad and the Boox (real voices and real recognition can't be tested headless).
+On iPhone, download an Enhanced or Premium voice first (Settings › Accessibility › Spoken Content › Voices).
+**Open questions:**
+- iOS sometimes plays speech quieter (through the earpiece) after the mic has been used. If that happens, say so.
+- 2 s of quiet ends your answer. If it cuts you off mid-thought, it can wait longer (or switch to tap-to-send).
+- Fast models feel most conversational; a slow thinking model leaves a gap before each spoken reply.
+
 ## 2026-11-16 — ✨ Visual overhaul (Apple-style look), bigger Tutor controls, wide Tutor on iPad landscape
 
 Andrew: make the app look less like an early-AI HTML app (UWorld or a slick Apple-designed app), the Tutor tab's buttons are

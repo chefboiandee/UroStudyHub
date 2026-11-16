@@ -49,6 +49,8 @@ inside another workspace; nothing here depends on that one any more.)
   phone viewport; needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir` saves screenshots).
   AI Tutor's AI panel (provider / model / reasoning effort; every provider's API is stubbed in the page and the request
   body checked): `node tools/ai-pick.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
+  AI Tutor's voice mode (speech + recognition stubbed, Claude streamed): `node tools/voice-text.test.mjs` (pure Node: what gets
+  said, chunking, spoken commands) and `node tools/voice-tutor.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
 
 ## Run and verify
 
