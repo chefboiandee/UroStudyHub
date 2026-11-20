@@ -118,6 +118,46 @@
   @keyframes pomoRing { 0%, 100% { transform: rotate(0deg) scale(1); } 20% { transform: rotate(-14deg) scale(1.08); } 40% { transform: rotate(12deg) scale(1.12); } 60% { transform: rotate(-8deg) scale(1.08); } 80% { transform: rotate(6deg) scale(1.04); } }
   @keyframes pomoGlowRed { 0%, 100% { box-shadow: 0 0 22px rgba(239,68,68,0.45); } 50% { box-shadow: 0 0 70px rgba(239,68,68,0.85); } }
   @keyframes pomoGlowGrn { 0%, 100% { box-shadow: 0 0 22px rgba(74,222,128,0.45); } 50% { box-shadow: 0 0 70px rgba(74,222,128,0.85); } }
+  /* ═══ POMODORO START ═══ Big domed start button in the dashboard timer card.
+     A radial highlight reads as the dome; the hard 7px base shadow reads as a raised
+     plate; pressing sinks the plate, shrinks the glow and darkens the inner shading. */
+  @keyframes ushPomoGlow {
+    0%, 100% { box-shadow: 0 7px 0 var(--a-red3), 0 10px 18px rgba(239,68,68,0.24), inset 0 2px 2px rgba(255,255,255,0.46), inset 0 -5px 10px rgba(0,0,0,0.26); }
+    50% { box-shadow: 0 7px 0 var(--a-red3), 0 16px 34px rgba(239,68,68,0.46), inset 0 2px 2px rgba(255,255,255,0.56), inset 0 -5px 10px rgba(0,0,0,0.26); }
+  }
+  .ush-pomo-start {
+    position: relative; display: flex; align-items: center; justify-content: center; gap: 7px;
+    width: 100%; min-height: 60px; margin-top: 6px; padding: 8px 12px 11px;
+    border: none; border-radius: 16px; color: #fff; cursor: pointer;
+    font-family: inherit; font-size: var(--f12); font-weight: 800; letter-spacing: 0.01em;
+    background:
+      radial-gradient(115% 85% at 50% 0%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.14) 38%, rgba(255,255,255,0) 56%),
+      linear-gradient(180deg, #ff8d7c 0%, #f05252 36%, #c81e1e 100%);
+    box-shadow: 0 7px 0 var(--a-red3), 0 10px 18px rgba(239,68,68,0.24), inset 0 2px 2px rgba(255,255,255,0.46), inset 0 -5px 10px rgba(0,0,0,0.26);
+    animation: ushPomoGlow 3.4s ease-in-out infinite;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .ush-pomo-start::before {
+    content: ""; position: absolute; left: 7%; right: 7%; top: 3px; height: 42%;
+    border-radius: 16px 16px 60% 60%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0));
+    pointer-events: none;
+  }
+  .ush-pomo-start > span { position: relative; z-index: 1; }
+  .ush-pomo-start .ush-pomo-start-mins {
+    font-size: var(--f10); font-weight: 800; padding: 2px 7px; border-radius: 999px;
+    background: rgba(0,0,0,0.22); box-shadow: inset 0 1px 2px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.18);
+    font-variant-numeric: tabular-nums;
+  }
+  .ush-pomo-start:hover { filter: brightness(1.05); }
+  .ush-pomo-start:not(:disabled):active {
+    animation: none; transform: translateY(6px) scale(0.99);
+    box-shadow: 0 1px 0 var(--a-red3), 0 3px 8px rgba(239,68,68,0.26), inset 0 3px 9px rgba(0,0,0,0.34);
+    filter: brightness(0.97);
+  }
+  .ush-pomo-start:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce), (update: slow) { .ush-pomo-start { animation: none; } }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--c-fill); border-radius: 6px; }
@@ -11723,7 +11763,17 @@ return (
 return <button key={m} onClick={function(e) { e.stopPropagation(); setPomoDuration(m); setPomoTime(m * 60); }} style={{ padding: "2px 7px", background: pomoDuration === m ? c.a + "30" : "var(--c-cd)", border: "1px solid " + (pomoDuration === m ? c.a + "50" : "var(--c-br)"), borderRadius: 4, color: pomoDuration === m ? c.a : "var(--c-mut2)", fontSize: "var(--f8)", cursor: "pointer" }}>{m}m</button>;
 })}
 </div>
-<div style={{ fontSize: "var(--f8)", color: "var(--c-mut2)", textAlign: "center" }}>Tap anywhere to start</div>
+<button
+type="button"
+className="ush-pomo-start"
+aria-label={"Start a " + pomoDuration + "-minute focus session"}
+title={"Start a " + pomoDuration + "-minute focus session"}
+onClick={function(e) { e.stopPropagation(); startPomo(); }}
+>
+<span aria-hidden="true" style={{ fontSize: "var(--f15)", lineHeight: 1 }}>{"🍅"}</span>
+<span>{"Start Focus"}</span>
+<span className="ush-pomo-start-mins">{pomoDuration + "m"}</span>
+</button>
 </div>
 )}
 {pomoState === "work" && (
