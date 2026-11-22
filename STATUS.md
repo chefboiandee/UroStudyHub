@@ -1,7 +1,41 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-16
+**Updated:** 2026-11-22
 **Tool:** Claude Code
+
+## 2026-11-22 — 🧠 The tutor on its own (tutor-only door) + uploads reach the first reply
+
+Andrew: can the tutor be its own pull-up app for quick studying between cases, with file upload and the same API keys
+as the phone site, run from his own harness app; later maybe a general "help me read anything I upload" tool.
+**Done** (`UroStudyHub.html`, `sw.js`, new `tutor.html`, `tutor-manifest.json`, `icons/`; written up in
+`UroStudyHub_CLAUDE.md` > AI Tutor and `SETUP.md`):
+- **The door:** `tutor.html` (= `UroStudyHub.min.html?app=tutor`) opens the same app as just the AI Tutor: no Hub, no tab
+  bar, no XP chips; header = Tutor, a home button (opens the full app), light / dark, Settings. Its own manifest, name
+  ("Tutor") and icon, so Add to Home Screen gives a second app. One code base: every tutor change lands in both.
+  The head script sets `window.__USH_APP`; the app reads it as `TUTOR_APP`.
+- **Keys:** same origin as the full site, so the keys, model choices, saved sessions and cheat sheets are shared. The door
+  connects on open (the last provider used if its key is saved, else the first cloud provider with a key:
+  `tutorAutoProvider`); the full app still opens "AI off" until tapped. A local model is never auto-connected.
+- **Upload:** the empty screen's "Upload a Chapter" card is now a button (both the door and the full app).
+- **Bug fixed (was live):** after an upload, the first lecture request went out from a stale render: **no file text**, the
+  Deep Dive prompt instead of the lecture one, and the "Loaded" line wiped; the file only reached the AI from the second
+  message. Same for the Deep Dive / Mastery Drill / Lecture start buttons (Mastery's first turn used the wrong prompt).
+  All four now send through the existing `planKick` effect, after the state has landed.
+- **Offline:** the service worker falls back to the cached page whatever the query string says.
+**Verified:** `node tools/tutor-app.drive.mjs` (54, headless phone + desktop, APIs stubbed: door chrome, manifest + icons
+served, auto-connect with the saved key and model, fallback to the keyed provider, no key, upload from the card with the
+file text and lecture prompt in the first request, `tutor.html`, the way back, the full app unchanged, Mastery Drill's
+first prompt). Regression: `ai-pick.drive` 67, `tutor-rich.drive` 57, `cheat-save.drive` 40 / `.test` 19,
+`voice-tutor.drive` 75, `voice-text.test` 18, `ise-plan.drive` 150.
+**Next steps:**
+- Plug the door into the harness app: open `https://chefboiandee.github.io/UroStudyHub/tutor.html` as a window / tab (keys
+  already there in the same browser). In an embedded frame or an app's own web view, storage is separate: enter the key
+  once in Settings there; a frame also needs `allow="microphone"` for voice mode. Not wired from this session: the
+  harness's code wasn't reachable from here.
+- The general "read anything" version: the opener and the lecture prompt still say AUA Core Curriculum / boards. A
+  subject-neutral prompt set picked in the door (or by file) is the next step when wanted.
+**Open questions:**
+- Should the door hide the urology-only bits (OR Skills, the four board-review starter chips, Auto-Anki)? Left in for now.
 
 ## 2026-11-16 (later 5) — 📄 The Rapid Review cheat sheet of each lecture saves itself
 

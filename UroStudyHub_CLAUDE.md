@@ -209,6 +209,17 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
   sheet swaps its auto-saved copy; the reply shows a tappable "✓ Saved to your cheat sheets" line. The Saved page has
   All / 📄 Cheat sheets / Sessions / Bookmarks filters, a search box, and Expand / Collapse all on the cheat-sheet list (A to Z by topic);
   bookmarks saved by hand from phase 9 count as cheat sheets too. Tests: `tools/cheat-save.test.mjs`, `tools/cheat-save.drive.mjs`.
+- **Tutor-only door (2026-11-22):** `tutor.html` → `UroStudyHub.min.html?app=tutor` is the same app opened as just the
+  tutor (for a quick pull-up, a home-screen icon of its own, or a window in another app). The head script sees the
+  parameter before first paint: sets `window.__USH_APP = "tutor"`, `html[data-app="tutor"]`, the title, swaps the manifest
+  link to `tutor-manifest.json` and adds the `icons/tutor-180.png` touch icon. In the app `TUTOR_APP` starts `page` on
+  `"chat"`, drops the tab bar, Back, Import and the XP chips, titles the header "Tutor" and adds a home button
+  (`[data-tutor-full]`, opens the full app). Same origin = same `uroStudyHub_*` storage: keys, models, saved sessions.
+  On open it connects a provider that has a saved key (`tutorAutoProvider`: last used, else Claude / Router / Gemini /
+  OpenAI in that order; never a local model); the full app still opens "AI off". Harness: `node tools/tutor-app.drive.mjs`.
+- **Opening messages go through `planKick`** (upload, Deep Dive / Mastery Drill / Lecture start buttons, plan Start
+  buttons): the handler sets the state, the effect sends from the next render. Never call `sendChat` from a timer set in
+  the handler: it sends from the old render (no uploaded text, the old mode's prompt, the grey "Loaded" line wiped).
 - **Regenerate response** button (🔄) on last assistant message
 - Auto-generate Anki cards from lectures (configurable tags)
 - Upload accepts: PDF, DOCX, TXT, MD, HTML, CSV, RTF

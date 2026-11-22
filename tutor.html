@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8" />
+<title>Tutor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="manifest" href="tutor-manifest.json" />
+<link rel="apple-touch-icon" href="icons/tutor-180.png" />
+<!-- The tutor-only door: the same app, opened as just the AI Tutor. -->
+<meta http-equiv="refresh" content="0;url=UroStudyHub.min.html?app=tutor">
+</head><body>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+location.replace("UroStudyHub.min.html?app=tutor");
+</script>
+</body></html>

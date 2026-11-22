@@ -17,8 +17,10 @@ inside another workspace; nothing here depends on that one any more.)
 
 ## Layout
 
-- `UroStudyHub.html` — the app (React + in-browser Babel, ~13k lines: grep → slice).
+- `UroStudyHub.html` — the app (React + in-browser Babel, ~18k lines: grep → slice).
   `python3 build.py` → `UroStudyHub.min.html`, which Pages serves (`index.html` redirects to it).
+- `tutor.html` → `UroStudyHub.min.html?app=tutor`: the tutor-only door (same app, just the AI Tutor; own
+  `tutor-manifest.json` + `icons/tutor-*.png`). The head script sets `window.__USH_APP`, the app reads `TUTOR_APP`.
 - `games/` — arcade games that are their own page; the app hosts them in a frame
   (`games/preop-please.html`: postMessage `preop:claim` / `preop:exit`; `games/uro-rush.html`: `rush:claim` / `rush:exit`;
   `games/uro-crawl.html`: `crawl:claim` / `crawl:result` / `crawl:exit` — the dungeon-crawler roguelike, shown to players as
@@ -54,6 +56,8 @@ inside another workspace; nothing here depends on that one any more.)
   AI Tutor's rich replies (tables, bold, Mermaid-style flowcharts and ```` ```chart ```` charts drawn by `renderRich`; canned
   replies from a stubbed API, streaming included): `node tools/tutor-rich.drive.mjs` (needs the `urostudyhub` server; same
   `CDN_DIR` trick; `SHOTS=dir` for phone light / dark and desktop shots).
+  Tutor-only door (`?app=tutor`: its chrome, manifest, auto-connect with the saved key, upload from the empty-screen card
+  with the file in the first request): `node tools/tutor-app.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
   AI Tutor's Rapid Review cheat-sheet auto-save (a lecture's phase-9 reply files itself into Saved; the Saved page's Cheat sheets
   filter): `node tools/cheat-save.test.mjs` (pure Node: what counts as the sheet, de-dupe, regenerate, filter / search) and
   `node tools/cheat-save.drive.mjs` (needs the `urostudyhub` server; same `CDN_DIR` trick; `SHOTS=dir`).
