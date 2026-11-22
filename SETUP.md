@@ -52,6 +52,19 @@ The app uses AI to power the tutor, generate flashcards, and build study plans. 
 
 ---
 
+## Just the Tutor (Optional)
+
+Want only the AI Tutor, as its own app? Open **https://chefboiandee.github.io/UroStudyHub/tutor.html**
+
+- It is the same tutor: upload a PDF, Word file or text file and it walks you through it step by step.
+- It uses the API key you already saved on this site in the same browser. Nothing to set up twice.
+- Add it to your home screen the same way as in Step 2 and it shows up as a separate app called **Tutor**.
+- The house button at the top opens the full UroStudy Hub.
+- Inside another app's built-in browser, or inside a frame on another page, the browser keeps storage separate:
+  open Settings (the gear) there once and paste your key.
+
+---
+
 ## What AI Does in the App
 
 - **AI Tutor** — upload a lecture PDF or notes → get a structured teaching session that walks you through the material like an attending would

@@ -6,7 +6,9 @@ var CACHE_NAME = "urostudyhub-v1";
 var ASSETS = [
   "./",
   "./index.html",
-  "./UroStudyHub.min.html"
+  "./UroStudyHub.min.html",
+  "./tutor.html",
+  "./tutor-manifest.json"
 ];
 
 // Install: pre-cache shell
@@ -49,8 +51,11 @@ self.addEventListener("fetch", function(e) {
       }
       return response;
     }).catch(function() {
-      // Network failed — serve from cache (offline mode)
-      return caches.match(e.request);
+      // Network failed — serve from cache (offline mode). The tutor-only door is the same page with
+      // ?app=tutor on the end, so fall back to the cached page whatever its query string says.
+      return caches.match(e.request).then(function(hit) {
+        return hit || caches.match(e.request, { ignoreSearch: true });
+      });
     })
   );
 });

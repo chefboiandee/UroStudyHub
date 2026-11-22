@@ -21,6 +21,25 @@
     if (ts === "compact" || ts === "large") document.documentElement.setAttribute("data-text", ts);
   } catch (e) {}
 })();
+/* Tutor-only door: UroStudyHub.min.html?app=tutor (short address: tutor.html) opens the same app as just
+   the AI Tutor, with its own name and home-screen icon (tutor-manifest.json). Same origin, so the saved
+   API keys, settings and saved sessions are the ones the full app uses. The app reads window.__USH_APP. */
+(function () {
+  try {
+    if (!/[?&]app=tutor(&|#|$)/.test(window.location.search)) return;
+    window.__USH_APP = "tutor";
+    var d = document, h = d.documentElement;
+    h.setAttribute("data-app", "tutor");
+    d.title = "Tutor";
+    var ml = d.querySelector('link[rel="manifest"]');
+    if (ml) ml.setAttribute("href", "tutor-manifest.json");
+    var add = function (tag, attrs) { var el = d.createElement(tag); for (var k in attrs) el.setAttribute(k, attrs[k]); d.head.appendChild(el); };
+    add("link", { rel: "apple-touch-icon", href: "icons/tutor-180.png" });
+    add("meta", { name: "apple-mobile-web-app-title", content: "Tutor" });
+    add("meta", { name: "apple-mobile-web-app-capable", content: "yes" });
+    add("meta", { name: "mobile-web-app-capable", content: "yes" });
+  } catch (e) {}
+})();
 </script>
 <style>
   /* ═══ THEME TOKENS ═══
@@ -212,6 +231,7 @@
 <body>
 <div id="root"></div>
 <div id="loading"><div class="spinner"></div><p>Loading UroStudy Hub...</p></div>
+<script>if (window.__USH_APP === "tutor") document.querySelector("#loading p").textContent = "Loading Tutor...";</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -5633,6 +5653,14 @@ return (
 </div>
 );
 }
+var TUTOR_APP = typeof window !== "undefined" && window.__USH_APP === "tutor";
+function tutorAutoProvider(lm) {
+var keyOf = { claude: lm.claudeKey, openrouter: lm.openrouterKey, gemini: lm.geminiKey, openai: lm.openaiKey };
+if (keyOf[lm.provider]) return lm.provider;
+var order = ["claude", "openrouter", "gemini", "openai"];
+for (var i = 0; i < order.length; i++) if (keyOf[order[i]]) return order[i];
+return "";
+}
 export default function UroStudyHub() {
 var [s, setS] = useState(function() {
 try {
@@ -5641,7 +5669,7 @@ if (saved) return migrateArcade(Object.assign({}, INIT, JSON.parse(saved)));
 } catch (e) {  }
 return migrateArcade(INIT);
 });
-var [page, setPage] = useState("hub");
+var [page, setPage] = useState(TUTOR_APP ? "chat" : "hub");
 var [tView, setTView] = useState("schedule");
 var [exPh, setExPh] = useState(null);
 var [exSec, setExSec] = useState(null);
@@ -5689,7 +5717,17 @@ var parsed = JSON.parse(saved);
 if (CLAUDE_LEGACY[parsed.claudeModel]) parsed.claudeModel = CLAUDE_LEGACY[parsed.claudeModel];
 if (CLAUDE_LEGACY[parsed.model]) parsed.model = CLAUDE_LEGACY[parsed.model];
 if (parsed.provider === "lmstudio" && !parsed.localModel && parsed.model) parsed.localModel = parsed.model;  // saved before localModel existed
-return Object.assign({}, defaults, parsed, { on: false });
+var loaded = Object.assign({}, defaults, parsed, { on: false });
+if (TUTOR_APP) {
+var ap = tutorAutoProvider(loaded);
+if (ap) {
+loaded.provider = ap;
+loaded.model = ap === "claude" ? (loaded.claudeModel || CLAUDE_DEFAULT) : ap === "gemini" ? (loaded.geminiModel || "gemini-2.5-flash")
+: ap === "openai" ? (loaded.openaiModel || "gpt-4o") : (loaded.openrouterModel || OR_DEFAULT_MODEL);
+loaded.on = true;
+}
+}
+return loaded;
 }
 } catch (e) {  }
 return defaults;
@@ -10953,7 +10991,7 @@ var lmSig = JSON.stringify(lmNoEffort);
 var settingsOverlay = useMemo(function() {
 return showSet ? React.createElement(SettingsModal, null) : null;
 }, [showSet, lmSig]);
-var hdrTitle = page === "hub" ? "UroStudy Hub" : page === "tracker" ? "Study Tracker" : page === "chat" ? "AI Tutor" : page === "anki" ? "Anki Cards" : page === "refs" ? "Pocket Guide" : page === "student" ? "Sub-I Toolkit" : "Quick Links";
+var hdrTitle = TUTOR_APP ? "Tutor" : page === "hub" ? "UroStudy Hub" : page === "tracker" ? "Study Tracker" : page === "chat" ? "AI Tutor" : page === "anki" ? "Anki Cards" : page === "refs" ? "Pocket Guide" : page === "student" ? "Sub-I Toolkit" : "Quick Links";
 var hdrBtn = { width: 36, height: 36, borderRadius: 18, background: "var(--c-fill)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--c-tx2)", padding: 0, flexShrink: 0 };
 var hdrChip = { display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 9px", borderRadius: 13, background: "var(--c-fill2)", fontSize: "var(--f11)", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, fontVariantNumeric: "tabular-nums" };
 var tutBtn = function(on, hex, txt) { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 36, padding: "0 13px", background: on ? (hex || c.a) + "1f" : c.cd, border: "1px solid " + (on ? (hex || c.a) + "70" : "var(--c-br)"), borderRadius: 11, cursor: "pointer", color: on ? (txt || hex || c.a) : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: on ? 700 : 600, whiteSpace: "nowrap", flexShrink: 0 }; };
@@ -10961,17 +10999,18 @@ var xpPct = nRank ? Math.max(0, Math.min(100, (s.xp - rank.minXP) / (nRank.minXP
 var header = (
 <div data-ush-header className={page === "chat" ? "ush-wide" : undefined} style={{ padding: page === "chat" ? "8px 14px 8px" : "12px 16px 10px", borderBottom: "1px solid var(--c-sep)", width: "100%", maxWidth: 820, margin: "0 auto", flexShrink: 0 }}>
 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-{page !== "hub" && <button aria-label="Back to Hub" title="Back to Hub" onClick={function() { setPage("hub"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 36, marginLeft: -6, background: "none", border: "none", cursor: "pointer", color: c.a, padding: 0, flexShrink: 0 }}>{Icon("back", 26, 2.3)}</button>}
+{page !== "hub" && !TUTOR_APP && <button aria-label="Back to Hub" title="Back to Hub" onClick={function() { setPage("hub"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 36, marginLeft: -6, background: "none", border: "none", cursor: "pointer", color: c.a, padding: 0, flexShrink: 0 }}>{Icon("back", 26, 2.3)}</button>}
 <h1 onClick={handleAdminTap} style={{ flex: 1, minWidth: 0, margin: 0, fontSize: page === "chat" ? 22 : 26, fontWeight: 700, lineHeight: 1.2, color: "var(--c-tx0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "default", userSelect: "none" }}>{hdrTitle}</h1>
 {isAdmin && <span onClick={function() { setShowAdmin(true); }} style={{ fontSize: "var(--f8)", color: "var(--a-or2)", cursor: "pointer", padding: "3px 7px", background: "#f9731618", borderRadius: 6, fontWeight: 700, flexShrink: 0 }}>ADMIN</span>}
-{page === "chat" && ff.gamification !== false && (
+{page === "chat" && !TUTOR_APP && ff.gamification !== false && (
 <div className="ush-hide-narrow" style={{ display: "flex", gap: 6, marginRight: 4 }}>
 <span title={streak + "-day streak" + (streakMult > 1 ? " · " + streakMult + "× XP" : "")} style={Object.assign({}, hdrChip, { color: "var(--a-or2)" })}>{"🔥 " + streak + (streakMult > 1 ? " · " + streakMult + "×" : "")}</span>
 <span title="Coins" style={Object.assign({}, hdrChip, { color: "var(--a-am)" })}>{"💰 " + s.coins}</span>
 <span title="Tokens" style={Object.assign({}, hdrChip, { color: "var(--a-am)" })}>{"🪙 " + (s.tokens || 0)}</span>
 </div>
 )}
-<button aria-label="Import shared content" title="Import shared content" onClick={function() { setImportModal(true); setImportText(""); setImportPreview(null); }} style={hdrBtn}>{Icon("inbox", 19)}</button>
+{!TUTOR_APP && <button aria-label="Import shared content" title="Import shared content" onClick={function() { setImportModal(true); setImportText(""); setImportPreview(null); }} style={hdrBtn}>{Icon("inbox", 19)}</button>}
+{TUTOR_APP && <button data-tutor-full aria-label="Open the full UroStudy Hub" title="Open the full UroStudy Hub" onClick={function() { window.location.href = window.location.pathname; }} style={hdrBtn}>{Icon("home", 19)}</button>}
 <button aria-label={lightMode ? "Dark mode" : "Light mode"} title={lightMode ? "Switch to dark mode" : "Switch to light mode (easier on e-ink readers)"} onClick={toggleLightMode} style={hdrBtn}>{Icon(lightMode ? "moon" : "sun", 19)}</button>
 <button aria-label="Settings" title="Settings" onClick={function() { setShowSet(true); }} style={hdrBtn}>{Icon("gear", 20, 1.6)}</button>
 </div>
@@ -13002,9 +13041,7 @@ msg += " — Starting structured lecture session...";
 resetSidekick();
 setChatMsgs([{ role: "system", content: msg }]);
 setConvertingChat("");
-setTimeout(function() {
-sendChat("I just uploaded the AUA Core Curriculum chapter on " + topicName + ". Let's start the structured lecture session. Begin with Phase 1: Big Picture.");
-}, 300);
+setPlanKick({ text: "I just uploaded the AUA Core Curriculum chapter on " + topicName + ". Let's start the structured lecture session. Begin with Phase 1: Big Picture." });
 if (autoAnki && cleaned.text.trim()) {
 setAnkiBatchDoc(cleaned.text);
 setAnkiBatchName(topicName);
@@ -13591,15 +13628,15 @@ voiceListen(false);
 <p style={{ fontSize: "var(--f11)", lineHeight: 1.6, color: "var(--c-mut)", margin: "0 0 12px" }}>Upload the chapter for a structured lecture, kick off a no-doc lecture, do a mechanism-first Deep Dive, or run a Mastery Drill that quizzes you forward one step at a time.</p>
 <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
 <button onClick={function() { fileRef.current && fileRef.current.click(); }} style={{ padding: "8px 16px", background: c.a, border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }} title="Upload chapter PDF/doc — auto-starts a 9-phase lecture">{"📄 Upload Chapter"}</button>
-<button onClick={function() { setLectureMode(false); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setTimeout(function() { sendChat("Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
-<button onClick={function() { setLectureMode(false); setMasteryMode(true); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting mastery drill: " + lectureTopic }]); setTimeout(function() { sendChat("Mastery drill on: " + lectureTopic + ". Probe my edge of understanding first — don't teach yet."); }, 300); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,#f59e0b,#f97316)", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }} title="Adaptive micro-step drill — probes your edge, builds a learning map, and gates every step behind a check question. Best for shaky topics.">{"🎯 Mastery Drill"}</button>
-<button onClick={function() { setLectureMode(true); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setTimeout(function() { sendChat("Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture."); }, 300); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 10, color: c.a, fontSize: "var(--f11)", fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
+<button onClick={function() { setLectureMode(false); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting Deep Dive: " + lectureTopic }]); setPlanKick({ text: "Let's deep dive on: " + lectureTopic + ". Begin Phase 1 (Framework)." }); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }} title="Mechanism-first Socratic session — best when you sort of know a topic but want to truly understand it">{"🧠 Deep Dive"}</button>
+<button onClick={function() { setLectureMode(false); setMasteryMode(true); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting mastery drill: " + lectureTopic }]); setPlanKick({ text: "Mastery drill on: " + lectureTopic + ". Probe my edge of understanding first — don't teach yet." }); }} style={{ padding: "8px 16px", background: "linear-gradient(135deg,#f59e0b,#f97316)", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }} title="Adaptive micro-step drill — probes your edge, builds a learning map, and gates every step behind a check question. Best for shaky topics.">{"🎯 Mastery Drill"}</button>
+<button onClick={function() { setLectureMode(true); setMasteryMode(false); setLecturePhase(0); resetSidekick(); setChatMsgs([{ role: "system", content: "Starting structured lecture: " + lectureTopic }]); setPlanKick({ text: "Let's study: " + lectureTopic + ". Start with Phase 1: Big Picture overview. Give me a high-yield, board-focused lecture." }); }} style={{ padding: "8px 16px", background: c.cd, border: "1px solid " + c.a + "40", borderRadius: 10, color: c.a, fontSize: "var(--f11)", fontWeight: 600, cursor: "pointer" }} title="Full 9-phase board prep sweep — best for topics you're learning fresh">{"📖 Lecture (No Doc)"}</button>
 </div>
 </div>
 ) : (
-<div style={{ background: c.a + "10", border: "1px solid " + c.a + "25", borderRadius: 14, padding: 16, margin: "0 auto 16px", maxWidth: 360 }}>
+<div data-upload-card role="button" tabIndex={0} title="Pick a file: PDF, DOCX, text, Markdown, HTML" onClick={function() { fileRef.current && fileRef.current.click(); }} onKeyDown={function(e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileRef.current && fileRef.current.click(); } }} style={{ background: c.a + "10", border: "1px solid " + c.a + "25", borderRadius: 14, padding: 16, margin: "0 auto 16px", maxWidth: 360, cursor: "pointer" }}>
 <div style={{ fontSize: "var(--f13)", fontWeight: 700, color: c.a, marginBottom: 6 }}>📄 Upload a Chapter</div>
-<p style={{ fontSize: "var(--f11)", lineHeight: 1.6, color: "var(--c-mut)", margin: 0 }}>Drop in any AUA Core Curriculum PDF or doc and a structured lecture session kicks off automatically — 9 phases from big picture to board questions, with checkpoints, pimp rounds, and mnemonics built in.</p>
+<p style={{ fontSize: "var(--f11)", lineHeight: 1.6, color: "var(--c-mut)", margin: 0 }}>Drop in any AUA Core Curriculum PDF or doc and a structured lecture session kicks off automatically — 9 phases from big picture to board questions, with checkpoints, pimp rounds, and mnemonics built in. <b style={{ color: c.a }}>Tap here to pick a file.</b></p>
 </div>
 )}
 <p style={{ fontSize: "var(--f11)", color: "var(--c-br2)", marginBottom: 12 }}>Or ask any question to start a Deep Dive:</p>
@@ -13624,7 +13661,7 @@ return (
 )}
 {chatMsgs.map(function(msg, i) {
 if (msg.role === "system") {
-return <div key={i} style={{ fontSize: "var(--f10)", color: "var(--c-mut2)", textAlign: "center", background: c.cd + "80", padding: "4px 12px", borderRadius: 12, alignSelf: "center" }}>{msg.content}</div>;
+return <div key={i} data-chat-sys style={{ fontSize: "var(--f10)", color: "var(--c-mut2)", textAlign: "center", background: c.cd + "80", padding: "4px 12px", borderRadius: 12, alignSelf: "center" }}>{msg.content}</div>;
 }
 return (
 <div key={i} data-chat-msg style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: msg.role === "user" ? "82%" : "calc(100% - 34px)", width: msg.role === "assistant" && richWide(msg.content) ? "100%" : undefined, position: "relative" }}>
@@ -16360,7 +16397,7 @@ return (
 </div>
 );
 })()}
-{nav}
+{!TUTOR_APP && nav}
 </div>
 );
 }
