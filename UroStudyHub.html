@@ -6365,8 +6365,8 @@ function IsePlanView(p) {
   return (
     <div ref={rootRef} data-ise-view="1" style={{ maxWidth: 640, margin: "0 auto", color: "var(--c-tx)", overflowAnchor: "none" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <button data-ise="back" onClick={function () { p.onBack(); }} style={iseBtn(c, false)}>← Plans</button>
-        <div style={{ flex: 1, textAlign: "center", fontSize: "var(--f14)", fontWeight: 800, color: "var(--c-tx0)" }}>🎯 In-Service Exam Sprint</div>
+        {p.onBack && <button data-ise="back" onClick={function () { p.onBack(); }} style={iseBtn(c, false)}>← Plans</button>}
+        <div style={{ flex: 1, textAlign: p.onBack ? "center" : "left", fontSize: "var(--f14)", fontWeight: 800, color: "var(--c-tx0)" }}>🎯 In-Service Exam Sprint</div>
         <button data-ise="setup-open" onClick={function () { setEditing(has ? !editing : true); }} style={iseBtn(c, has && editing)}>{(has && editing ? "✓ " : "") + "⚙ Setup"}</button>
       </div>
 
@@ -6504,6 +6504,7 @@ export default function UroStudyHub() {
   var gamOn = ff.gamification !== false;  // off: no XP / coin / token / streak numbers anywhere (they still accrue quietly)
   var orSkillsOn = ff.orSkills !== false;
   var opLogOn = ENABLE_SURGILOG && ff.opLog !== false;
+  var sprintTabOn = s.role !== "student";  // the In-Service Exam sprint's own Study tab (residents; a student's Sub-I has no ISE)
   // SurgiLog talks to its Chrome extension through chrome.runtime, which only exists in desktop Chrome (never on an iPhone)
   var hasChromeExt = typeof chrome !== "undefined" && !!chrome && !!chrome.runtime && typeof chrome.runtime.sendMessage === "function";
   var [page, setPage] = useState(TUTOR_APP ? "chat" : "hub");
@@ -13573,10 +13574,11 @@ export default function UroStudyHub() {
       {page === "tracker" && (
         <div style={{ padding: "0 0 80px" }}>
           <div style={{ display: "flex", borderBottom: "1px solid " + c.cd, padding: "0 2px", background: c.bg, position: "sticky", top: 0, zIndex: 10, overflowX: "auto" }}>
-            {[{ id: "schedule", i: "📅", l: "Schedule" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, opLogOn && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
-              var on = tView === v.id || (v.id === "plans" && tView === "ise");
+            {/* The In-Service Exam sprint has its own tab (it used to open only from a card in Plans); not for students */}
+            {[{ id: "schedule", i: "📅", l: "Schedule" }, sprintTabOn && { id: "ise", i: "🎯", l: "Sprint" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, opLogOn && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
+              var on = tView === v.id || (v.id === "plans" && tView === "ise" && !sprintTabOn);
               return (
-                <button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: "var(--f9)", cursor: "pointer", color: on ? c.a : "var(--c-mut2)", borderBottom: on ? "2px solid " + c.a : "2px solid transparent", fontWeight: on ? 700 : 400, whiteSpace: "nowrap" }}>
+                <button key={v.id} data-tview={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: "var(--f9)", cursor: "pointer", color: on ? c.a : "var(--c-mut2)", borderBottom: on ? "2px solid " + c.a : "2px solid transparent", fontWeight: on ? 700 : 400, whiteSpace: "nowrap" }}>
                   {v.i} {v.l}
                 </button>
               );
@@ -13699,11 +13701,27 @@ export default function UroStudyHub() {
                 notify={function(m) { setSaveFeedback(m); setTimeout(function() { setSaveFeedback(""); }, 2500); }}
                 saveFail={iseSaveFail} drafts={iseDraft}
                 autoReshuffle={iseAutoShuffle} onAutoDone={function() { setIseAutoShuffle(false); }}
-                onBack={function() { setTView("plans"); }} />
+                onBack={sprintTabOn ? null : function() { setTView("plans"); }} />
             )}
             {/* Schedule */}
             {tView === "schedule" && (
               <div>
+                {/* Today's In-Service sprint task (while a sprint runs): tap for the Sprint tab; behind opens the reshuffle, like the Hub */}
+                {sprintTabOn && (function() {
+                  var sum = iseTodaySummary(ise, iseToday);
+                  if (!sum) return null;
+                  var behind = sum.state === "behind";
+                  return (
+                    <button data-ise="schedule-card" onClick={function() { if (behind) setIseAutoShuffle(true); setTView("ise"); }} style={{ width: "100%", textAlign: "left", background: c.cd, border: "2px solid " + (behind ? "var(--a-red)" : c.a + "55"), borderRadius: 12, padding: "10px 12px", marginBottom: 12, minHeight: 44, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: "var(--c-tx)" }}>
+                      <span style={{ fontSize: 20 }}>{"🎯"}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "var(--f11)", fontWeight: 800, color: behind ? "var(--a-red0)" : c.a }}>{"In-Service Sprint"}</span>
+                        <span style={{ display: "block", fontSize: "var(--f11)", color: behind ? "var(--a-red0)" : "var(--c-mut)", marginTop: 1, lineHeight: 1.4 }}>{sum.line}</span>
+                      </span>
+                      <span style={{ fontSize: "var(--f14)", fontWeight: 700, color: c.a }}>{"›"}</span>
+                    </button>
+                  );
+                })()}
                 {/* Sub-I rotation progress overview */}
                 {onSubi && (function() {
                   var doneCount = FLAT.filter(function(f) { return !!s.done[f.key]; }).length;

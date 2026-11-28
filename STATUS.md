@@ -3,6 +3,21 @@
 **Updated:** 2026-11-28
 **Tool:** Claude Code
 
+## 2026-11-28 (later 2) — 🎯 The In-Service Sprint gets its own Study tab
+
+Andrew: do the Sprint next (second of the bigger moves; he reads on the iPad in landscape, so iPad portrait comes after).
+The sprint was only reachable from a card in Study › Plans. **Done** (`UroStudyHub.html`; `UroStudyHub_CLAUDE.md` > Study
+Tracker Sub-Tabs):
+- **🎯 Sprint tab**, second in Study (Schedule · Sprint · Plans · Core · Op Log · Stats; all six fit at 390px). Residents
+  only: a student's Sub-I has no ISE, and students still open it from the Plans card (with its "← Plans"). As a tab the
+  sprint has no "← Plans" button; the Sprint tab, not Plans, is highlighted while it's open. The Plans card stays.
+- **Schedule** opens with today's sprint task while a sprint runs ("19 days · today: Voiding 1 · 25 SASP Qs"); behind,
+  it's red and opens the reshuffle sheet, like the Hub's 🎯 task.
+**Verified:** `review-fixes.drive` 121 (new block D1: tab order and fit at 390px, set-up from the tab, the Schedule card on
+track and behind, the student path); `ise-plan.drive` 150 (its "Plans tab highlighted" check now expects the Sprint tab, and
+it goes back to Plans by the tab, not "← Plans"); the rest of the suite unchanged and passing.
+
+
 ## 2026-11-28 (later) — 📱 Tutor toolbar on a phone: one row + a Tools sheet
 
 Andrew picked the first of the bigger phone moves proposed with the review fixes: the Tutor toolbar took three rows (about a
