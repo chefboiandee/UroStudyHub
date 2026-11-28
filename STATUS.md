@@ -3,6 +3,26 @@
 **Updated:** 2026-11-28
 **Tool:** Claude Code
 
+## 2026-11-28 (later 3) — 📱 iPad portrait gets the condensed Tutor toolbar
+
+Andrew: after the Sprint, condense the Tutor toolbar on iPad portrait to a size that makes sense and fix whatever the new
+size affects (he reads in landscape almost always). **Done** (`UroStudyHub.html`; `UroStudyHub_CLAUDE.md` > AI Tutor):
+- **Breakpoint 700 → 1100px.** Every iPad in portrait (744-1024) now gets the one-row toolbar (53px instead of ~190px, four
+  wrapped rows); every iPad in landscape (1133+) and laptops keep the inline toolbar unchanged.
+- **Tablet row keeps its labels** (model chip up to 380px · "cost $…" · "Voice off" · "⋯ Tools"); only phones (under
+  700px) drop them. Voice and Tools sit at the right.
+- **On a tablet, Tools opens a panel right under the Tools button** (up to 460px wide) instead of a bottom sheet across the
+  screen from it; phones keep the bottom sheet.
+- What else the size touched: the inline-toolbar CSS comment; nothing else in the app keys off 700px for the Tutor. Checked
+  at 744 / 820 / 1024 portrait, 1180 landscape, 1280 desktop and 390 phone.
+**Verified:** `review-fixes.drive` 126 (C3 adds iPad mini / Air / Pro 12.9 portrait one row with labels, the panel under
+Tools, iPad landscape inline); full suite passing (`ai-pick` 67, `anki-study` 63, `cheat-save` 40 / 19, `ise-plan` 150 / 45,
+`tutor-app` 54, `tutor-rich` 57, `voice-tutor` 75, `voice-text` 18, `anki-sched` 32, `arcade-cards` 119, `arcade-play` 24,
+`review-fixes.test` 12).
+**Next steps:** try both on the devices: the Sprint tab and Schedule card on the iPhone; the Tutor in iPad portrait once.
+The remaining proposed moves (first-run and Hub clean-up, fewer bottom tabs) wait for Andrew.
+
+
 ## 2026-11-28 (later 2) — 🎯 The In-Service Sprint gets its own Study tab
 
 Andrew: do the Sprint next (second of the bigger moves; he reads on the iPad in landscape, so iPad portrait comes after).

@@ -215,9 +215,10 @@
   /* Wide screens (iPad landscape, laptops): the tutor uses the width, so long replies scroll less */
   @media (min-width: 1000px) { .ush-wide { max-width: min(1320px, 96vw) !important; } }
   @media (max-width: 520px) { .ush-hide-narrow { display: none !important; } }
-  /* 700px and up: the timer and actions flow one by one with the model chip, so they fill rows instead of wrapping as a block */
+  /* Inline Tutor toolbar (1100px and up): the timer and actions flow one by one with the model chip, so they fill rows instead of wrapping as a block */
   @media (min-width: 700px) { .ush-tscroll { display: contents !important; } }
-  /* Under 700px the Tutor toolbar is one row and its tools open in a sheet (tutNarrow in the app), so no swipe rows */
+  /* Under 1100px (phones, iPad portrait) the Tutor toolbar is one row and its tools open in a sheet (tutNarrow in the app);
+     the inline layout above is only used from 1100px (iPad landscape, laptops) */
   /* Loading screen */
   #loading { position: fixed; inset: 0; background: var(--c-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
   #loading .spinner { width: 34px; height: 34px; border: 3px solid var(--c-fill); border-top-color: var(--c-focus); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
@@ -6651,14 +6652,18 @@ try { return JSON.parse(localStorage.getItem("uroStudyHub_prices") || "{}") || {
 });
 var [showCost, setShowCost] = useState(false);
 var [showAiPick, setShowAiPick] = useState(false);  // the tutor's AI panel: provider, model, reasoning effort
+var TUT_NARROW_MQ = "(max-width: 1099px)", TUT_PHONE_MQ = "(max-width: 699px)";
+function tutMatch(q) { try { return window.matchMedia(q).matches; } catch (e) { return false; } }
 var [showTools, setShowTools] = useState(false);
-var [tutNarrow, setTutNarrow] = useState(function() { try { return window.matchMedia("(max-width: 699px)").matches; } catch (e) { return false; } });
+var [toolsAt, setToolsAt] = useState(null);  // tablets: where the Tools panel drops down from (under the Tools button)
+var [tutNarrow, setTutNarrow] = useState(function() { return tutMatch(TUT_NARROW_MQ); });
+var [tutPhone, setTutPhone] = useState(function() { return tutMatch(TUT_PHONE_MQ); });
 useEffect(function() {
-var mq;
-try { mq = window.matchMedia("(max-width: 699px)"); } catch (e) { return undefined; }
-function on() { setTutNarrow(mq.matches); if (!mq.matches) setShowTools(false); }
-if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
-return function() { if (mq.removeEventListener) mq.removeEventListener("change", on); else if (mq.removeListener) mq.removeListener(on); };
+var mqs;
+try { mqs = [window.matchMedia(TUT_NARROW_MQ), window.matchMedia(TUT_PHONE_MQ)]; } catch (e) { return undefined; }
+function on() { setTutNarrow(mqs[0].matches); setTutPhone(mqs[1].matches); if (!mqs[0].matches) setShowTools(false); }
+mqs.forEach(function(mq) { if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on); });
+return function() { mqs.forEach(function(mq) { if (mq.removeEventListener) mq.removeEventListener("change", on); else if (mq.removeListener) mq.removeListener(on); }); };
 }, []);
 useEffect(function() { if (page !== "chat") { setShowTools(false); setShowAiPick(false); } }, [page]);
 var vEng = useRef(null);
@@ -13249,7 +13254,7 @@ reader.readAsText(file);
 var cm = currentModel(), ef = effortFor(lm.provider, cm, lm.effort);
 var label = lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + cm.split("/").pop().substring(0, 20) + (ef ? " · " + EFFORT_LABEL[ef] : "") : "AI off · pick a model";
 return (
-<button data-aipick onClick={function() { setShowCost(false); setShowTools(false); setShowAiPick(!showAiPick); }} title="Switch AI provider, model or reasoning effort" style={Object.assign(tutBtn(showAiPick), { gap: 7, flex: tutNarrow ? "1 1 auto" : "1 1 200px", maxWidth: tutNarrow ? "none" : 320, minWidth: 0, justifyContent: "flex-start" })}>
+<button data-aipick onClick={function() { setShowCost(false); setShowTools(false); setShowAiPick(!showAiPick); }} title="Switch AI provider, model or reasoning effort" style={Object.assign(tutBtn(showAiPick), { gap: 7, flex: tutPhone ? "1 1 auto" : tutNarrow ? "0 1 380px" : "1 1 200px", maxWidth: tutPhone ? "none" : tutNarrow ? 380 : 320, minWidth: 0, justifyContent: "flex-start" })}>
 <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
 <span style={{ fontSize: "var(--f12)", fontWeight: 600, color: lm.on ? "var(--c-tx)" : "var(--a-red0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
 <span style={{ color: "var(--c-mut)" }}>{Icon("chevDown", 15, 2.2)}</span>
@@ -13262,12 +13267,12 @@ var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
 var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
 return (
 <button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowAiPick(false); setShowTools(false); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={Object.assign(tutBtn(showCost), { gap: 5, border: "1px solid " + (lc.live || showCost ? c.a + "80" : "var(--c-br)"), color: lc.live ? c.a : "var(--c-tx2)", fontWeight: 700, fontVariantNumeric: "tabular-nums" })}>
-{!tutNarrow && <span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>}{label}
+{!tutPhone && <span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>}{label}
 </button>
 );
 })()}
 {(function() {
-var voiceBtn = VE.tts && <button data-voice-toggle onClick={toggleVoice} aria-pressed={vOn} aria-label={"Voice " + (vOn ? "on" : "off")} style={tutNarrow ? Object.assign(tutBtn(vOn), { padding: "0 11px" }) : tutBtn(vOn)} title={vOn ? "Voice mode is on: replies are read aloud" + (VE.stt ? " and it listens for your answer" : "") + ". Tap to turn it off." : "Voice mode: a spoken back-and-forth. The tutor explains a bit at a time out loud, quizzes you, and you answer by talking."}>{Icon("mic", 17, 2)}{tutNarrow ? null : "Voice " + (vOn ? "on" : "off")}</button>;
+var voiceBtn = VE.tts && <button data-voice-toggle onClick={toggleVoice} aria-pressed={vOn} aria-label={"Voice " + (vOn ? "on" : "off")} style={tutPhone ? Object.assign(tutBtn(vOn), { padding: "0 11px" }) : tutNarrow ? Object.assign(tutBtn(vOn), { marginLeft: "auto" }) : tutBtn(vOn)} title={vOn ? "Voice mode is on: replies are read aloud" + (VE.stt ? " and it listens for your answer" : "") + ". Tap to turn it off." : "Voice mode: a spoken back-and-forth. The tutor explains a bit at a time out loud, quizzes you, and you answer by talking."}>{Icon("mic", 17, 2)}{tutPhone ? null : "Voice " + (vOn ? "on" : "off")}</button>;
 var pomoEl = (
 <div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "2px 5px 2px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40, flexShrink: 0, whiteSpace: "nowrap" }}>
 <span style={{ fontSize: "var(--f15)" }}>{"🍅"}</span>
@@ -13327,13 +13332,16 @@ var secH = { fontSize: "var(--f10)", fontWeight: 700, color: "var(--c-mut2)", te
 return (
 <React.Fragment>
 {voiceBtn}
-<button data-tools-btn aria-label={"Tutor tools" + (toolsLbl ? ", timer " + mmss : "")} aria-expanded={showTools} onClick={function() { setShowAiPick(false); setShowCost(false); setShowTools(!showTools); }} title="Timer, upload, saved sessions, clear, style" style={Object.assign(tutBtn(showTools || pomoOn, pomoState === "break" ? "#4ade80" : pomoOn ? "#ef4444" : undefined), { padding: toolsLbl ? "0 11px" : "0 10px", fontVariantNumeric: "tabular-nums" })}>
+<button data-tools-btn aria-label={"Tutor tools" + (toolsLbl ? ", timer " + mmss : "")} aria-expanded={showTools} onClick={function(e) { var r = e.currentTarget.getBoundingClientRect(); setToolsAt({ top: Math.round(r.bottom + 6), right: Math.max(8, Math.round(window.innerWidth - r.right)) }); setShowAiPick(false); setShowCost(false); setShowTools(!showTools); }} title="Timer, upload, saved sessions, clear, style" style={Object.assign(tutBtn(showTools || pomoOn, pomoState === "break" ? "#4ade80" : pomoOn ? "#ef4444" : undefined), { padding: toolsLbl ? "0 11px" : "0 10px", fontVariantNumeric: "tabular-nums", marginLeft: !tutPhone && !voiceBtn ? "auto" : undefined })}>
 {toolsLbl ? <span style={{ fontWeight: 800 }}>{toolsLbl}</span> : Icon("more", 20, 3)}
+{!tutPhone && !toolsLbl && <span>{"Tools"}</span>}
 </button>
 {showTools && (
-<div data-tools-backdrop onClick={function() { setShowTools(false); }} style={{ position: "fixed", inset: 0, zIndex: 260, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-<div data-tools-sheet role="dialog" aria-label="Tutor tools" onClick={function(e) { e.stopPropagation(); var t = e.target; while (t && t !== e.currentTarget) { if (t.getAttribute && t.getAttribute("data-tool-close") !== null) { setShowTools(false); break; } t = t.parentNode; } }} style={{ width: "100%", maxWidth: 560, maxHeight: "82vh", overflowY: "auto", overscrollBehavior: "contain", background: c.bg, borderRadius: "18px 18px 0 0", border: "1px solid var(--c-br)", borderBottom: "none", padding: "8px 14px 18px", boxSizing: "border-box", boxShadow: "0 -8px 30px rgba(0,0,0,.3)" }}>
-<div style={{ width: 36, height: 4, background: "var(--c-br)", borderRadius: 2, margin: "0 auto 6px" }} />
+<div data-tools-backdrop onClick={function() { setShowTools(false); }} style={{ position: "fixed", inset: 0, zIndex: 260, background: tutPhone ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.18)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+<div data-tools-sheet role="dialog" aria-label="Tutor tools" onClick={function(e) { e.stopPropagation(); var t = e.target; while (t && t !== e.currentTarget) { if (t.getAttribute && t.getAttribute("data-tool-close") !== null) { setShowTools(false); break; } t = t.parentNode; } }} style={tutPhone || !toolsAt
+? { width: "100%", maxWidth: 560, maxHeight: "82vh", overflowY: "auto", overscrollBehavior: "contain", background: c.bg, borderRadius: "18px 18px 0 0", border: "1px solid var(--c-br)", borderBottom: "none", padding: "8px 14px 18px", boxSizing: "border-box", boxShadow: "0 -8px 30px rgba(0,0,0,.3)" }
+: { position: "absolute", top: toolsAt.top, right: toolsAt.right, width: "min(460px, calc(100vw - 16px))", maxHeight: "calc(100% - " + (toolsAt.top + 12) + "px)", overflowY: "auto", overscrollBehavior: "contain", background: c.bg, borderRadius: 16, border: "1px solid var(--c-br)", padding: "10px 14px 16px", boxSizing: "border-box", boxShadow: "0 12px 36px rgba(0,0,0,.28)" }}>
+{tutPhone && <div style={{ width: 36, height: 4, background: "var(--c-br)", borderRadius: 2, margin: "0 auto 6px" }} />}
 <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
 <div style={{ flex: 1, fontSize: "var(--f14)", fontWeight: 800, color: "var(--c-tx0)" }}>{"Tools"}</div>
 <button data-tools-close aria-label="Close tools" onClick={function() { setShowTools(false); }} style={{ minWidth: 36, minHeight: 36, background: "none", border: "1px solid var(--c-br)", borderRadius: 18, color: "var(--c-mut)", cursor: "pointer", fontSize: "var(--f12)" }}>{"✕"}</button>
