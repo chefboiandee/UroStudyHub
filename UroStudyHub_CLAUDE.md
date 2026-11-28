@@ -129,8 +129,9 @@ Bottom tab bar with dynamic tabs (some toggleable):
 
 | Sub-tab | ID | Description |
 |---------|----|-------------|
-| 📅 | `schedule` | Weekly reading plan with adaptive pacing, commitment editor |
-| 🗂 | `plans` | Plan management — AUA Core, Sub-I, custom plans |
+| 📅 | `schedule` | Weekly reading plan with adaptive pacing, commitment editor; while an In-Service sprint runs, today's sprint task on top (`data-ise="schedule-card"`; behind → opens the reshuffle) |
+| 🎯 | `ise` | In-Service Exam Sprint (`IsePlanView`), its own tab for residents (`sprintTabOn`: not for students, who open it from the Plans card, with "← Plans") |
+| 🗂 | `plans` | Plan management — AUA Core, Sub-I, custom plans; the sprint card |
 | 📚 | `curriculum` | Full topic tree — phases → sections → topics |
 | 🔗 | `oplog` | Resident Op Log (SurgiLog integration, toggle-gated) |
 | 📈 | `stats` | Statistics — activity heatmap, confidence heatmap, rank, export |

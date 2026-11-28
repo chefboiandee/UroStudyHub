@@ -637,6 +637,51 @@ await block('C3. Tutor toolbar on a phone: one row, the rest in the Tools sheet;
   await w.close();
 });
 
+await block("D1. The In-Service Sprint has its own Study tab, and today's task tops Schedule", async () => {
+  // A sprint built on Mon Nov 2 for an exam on Nov 21 (the page's own iseSetup), seen on Nov 2 and a week later with nothing logged
+  const seedSprint = (p) => p.evaluate(() => { localStorage.setItem('uroStudyHub_ise', JSON.stringify(iseSetup(iseNorm(null), Object.assign({}, ISE_CFG_DEFAULT, { exam: '2026-11-21' }), {}, '2026-11-02'))); });
+  let o = await open({ fixedTime: new Date('2026-11-02T15:00:00Z'), prog: { lastLoginDate: '2026-11-02' } });
+  await nav(o.p, 'tracker');
+  const tabs = await o.p.evaluate(() => { const t = [...document.querySelectorAll('[data-tview]')]; const bar = t[0].parentElement; return { ids: t.map((x) => x.getAttribute('data-tview')), fits: bar.scrollWidth <= bar.clientWidth }; });
+  check('Study tabs: Sprint second, and all six fit at 390 px', tabs.ids.join(',') === 'schedule,ise,plans,curriculum,oplog,stats' && tabs.fits, tabs.ids.join(','));
+  check('no sprint yet: no Sprint card on Schedule', !(await has(o.p, '[data-ise="schedule-card"]')));
+  await o.p.locator('[data-tview="ise"]').click();
+  await o.p.waitForSelector('[data-ise-view]', { timeout: 8000 });
+  check('the Sprint tab opens the sprint (set-up), highlighted, without a "← Plans" button', (await o.p.locator('[data-tview="ise"]').evaluate((b) => getComputedStyle(b).borderBottomStyle === 'solid' && getComputedStyle(b).fontWeight >= 700)) && !(await has(o.p, '[data-ise="back"]')));
+  await seedSprint(o.p);
+  await reload(o.p);
+  await studyTab(o.p, 'Schedule');
+  const card = await o.p.locator('[data-ise="schedule-card"]').innerText().catch(() => '');
+  check('with a sprint: Schedule opens with today\'s sprint task', /In-Service Sprint/.test(card) && /today:/.test(card), card.replace(/\n/g, ' | '));
+  await shot(o.p, 'd1-schedule-card');
+  await o.p.locator('[data-ise="schedule-card"]').click();
+  await o.p.waitForSelector('[data-ise-view]', { timeout: 8000 });
+  check('…tapping it opens the Sprint tab (no reshuffle sheet when on track)', !(await has(o.p, '[data-ise="sheet"]')));
+  await shot(o.p, 'd1-sprint-tab');
+  const store = await o.p.evaluate(() => localStorage.getItem('uroStudyHub_ise'));
+  errCheck('D1 resident', o.errs);
+  await o.ctx.close();
+  // a week later with nothing logged: behind; the card is red and opens the reshuffle, like the Hub task
+  o = await open({ fixedTime: new Date('2026-11-09T15:00:00Z'), prog: { lastLoginDate: '2026-11-09' }, seed: { uroStudyHub_ise: store } });
+  await nav(o.p, 'tracker');
+  const late = await o.p.locator('[data-ise="schedule-card"]').innerText().catch(() => '');
+  check('behind: the Schedule card says so', /behind/.test(late), late.replace(/\n/g, ' | '));
+  await o.p.locator('[data-ise="schedule-card"]').click();
+  const sheet = await o.p.waitForSelector('[data-ise="sheet"]', { timeout: 4000 }).then(() => true).catch(() => false);
+  check('…and tapping it opens the reshuffle sheet', sheet);
+  await o.ctx.close();
+  // a student: no Sprint tab; the Plans card still opens it, with its way back
+  o = await open({ prog: { role: 'student' } });
+  await nav(o.p, 'tracker');
+  check('student: no Sprint tab', !(await has(o.p, '[data-tview="ise"]')));
+  await studyTab(o.p, 'Plans');
+  await o.p.locator('[data-ise="card"]').click();
+  await o.p.waitForSelector('[data-ise-view]', { timeout: 8000 });
+  check('…the Plans card opens the sprint, with "← Plans"', await has(o.p, '[data-ise="back"]'));
+  errCheck('D1 student', o.errs);
+  await o.ctx.close();
+});
+
 await browser.close();
 console.log('\n' + nPass + ' passed, ' + nFail + ' failed. Screenshots: ' + SHOTS);
 process.exit(nFail ? 1 : 0);

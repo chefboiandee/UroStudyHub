@@ -297,10 +297,11 @@ try {
     check('Plans card shows the not-set-up subtitle', /Plan the weeks before the ISE/.test(card), short(card.replace(/\n/g, ' | ')));
     await tap(p, 'card');
     await p.waitForSelector(ISE('setup'), { timeout: 8000 });
-    const tabs = await p.evaluate(() => [...document.querySelectorAll('button')].filter((b) => /🗂\s*Plans|📅\s*Schedule/.test(b.textContent) && b.getClientRects().length)
+    const tabs = await p.evaluate(() => [...document.querySelectorAll('button')].filter((b) => /🎯\s*Sprint|🗂\s*Plans|📅\s*Schedule/.test(b.textContent) && b.getClientRects().length)
       .map((b) => ({ t: b.textContent.trim(), w: getComputedStyle(b).fontWeight, bb: getComputedStyle(b).borderBottomColor })));
-    const plansTab = tabs.find((x) => /Plans/.test(x.t)), schedTab = tabs.find((x) => /Schedule/.test(x.t));
-    check('Plans tab is highlighted while the ISE view is open', plansTab && schedTab && +plansTab.w >= 700 && +schedTab.w < 700 && plansTab.bb !== schedTab.bb, short(tabs));
+    const sprintTab = tabs.find((x) => /Sprint/.test(x.t)), plansTab = tabs.find((x) => /Plans/.test(x.t)), schedTab = tabs.find((x) => /Schedule/.test(x.t));
+    // the sprint is its own Study tab (residents): it, not Plans, is highlighted while the ISE view is open
+    check('Sprint tab is highlighted while the ISE view is open', sprintTab && plansTab && schedTab && +sprintTab.w >= 700 && +plansTab.w < 700 && +schedTab.w < 700 && sprintTab.bb !== plansTab.bb, short(tabs));
     const exam = await p.locator(ISE('exam-date')).inputValue();
     check('Setup defaults the exam to the third Saturday of November (2026-11-21)', exam === '2026-11-21', exam);
     const pv = (await textOf(p, 'setup-preview')).replace(/\n/g, ' / ');
@@ -558,7 +559,7 @@ try {
     await tap(p, 'sheet-cancel');
     const closed = await waitFor(p, () => !document.querySelector('[data-ise="sheet"]'), null, 3000);
     check('Cancel closes the auto-opened sheet and leaves the stored plan byte-identical', closed && (await getLS(p, 'uroStudyHub_ise')) === stored0);
-    await tap(p, 'back');
+    await clickText(p, /🗂\s*Plans/);  // (the sprint is its own Study tab for residents: no "← Plans" button)
     const card = await textOf(p, 'card');
     check('Plans card: "6 blocks behind: tap to reshuffle"', /6 blocks behind: tap to reshuffle/.test(card), short(card.replace(/\n/g, ' | ')));
     await tap(p, 'card');
