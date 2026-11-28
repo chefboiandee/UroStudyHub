@@ -165,7 +165,7 @@ await block('A. The door: just the tutor, own name and icon', async () => {
     touch: (document.querySelector('link[rel="apple-touch-icon"]') || { getAttribute() { return ''; } }).getAttribute('href'),
     navBtns: [...document.querySelectorAll('button[data-nav]')].filter((b) => b.getClientRects().length).length,
     back: [...document.querySelectorAll('button[aria-label="Back to Hub"]')].length,
-    imp: [...document.querySelectorAll('button[aria-label="Import shared content"]')].length,
+    imp: [...document.querySelectorAll('button[data-hdr-import]')].length,
     settings: [...document.querySelectorAll('button[aria-label="Settings"]')].filter((b) => b.getClientRects().length).length,
     overflowX: document.documentElement.scrollWidth - window.innerWidth,
     hdrText: (document.querySelector('[data-ush-header]') || {}).textContent || '',
@@ -303,7 +303,7 @@ await block('H. The full app is unchanged', async () => {
     manifest: document.querySelector('link[rel="manifest"]').getAttribute('href'),
     h1: [...document.querySelectorAll('[data-ush-header] h1')].map((h) => h.textContent.trim()).join('|'),
     navBtns: [...document.querySelectorAll('button[data-nav]')].filter((b) => b.getClientRects().length).length,
-    imp: [...document.querySelectorAll('button[aria-label="Import shared content"]')].length,
+    imp: [...document.querySelectorAll('button[data-hdr-import]')].length,
     full: [...document.querySelectorAll('[data-tutor-full]')].length,
   }));
   check('opens on the Hub with the tab bar', info.h1 === 'UroStudy Hub' && info.navBtns >= 4, info.h1 + ' / ' + info.navBtns);

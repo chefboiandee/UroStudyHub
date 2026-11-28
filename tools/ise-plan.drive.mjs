@@ -198,6 +198,15 @@ async function tap(p, name, extra = '') {
 const has = (p, name, extra = '') => p.locator(ISE(name, extra) + ':visible').count().then((n) => n > 0);
 const textOf = (p, name, extra = '') => p.locator(ISE(name, extra)).first().innerText({ timeout: 5000 });
 
+// The full app opens "AI off" and sends nothing until a model is connected: connect the seeded local model
+// (DOM clicks: the "Unfinished lecture" banner, which the 'start' block keeps up, sits over the AI chip)
+async function connectLocal(p) {
+  await navTo(p, 'chat');
+  await clickText(p, /\S/, '[data-aipick]');
+  await clickText(p, /\S/, '[data-aipick-prov="lmstudio"]');
+  if (await p.locator('[data-aipick-panel]').count()) await clickText(p, /\S/, '[data-aipick]');
+  await p.waitForTimeout(150);
+}
 async function openIse(p) {
   await navTo(p, 'study');
   if (!(await p.locator('[data-ise-view]').count())) {
@@ -456,6 +465,7 @@ try {
     const banner = await waitFor(p, () => /Unfinished lecture/.test(document.body.innerText), null, 5000);
     check('Preseeded tutor session is offered for resume', banner);
     const saved0 = ((await getProg(p)).savedLectures || []).length;
+    await connectLocal(p);
     await openIse(p);
     await tap(p, 'mode-mastery');
     const topic = await p.locator(ISE('start')).first().getAttribute('data-topic');
@@ -637,6 +647,7 @@ try {
   const recentLbl = async () => (await textOf(p, 'miss-filter-recent')).replace(/^✓\s*/, '').trim();
 
   await block('miss log', async () => {
+    await connectLocal(p);
     await openIse(p);
     const g0 = await p.locator(ISE('miss-group')).inputValue();
     check('Miss log: group defaults to today\'s group (void)', g0 === 'void', g0);

@@ -1,7 +1,70 @@
 # Status — UroStudyHub
 
-**Updated:** 2026-11-22
+**Updated:** 2026-11-28
 **Tool:** Claude Code
+
+## 2026-11-28 — 🔧 Fixes from an outside review: trim leaks, 12 bugs, phone UI quick wins
+
+Andrew had the app reviewed from outside (UI critique of phone / desktop screenshots + a bug hunt), each item re-checked against
+the code, and asked for the fixes here. Games were out of scope. **Done** (`UroStudyHub.html`; written up in
+`UroStudyHub_CLAUDE.md` > Study Plans, AI Tutor, Other Features):
+- **New feature flags** (in `s.featureFlags`, default on; Settings › admin › Study Mode Controls lists them; all gates read
+  `ff`, so a host that swaps `var ff = s.featureFlags || {};` controls them too):
+  - `orSkills` — the OR Skills course: the Tutor toolbar button, the empty-chat card, its view (falls back to the chat).
+  - `subI` — the Sub-I plan in Study › Plans (an active Sub-I plan falls back to AUA Core) and the student (Sub-I) tab.
+  - `opLog` — the Op Log / SurgiLog tab in Study and the SurgiLog section in Settings.
+  - To hold them off in the trimmed tutor window, its flag swap needs `orSkills: false, subI: false, opLog: false` added.
+- **Host anchors: none changed.** All six strings the trimmed window swaps are still in the source and the built page once
+  each (`var ff = s.featureFlags || {};`, the `links` / `games` tab-filter lines, `navigator.serviceWorker.register("sw.js")`,
+  `var [page, setPage] = useState(TUTOR_APP ? "chat" : "hub");`, `{page !== "hub" && !TUTOR_APP && <button aria-label="Back to Hub"`).
+  Two moves to know about: the `ff` line now sits right after the progress state (higher up, so the plan code can read it),
+  and the bottom-bar tab list + filter moved into `var NAV_TABS = …` above the header (same filter text; the header uses it
+  to know which pages are there).
+- **Gamification off really is off:** no Stats rank grid, no "+N XP · +N coins" / streak in the Anki session summary, no coin
+  / token / streak toasts (daily bonus, topic done, Pomodoro, Anki goal), no reward line on the Pomodoro alert, and
+  Reorganize is free (no coin price, no "Need N more coins", no streak reset).
+- **SurgiLog:** the "paste your Extension ID" warning shows only where `chrome.runtime` exists (never on an iPhone); a failed
+  case sync no longer writes its error into the tutor's uploaded-file text.
+- **Bugs:** (1) each plan keeps its own ticks: AUA Core keys stay `p-s-t` (every existing tick stays with AUA Core), Sub-I
+  `subi:p-s-t`, custom `<id>:p-s-t`; counts, stats and the schedule use the active plan only. (2) "today" is local
+  (`studyToday()`, 4am rollover like Anki; `localYmd()` for case dates); evening ticks, streaks, the login bonus, the activity
+  log and new Op Log / case-log entries no longer land on tomorrow. (3) Reorganize saves the plan's tick count and compares
+  the ticks after it (it read "ahead" for weeks). (4) Cut-off replies: `callAI` reads `finish_reason` / `stop_reason`; the
+  tutor marks a cut reply with ▶ Continue / 🔄 Regenerate, Quick Ask notes it, Anki generation keeps the complete cards and
+  says it was cut off, the syllabus parser says "cut off". (5) Phase detection only follows phase headings
+  (`lecturePhaseOf`); only the NEXT / SKIP commands advance (`isPhaseCommand`), not "Next, explain…". (6) `cleanMd`: a
+  References / Disclosures / … section ends at the next heading of its level; "Doing…" and "Received 6 units…" are kept.
+  (7) Anki text export: HTML-escaped, line breaks → `<br>`. (8) AnkiConnect errors are shown ("Anki said: …"), not counted
+  as duplicates. (9) Share codes import with the share sheet's header / chat text around them (the Import box too).
+  (10) Pomodoro runs from an end time and re-syncs on wake (iOS freezes timers when locked). (11) Study reminders stay on
+  after a reload. (12) An unreadable save is kept as `uroStudyHub_progress_bad` with a warning bar; storage-full trimming
+  and a failed save are announced.
+- **Phone UI:** Style Preview capped (≤ 42% of the screen) and scrolls, with ✕, and picking a style (panel or toolbar chip)
+  closes it; an empty chat no longer scrolls its heading under the toolbar; with no AI connected there's no cost pill and
+  sending / topic chips / lecture starts open the model picker (the message goes once a model is picked); Stats heatmap
+  squares use theme colors, with a legend; "🧠 Open Anki" moved into Anki › Cards; the settings sheet is titled Settings
+  with a 36 px ×; the personal-note box fits its placeholder; the header Import has a clipboard icon and the Import copy
+  only offers what's on (no attending prefs / site notes / card packs where there's no Guide).
+**Verified:** new `node tools/review-fixes.test.mjs` (12, pure Node, TZ America/Chicago) and `node tools/review-fixes.drive.mjs`
+(94, headless 390 px phone, APIs stubbed: switches off / on, the trimmed window's text swaps applied to the built page,
+every bug above, the UI items; screenshots looked at). Regression, all passing: `ai-pick` 67, `anki-study` 63, `cheat-save.drive`
+40 / `.test` 19, `ise-plan.drive` 150 / `.test` 45, `tutor-app` 54, `tutor-rich` 57, `voice-tutor` 75, `voice-text` 18,
+`anki-sched` 32, `arcade-cards` 119, `arcade-play` 24. Harness updates for the new behaviour: `ai-pick` (the sheet is
+"Settings"), `tutor-app` (Import button hook), `cheat-save.drive`, `tutor-rich`, `ise-plan.drive` (connect a model before
+sending: the full app sends nothing while "AI off"). `cheat-save.drive` block C already failed on origin/main (after a reload
+the "Unfinished lecture" banner sits over the Tutor toolbar, so the Saved click timed out): it now clicks through the DOM.
+**Next steps:**
+- The trimmed tutor window: add `orSkills: false, subI: false, opLog: false` to its flag swap once this is merged.
+- Try it on the iPhone: lock the phone mid-Pomodoro; an evening tick shows today's date; a cut-off long lecture.
+- The bigger phone UX moves proposed with this change (one-row Tutor toolbar + Tools sheet, the In-Service Sprint out of
+  Plans, first-run and Hub clean-up) wait for Andrew's call.
+**Open questions:**
+- On a phone the "Unfinished lecture" resume banner (fixed, top 60 px) covers the Tutor's AI chip and first toolbar row until
+  it's answered. Left as is; worth folding into the toolbar redesign.
+- Ticks made on the Sub-I or a custom plan before this change were saved as plain `p-s-t`, so they now show on AUA Core
+  (there's no way to tell them apart). Fine for a resident on AUA Core; say if a student needs them moved.
+- Anki push (AnkiConnect) still sends fields as before (no `<br>` / escaping), so re-pushing doesn't create duplicates of
+  cards pushed earlier; say if multi-line backs should get `<br>` there too.
 
 ## 2026-11-22 — 🧠 The tutor on its own (tutor-only door) + uploads reach the first reply
 

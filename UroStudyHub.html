@@ -1512,7 +1512,7 @@ const SUBI_PHASES = [
       { cat:"Being a Good Doctor", topics:["Physician and Patient Communication","Ethics","Patient Safety"]},
     ]},
 ];
-const SUBI_FLAT = buildFlat(SUBI_PHASES);
+const SUBI_FLAT = buildFlat(SUBI_PHASES, "subi");
 
 const MED_STUDENT = [
   "Acute Scrotum","Basic Communication Skills","BPH","Bladder Drainage",
@@ -1523,12 +1523,16 @@ const MED_STUDENT = [
 ];
 
 // Build flat topic list from any PHASES array
-function buildFlat(phases) {
+// Topic keys (s.done, s.conf, s.srs, s.notes): "phase-section-topic" for the AUA Core plan, "<plan id>:phase-section-topic"
+// for the Sub-I plan ("subi") and custom plans, so each plan keeps its own ticks. Ticks saved before plans had their own
+// keys were all plain "p-s-t", so they stay with the AUA Core plan (the migration is that they keep their key).
+function topicKeyOf(ns, pi, si, ti) { return (ns ? ns + ":" : "") + pi + "-" + si + "-" + ti; }
+function buildFlat(phases, ns) {
   var flat = [];
   phases.forEach(function(ph, pi) {
     ph.sections.forEach(function(sec, si) {
       sec.topics.forEach(function(t, ti) {
-        flat.push({ phase: pi, section: si, topic: ti, key: pi + "-" + si + "-" + ti, t: t, cat: sec.cat, phName: ph.name, phIcon: ph.icon });
+        flat.push({ phase: pi, section: si, topic: ti, key: topicKeyOf(ns, pi, si, ti), t: t, cat: sec.cat, phName: ph.name, phIcon: ph.icon });
       });
     });
   });
@@ -1738,6 +1742,7 @@ var ICON_PATHS = {
   sun: "M12 16.2a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4zM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4",
   moon: "M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z",
   inbox: "M12 3.5v10M7.8 9.6 12 13.8l4.2-4.2M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14",
+  paste: "M9 4.5H7A1.5 1.5 0 0 0 5.5 6v13.5A1.5 1.5 0 0 0 7 21h10a1.5 1.5 0 0 0 1.5-1.5V6A1.5 1.5 0 0 0 17 4.5h-2M9.5 3h5v3h-5zM12 9.5v7M9 13.6l3 3 3-3",
   send: "M12 19V5.5M6 11.5l6-6 6 6",
   doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 17.5v-6M9.5 14l2.5-2.5 2.5 2.5",
   bookmark: "M6.5 3.5h11v17L12 16.5l-5.5 4z",
@@ -1960,6 +1965,19 @@ function claudeMaxTokens(model, maxTok) { return /^claude-(opus|sonnet|haiku|fab
 // The answer text of a Messages API response: join the text blocks (thinking blocks come first).
 function claudeText(data) {
   return ((data && data.content) || []).filter(function(b) { return b && b.type === "text"; }).map(function(b) { return b.text || ""; }).join("");
+}
+// Why a reply stopped, as each provider reports it (OpenAI-style finish_reason / Anthropic stop_reason): these mean the
+// model ran out of room, so the text is the start of an answer, not all of it.
+var AI_CUT_STOP = /^(length|max_tokens|max_output_tokens|model_context_window_exceeded)$/i;
+// A JSON array of cards cut off mid-way: keep the objects that closed before the cut ("[{...},{...},{..." -> first two)
+function salvageJsonArray(text) {
+  var t = String(text || "");
+  var a = t.indexOf("[");
+  if (a < 0) return null;
+  for (var end = t.lastIndexOf("}"); end > a; end = t.lastIndexOf("}", end - 1)) {
+    try { var v = JSON.parse(t.slice(a, end + 1) + "]"); if (Array.isArray(v)) return v; } catch (e) { /* earlier brace */ }
+  }
+  return null;
 }
 function claudeRefusal() {
   var e = new Error("Claude's safety filter declined this one. Try rephrasing it, or pick another model in Settings.");
@@ -2449,6 +2467,212 @@ function savedCounts(list) {
   return n;
 }
 // CHEAT-END
+
+// REVIEW-HELPERS-BEGIN — pure helpers (no DOM, no React). tools/review-fixes.test.mjs runs this block in Node.
+// Share codes: "URO:<TYPE>:<base64>". Share sheets send a header line with the code, and messaging apps add text
+// around it, so the code is found anywhere in what was pasted (base64 has no ":" or spaces, so it ends at the first).
+function findShareCode(text) {
+  var m = String(text || "").match(/URO:([A-Za-z0-9_]+):([A-Za-z0-9+\/]+={0,2})/);
+  return m ? { type: m[1], encoded: m[2] } : null;
+}
+
+// Which lecture phase a tutor reply opens (index into LECTURE_PHASES), or -1. Only a phase heading counts: the phase
+// emoji or "Phase N" next to the phase's name, "Phase N" opening a line, the emoji opening the reply, or (not strict)
+// a line that opens with the phase's name. "phase 3 trial", or "treatment" / "management" / "mnemonic" / "multiple
+// choice" in passing, are not phase changes. strict = voice mode (a phase is many short turns): no name-only pass.
+var LECTURE_PHASE_NAMES = [
+  ["BIG PICTURE"],
+  ["CONCEPTUAL FRAMEWORK"],
+  ["CORE DETAILS I(?!I)", "CORE DETAILS 1", "CORE DETAILS(?!\\s*(?:II|2))"],
+  ["CHECKPOINT"],
+  ["CORE DETAILS II", "CORE DETAILS 2", "CORE DETAILS(?!\\s*(?:I|1)\\b)"],
+  ["PIMP ROUND", "PIMP QUESTIONS"],
+  ["MEMORY ANCHORS?"],
+  ["BOARD[- ]STYLE", "BOARD QUESTIONS"],
+  ["RAPID REVIEW", "ONE[- ]PAGE SUMMARY", "CHEAT SHEET"],
+];
+function phaseReEsc(t) { return t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function lecturePhaseOf(text, strict) {
+  var t = String(text || "");
+  var lines = t.split("\n").map(function(l) { return l.replace(/^[\s>#*_]+/, "").replace(/^(?:[-•]\s+)/, ""); });
+  var first = "";
+  for (var f = 0; f < lines.length; f++) { if (lines[f].trim()) { first = lines[f]; break; } }
+  var SEP = "\\s*(?:\\*\\*|__)?\\s*[:.,\\-–—)]?\\s*(?:\\*\\*|__)?\\s*";
+  var i;
+  // 1. emoji or "Phase N" right next to the phase's name ("🔬 Core Details I", "Phase 9, Rapid Review", "📄 PHASE 9: ...")
+  for (i = LECTURE_PHASES.length - 1; i >= 0; i--) {
+    var p = LECTURE_PHASES[i], n = i + 1;
+    var names = "(?:" + LECTURE_PHASE_NAMES[i].join("|") + ")";
+    var tag = "(?:" + phaseReEsc(p.icon.replace(/\uFE0F/g, "")) + "\\uFE0F?(?:" + SEP + "PHASE\\s*" + n + "(?!\\d))?|PHASE\\s*" + n + "(?!\\d)(?:" + SEP + phaseReEsc(p.icon.replace(/\uFE0F/g, "")) + "\\uFE0F?)?)";
+    if (new RegExp(tag + SEP + names, "i").test(t)) return i;
+    // the emoji next to "Phase N" with no name ("## 📄 Phase 9")
+    if (new RegExp(phaseReEsc(p.icon.replace(/\uFE0F/g, "")) + "\\uFE0F?" + SEP + "PHASE\\s*" + n + "(?!\\d)", "i").test(t)) return i;
+  }
+  // 2. "Phase N" opening a line, as a heading ("Phase 5: ...", "**Phase 5**"), not "Phase 3 trials showed..."
+  for (i = LECTURE_PHASES.length - 1; i >= 0; i--) {
+    var re2 = new RegExp("^PHASE\\s*" + (i + 1) + "(?!\\d)\\s*(?:\\*\\*|__)?\\s*(?:[:.\\-–—]|$)", "i");
+    for (var l2 = 0; l2 < lines.length; l2++) if (re2.test(lines[l2].trim())) return i;
+  }
+  // 3. the reply opens with the phase emoji
+  for (i = LECTURE_PHASES.length - 1; i >= 0; i--) {
+    if (first.indexOf(LECTURE_PHASES[i].icon.replace(/\uFE0F/g, "")) === 0) return i;
+  }
+  if (strict) return -1;
+  // 4. a line that opens with the phase's name ("CHECKPOINT — 5 quick ones", "**Pimp Round**")
+  for (i = LECTURE_PHASES.length - 1; i >= 0; i--) {
+    var re4 = new RegExp("^(?:" + LECTURE_PHASE_NAMES[i].join("|") + ")(?![A-Za-z])", "i");
+    for (var l4 = 0; l4 < lines.length; l4++) if (re4.test(lines[l4].trim())) return i;
+  }
+  return -1;
+}
+// Is a message the learner typed a lecture command to move on (the NEXT / SKIP buttons send "NEXT" and "SKIP this
+// phase and move to the next one.")? "Next, explain the blood supply" or "Skipping meals..." are questions, not commands.
+function isPhaseCommand(text) {
+  return /^\s*(?:next|skip)(?:\s+(?:please|phase|section|part|one|it|this(?:\s+(?:phase|one|section))?)\b[^?]*?)?\s*[.!]*\s*$/i.test(String(text || ""));
+}
+
+// A card field for Anki's text import with "#html:true": the field is HTML, so & < > " are escaped and line breaks
+// become <br> (a raw newline would end the note; a raw "<" can swallow text as a tag). Tabs would split the field.
+function ankiFieldHtml(text) {
+  return String(text == null ? "" : text)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    .replace(/\r\n?/g, "\n").replace(/\n/g, "<br>").replace(/\t/g, " ");
+}
+// What AnkiConnect's addNotes answer means for n cards sent: { added, dupes, failed, error }. Older AnkiConnect returns
+// a list with null for each note it skipped; newer ones put the reasons in "error" (and may leave result null), so a
+// failure (deck / note type missing, empty field) is no longer mistaken for duplicates.
+function ankiConnectResult(data, n) {
+  var res = data && Array.isArray(data.result) ? data.result : null;
+  var added = res ? res.filter(function(r) { return r !== null && r !== undefined; }).length : 0;
+  var err = data && data.error ? String(data.error) : "";
+  if (!err) return { added: added, dupes: res ? res.length - added : 0, failed: res ? 0 : n, error: res ? "" : "No answer from Anki" };
+  var dupes = (err.match(/duplicate/gi) || []).length;
+  var rest = err.replace(/cannot create note because it is a duplicate/gi, "").replace(/[\[\]'",\s]/g, "");
+  if (dupes && !rest) return { added: added, dupes: dupes, failed: 0, error: "" };
+  return { added: added, dupes: dupes, failed: Math.max(0, n - added - dupes), error: err };
+}
+
+// Strip citations, references, contributor/editor blocks, and other boilerplate
+function cleanMd(md) {
+  var lines = md.split("\n");
+  var out = [];
+  var skip = false;
+  var stripped = { refs: 0, contrib: 0, lines: 0 };
+
+  // Patterns that signal "start cutting" — everything after these is usually junk
+  var cutHeaders = [
+    /^#{1,4}\s*(references|bibliography|works cited|citations?|suggested readings?|further reading|recommended reading)/i,
+    /^#{1,4}\s*(about the authors?|contributors?|editors?|editorial board|author(?:s'?)? disclosure|conflicts? of interest|disclosures?|acknowledgment)/i,
+    /^#{1,4}\s*(copyright|terms of use|legal notice|disclaimer)/i,
+  ];
+
+  // Patterns for lines to always skip (even before cut sections)
+  var skipLine = [
+    // "Received: 3 March 2021", "Published 2019.", "Accepted 03/12/2020": a date, not "Received 6 units of PRBCs"
+    /^\s*\*?\*?\(?\s*(?:revised|updated|reviewed|published|accepted|received|submitted)\b\s*(?:on\b\s*)?:?\s*(?:\d{1,4}[\/.\-]\d{1,2}(?:[\/.\-]\d{1,4})?\b|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+\d{4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:\d{1,2},?\s+)?\d{4}|\d{4}\s*[.;,)]?\s*(?:\*\*)?\s*$)/i,
+    // "doi: 10.1016/...", "PMID 123456", "ISBN 978-...": the identifier needs its number, so "Doing..." / "Doi Moi" stay
+    /^\s*(?:doi|pmid|isbn|issn)\b\s*[:#]?\s*\S*\d/i,
+    /^\s*https?:\/\/doi\.org\//i,
+    /^\s*\*?\*?(?:corresponding author|address for correspondence|reprint requests?)\s*:?\s*/i,
+    /^\s*copyright\s*(?:\(c\)|©)\s*\d{4}/i,
+    /^\s*all rights reserved/i,
+    /^\s*(?:page|pg\.?)\s*\d+\s*(?:of\s*\d+)?\.?\s*$/i,
+    /^\s*\[\d+\]\s*$/,
+  ];
+
+  // Inline citation patterns to strip from text
+  var inlineCite = [
+    /\s*\[\d+(?:[-–,]\s*\d+)*\]/g,           // [1] [1-3] [1,2,3]
+    /\s*\((?:[A-Z][a-z]+(?:\s+et\s+al\.?)?(?:,?\s*\d{4})\s*(?:;\s*)?)+\)/g,  // (Smith et al., 2020; Jones, 2019)
+    /\s*\((?:ibid\.?|op\.?\s*cit\.?|loc\.?\s*cit\.?)\)/gi,
+  ];
+
+  var cutLevel = 0;  // heading level (number of #) of the section being cut
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+
+    // Check if this line starts a cut section
+    var isCut = false;
+    for (var h = 0; h < cutHeaders.length; h++) {
+      if (cutHeaders[h].test(line.trim())) { isCut = true; break; }
+    }
+    if (isCut) {
+      skip = true;
+      cutLevel = line.trim().match(/^#+/)[0].length;
+      stripped.refs++;
+      stripped.lines++;
+      continue;
+    }
+    // A real heading at the cut section's level or above ends it (a chapter's References are often followed by the
+    // next chapter, or by a section that matters); a deeper heading (### Journal articles) stays inside it
+    if (skip) {
+      var hm = line.trim().match(/^(#{1,6})\s+\S/);
+      if (hm && hm[1].length <= cutLevel) skip = false;
+      else { stripped.lines++; continue; }
+    }
+
+    // Skip boilerplate lines
+    var skipThis = false;
+    for (var s2 = 0; s2 < skipLine.length; s2++) {
+      if (skipLine[s2].test(line)) { skipThis = true; stripped.contrib++; break; }
+    }
+    if (skipThis) continue;
+
+    // Strip inline citations from the line
+    var cleaned = line;
+    for (var c2 = 0; c2 < inlineCite.length; c2++) {
+      cleaned = cleaned.replace(inlineCite[c2], "");
+    }
+
+    out.push(cleaned);
+  }
+
+  // Remove leading blank lines
+  while (out.length > 0 && out[0].trim() === "") out.shift();
+
+  // Try to detect and remove front matter (editors, contributors at the START)
+  var frontCut = 0;
+  var frontPatterns = [
+    /^\s*\*?\*?(?:editor|contributor|author|reviewer|chair|panel\s*member|committee|faculty|written by|edited by|reviewed by|prepared by)\s*(?:s|:|\()/i,
+    /^\s*\*?\*?[A-Z][a-z]+(?:\s+[A-Z]\.?\s+)?[A-Z][a-z]+\s*,?\s*(?:MD|DO|PhD|FACS|MBA|MPH|MS|MA|FRCS|DrPH|BSc|RN)\b/,
+    /^\s*(?:department|division|section)\s+of\s+/i,
+    /^\s*(?:university|college|hospital|medical (?:center|school)|school of medicine)\s/i,
+  ];
+  // Scan first 40 lines for front matter cluster
+  var inFront = true;
+  for (var fi = 0; fi < Math.min(40, out.length) && inFront; fi++) {
+    var fl = out[fi].trim();
+    if (fl === "" || fl === "---") continue;
+    // If it's the title heading, skip it
+    if (/^#\s+/.test(fl)) continue;
+    var isFront = false;
+    for (var fp = 0; fp < frontPatterns.length; fp++) {
+      if (frontPatterns[fp].test(fl)) { isFront = true; break; }
+    }
+    if (isFront) {
+      frontCut = fi + 1;
+    } else if (fl.length > 60) {
+      // Hit real content (a substantial paragraph), stop scanning
+      inFront = false;
+    }
+  }
+  // Only cut if we found front matter lines
+  if (frontCut > 0) {
+    // Keep the title (first # heading) if present
+    var title = "";
+    for (var ti = 0; ti < frontCut; ti++) {
+      if (/^#\s+/.test(out[ti].trim())) { title = out[ti]; break; }
+    }
+    out = out.slice(frontCut);
+    if (title) out.unshift(title);
+    stripped.contrib += frontCut;
+  }
+
+  var result = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: result, stripped: stripped };
+}
+// REVIEW-HELPERS-END
+
 
 // ═══ MATH RENDERING (KaTeX) ═══
 // Tutor answers write formulas in LaTeX; renderMathText() splits a message into
@@ -4839,6 +5063,9 @@ const INIT = {
     shop: true,          // coin shop (themes, upgrades)
     gamification: true,  // XP, coins, streaks, ranks display
     links: true,         // quick links tab
+    orSkills: true,      // the OR Skills course in the Tutor (toolbar button, empty-chat card, its view)
+    subI: true,          // the Sub-I plan in Study > Plans and the student (Sub-I) tab
+    opLog: true,         // the Op Log / SurgiLog tab in Study and SurgiLog in Settings
   },
   // Schedule reorganize
   scheduleAnchorDate: null, // when current schedule "started"
@@ -4886,6 +5113,11 @@ function ankiStudyDay(ts) {
   return Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 86400000);
 }
 function ankiDayKey(ts) { return new Date(ankiStudyDay(ts) * 86400000).toISOString().slice(0, 10); }
+// Dates the app saves are local. "Today" for study (topic ticks, streaks, the daily bonus, the activity log) is the
+// study day, which starts at 4am like the Anki and In-Service days; toISOString() gives the UTC date, which in the US is
+// already tomorrow from late afternoon / evening. A case's date is the plain calendar date.
+function studyToday() { return ankiDayKey(Date.now()); }
+function localYmd(d) { return iseYmd(d || new Date()); }
 
 function ankiClozeNums(text) {
   var re = /\{\{c(\d+)::/g, out = [], m, n;
@@ -6243,15 +6475,40 @@ function tutorAutoProvider(lm) {
   return "";
 }
 
+// The saved progress, or a fresh start. Unreadable saved data is stashed under uroStudyHub_progress_bad (or in
+// IndexedDB when storage is too full for a copy) before the fresh state overwrites it, like iseLoad does for the sprint.
+var PROGRESS_LOAD_BAD = false;
+function progressLoad() {
+  var raw = null;
+  try { raw = localStorage.getItem("uroStudyHub_progress"); } catch (e) { return migrateArcade(INIT); }
+  if (!raw) return migrateArcade(INIT);
+  try {
+    var v = JSON.parse(raw);
+    if (v && typeof v === "object" && !Array.isArray(v)) return migrateArcade(Object.assign({}, INIT, v));
+  } catch (e) { /* unreadable: below */ }
+  PROGRESS_LOAD_BAD = true;
+  try { localStorage.setItem("uroStudyHub_progress_bad", raw); }
+  catch (e) { try { idbSet("progress_bad", raw).catch(function() {}); } catch (e2) { /* nowhere left to keep it */ } }
+  return migrateArcade(INIT);
+}
+
 // ═══ MAIN APP ═══
 export default function UroStudyHub() {
-  var [s, setS] = useState(function() {
-    try {
-      var saved = localStorage.getItem("uroStudyHub_progress");
-      if (saved) return migrateArcade(Object.assign({}, INIT, JSON.parse(saved)));
-    } catch (e) { /* ignore */ }
-    return migrateArcade(INIT);
+  var [s, setS] = useState(progressLoad);
+  // A storage problem the learner has to know about (unreadable save, storage full); a dismissible bar at the top
+  var [storeWarn, setStoreWarn] = useState(function() {
+    return PROGRESS_LOAD_BAD ? "Your saved progress couldn't be read, so the app started fresh. The old data was kept as uroStudyHub_progress_bad; nothing was deleted." : "";
   });
+  var storeWarned = useRef("");
+  // Feature switches (Settings > Study Mode Controls; the Harness Tutor window holds some off). Every gate reads ff.
+  // games / shop / gamification (XP, coins, ranks, streak chips) / prefCards / links, plus
+  // orSkills (the OR Skills course), subI (the Sub-I plan + the student page), opLog (Op Log / SurgiLog in Study)
+  var ff = s.featureFlags || {};
+  var gamOn = ff.gamification !== false;  // off: no XP / coin / token / streak numbers anywhere (they still accrue quietly)
+  var orSkillsOn = ff.orSkills !== false;
+  var opLogOn = ENABLE_SURGILOG && ff.opLog !== false;
+  // SurgiLog talks to its Chrome extension through chrome.runtime, which only exists in desktop Chrome (never on an iPhone)
+  var hasChromeExt = typeof chrome !== "undefined" && !!chrome && !!chrome.runtime && typeof chrome.runtime.sendMessage === "function";
   var [page, setPage] = useState(TUTOR_APP ? "chat" : "hub");
   var [tView, setTView] = useState("schedule");
   var [exPh, setExPh] = useState(null);
@@ -6277,7 +6534,7 @@ export default function UroStudyHub() {
   // Unsaved sprint drafts (miss text, log entries, selected day) survive Setup and navigation
   var iseDraft = useRef({ miss: "", log: {}, sel: null, mode: {} });
   var [iseAutoShuffle, setIseAutoShuffle] = useState(false);
-  var [caseLogForm, setCaseLogForm] = useState({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
+  var [caseLogForm, setCaseLogForm] = useState({ date: localYmd(), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
   var [caseLogEdit, setCaseLogEdit] = useState(null);
   var [caseLogFilter, setCaseLogFilter] = useState("");
   var [pimpProc, setPimpProc] = useState(null);
@@ -6335,16 +6592,25 @@ export default function UroStudyHub() {
   }, [lm]);
   // Persist study progress to localStorage
   useEffect(function() {
-    try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); }
+    try { localStorage.setItem("uroStudyHub_progress", JSON.stringify(s)); storeWarned.current = ""; }
     catch (e) {
       // Quota hit (saved lecture transcripts can be big) — never let core progress
-      // (topics done, XP, streak) silently stop persisting; shed transcript bulk and retry.
+      // (topics done, XP, streak) silently stop persisting; shed transcript bulk and retry, and say so (once per problem).
       try {
         var slim = Object.assign({}, s, { savedLectures: (s.savedLectures || []).map(function(l) {
           return l.type === "session" ? Object.assign({}, l, { messages: (l.messages || []).slice(0, 4), sideMsgs: [], truncated: true }) : l;
         }) });
         localStorage.setItem("uroStudyHub_progress", JSON.stringify(slim));
-      } catch (e2) { /* ignore */ }
+        if (storeWarned.current !== "slim") {
+          storeWarned.current = "slim";
+          setStoreWarn("Storage is full. To keep your progress saving, saved tutor sessions are stored with only their first 4 messages (cheat sheets and bookmarks are kept whole). Delete old sessions in Tutor › Saved to make room.");
+        }
+      } catch (e2) {
+        if (storeWarned.current !== "fail") {
+          storeWarned.current = "fail";
+          setStoreWarn("Your progress is NOT being saved: this browser's storage is full. Delete old sessions in Tutor › Saved to free space; until then, changes are lost when the page closes.");
+        }
+      }
     }
   }, [s]);
 
@@ -6369,13 +6635,13 @@ export default function UroStudyHub() {
 
   // Daily login bonus — award 5 coins on first open each day
   useEffect(function() {
-    var todayStr = new Date().toISOString().split("T")[0];
+    var todayStr = studyToday();
     if (s.lastLoginDate !== todayStr) {
       setS(function(p) {
         if (p.lastLoginDate === todayStr) return p; // guard against double-fire
         return Object.assign({}, p, { coins: p.coins + 5, lastLoginDate: todayStr });
       });
-      setTimeout(function() { flashToast("+5 🪙 Daily login bonus!", 2500); }, 1000);
+      if (gamOn) setTimeout(function() { flashToast("+5 🪙 Daily login bonus!", 2500); }, 1000);
     }
   }, []);
 
@@ -6383,9 +6649,9 @@ export default function UroStudyHub() {
   function syncStudyAnalytics() {
     var url = s.studySyncUrl || STUDY_SYNC_URL;
     if (!url) return;
-    var todayStr = new Date().toISOString().split("T")[0];
+    var todayStr = studyToday();
     if (s.lastSyncDate === todayStr) return; // already synced today
-    var doneKeys = Object.keys(s.done || {});
+    var doneKeys = Object.keys(planDone());
     var log = s.activityLog || [];
     var dailyDates = {};
     for (var i = 0; i < log.length; i++) { dailyDates[log[i].date] = true; }
@@ -6487,13 +6753,11 @@ export default function UroStudyHub() {
 
   function decodeShareable(code) {
     try {
-      var trimmed = (code || "").trim();
-      if (trimmed.indexOf("URO:") !== 0) return null;
-      var parts = trimmed.split(":");
-      if (parts.length < 3) return null;
-      var type = parts[1];
-      var encoded = parts.slice(2).join(":"); // rejoin in case base64 had colons
-      var json = decodeURIComponent(escape(atob(encoded)));
+      // The code may come with the share sheet's header ("Paste this code in UroStudy → Import:") or a messaging app's text
+      var found = findShareCode(code);
+      if (!found) return null;
+      var type = found.type;
+      var json = decodeURIComponent(escape(atob(found.encoded)));
       var data = JSON.parse(json);
       return { type: type, data: data };
     } catch(e) { return null; }
@@ -6667,16 +6931,25 @@ export default function UroStudyHub() {
   var syllabusFileRef = useRef(null);
 
   // Reminder state
-  var [reminderEnabled, setReminderEnabled] = useState(false);
+  // Remembered across reloads (on only while notifications are still allowed)
+  var [reminderEnabled, setReminderEnabled] = useState(function() {
+    try { return localStorage.getItem("uroStudyHub_remindersOn") === "1" && "Notification" in window && Notification.permission === "granted"; } catch(e) { return false; }
+  });
   var [reminderTimes, setReminderTimes] = useState(function() {
     try { var v = localStorage.getItem("uroStudyHub_reminders"); return v ? JSON.parse(v) : ["08:00", "14:00", "20:00"]; } catch(e) { return ["08:00", "14:00", "20:00"]; }
   });
 
-  // Dynamic PHASES/FLAT based on active plan
+  // Dynamic PHASES/FLAT based on active plan (the Sub-I plan falls back to AUA Core while its switch is off)
+  var subiOn = ff.subI !== false;
   var activePlan = activePlanId === "aua" ? null : activePlanId === "subi" ? null : customPlans.find(function(p) { return p.id === activePlanId; });
-  var PHASES = activePlanId === "subi" ? SUBI_PHASES : activePlan ? activePlan.phases : AUA_PHASES;
-  var FLAT = buildFlat(PHASES);
+  var onSubi = activePlanId === "subi" && subiOn;
+  var PHASES = onSubi ? SUBI_PHASES : activePlan ? activePlan.phases : AUA_PHASES;
+  var PLAN_NS = onSubi ? "subi" : activePlan ? activePlan.id : "";  // "" = AUA Core (see topicKeyOf)
+  var FLAT = buildFlat(PHASES, PLAN_NS);
   var TOTAL = FLAT.length;
+  function tKeyOf(pi, si, ti) { return topicKeyOf(PLAN_NS, pi, si, ti); }
+  // The active plan's ticks only: { key: date } for its topics
+  function planDone() { var o = {}; FLAT.forEach(function(f) { if (s.done[f.key]) o[f.key] = s.done[f.key]; }); return o; }
 
   // Save plan changes
   function switchPlan(planId) {
@@ -6702,7 +6975,8 @@ export default function UroStudyHub() {
     setPlanBuilderStep("generating");
     setPlanBuilderError("");
     var truncated = text.length > 15000 ? text.substring(0, 15000) + "\n\n[TRUNCATED — remaining content omitted]" : text;
-    callAI(SYLLABUS_PARSE_PROMPT, [{ role: "user", content: truncated }], { temperature: 0.3, max_tokens: 8192 }, function(result) {
+    callAI(SYLLABUS_PARSE_PROMPT, [{ role: "user", content: truncated }], { temperature: 0.3, max_tokens: 8192 }, function(result, info) {
+      var cutOff = !!(info && info.cut);
       try {
         // Extract JSON from response (handle markdown fences)
         var jsonStr = result.trim();
@@ -6727,7 +7001,9 @@ export default function UroStudyHub() {
         setPlanBuilderPhases(parsed);
         setPlanBuilderStep("review");
       } catch(e) {
-        setPlanBuilderError("AI returned invalid format. Try again or paste a cleaner syllabus. Error: " + e.message);
+        setPlanBuilderError(cutOff
+          ? "The AI's reply was cut off before the plan was complete (it hit the length limit). Try a shorter syllabus, split it in two, or pick a model with a bigger output limit."
+          : "AI returned invalid format. Try again or paste a cleaner syllabus. Error: " + e.message);
         setPlanBuilderStep("upload");
       }
     }, function(err) {
@@ -6781,6 +7057,9 @@ export default function UroStudyHub() {
   useEffect(function() {
     try { localStorage.setItem("uroStudyHub_reminders", JSON.stringify(reminderTimes)); } catch(e) { /* ignore */ }
   }, [reminderTimes]);
+  useEffect(function() {
+    try { localStorage.setItem("uroStudyHub_remindersOn", reminderEnabled ? "1" : "0"); } catch(e) { /* ignore */ }
+  }, [reminderEnabled]);
 
   function enableReminders() {
     if (!("Notification" in window)) { return; }
@@ -6826,7 +7105,7 @@ export default function UroStudyHub() {
   useEffect(function() {
     if (!s.userId) {
       var uid = "u_" + Math.random().toString(36).substring(2, 10);
-      setS(function(p) { return Object.assign({}, p, { userId: uid, firstOpenDate: new Date().toISOString().slice(0, 10) }); });
+      setS(function(p) { return Object.assign({}, p, { userId: uid, firstOpenDate: localYmd() }); });
     }
   }, []);
 
@@ -6866,7 +7145,8 @@ export default function UroStudyHub() {
   // ═══ ANALYTICS COMPUTATION ═══
   function computeAnalytics() {
     var log = s.activityLog || [];
-    var doneKeys = Object.keys(s.done || {});
+    var pDone = planDone();
+    var doneKeys = Object.keys(pDone);
     var doneCount = doneKeys.length;
     var confVals = Object.values(s.conf || {});
     var avgConf = confVals.length > 0 ? (confVals.reduce(function(a, b) { return a + b; }, 0) / confVals.length).toFixed(1) : "N/A";
@@ -6885,8 +7165,8 @@ export default function UroStudyHub() {
 
     // Topics completed per day (from done dates)
     var topicsByDay = {};
-    for (var key in s.done) {
-      var dt = s.done[key];
+    for (var key in pDone) {
+      var dt = pDone[key];
       topicsByDay[dt] = (topicsByDay[dt] || 0) + 1;
     }
 
@@ -6962,7 +7242,7 @@ export default function UroStudyHub() {
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    a.href = url; a.download = "urostudy_data_" + (s.userId || "user") + "_" + new Date().toISOString().slice(0, 10) + ".json";
+    a.href = url; a.download = "urostudy_data_" + (s.userId || "user") + "_" + localYmd() + ".json";
     a.click(); URL.revokeObjectURL(url);
   }
 
@@ -7027,7 +7307,7 @@ export default function UroStudyHub() {
     var blob = new Blob([csv], { type: "text/csv" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
-    a.href = url; a.download = "urostudy_data_" + (s.userId || "user") + "_" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.href = url; a.download = "urostudy_data_" + (s.userId || "user") + "_" + localYmd() + ".csv";
     a.click(); URL.revokeObjectURL(url);
   }
 
@@ -7070,6 +7350,12 @@ export default function UroStudyHub() {
   var [studyCfg, setStudyCfg] = useState(false);  // Review tab: settings row open
   var [studyDelArm, setStudyDelArm] = useState(false); // Review tab: delete needs a second tap
   var [chatView, setChatView] = useState("chat"); // "chat", "saved", or "skills"
+  // A view whose switch is off falls back to its home view
+  useEffect(function() {
+    if (!orSkillsOn && chatView === "skills") setChatView("chat");
+    if (ff.subI === false && page === "student") setPage("tracker");
+    if (!opLogOn && tView === "oplog") setTView("schedule");
+  }, [orSkillsOn, chatView, ff.subI, page, opLogOn, tView]);
   var [skillsCtx, setSkillsCtx] = useState(function() { try { var v = sessionStorage.getItem("uroStudyHub_skillsCtx"); return v ? JSON.parse(v) : null; } catch(e) { return null; } }); // active surgical-skills module session { id, mode }
   var [expandedSkill, setExpandedSkill] = useState({}); // which skills cards / cheat sheet are open
   var [showTutorNotes, setShowTutorNotes] = useState(false);
@@ -7250,7 +7536,7 @@ export default function UroStudyHub() {
   var c = (lightMode && th.lc) ? th.lc : th.c;
 
   // Derived
-  var doneN = Object.keys(s.done).length;
+  var doneN = FLAT.filter(function(f) { return !!s.done[f.key]; }).length;  // the active plan's ticks (s.done holds every plan's)
   var medN = Object.keys(s.medDone).length;
   var rank = getRank(s.xp);
   var nRank = getNextRank(s.xp);
@@ -7259,7 +7545,6 @@ export default function UroStudyHub() {
   var pct = TOTAL > 0 ? Math.round(doneN / TOTAL * 100) : 0;
   var xpM = 1 + (s.ups.xp_boost || 0) * 0.1;
   var streak = s.streak || 0;
-  var ff = s.featureFlags || {};
 
   function getStreakMultiplier(sk) {
     if (sk >= 30) return 1.75;
@@ -7292,7 +7577,7 @@ export default function UroStudyHub() {
     var anchor = s.scheduleAnchorDate;
     if (!anchor) {
       // Fallback: earliest done date, or treat as on track
-      var doneDates = Object.values(s.done).filter(Boolean).sort();
+      var doneDates = Object.values(planDone()).filter(Boolean).sort();
       anchor = doneDates.length > 0 ? doneDates[0] : null;
     }
     if (!anchor) return { topicsBehind: 0, weeksBehind: 0, status: "on_track" };
@@ -7301,7 +7586,11 @@ export default function UroStudyHub() {
     var elapsedMs = now - anchorDate;
     var elapsedWeeks = Math.max(0, Math.floor(elapsedMs / (7 * 86400000)));
     var expectedDone = elapsedWeeks * topicsPerWeek;
-    var actualDone = doneN;
+    // Topics done since the anchor: the count saved at Reorganize when it was made on this plan, else the ticks dated
+    // on or after the anchor (the anchor of a schedule that was never reorganized is its first tick, so that is all of them)
+    var actualDone = typeof s.scheduleAnchorDone === "number" && s.scheduleAnchorPlan === (PLAN_NS || "aua")
+      ? Math.max(0, doneN - s.scheduleAnchorDone)
+      : FLAT.filter(function(f) { var d = s.done[f.key]; return !!d && String(d) >= String(anchor).slice(0, 10); }).length;
     var topicsBehind = Math.max(0, expectedDone - actualDone);
     var weeksBehind = topicsPerWeek > 0 ? Math.round(topicsBehind / topicsPerWeek) : 0;
     var status = "on_track";
@@ -7312,24 +7601,27 @@ export default function UroStudyHub() {
     return { topicsBehind: topicsBehind, weeksBehind: weeksBehind, status: status, expectedDone: expectedDone, actualDone: actualDone };
   }
 
-  var REORG_COST = 25;
+  // Reorganizing costs coins and the streak only while gamification is on; with it off it's free (no coins shown to pay with)
+  var REORG_COST = ff.gamification !== false ? 25 : 0;
+  var reorgShort = Math.max(0, REORG_COST - (s.coins || 0));
 
   function doReorganize() {
-    if (s.coins < REORG_COST) {
+    if (reorgShort > 0) {
       setSaveFeedback("Need " + (REORG_COST - s.coins) + " more coins!");
       setTimeout(function() { setSaveFeedback(""); }, 2500);
       return;
     }
-    var todayStr = new Date().toISOString().split("T")[0];
+    var todayStr = studyToday();
+    var anchorDone = doneN, anchorPlan = PLAN_NS || "aua";
     setS(function(p) {
       var up = {
-        coins: p.coins - REORG_COST,
-        streak: 0,
-        lastDay: null,
         scheduleAnchorDate: todayStr,
+        scheduleAnchorDone: anchorDone,  // the plan's ticks at this point: "ahead / behind" counts the ones after it
+        scheduleAnchorPlan: anchorPlan,
         lastReorgDate: todayStr,
         srsFirst: reorgSrsFirst,
       };
+      if (REORG_COST > 0) { up.coins = p.coins - REORG_COST; up.streak = 0; up.lastDay = null; }
       // "Catch up faster" option: increase study minutes to boost topicsPerWeek
       if (reorgOption === "catchup" && reorgCatchupWeeks > 0) {
         var remaining = FLAT.filter(function(f) { return !p.done[f.key]; }).length;
@@ -7351,12 +7643,13 @@ export default function UroStudyHub() {
   function markDone(key, med) {
     var f = med ? "medDone" : "done";
     if (s[f][key]) return;
-    var todayStr = new Date().toISOString().split("T")[0];
+    var todayStr = studyToday();
     // Pre-compute streak to determine multiplier
     var oldStreak = s.streak || 0;
     var newStreak = oldStreak;
     var shieldUsed = false;
-    if (s.lastDay !== todayStr) {
+    // (a lastDay later than today was saved as a UTC date before dates went local: same study day, no streak change)
+    if (s.lastDay !== todayStr && !(s.lastDay && s.lastDay > todayStr)) {
       if (s.lastDay) {
         var daysMissed = Math.floor((new Date(todayStr) - new Date(s.lastDay)) / 86400000) - 1;
         if (daysMissed <= 0) {
@@ -7399,7 +7692,8 @@ export default function UroStudyHub() {
       return Object.assign({}, p, up);
     });
     // Show toasts
-    if (shieldUsed) {
+    if (!gamOn) { /* no streak / coin toasts */ }
+    else if (shieldUsed) {
       setSaveFeedback("Streak Shield activated! 🛡️");
       setTimeout(function() { setSaveFeedback(""); }, 2500);
     } else if (milestoneMsg) {
@@ -7519,7 +7813,7 @@ export default function UroStudyHub() {
 
   // ═══ TOKEN & ACTIVITY SYSTEM ═══
   var TOKEN_REWARDS = { lecture: 3, reading: 2, anki: 2, pomodoro: 2, sasp: 3, topic: 1 };
-  var today = new Date().toISOString().slice(0, 10);
+  var today = studyToday();
 
   function logFeatureUse(label) {
     var entry = { date: today, type: "feature", tokens: 0, label: label, ts: Date.now() };
@@ -7538,7 +7832,7 @@ export default function UroStudyHub() {
         activityLog: (p.activityLog || []).concat([entry]),
       });
     });
-    flashToast("+" + amt + " 🪙 " + (label || type), 2500);
+    if (gamOn) flashToast("+" + amt + " 🪙 " + (label || type), 2500);
     return amt;
   }
 
@@ -7556,7 +7850,7 @@ export default function UroStudyHub() {
     var opts = { token: TOKEN_REWARDS.anki };
     var cr = ankiCredit(s, count, now, today, opts);
     setS(function(p) { return Object.assign({}, p, ankiCredit(p, count, now, today, opts).patch); });
-    if (cr.goalHit) flashToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!", 2500);
+    if (cr.goalHit) flashToast(gamOn ? "+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!" : "Anki goal reached!", 2500);
   }
 
   // Get activity counts for heatmap
@@ -7736,85 +8030,90 @@ export default function UroStudyHub() {
         lastPomDate: today,
       });
     });
-    flashToast("🍅 Pomodoro #" + n + " done! +" + tok + " 🪙 · +" + shown + " 💰", 3000);
+    flashToast("🍅 Pomodoro #" + n + " done!" + (gamOn ? " +" + tok + " 🪙 · +" + shown + " 💰" : ""), 3000);
     firePomoAlert({ kind: "work", n: n, tok: tok, coins: shown });
   }
 
-  // Break countdown, shared by the start and resume paths (the resume path used
-  // to leave the break frozen — no interval — which also blocked the "done"
-  // transition that logs totalStudyMins).
-  function startBreakInterval() {
-    pomoRef.current = setInterval(function() {
-      setPomoTime(function(t2) {
-        if (t2 <= 1) {
-          clearInterval(pomoRef.current);
-          pomoRef.current = null;
-          setPomoState("done");
-          firePomoAlert({ kind: "done" });
-          return 0;
-        }
-        return t2 - 1;
-      });
-    }, 1000);
+  // The timer runs from an end time, not by counting interval ticks: iOS freezes timers while the phone is locked or
+  // the tab is in the background, so a counted 25 minutes could take an hour. Every tick (and coming back to the tab)
+  // re-reads the clock; a phase that ended while the phone was locked is finished then, and the break that followed it
+  // is counted from when the work really ended.
+  var pomoEndRef = useRef(0);        // when the running phase ends (ms since epoch); 0 = not running
+  var pomoPhaseRef = useRef("idle"); // "work" / "break" while running (state lags inside the interval)
+  var pomoLeftRef = useRef(0);       // seconds left while paused
+  var pomoTickRef = useRef(null);
+  function pomoClear() { if (pomoRef.current) clearInterval(pomoRef.current); pomoRef.current = null; }
+  function pomoRun() {
+    pomoClear();
+    pomoRef.current = setInterval(function() { if (pomoTickRef.current) pomoTickRef.current(); }, 500);
   }
+  function pomoTick() {
+    var end = pomoEndRef.current;
+    if (!end) return;
+    var now = Date.now();
+    if (now < end) { setPomoTime(Math.ceil((end - now) / 1000)); return; }
+    if (pomoPhaseRef.current === "work") {
+      // Work session done — tokens + coins + session counter, then the break
+      pomoWorkComplete();
+      pomoPhaseRef.current = "break";
+      setPomoState("break");
+      pomoEndRef.current = end + (pomoDevSecs || pomoBreak * 60) * 1000;
+      if (now < pomoEndRef.current) { setPomoTime(Math.ceil((pomoEndRef.current - now) / 1000)); return; }
+    }
+    pomoClear();
+    pomoEndRef.current = 0;
+    pomoPhaseRef.current = "done";
+    setPomoTime(0);
+    setPomoState("done");
+    firePomoAlert({ kind: "done" });
+  }
+  pomoTickRef.current = pomoTick;
+  useEffect(function() {
+    function resync() { if (!document.hidden && pomoTickRef.current) pomoTickRef.current(); }
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("focus", resync);
+    window.addEventListener("pageshow", resync);
+    return function() {
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("focus", resync);
+      window.removeEventListener("pageshow", resync);
+      pomoClear();
+    };
+  }, []);
 
   function startPomo() {
     primePomoAudio(); // user gesture — unlock the chime for later
     dismissPomoAlert();
+    var secs = pomoDevSecs || pomoDuration * 60;
     setPomoState("work");
     setPomoPaused(false);
-    setPomoTime(pomoDevSecs || pomoDuration * 60);
-    if (pomoRef.current) clearInterval(pomoRef.current);
-    pomoRef.current = setInterval(function() {
-      setPomoTime(function(t) {
-        if (t <= 1) {
-          clearInterval(pomoRef.current);
-          // Work session done — tokens + coins + session counter
-          setPomoState("break");
-          pomoWorkComplete();
-          setPomoTime(pomoDevSecs || pomoBreak * 60);
-          startBreakInterval();
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
+    setPomoTime(secs);
+    pomoPhaseRef.current = "work";
+    pomoEndRef.current = Date.now() + secs * 1000;
+    pomoRun();
   }
 
   function pausePomo() {
-    if (pomoRef.current) clearInterval(pomoRef.current);
-    pomoRef.current = null;
+    if (!pomoEndRef.current) return;
+    pomoLeftRef.current = Math.max(1, Math.ceil((pomoEndRef.current - Date.now()) / 1000));
+    pomoEndRef.current = 0;
+    pomoClear();
+    setPomoTime(pomoLeftRef.current);
     setPomoPaused(true);
   }
 
   function resumePomo() {
-    if (pomoRef.current) return;
+    if (pomoEndRef.current) return;
     setPomoPaused(false);
     primePomoAudio();
-    pomoRef.current = setInterval(function() {
-      setPomoTime(function(t) {
-        if (t <= 1) {
-          clearInterval(pomoRef.current);
-          if (pomoState === "work") {
-            setPomoState("break");
-            pomoWorkComplete();
-            setPomoTime(pomoDevSecs || pomoBreak * 60);
-            startBreakInterval();
-            return 0;
-          } else {
-            setPomoState("done");
-            firePomoAlert({ kind: "done" });
-            return 0;
-          }
-        }
-        return t - 1;
-      });
-    }, 1000);
+    pomoEndRef.current = Date.now() + (pomoLeftRef.current || pomoTime) * 1000;
+    pomoRun();
   }
 
   function resetPomo() {
-    if (pomoRef.current) clearInterval(pomoRef.current);
-    pomoRef.current = null;
+    pomoClear();
+    pomoEndRef.current = 0;
+    pomoPhaseRef.current = "idle";
     setPomoState("idle");
     setPomoPaused(false);
     setPomoTime(pomoDuration * 60);
@@ -8179,115 +8478,6 @@ export default function UroStudyHub() {
     return md;
   }
 
-  // Strip citations, references, contributor/editor blocks, and other boilerplate
-  function cleanMd(md) {
-    var lines = md.split("\n");
-    var out = [];
-    var skip = false;
-    var stripped = { refs: 0, contrib: 0, lines: 0 };
-
-    // Patterns that signal "start cutting" — everything after these is usually junk
-    var cutHeaders = [
-      /^#{1,4}\s*(references|bibliography|works cited|citations?|suggested readings?|further reading|recommended reading)/i,
-      /^#{1,4}\s*(about the authors?|contributors?|editors?|editorial board|author(?:s'?)? disclosure|conflicts? of interest|disclosures?|acknowledgment)/i,
-      /^#{1,4}\s*(copyright|terms of use|legal notice|disclaimer)/i,
-    ];
-
-    // Patterns for lines to always skip (even before cut sections)
-    var skipLine = [
-      /^\s*\*?\*?\(?\s*(?:revised|updated|reviewed|published|accepted|received|submitted)\s*:?\s*\d/i,
-      /^\s*(?:doi|pmid|isbn|issn)\s*:?\s*/i,
-      /^\s*https?:\/\/doi\.org\//i,
-      /^\s*\*?\*?(?:corresponding author|address for correspondence|reprint requests?)\s*:?\s*/i,
-      /^\s*copyright\s*(?:\(c\)|©)\s*\d{4}/i,
-      /^\s*all rights reserved/i,
-      /^\s*(?:page|pg\.?)\s*\d+\s*(?:of\s*\d+)?\.?\s*$/i,
-      /^\s*\[\d+\]\s*$/,
-    ];
-
-    // Inline citation patterns to strip from text
-    var inlineCite = [
-      /\s*\[\d+(?:[-–,]\s*\d+)*\]/g,           // [1] [1-3] [1,2,3]
-      /\s*\((?:[A-Z][a-z]+(?:\s+et\s+al\.?)?(?:,?\s*\d{4})\s*(?:;\s*)?)+\)/g,  // (Smith et al., 2020; Jones, 2019)
-      /\s*\((?:ibid\.?|op\.?\s*cit\.?|loc\.?\s*cit\.?)\)/gi,
-    ];
-
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-
-      // Check if this line starts a cut section
-      for (var h = 0; h < cutHeaders.length; h++) {
-        if (cutHeaders[h].test(line.trim())) {
-          skip = true;
-          stripped.refs++;
-          break;
-        }
-      }
-      if (skip) { stripped.lines++; continue; }
-
-      // Check if we hit a new real heading after a cut (stop cutting)
-      // Actually we want to keep cutting to the end, so no un-skip
-
-      // Skip boilerplate lines
-      var skipThis = false;
-      for (var s2 = 0; s2 < skipLine.length; s2++) {
-        if (skipLine[s2].test(line)) { skipThis = true; stripped.contrib++; break; }
-      }
-      if (skipThis) continue;
-
-      // Strip inline citations from the line
-      var cleaned = line;
-      for (var c2 = 0; c2 < inlineCite.length; c2++) {
-        cleaned = cleaned.replace(inlineCite[c2], "");
-      }
-
-      out.push(cleaned);
-    }
-
-    // Remove leading blank lines
-    while (out.length > 0 && out[0].trim() === "") out.shift();
-
-    // Try to detect and remove front matter (editors, contributors at the START)
-    var frontCut = 0;
-    var frontPatterns = [
-      /^\s*\*?\*?(?:editor|contributor|author|reviewer|chair|panel\s*member|committee|faculty|written by|edited by|reviewed by|prepared by)\s*(?:s|:|\()/i,
-      /^\s*\*?\*?[A-Z][a-z]+(?:\s+[A-Z]\.?\s+)?[A-Z][a-z]+\s*,?\s*(?:MD|DO|PhD|FACS|MBA|MPH|MS|MA|FRCS|DrPH|BSc|RN)\b/,
-      /^\s*(?:department|division|section)\s+of\s+/i,
-      /^\s*(?:university|college|hospital|medical (?:center|school)|school of medicine)\s/i,
-    ];
-    // Scan first 40 lines for front matter cluster
-    var inFront = true;
-    for (var fi = 0; fi < Math.min(40, out.length) && inFront; fi++) {
-      var fl = out[fi].trim();
-      if (fl === "" || fl === "---") continue;
-      // If it's the title heading, skip it
-      if (/^#\s+/.test(fl)) continue;
-      var isFront = false;
-      for (var fp = 0; fp < frontPatterns.length; fp++) {
-        if (frontPatterns[fp].test(fl)) { isFront = true; break; }
-      }
-      if (isFront) {
-        frontCut = fi + 1;
-      } else if (fl.length > 60) {
-        // Hit real content (a substantial paragraph), stop scanning
-        inFront = false;
-      }
-    }
-    // Only cut if we found front matter lines
-    if (frontCut > 0) {
-      // Keep the title (first # heading) if present
-      var title = "";
-      for (var ti = 0; ti < frontCut; ti++) {
-        if (/^#\s+/.test(out[ti].trim())) { title = out[ti]; break; }
-      }
-      out = out.slice(frontCut);
-      if (title) out.unshift(title);
-      stripped.contrib += frontCut;
-    }
-
-    var result = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    return { text: result, stripped: stripped };
-  }
 
   function convertFile(file) {
     var ext = (file.name || "").split(".").pop().toLowerCase();
@@ -8432,7 +8622,7 @@ export default function UroStudyHub() {
         var header = "#separator:tab\n#html:true\n#notetype:Basic\n#tags column:3\n";
         var rows = basics.map(function(c2) {
           var tagStr = (c2.tags || []).join(" ");
-          return c2.front.replace(/\t/g, " ") + "\t" + c2.back.replace(/\t/g, " ") + "\t" + tagStr;
+          return ankiFieldHtml(c2.front) + "\t" + ankiFieldHtml(c2.back) + "\t" + tagStr;
         }).join("\n");
         var blob = new Blob([header + rows], { type: "text/plain" });
         var url = URL.createObjectURL(blob);
@@ -8446,7 +8636,7 @@ export default function UroStudyHub() {
         var header2 = "#separator:tab\n#html:true\n#notetype:Cloze\n#tags column:2\n";
         var rows2 = clozes.map(function(c2) {
           var tagStr = (c2.tags || []).join(" ");
-          return (c2.text || "").replace(/\t/g, " ") + "\t" + tagStr;
+          return ankiFieldHtml(c2.text || "") + "\t" + tagStr;
         }).join("\n");
         var blob2 = new Blob([header2 + rows2], { type: "text/plain" });
         var url2 = URL.createObjectURL(blob2);
@@ -8528,9 +8718,14 @@ export default function UroStudyHub() {
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var added = (data.result || []).filter(function(r) { return r !== null; }).length;
-        var dupes = (data.result || []).filter(function(r) { return r === null; }).length;
-        setAnkiProgress("Done! " + added + " added" + (dupes > 0 ? ", " + dupes + " duplicates skipped" : ""));
+        // AnkiConnect reports failures in data.error (deck or note type missing, empty field...): say what it said
+        var r = ankiConnectResult(data, notes.length);
+        if (r.error) {
+          setAnkiProgress((r.added ? r.added + " added, " : "") + (r.failed || notes.length - r.added) + " not added. Anki said: " + r.error.slice(0, 180));
+          setTimeout(function() { setAnkiProgress(""); }, 9000);
+          return;
+        }
+        setAnkiProgress("Done! " + r.added + " added" + (r.dupes > 0 ? ", " + r.dupes + " duplicates skipped" : ""));
         setTimeout(function() { setAnkiProgress(""); }, 4000);
       })
       .catch(function() {
@@ -8636,12 +8831,12 @@ export default function UroStudyHub() {
     var key = g === 1 ? "again" : g === 2 ? "hard" : g === 3 ? "good" : "easy";
     var nxt = Object.assign({}, ss, { done: ss.done + 1, xp: ss.xp + cr.xp, coins: ss.coins + cr.coins, undo: { id: card.id, k: k, before: before, g: key, xp: cr.xp, coins: cr.coins, day: cr.key } });
     nxt[key] = ss[key] + 1;
-    if (cr.milestone) { nxt.streakMsg = cr.milestone.msg + " +" + cr.milestone.coins + " coins!"; setSaveFeedback(nxt.streakMsg); setTimeout(function() { setSaveFeedback(""); }, 3000); }
-    if (cr.goalHit) { nxt.goalMsg = "Daily goal reached! +" + TOKEN_REWARDS.anki + " 🪙"; flashToast("+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!", 2500); }
+    if (cr.milestone && gamOn) { nxt.streakMsg = cr.milestone.msg + " +" + cr.milestone.coins + " coins!"; setSaveFeedback(nxt.streakMsg); setTimeout(function() { setSaveFeedback(""); }, 3000); }
+    if (cr.goalHit) { nxt.goalMsg = "Daily goal reached!" + (gamOn ? " +" + TOKEN_REWARDS.anki + " 🪙" : ""); flashToast(gamOn ? "+" + TOKEN_REWARDS.anki + " 🪙 Anki goal reached!" : "Anki goal reached!", 2500); }
     var nx = ankiNext(ankiQueueNow(newCards, ankiTagF));
     var cleared = !nx;
     if (cleared && !ankiNext(ankiQueueNow(newCards, "")) && s.ankiClearDay !== cr.key) {
-      nxt.bonus = "Queue cleared! +" + ANKI_REWARD.clearXp + " XP, +" + ANKI_REWARD.clearCoins + " coins";
+      nxt.bonus = gamOn ? "Queue cleared! +" + ANKI_REWARD.clearXp + " XP, +" + ANKI_REWARD.clearCoins + " coins" : "";
       setS(function(p) {
         if (p.ankiClearDay === cr.key) return p;
         return Object.assign({}, p, { xp: (p.xp || 0) + ANKI_REWARD.clearXp, coins: (p.coins || 0) + ANKI_REWARD.clearCoins, ankiClearDay: cr.key });
@@ -8741,11 +8936,11 @@ export default function UroStudyHub() {
                 })}
               </div>
             )}
-            {(ss.xp > 0 || ss.coins > 0) && <div style={{ fontSize: "var(--f13)", fontWeight: 700, color: "var(--a-am)", marginBottom: 4 }}>{"+" + ss.xp + " XP" + (ss.coins > 0 ? " · +" + ss.coins + " 🪙" : "")}</div>}
+            {gamOn && (ss.xp > 0 || ss.coins > 0) && <div data-anki-reward style={{ fontSize: "var(--f13)", fontWeight: 700, color: "var(--a-am)", marginBottom: 4 }}>{"+" + ss.xp + " XP" + (ss.coins > 0 ? " · +" + ss.coins + " 🪙" : "")}</div>}
             {ss.bonus && <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: "var(--a-grn)", marginBottom: 4 }}>{ss.bonus}</div>}
             {ss.goalMsg && <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: "var(--a-grn)", marginBottom: 4 }}>{ss.goalMsg}</div>}
             {ss.streakMsg && <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: "var(--a-am)", marginBottom: 4 }}>{ss.streakMsg}</div>}
-            <div style={{ fontSize: "var(--f10)", color: "var(--c-mut)" }}>{"Today: " + todayN + "/" + goal + " reviews" + ((s.streak || 0) > 0 ? " · " + s.streak + " day streak 🔥" : "")}</div>
+            <div style={{ fontSize: "var(--f10)", color: "var(--c-mut)" }}>{"Today: " + todayN + "/" + goal + " reviews" + (gamOn && (s.streak || 0) > 0 ? " · " + s.streak + " day streak 🔥" : "")}</div>
           </div>
           {!ss.cleared && dueN > 0 && <button onClick={function() { ankiMore(10); }} style={Object.assign({}, bigBtn, { marginBottom: 8 })}>{"▶ Review " + Math.min(10, dueN) + " more"}</button>}
           <div style={{ display: "flex", gap: 8 }}>
@@ -8973,7 +9168,9 @@ export default function UroStudyHub() {
     if (!pane) return;
     var f = chatFollow.current;
     var last = chatMsgs[chatMsgs.length - 1];
-    if (!last || last.role !== "assistant") {
+    // An empty chat stays at the top (its heading would scroll up under the toolbar)
+    if (!last) { f.away = false; f.set = -1; return; }
+    if (last.role !== "assistant") {
       f.away = false; f.set = -1;
       scrollPaneTo(pane, pane.scrollHeight);
       return;
@@ -9043,7 +9240,7 @@ export default function UroStudyHub() {
     var model = currentModel();
     var eff = effortFor(prov, model, lm.effort);  // reasoning effort to send, or null
     var inChars = sysPrompt.length + messages.reduce(function(n, m) { return n + String(m.content || "").length; }, 0);
-    var acc = "", usage = null, noted = false, epoch = sessEpoch.current;
+    var acc = "", usage = null, noted = false, epoch = sessEpoch.current, stop = "";
     var flight = { inTok: Math.round(inChars / 4), rate: (priceFor(prov, model, Math.round(inChars / 4)) || {}).rate || null };
     if (kind === "tutor" || kind === "side") inflightCost.current[kind] = flight;
     function landed() { if (inflightCost.current[kind] === flight) inflightCost.current[kind] = null; }
@@ -9059,7 +9256,8 @@ export default function UroStudyHub() {
       if (!(outTok >= 0)) { outTok = Math.round(acc.length / 4); est = true; }
       recordUsage({ prov: prov, model: model, kind: kind, epoch: epoch, inTok: inTok, outTok: outTok, cost: typeof u.cost === "number" ? u.cost : null, est: est });
     }
-    function done(text) { if (text) acc = text; noteUsage(); onSuccess(text); }
+    // onSuccess(text, info): info.cut = the provider stopped it at the length limit (show it as cut off, not finished)
+    function done(text) { if (text) acc = text; noteUsage(); onSuccess(text, { cut: AI_CUT_STOP.test(stop), stop: stop }); }
     function fail(err) { if (acc) noteUsage(); else landed(); if (onError) onError(err); }
 
     // Helper for OpenAI-compatible APIs (OpenAI, OpenRouter, LM Studio, Gemini OpenAI-compat)
@@ -9094,6 +9292,7 @@ export default function UroStudyHub() {
               if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
               if (j.usage) usage = j.usage;
               var ch = j.choices && j.choices[0];
+              if (ch && ch.finish_reason) stop = ch.finish_reason;
               var piece = ch && ch.delta && ch.delta.content;
               if (piece) { acc += piece; onDelta(acc); }
             }).then(function() { return { choices: [{ message: { content: acc } }] }; });
@@ -9104,6 +9303,7 @@ export default function UroStudyHub() {
         .then(function(data) {
           if (data.error) { fail(new Error(data.error.message || JSON.stringify(data.error))); return; }
           if (data.usage) usage = data.usage;
+          if (data.choices && data.choices[0] && data.choices[0].finish_reason) stop = data.choices[0].finish_reason;
           var text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
           done(text);
         })
@@ -9138,6 +9338,7 @@ export default function UroStudyHub() {
               // input tokens arrive in message_start; the running output count in message_delta
               if (j.type === "message_start" && j.message && j.message.usage) usage = Object.assign({}, j.message.usage);
               if (j.type === "message_delta" && j.usage) usage = Object.assign(usage || {}, j.usage);
+              if (j.type === "message_delta" && j.delta && j.delta.stop_reason) stop = j.delta.stop_reason;
               if (j.type === "message_delta" && j.delta && j.delta.stop_reason === "refusal") refused = true;
               if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") { acc += j.delta.text; onDelta(acc); }
             }).then(function() {
@@ -9151,8 +9352,9 @@ export default function UroStudyHub() {
           if (data.error) { fail(new Error(data.error.message || JSON.stringify(data.error))); return; }
           if (data.usage) usage = data.usage;
           var text = claudeText(data);
+          if (data.stop_reason) stop = data.stop_reason;
           if (data.stop_reason === "refusal") { acc = text; fail(claudeRefusal()); return; }
-          if (!text) { fail(new Error("Empty response from Claude API")); return; }
+          if (!text) { fail(new Error(AI_CUT_STOP.test(stop) ? "Cut off before any text: the reply hit the length limit" : "Empty response from Claude API")); return; }
           done(text);
         })
         .catch(fail);
@@ -9240,57 +9442,30 @@ export default function UroStudyHub() {
   }
 
   function detectPhase(text, strict) {
-    // Try to detect which lecture phase the AI just delivered (strict: voice mode, where a phase is several
-    // short turns, so the loose keyword pass below would jump phases on any "management" mid-phase)
-    var upper = text.toUpperCase();
-    // First pass: look for icon + name combo (strongest signal)
-    for (var i = LECTURE_PHASES.length - 1; i >= 0; i--) {
-      var p = LECTURE_PHASES[i];
-      if (text.indexOf(p.icon) !== -1 && upper.indexOf(p.name.toUpperCase()) !== -1) {
-        return i;
-      }
-    }
-    // Second pass: look for "Phase N" pattern
-    for (var j = LECTURE_PHASES.length - 1; j >= 0; j--) {
-      if (upper.indexOf("PHASE " + (j + 1)) !== -1) return j;
-    }
-    // Third pass: look for just the icon at the start of the response (within first 100 chars)
-    var head = text.substring(0, 100);
-    for (var k = LECTURE_PHASES.length - 1; k >= 0; k--) {
-      if (head.indexOf(LECTURE_PHASES[k].icon) !== -1) return k;
-    }
-    if (strict) return -1;
-    // Fourth pass: keyword matching for phase names
-    var keywords = [
-      ["BIG PICTURE", "ORIENTATION"],
-      ["CONCEPTUAL FRAMEWORK", "FRAMEWORK", "SCAFFOLDING"],
-      ["CORE DETAILS I", "CORE DETAILS 1", "DEEP DIVE"],
-      ["CHECKPOINT", "RAPID-FIRE", "RECALL QUESTIONS"],
-      ["CORE DETAILS II", "CORE DETAILS 2", "TREATMENT", "MANAGEMENT"],
-      ["PIMP ROUND", "PIMP QUESTION"],
-      ["MEMORY ANCHOR", "MNEMONIC"],
-      ["BOARD-STYLE", "BOARD QUESTION", "MULTIPLE CHOICE"],
-      ["RAPID REVIEW", "CHEAT SHEET", "ONE-PAGE SUMMARY"],
-    ];
-    for (var m = keywords.length - 1; m >= 0; m--) {
-      for (var n = 0; n < keywords[m].length; n++) {
-        if (upper.indexOf(keywords[m][n]) !== -1) return m;
-      }
-    }
-    return -1;
+    // Which lecture phase the AI just delivered (strict: voice mode, where a phase is several short turns, so a
+    // name in passing must never move the bar). The rules are in lecturePhaseOf (REVIEW-HELPERS block).
+    return lecturePhaseOf(text, strict);
   }
 
   function sendChat(text) {
     if (!text || !text.trim()) return;
+    if (!lm.on) {
+      // No AI connected: open the model picker instead of sending into the void (it used to go to LM Studio at
+      // localhost:1234). The message waits in the box and goes as soon as a model is connected.
+      setChatIn(text);
+      setPendingAsk(text);
+      setShowCost(false);
+      setShowAiPick(true);
+      return;
+    }
     if (vOn) { VE.unlock(); setVNote(""); setVStart(""); }
     var userMsg = { role: "user", content: text };
     var msgs = chatMsgs.concat([userMsg]);
     setChatMsgs(msgs);
     setChatIn("");
     setChatLoad(true);
-    // If user typed NEXT or SKIP, optimistically advance phase
-    var trimUpper = text.trim().toUpperCase();
-    var userAdvanced = lectureMode && (trimUpper === "NEXT" || trimUpper.indexOf("NEXT") === 0 || trimUpper === "SKIP" || trimUpper.indexOf("SKIP") === 0);
+    // If the learner sent the NEXT / SKIP command (not just a message starting "Next, ..."), optimistically advance phase
+    var userAdvanced = lectureMode && isPhaseCommand(text);
     if (userAdvanced) {
       setLecturePhase(function(prev) { return Math.min(prev + 1, LECTURE_PHASES.length - 1); });
     }
@@ -9298,7 +9473,8 @@ export default function UroStudyHub() {
   }
 
   function _sendFromMsgs(msgs, ctxOverride) {
-    var chatHistory = msgs.filter(function(m) { return m.role !== "system"; });
+    // Only role + content go to the API (a message can carry app-side marks such as cut)
+    var chatHistory = msgs.filter(function(m) { return m.role !== "system"; }).map(function(m) { return { role: m.role, content: m.content }; });
     var styleKey = s.tutorStyle || "engaging";
     var styleInject = TUTOR_STYLES[styleKey] ? TUTOR_STYLES[styleKey].inject : "";
     var customNote = (s.tutorCustomNote || "").trim();
@@ -9331,10 +9507,12 @@ export default function UroStudyHub() {
     if (talk) talk.begin();
     var onDelta = live || talk ? function(t) { heard = t; if (chatReq.current !== reqId) return; if (live) live.push(t); if (talk) talk.feed(t); } : null;
 
-    callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: onDelta, signal: ctrl ? ctrl.signal : undefined, kind: "tutor" }, function(reply) {
+    callAI(sysContent, chatHistory, { temperature: 0.7, onDelta: onDelta, signal: ctrl ? ctrl.signal : undefined, kind: "tutor" }, function(reply, info) {
       if (chatReq.current !== reqId) return;
       if (live) live.cancel();
-      setChatMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try regenerating." }]));
+      var landed = { role: "assistant", content: reply || "No response — try regenerating." };
+      if (info && info.cut) landed.cut = true;  // stopped at the length limit: shown with Continue / Regenerate
+      setChatMsgs(msgs.concat([landed]));
       setChatLoad(false);
       saveHooks(parseHooks(reply));
       if (talk) talk.finish(reply || "", "reply");
@@ -9366,7 +9544,14 @@ export default function UroStudyHub() {
     VE.stopAll();
   }
 
+  // A reply cut off at the length limit: ask for the rest as the next turn
+  function continueReply() {
+    if (chatLoad) return;
+    sendChat("Continue exactly where your last reply was cut off. Don't repeat anything you already wrote.");
+  }
+
   function regenerateResponse() {
+    if (!lm.on) { setShowCost(false); setShowAiPick(true); return; }
     // Remove the last assistant message and re-send from the conversation up to that point
     var msgs = chatMsgs.slice();
     var dropped = [];
@@ -9548,6 +9733,7 @@ export default function UroStudyHub() {
 
   function sendSide(text) {
     if (!text || !text.trim() || sideLoad) return;
+    if (!lm.on) { setShowCost(false); setShowAiPick(true); return; }  // no AI connected: pick one first (the question stays in the box)
     var msgs = sideMsgs.concat([{ role: "user", content: text.trim() }]);
     setSideMsgs(msgs);
     setSideIn("");
@@ -9559,10 +9745,10 @@ export default function UroStudyHub() {
     var live = s.tutorStream === false ? null : streamBatcher(function(t) {
       if (sideReq.current === reqId) setSideMsgs(msgs.concat([{ role: "assistant", content: t }]));
     });
-    callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined, kind: "side" }, function(reply) {
+    callAI(buildSidekickSys(), msgs.slice(-12), { temperature: 0.4, onDelta: live ? live.push : null, signal: ctrl ? ctrl.signal : undefined, kind: "side" }, function(reply, info) {
       if (sideReq.current !== reqId) return;
       if (live) live.cancel();
-      setSideMsgs(msgs.concat([{ role: "assistant", content: reply || "No response — try again." }]));
+      setSideMsgs(msgs.concat([{ role: "assistant", content: (reply || "No response — try again.") + (info && info.cut ? "\n\n⚠ Cut off: the reply hit the length limit. Ask it to continue." : "") }]));
       setSideLoad(false);
       saveHooks(parseHooks(reply));
     }, function(err) {
@@ -9612,6 +9798,13 @@ export default function UroStudyHub() {
   // Saves whatever conversation is live first, then sends the opener from an effect so the
   // first request is built from the new mode and messages (not a stale closure).
   var [planKick, setPlanKick] = useState(null);
+  // A message sent while no AI was connected: it goes when a model is picked, and is dropped if the picker closes first
+  var [pendingAsk, setPendingAsk] = useState(null);
+  useEffect(function() {
+    if (!pendingAsk) return;
+    if (lm.on) { var t = pendingAsk; setPendingAsk(null); setPlanKick({ text: t }); }
+    else if (!showAiPick) setPendingAsk(null);
+  }, [lm.on, pendingAsk, showAiPick]);
   function startPlanTopic(topic, mode, extra) {
     if (pendingResume) {
       var ps = pendingResume;
@@ -9644,9 +9837,8 @@ export default function UroStudyHub() {
     setPlanKick(null);
     sendChat(k.text);
   }, [planKick]);
-  // Whether a Core topic is checked off (only meaningful while the AUA Core plan is active)
+  // Whether a Core topic is checked off in the AUA Core plan (its ticks are its own, whichever plan is active)
   function iseCoreDone(name) {
-    if (activePlanId !== "aua") return false;
     var f = AUA_BY_NAME[name];
     return !!(f && s.done && s.done[f.key]);
   }
@@ -9696,10 +9888,12 @@ export default function UroStudyHub() {
     var tagList = ankiTags.slice();
     var sysPr = ANKI_SYS_PROMPT + myHooksAnkiNote() + "\n\nGenerate exactly " + ankiCount + " cards.";
     var userMsg = [{ role: "user", content: "Generate " + ankiCount + " board-review Anki cards about: " + ankiTopic }];
-    callAI(sysPr, userMsg, { temperature: 0.5 }, function(text) {
+    callAI(sysPr, userMsg, { temperature: 0.5 }, function(text, info) {
       var clean = (text || "[]").replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+      var cutOff = !!(info && info.cut);
       try {
-        var cards = JSON.parse(clean);
+        var cards;
+        try { cards = JSON.parse(clean); } catch (pe) { cards = cutOff ? salvageJsonArray(clean) : null; if (!cards || !cards.length) throw pe; }
         var newCards = cards.map(function(cd, i) {
           var base = { id: Date.now() + i + Math.random(), tags: tagList, topic: ankiTopic };
           if (cd.type === "cloze" && cd.text) {
@@ -9712,10 +9906,10 @@ export default function UroStudyHub() {
         addAnkiCards(newCards);
         setAnkiGen(false);
         var nCloze = newCards.filter(function(c2) { return c2.type === "cloze"; }).length;
-        setAnkiProgress("Generated " + newCards.length + " cards! (" + nCloze + " cloze, " + (newCards.length - nCloze) + " basic)");
+        setAnkiProgress((cutOff ? "Cut off at the length limit: kept the " + newCards.length + " complete cards. " : "Generated " + newCards.length + " cards! ") + "(" + nCloze + " cloze, " + (newCards.length - nCloze) + " basic)");
       } catch(e) {
         setAnkiGen(false);
-        setAnkiProgress("Parse error - AI response was not valid JSON");
+        setAnkiProgress(cutOff ? "Cut off: the reply hit the length limit before any card was complete. Ask for fewer cards." : "Parse error - AI response was not valid JSON");
       }
       setTimeout(function() { setAnkiProgress(""); }, 4000);
     }, function() { setAnkiGen(false); setAnkiProgress("Generation failed - check AI connection"); setTimeout(function() { setAnkiProgress(""); }, 3000); });
@@ -9742,23 +9936,29 @@ export default function UroStudyHub() {
     }
     setAnkiProgress("Processing " + chunks.length + " sections from document...");
     var allCards = [];
+    var nCut = 0, nBad = 0;  // sections whose reply was cut off at the length limit / wasn't usable JSON
 
     function processChunk(idx) {
       if (idx >= chunks.length) {
         addAnkiCards(allCards);
         setAnkiGen(false);
         var nCloze = allCards.filter(function(c2) { return c2.type === "cloze"; }).length;
-        setAnkiProgress("Done! " + allCards.length + " cards from " + chunks.length + " sections (" + nCloze + " cloze, " + (allCards.length - nCloze) + " basic)");
+        setAnkiProgress("Done! " + allCards.length + " cards from " + chunks.length + " sections (" + nCloze + " cloze, " + (allCards.length - nCloze) + " basic)"
+          + (nCut ? " · " + nCut + " section" + (nCut === 1 ? " was" : "s were") + " cut off at the length limit (kept the complete cards)" : "")
+          + (nBad ? " · " + nBad + " section" + (nBad === 1 ? "" : "s") + " skipped (unreadable reply)" : ""));
         setTimeout(function() { setAnkiProgress(""); }, 5000);
         return;
       }
       setAnkiProgress("Processing section " + (idx + 1) + " of " + chunks.length + "... (" + allCards.length + " cards so far)");
       var sysPr = ANKI_SYS_PROMPT + myHooksAnkiNote() + "\n\nGenerate 5-15 cards from the provided curriculum section.";
       var userMsg = [{ role: "user", content: "Generate board-review Anki cards from this curriculum section:\n\n" + chunks[idx] }];
-      callAI(sysPr, userMsg, { temperature: 0.4 }, function(text) {
+      callAI(sysPr, userMsg, { temperature: 0.4 }, function(text, info) {
         var clean = (text || "[]").replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        var cutOff = !!(info && info.cut);
+        if (cutOff) nCut++;
         try {
-          var cards = JSON.parse(clean);
+          var cards;
+          try { cards = JSON.parse(clean); } catch (pe) { cards = cutOff ? salvageJsonArray(clean) : null; if (!cards) throw pe; }
           cards.forEach(function(cd, i) {
             var base = { id: Date.now() + idx * 100 + i + Math.random(), tags: tagList, topic: topicLabel };
             if (cd.type === "cloze" && cd.text) {
@@ -9768,7 +9968,7 @@ export default function UroStudyHub() {
             }
             allCards.push(base);
           });
-        } catch (e) { /* skip bad chunks */ }
+        } catch (e) { if (!cutOff) nBad++; /* skip bad chunks */ }
         processChunk(idx + 1);
       }, function() {
         // Skip failed chunk and continue
@@ -11950,8 +12150,8 @@ export default function UroStudyHub() {
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={function() { setShowSet(false); }}>
         <div style={{ background: c.bg, borderRadius: 16, padding: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", border: "1px solid " + c.cd }} onClick={function(e) { e.stopPropagation(); }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h2 style={{ fontSize: "var(--f16)", fontWeight: 700, color: "var(--c-tx)", margin: 0 }}>AI Provider</h2>
-            <button onClick={function() { setShowSet(false); }} style={{ background: "none", border: "none", color: "var(--c-mut2)", cursor: "pointer", fontSize: "var(--f16)" }}>{"×"}</button>
+            <h2 style={{ fontSize: "var(--f16)", fontWeight: 700, color: "var(--c-tx)", margin: 0 }}>Settings</h2>
+            <button data-set-close aria-label="Close settings" onClick={function() { setShowSet(false); }} style={{ minWidth: 36, minHeight: 36, marginRight: -8, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", borderRadius: 18, color: "var(--c-mut2)", cursor: "pointer", fontSize: "var(--f16)" }}>{"×"}</button>
           </div>
 
           {/* Provider tabs */}
@@ -12176,7 +12376,7 @@ export default function UroStudyHub() {
           </div>
 
           {/* ═══ SURGILOG INTEGRATION ═══ */}
-          {ENABLE_SURGILOG && <div style={{ marginTop: 16, borderTop: "1px solid var(--c-br)", paddingTop: 14 }}>
+          {opLogOn && <div style={{ marginTop: 16, borderTop: "1px solid var(--c-br)", paddingTop: 14 }}>
             <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: "var(--a-em)", marginBottom: 6 }}>{"🔗 SurgiLog Extension"}</div>
             <div style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", marginBottom: 8, lineHeight: 1.5 }}>Connect to your SurgiLog Chrome extension to push cases directly from your case log to ACGME. Find your extension ID at chrome://extensions with Developer Mode on.</div>
             <input value={s.surgilogId || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { surgilogId: e.target.value.trim() }); }); }} placeholder="Extension ID (e.g. abcdefghijklmnopqrstuvwxyz)" style={Object.assign({}, inputStyle, { fontFamily: "monospace", fontSize: "var(--f10)" })} />
@@ -12216,6 +12416,9 @@ export default function UroStudyHub() {
   // ═══ HEADER ═══
   // iOS-style bar: back chevron, a plain title, round icon buttons; underneath, one status strip
   // (rank + XP progress, then streak, coins and tokens as small capsules).
+  // The bottom-bar tabs this app shows (role, Anki switch, feature flags)
+  var NAV_TABS = [{ id: "hub", ic: "home", l: "Hub" }, { id: "tracker", ic: "study", l: "Study" }, { id: "chat", ic: "tutor", l: "Tutor" }, { id: "anki", ic: "cards", l: "Anki", feat: "anki" }, { id: "games", ic: "games", l: "Games" }, { id: "refs", ic: "guide", l: "Guide" }, { id: "student", ic: "cap", l: "Sub-I", role: "student" }, { id: "links", ic: "link", l: "Links" }].filter(function(v) { if (v.role && v.role !== s.role) return false; if (v.feat === "anki" && s.ankiEnabled === false) return false; if (v.id === "games" && ff.games === false) return false; if (v.id === "links" && ff.links === false) return false; if (v.id === "student" && ff.subI === false) return false; return true; });
+  function navHas(id) { return NAV_TABS.some(function(v) { return v.id === id; }); }
   var hdrTitle = TUTOR_APP ? "Tutor" : page === "hub" ? "UroStudy Hub" : page === "tracker" ? "Study Tracker" : page === "chat" ? "AI Tutor" : page === "anki" ? "Anki Cards" : page === "refs" ? "Pocket Guide" : page === "student" ? "Sub-I Toolkit" : "Quick Links";
   var hdrBtn = { width: 36, height: 36, borderRadius: 18, background: "var(--c-fill)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--c-tx2)", padding: 0, flexShrink: 0 };
   var hdrChip = { display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 9px", borderRadius: 13, background: "var(--c-fill2)", fontSize: "var(--f11)", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, fontVariantNumeric: "tabular-nums" };
@@ -12236,7 +12439,7 @@ export default function UroStudyHub() {
             <span title="Tokens" style={Object.assign({}, hdrChip, { color: "var(--a-am)" })}>{"🪙 " + (s.tokens || 0)}</span>
           </div>
         )}
-        {!TUTOR_APP && <button aria-label="Import shared content" title="Import shared content" onClick={function() { setImportModal(true); setImportText(""); setImportPreview(null); }} style={hdrBtn}>{Icon("inbox", 19)}</button>}
+        {!TUTOR_APP && <button data-hdr-import aria-label="Import a share code" title="Import a share code" onClick={function() { setImportModal(true); setImportText(""); setImportPreview(null); }} style={hdrBtn}>{Icon("paste", 19)}</button>}
         {TUTOR_APP && <button data-tutor-full aria-label="Open the full UroStudy Hub" title="Open the full UroStudy Hub" onClick={function() { window.location.href = window.location.pathname; }} style={hdrBtn}>{Icon("home", 19)}</button>}
         <button aria-label={lightMode ? "Dark mode" : "Light mode"} title={lightMode ? "Switch to dark mode" : "Switch to light mode (easier on e-ink readers)"} onClick={toggleLightMode} style={hdrBtn}>{Icon(lightMode ? "moon" : "sun", 19)}</button>
         <button aria-label="Settings" title="Settings" onClick={function() { setShowSet(true); }} style={hdrBtn}>{Icon("gear", 20, 1.6)}</button>
@@ -12267,7 +12470,7 @@ export default function UroStudyHub() {
   var nav = (
     <div className="ush-bar" style={{ position: page === "chat" ? "relative" : "fixed", flexShrink: 0, bottom: 0, left: 0, right: 0, zIndex: 100, borderTop: "1px solid var(--c-sep)" }}>
       <div style={{ display: "flex", justifyContent: "space-around", maxWidth: 720, margin: "0 auto", padding: "5px 4px 7px" }}>
-      {[{ id: "hub", ic: "home", l: "Hub" }, { id: "tracker", ic: "study", l: "Study" }, { id: "chat", ic: "tutor", l: "Tutor" }, { id: "anki", ic: "cards", l: "Anki", feat: "anki" }, { id: "games", ic: "games", l: "Games" }, { id: "refs", ic: "guide", l: "Guide" }, { id: "student", ic: "cap", l: "Sub-I", role: "student" }, { id: "links", ic: "link", l: "Links" }].filter(function(v) { if (v.role && v.role !== s.role) return false; if (v.feat === "anki" && s.ankiEnabled === false) return false; if (v.id === "games" && ff.games === false) return false; if (v.id === "links" && ff.links === false) return false; return true; }).map(function(v) {
+      {NAV_TABS.map(function(v) {
         var on = page === v.id;
         return (
           <button key={v.id} data-nav={v.id} aria-current={on ? "page" : undefined} onClick={function() { if (v.id === "games") { logFeatureUse("opened_games"); setShowGame("select"); } else { setPage(v.id); } }} style={{ flex: "1 1 0", minWidth: 0, maxWidth: 96, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: on ? c.a : "var(--c-mut2)", padding: "3px 0" }}>
@@ -12395,15 +12598,16 @@ export default function UroStudyHub() {
               );
             })()}
 
-            {/* Cost display */}
-            <div style={{ background: "var(--c-bg)", borderRadius: 10, padding: "8px 12px", marginTop: 10, marginBottom: 14, border: "1px solid var(--c-br)", textAlign: "center" }}>
+            {/* Cost display (gamification on only) */}
+            {REORG_COST > 0 && <div style={{ background: "var(--c-bg)", borderRadius: 10, padding: "8px 12px", marginTop: 10, marginBottom: 14, border: "1px solid var(--c-br)", textAlign: "center" }}>
               <div style={{ fontSize: "var(--f10)", color: "var(--a-or2)", fontWeight: 600 }}>{"Cost: " + REORG_COST + " coins 💰 + streak reset"}</div>
               <div style={{ fontSize: "var(--f8)", color: "var(--c-mut2)", marginTop: 2 }}>{"Current balance: " + s.coins + " coins · Streak: " + streak}</div>
-            </div>
+            </div>}
+            {REORG_COST === 0 && <div style={{ height: 14 }} />}
 
             {/* Confirm button */}
-            <button onClick={doReorganize} disabled={s.coins < REORG_COST} style={{ width: "100%", padding: "12px 16px", background: s.coins < REORG_COST ? "var(--c-br)" : c.a, border: "none", borderRadius: 12, color: s.coins < REORG_COST ? "var(--c-mut2)" : "#fff", fontSize: "var(--f13)", fontWeight: 700, cursor: s.coins < REORG_COST ? "not-allowed" : "pointer" }}>
-              {s.coins < REORG_COST ? "Need " + (REORG_COST - s.coins) + " more coins" : "Reorganize Schedule"}
+            <button data-reorg-go onClick={doReorganize} disabled={reorgShort > 0} style={{ width: "100%", padding: "12px 16px", background: reorgShort > 0 ? "var(--c-br)" : c.a, border: "none", borderRadius: 12, color: reorgShort > 0 ? "var(--c-mut2)" : "#fff", fontSize: "var(--f13)", fontWeight: 700, cursor: reorgShort > 0 ? "not-allowed" : "pointer" }}>
+              {reorgShort > 0 ? "Need " + reorgShort + " more coins" : "Reorganize Schedule"}
             </button>
 
             <button onClick={function() { setShowReorg(false); }} style={{ width: "100%", padding: "10px 16px", background: "transparent", border: "none", color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer", marginTop: 6 }}>Cancel</button>
@@ -12455,17 +12659,19 @@ export default function UroStudyHub() {
               <button onClick={function() { setImportModal(false); setImportText(""); setImportPreview(null); }} style={{ background: "none", border: "none", color: "var(--c-mut2)", cursor: "pointer", fontSize: 18 }}>{"×"}</button>
             </div>
 
-            <div style={{ fontSize: "var(--f10)", color: "var(--c-mut)", marginBottom: 10 }}>Paste a share code from a colleague to import their attending prefs, site notes, or card packs — or your own In-Service plan backup.</div>
+            <div data-import-copy style={{ fontSize: "var(--f10)", color: "var(--c-mut)", marginBottom: 10 }}>{navHas("refs")
+              ? "Paste a share code from a colleague to import their attending prefs, site notes, or card packs — or your own In-Service plan backup."
+              : "Paste a share code to bring in your In-Service plan backup (Study › Plans › In-Service Exam Sprint › 💾 Back up / move device)."}</div>
 
             <textarea value={importText} onChange={function(e) {
               var val = e.target.value;
               setImportText(val);
-              if (val.trim().indexOf("URO:") === 0) {
+              if (findShareCode(val)) {  // the code anywhere in what was pasted (a share sheet adds a header)
                 setImportPreview(parseImport(val));
               } else {
                 setImportPreview(null);
               }
-            }} placeholder={"Paste share code here...\n(starts with URO:ATT:, URO:SITE:, URO:PACK: or URO:ISE:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 12, color: "var(--c-tx)", fontSize: "var(--f11)", fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+            }} placeholder={navHas("refs") ? "Paste share code here...\n(starts with URO:ATT:, URO:SITE:, URO:PACK: or URO:ISE:)" : "Paste share code here...\n(starts with URO:ISE:)"} style={{ width: "100%", minHeight: 80, padding: 10, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 12, color: "var(--c-tx)", fontSize: "var(--f11)", fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
 
             {/* Preview */}
             {importPreview && (
@@ -12475,7 +12681,7 @@ export default function UroStudyHub() {
               </div>
             )}
 
-            {importText.trim() && !importPreview && importText.trim().indexOf("URO:") === 0 && (
+            {importText.trim() && !importPreview && !!findShareCode(importText) && (
               <div style={{ marginTop: 10, padding: 10, background: "#ef444410", border: "1px solid #ef444430", borderRadius: 10 }}>
                 <div style={{ fontSize: "var(--f10)", color: "var(--a-red)" }}>Could not decode this share code. Make sure you copied the entire code.</div>
               </div>
@@ -12679,7 +12885,7 @@ export default function UroStudyHub() {
               <form onSubmit={function(e) {
                 e.preventDefault();
                 var form = e.target;
-                var answers = { date: new Date().toISOString().slice(0, 10) };
+                var answers = { date: localYmd() };
                 for (var qi = 0; qi < qs.length; qi++) {
                   var val = form.elements["survey_" + qs[qi].id];
                   if (val) answers[qs[qi].id] = val.value || "";
@@ -12901,6 +13107,9 @@ export default function UroStudyHub() {
                   { key: "gamification", label: "Gamification UI", desc: "XP bar, coins, streaks, rank badges" },
                   { key: "prefCards", label: "Preference Cards", desc: "Attending preference cards (Sub-I)" },
                   { key: "links", label: "Quick Links", desc: "External links tab" },
+                  { key: "orSkills", label: "OR Skills", desc: "Surgical fundamentals course in the Tutor" },
+                  { key: "subI", label: "Sub-I", desc: "Sub-I rotation plan + student tab" },
+                  { key: "opLog", label: "Op Log", desc: "Op Log / SurgiLog tab in Study" },
                 ].map(function(item) {
                   var on = (s.featureFlags || {})[item.key] !== false;
                   return (
@@ -12933,6 +13142,13 @@ export default function UroStudyHub() {
       {gameOverlay}
 
       {/* Token toast */}
+      {storeWarn && (
+        <div data-store-warn role="alert" style={{ position: "fixed", top: 8, left: 8, right: 8, zIndex: 420, maxWidth: 520, margin: "0 auto", display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", background: c.bg, border: "2px solid var(--a-or2)", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,.35)", color: "var(--c-tx)", fontSize: "var(--f11)", lineHeight: 1.45 }}>
+          <span style={{ flexShrink: 0 }}>{"⚠️"}</span>
+          <span style={{ flex: 1 }}>{storeWarn}</span>
+          <button aria-label="Dismiss" onClick={function() { setStoreWarn(""); }} style={{ flexShrink: 0, minWidth: 36, minHeight: 36, background: "none", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-mut)", cursor: "pointer", fontSize: "var(--f12)" }}>{"✕"}</button>
+        </div>
+      )}
       {tokenToast && (
         <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", width: "max-content", maxWidth: "90vw", textAlign: "center", background: "var(--a-am)", color: "var(--c-bg)", padding: "8px 20px", borderRadius: 20, fontWeight: 800, fontSize: "var(--f14)", zIndex: 300, boxShadow: "0 4px 20px rgba(251,191,36,.4)", animation: "none" }}>
           {tokenToast}
@@ -12948,7 +13164,7 @@ export default function UroStudyHub() {
             {pomoAlert.kind === "work" ? (
               <div>
                 <div style={{ fontSize: "var(--f13)", color: "var(--c-tx)", fontWeight: 700 }}>{"Pomodoro #" + pomoAlert.n + " in the books — break started"}</div>
-                <div style={{ fontSize: "var(--f16)", fontWeight: 800, color: "var(--a-am)", marginTop: 8 }}>{"+" + pomoAlert.tok + " 🪙 · +" + pomoAlert.coins + " 💰"}</div>
+                {gamOn && <div style={{ fontSize: "var(--f16)", fontWeight: 800, color: "var(--a-am)", marginTop: 8 }}>{"+" + pomoAlert.tok + " 🪙 · +" + pomoAlert.coins + " 💰"}</div>}
               </div>
             ) : (
               <div>
@@ -13257,7 +13473,7 @@ export default function UroStudyHub() {
             var d = new Date();
             for (var i = 83; i >= 0; i--) {
               var dd = new Date(d.getTime() - i * 86400000);
-              var key = dd.toISOString().slice(0, 10);
+              var key = localYmd(dd);
               var entry = hm[key];
               var val = entry ? entry.total : 0;
               var bg = val === 0 ? "var(--c-cd)" : val <= 2 ? "#164e3f" : val <= 4 ? "#166534" : val <= 7 ? "#15803d" : "var(--a-grn2)";
@@ -13343,7 +13559,7 @@ export default function UroStudyHub() {
       {page === "tracker" && (
         <div style={{ padding: "0 0 80px" }}>
           <div style={{ display: "flex", borderBottom: "1px solid " + c.cd, padding: "0 2px", background: c.bg, position: "sticky", top: 0, zIndex: 10, overflowX: "auto" }}>
-            {[{ id: "schedule", i: "📅", l: "Schedule" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, ENABLE_SURGILOG && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
+            {[{ id: "schedule", i: "📅", l: "Schedule" }, { id: "plans", i: "🗂", l: "Plans" }, { id: "curriculum", i: "📚", l: "Core" }, opLogOn && { id: "oplog", i: "🔗", l: "Op Log" }, { id: "stats", i: "📈", l: "Stats" }].filter(Boolean).map(function(v) {
               var on = tView === v.id || (v.id === "plans" && tView === "ise");
               return (
                 <button key={v.id} onClick={function() { setTView(v.id); }} style={{ flex: 1, padding: "9px 4px", background: "none", border: "none", fontSize: "var(--f9)", cursor: "pointer", color: on ? c.a : "var(--c-mut2)", borderBottom: on ? "2px solid " + c.a : "2px solid transparent", fontWeight: on ? 700 : 400, whiteSpace: "nowrap" }}>
@@ -13359,7 +13575,7 @@ export default function UroStudyHub() {
                 {/* Active plan indicator */}
                 <div style={{ background: c.cd, borderRadius: 12, padding: 14, marginBottom: 14, border: "1px solid " + c.a + "33" }}>
                   <div style={{ fontSize: "var(--f9)", color: "var(--c-mut2)", textTransform: "uppercase", letterSpacing: ".5px", fontWeight: 600, marginBottom: 4 }}>Active Study Plan</div>
-                  <div style={{ fontSize: "var(--f14)", fontWeight: 800, color: c.a }}>{activePlanId === "subi" ? "Sub-I Rotation Schedule" : activePlan ? activePlan.name : "AUA Core Curriculum"}</div>
+                  <div style={{ fontSize: "var(--f14)", fontWeight: 800, color: c.a }}>{onSubi ? "Sub-I Rotation Schedule" : activePlan ? activePlan.name : "AUA Core Curriculum"}</div>
                   <div style={{ fontSize: "var(--f10)", color: "var(--c-mut)", marginTop: 2 }}>
                     {PHASES.length + " phases, " + TOTAL + " topics"}
                     {activePlan && activePlan.examDate && " · Exam: " + activePlan.examDate}
@@ -13389,17 +13605,17 @@ export default function UroStudyHub() {
                 <div style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--c-mut)", marginBottom: 8 }}>Available Plans</div>
 
                 {/* AUA built-in */}
-                <div onClick={function() { switchPlan("aua"); }} style={{ background: activePlanId === "aua" ? c.a + "15" : c.cd, borderRadius: 12, padding: 12, marginBottom: 8, border: "1px solid " + (activePlanId === "aua" ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+                <div onClick={function() { switchPlan("aua"); }} style={{ background: PLAN_NS === "" ? c.a + "15" : c.cd, borderRadius: 12, padding: 12, marginBottom: 8, border: "1px solid " + (PLAN_NS === "" ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 22 }}>{"🏥"}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: activePlanId === "aua" ? c.a : "var(--c-tx)" }}>AUA Core Curriculum</div>
+                    <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: PLAN_NS === "" ? c.a : "var(--c-tx)" }}>AUA Core Curriculum</div>
                     <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)" }}>{AUA_PHASES.length + " phases, " + AUA_FLAT.length + " topics — Urology Board Prep"}</div>
                   </div>
-                  {activePlanId === "aua" && <span style={{ fontSize: "var(--f9)", color: c.a, fontWeight: 700, padding: "2px 8px", background: c.a + "20", borderRadius: 4 }}>Active</span>}
+                  {PLAN_NS === "" && <span style={{ fontSize: "var(--f9)", color: c.a, fontWeight: 700, padding: "2px 8px", background: c.a + "20", borderRadius: 4 }}>Active</span>}
                 </div>
 
                 {/* Sub-I built-in */}
-                <div onClick={function() { switchPlan("subi"); }} style={{ background: activePlanId === "subi" ? c.a + "15" : c.cd, borderRadius: 12, padding: 12, marginBottom: 8, border: "1px solid " + (activePlanId === "subi" ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+                {subiOn && <div data-plan="subi" onClick={function() { switchPlan("subi"); }} style={{ background: activePlanId === "subi" ? c.a + "15" : c.cd, borderRadius: 12, padding: 12, marginBottom: 8, border: "1px solid " + (activePlanId === "subi" ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontSize: 22 }}>{"🩺"}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: "var(--f12)", fontWeight: 700, color: activePlanId === "subi" ? c.a : "var(--c-tx)" }}>Sub-I Rotation Schedule</div>
@@ -13407,11 +13623,11 @@ export default function UroStudyHub() {
                     <div style={{ fontSize: "var(--f8)", color: "var(--c-mut2)", marginTop: 2 }}>Med student curriculum + anatomy + pimping prep. What you actually need on sub-I.</div>
                   </div>
                   {activePlanId === "subi" && <span style={{ fontSize: "var(--f9)", color: c.a, fontWeight: 700, padding: "2px 8px", background: c.a + "20", borderRadius: 4 }}>Active</span>}
-                </div>
+                </div>}
 
                 {/* Custom plans */}
                 {customPlans.map(function(plan) {
-                  var pFlat = buildFlat(plan.phases);
+                  var pFlat = buildFlat(plan.phases, plan.id);
                   var isActive = activePlanId === plan.id;
                   return (
                     <div key={plan.id} onClick={function() { switchPlan(plan.id); }} style={{ background: isActive ? c.a + "15" : c.cd, borderRadius: 12, padding: 12, marginBottom: 8, border: "1px solid " + (isActive ? c.a + "50" : "var(--c-br)"), cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
@@ -13475,7 +13691,7 @@ export default function UroStudyHub() {
             {tView === "schedule" && (
               <div>
                 {/* Sub-I rotation progress overview */}
-                {activePlanId === "subi" && (function() {
+                {onSubi && (function() {
                   var doneCount = FLAT.filter(function(f) { return !!s.done[f.key]; }).length;
                   var pct = TOTAL > 0 ? Math.round(doneCount / TOTAL * 100) : 0;
                   return (
@@ -13524,7 +13740,7 @@ export default function UroStudyHub() {
                     </div>
                   </div>
                 )}
-                <h2 style={{ fontSize: "var(--f13)", fontWeight: 700, marginBottom: 3, color: "var(--c-tx0)" }}>{activePlanId === "subi" ? "Rotation Schedule" : "Weekly Reading Plan"}</h2>
+                <h2 style={{ fontSize: "var(--f13)", fontWeight: 700, marginBottom: 3, color: "var(--c-tx0)" }}>{onSubi ? "Rotation Schedule" : "Weekly Reading Plan"}</h2>
                 {(function() {
                   var ss = getScheduleStatus();
                   if (ss.status === "on_track" || ss.status === "ahead" || ss.topicsBehind <= 0) return null;
@@ -13718,7 +13934,7 @@ export default function UroStudyHub() {
                                 {so && (
                                   <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: 4, background: c.bg + "44", border: "1px solid var(--c-br-44)", borderTop: "none", borderRadius: "0 0 6px 6px" }}>
                                     {sec.topics.map(function(tp, ti) {
-                                      var k = pi + "-" + si + "-" + ti;
+                                      var k = tKeyOf(pi, si, ti);
                                       return <TopicRow key={ti} tKey={k} label={tp} isDone={!!s.done[k]} />;
                                     })}
                                   </div>
@@ -13758,7 +13974,7 @@ export default function UroStudyHub() {
                 } else {
                   setS(function(p) { return Object.assign({}, p, { caseLog: (p.caseLog || []).concat([newCase]) }); });
                 }
-                setCaseLogForm({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
+                setCaseLogForm({ date: localYmd(), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
               }
 
               function deleteCase(id) {
@@ -13845,7 +14061,7 @@ export default function UroStudyHub() {
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={saveCase} style={{ flex: 1, padding: "8px 0", background: "linear-gradient(135deg, " + c.a + ", " + c.a2 + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }}>{caseLogEdit ? "Update" : "Log Case"}</button>
-                      {caseLogEdit && <button onClick={function() { setCaseLogEdit(null); setCaseLogForm({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
+                      {caseLogEdit && <button onClick={function() { setCaseLogEdit(null); setCaseLogForm({ date: localYmd(), procedure: "", role: "Observer", attending: "", notes: "", tags: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
                     </div>
                   </div>
 
@@ -14039,15 +14255,17 @@ export default function UroStudyHub() {
             {/* Rotation Site Notes moved to Pocket Guide tab */}
 
             {/* ═══ RESIDENT OP LOG (SurgiLog Integration) ═══ */}
-            {ENABLE_SURGILOG && tView === "oplog" && (function() {
-              // Sync SurgiLog cases on first render of this tab
+            {opLogOn && tView === "oplog" && (function() {
+              // Sync SurgiLog cases on first render of this tab (desktop Chrome only). A failure leaves the synced list
+              // empty; it used to be written into the tutor's uploaded-file text.
               if (s.surgilogId && slCases === null) {
-                try {
+                if (!hasChromeExt) setSlCases([]);
+                else try {
                   chrome.runtime.sendMessage(s.surgilogId, { type: "surgilog-get-cases" }, function(response) {
                     if (response && response.ok) { setSlCases(response.cases || []); }
-                    else { setSlCases([]); setUpText("Could not connect to SurgiLog extension. Make sure it's installed and enabled."); }
+                    else { setSlCases([]); }
                   });
-                } catch(e) { setSlCases([]); setUpText("SurgiLog extension not available. Check that it's installed."); }
+                } catch(e) { setSlCases([]); }
               }
               var opCases = s.opLog || [];
               var opFilter = s.opFilter || "";
@@ -14062,7 +14280,7 @@ export default function UroStudyHub() {
               var ROLES = ["Surgeon Chief", "Surgeon Jr.", "First Assistant", "Teaching Asst."];
               var APPROACHES = ["Open", "Laparoscopic", "Robotic", "Endoscopic", "Percutaneous", "Other"];
               var LATERALITY = ["N/A", "Left", "Right", "Bilateral"];
-              var opForm = s.opForm || { date: new Date().toISOString().slice(0,10), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" };
+              var opForm = s.opForm || { date: localYmd(), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" };
               var opEdit = s.opEdit || null;
 
               function setOpForm(fn) { setS(function(p) { return Object.assign({}, p, { opForm: typeof fn === "function" ? fn(p.opForm || opForm) : fn }); }); }
@@ -14075,10 +14293,10 @@ export default function UroStudyHub() {
                 if (opEdit) {
                   setS(function(p) {
                     var updated = (p.opLog || []).map(function(c2) { return c2.id === opEdit ? Object.assign({}, c2, f) : c2; });
-                    return Object.assign({}, p, { opLog: updated, opEdit: null, opForm: { date: new Date().toISOString().slice(0,10), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" } });
+                    return Object.assign({}, p, { opLog: updated, opEdit: null, opForm: { date: localYmd(), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" } });
                   });
                 } else {
-                  setS(function(p) { return Object.assign({}, p, { opLog: (p.opLog || []).concat([newCase]), opForm: { date: new Date().toISOString().slice(0,10), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" } }); });
+                  setS(function(p) { return Object.assign({}, p, { opLog: (p.opLog || []).concat([newCase]), opForm: { date: localYmd(), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" } }); });
                 }
               }
 
@@ -14163,8 +14381,8 @@ export default function UroStudyHub() {
                     </div>
                   </div>
 
-                  {/* SurgiLog connection status */}
-                  {!s.surgilogId && (
+                  {/* SurgiLog connection status (the ID can only be used where Chrome extensions can be reached) */}
+                  {!s.surgilogId && hasChromeExt && (
                     <div style={{ padding: "8px 10px", background: "#fbbf2410", border: "1px solid #fbbf2430", borderRadius: 10, marginBottom: 10 }}>
                       <div style={{ fontSize: "var(--f10)", color: "var(--a-am)", fontWeight: 600 }}>{"⚠️"} SurgiLog not connected</div>
                       <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)", marginTop: 2 }}>Go to Settings (gear icon) and paste your SurgiLog Extension ID. Cases can still be logged and exported without it.</div>
@@ -14231,7 +14449,7 @@ export default function UroStudyHub() {
                       {s.surgilogId && !opEdit && (
                         <button onClick={function() { var f = s.opForm || opForm; if (!f.procedure_name) return; saveOp(); setTimeout(function() { var latest = (s.opLog || []); if (latest.length) pushOpToSurgiLog(latest[latest.length - 1]); }, 100); }} style={{ padding: "8px 14px", background: "#34d39920", border: "1px solid #34d39940", borderRadius: 10, color: "var(--a-em)", fontSize: "var(--f10)", fontWeight: 700, cursor: "pointer" }}>{"Log + Send to SurgiLog"}</button>
                       )}
-                      {opEdit && <button onClick={function() { setOpEdit(null); setOpForm({ date: new Date().toISOString().slice(0,10), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
+                      {opEdit && <button onClick={function() { setOpEdit(null); setOpForm({ date: localYmd(), procedure_name: "", role: "First Assistant", attending: "", hospital: "", approach: "", laterality: "N/A", notes: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
                     </div>
                   </div>
 
@@ -14359,7 +14577,7 @@ export default function UroStudyHub() {
             {tView === "stats" && (
               <div>
                 <h2 style={{ fontSize: "var(--f13)", fontWeight: 700, marginBottom: 10, color: "var(--c-tx0)" }}>📈 Stats</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(85px,1fr))", gap: 5, marginBottom: 16 }}>
+                {ff.gamification !== false && <div data-rank-grid style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(85px,1fr))", gap: 5, marginBottom: 16 }}>
                   {RANKS.map(function(r, i) {
                     return (
                       <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "8px 5px", background: c.cd, borderRadius: 8, border: "1px solid var(--c-br)", opacity: s.xp >= r.minXP ? 1 : 0.3 }}>
@@ -14369,8 +14587,14 @@ export default function UroStudyHub() {
                       </div>
                     );
                   })}
+                </div>}
+                <h3 style={{ fontSize: "var(--f11)", fontWeight: 600, marginBottom: 4, color: "var(--c-mut)" }}>Confidence Heatmap</h3>
+                <div data-heat-legend style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", fontSize: "var(--f8)", color: "var(--c-mut2)", marginBottom: 6 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 2, background: "var(--c-bg)", border: "1px solid var(--c-br2)" }} />{"not done"}
+                  <span style={{ width: 11, height: 11, borderRadius: 2, background: "var(--a-red)", marginLeft: 6 }} />
+                  <span style={{ width: 11, height: 11, borderRadius: 2, background: "var(--a-yel)" }} />
+                  <span style={{ width: 11, height: 11, borderRadius: 2, background: "var(--a-em2)" }} />{"done: confidence low → high (grey = not rated)"}
                 </div>
-                <h3 style={{ fontSize: "var(--f11)", fontWeight: 600, marginBottom: 6, color: "var(--c-mut)" }}>Confidence Heatmap</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   {PHASES.map(function(ph, pi) {
                     return (
@@ -14382,11 +14606,11 @@ export default function UroStudyHub() {
                               <div style={{ fontSize: "var(--f7)", color: "var(--c-br2)", minWidth: 70, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.cat}</div>
                               <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                                 {sec.topics.map(function(_, ti) {
-                                  var k = pi + "-" + si + "-" + ti;
+                                  var k = tKeyOf(pi, si, ti);
                                   var cf = s.conf[k] || 0;
                                   var dn = !!s.done[k];
-                                  var cols = ["#374151", "var(--a-red)", "var(--a-or2)", "var(--a-yel)", "var(--a-grn2)", "var(--a-em2)"];
-                                  return <div key={ti} style={{ width: 11, height: 11, borderRadius: 2, background: dn ? cols[cf] : "#1f2937", border: dn ? "none" : "1px solid var(--c-br)" }} />;
+                                  var cols = ["var(--c-mut2)", "var(--a-red)", "var(--a-or2)", "var(--a-yel)", "var(--a-grn2)", "var(--a-em2)"];
+                                  return <div key={ti} data-heat-cell={dn ? "done" : "open"} style={{ width: 11, height: 11, borderRadius: 2, background: dn ? cols[cf] : "var(--c-bg)", border: dn ? "none" : "1px solid var(--c-br2)" }} />;
                                 })}
                               </div>
                             </div>
@@ -14435,8 +14659,8 @@ export default function UroStudyHub() {
                 </button>
               );
             })()}
-            {/* Cost meter — this session so far, climbing while a reply is written. Tap for details. */}
-            {(function() {
+            {/* Cost meter — this session so far, climbing while a reply is written. Tap for details. (Not while no AI is connected.) */}
+            {lm.on && (function() {
               var lc = liveSessCost();
               var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
               var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
@@ -14562,7 +14786,7 @@ export default function UroStudyHub() {
                 reader.readAsText(file);
               }
             }} style={{ display: "none" }} />
-            <button onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={tutBtn(chatView === "skills", "#f97316", "var(--a-or)")}>{"🔪 OR Skills"}</button>
+            {orSkillsOn && <button data-orskills-btn onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={tutBtn(chatView === "skills", "#f97316", "var(--a-or)")}>{"🔪 OR Skills"}</button>}
             <button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={tutBtn(chatView === "saved", "#a78bfa", "var(--a-vio)")}>{Icon("bookmark", 17)}{"Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
             <button onClick={function() { stopChatReply(); setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={tutBtn(false)} title="Clear the chat and start fresh">{Icon("compose", 17)}{"Clear"}</button>
             </div>
@@ -14573,7 +14797,7 @@ export default function UroStudyHub() {
               {Object.keys(TUTOR_STYLES).map(function(key) {
                 var st = TUTOR_STYLES[key];
                 var isActive = (s.tutorStyle || "engaging") === key;
-                return <button key={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key, showStylePreview: p.tutorStyle === key ? !p.showStylePreview : true }); }); }} title={st.desc} style={{ padding: "0 14px", background: isActive ? c.a + "1f" : "transparent", border: "1px solid " + (isActive ? c.a + "70" : "var(--c-br)"), borderRadius: 18, color: isActive ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: isActive ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }}>{st.icon + " " + st.label}</button>;
+                return <button key={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key, showStylePreview: false }); }); }} title={st.desc} style={{ padding: "0 14px", background: isActive ? c.a + "1f" : "transparent", border: "1px solid " + (isActive ? c.a + "70" : "var(--c-br)"), borderRadius: 18, color: isActive ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: isActive ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }}>{st.icon + " " + st.label}</button>;
               })}
               <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
               <button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", flexShrink: 0, minHeight: 34, minWidth: 40 }} title="Tutor settings: personal note, live replies, my hooks">{"✏️"}</button>
@@ -14647,14 +14871,17 @@ export default function UroStudyHub() {
           })()}
           {/* Style preview panel — shows how each style would sound on a sample BPH question */}
           {s.showStylePreview && (
-            <div style={{ padding: "8px 12px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "30" }}>
-              <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)", marginBottom: 6 }}>How each style would teach a BPH question — tap to switch:</div>
+            <div data-style-preview style={{ padding: "8px 12px 10px", borderBottom: "1px solid " + c.cd, background: c.cd + "30", maxHeight: "min(42vh, 360px)", overflowY: "auto", overscrollBehavior: "contain", flexShrink: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div style={{ flex: 1, fontSize: "var(--f9)", color: "var(--c-mut)" }}>How each style would teach a BPH question — tap one to use it:</div>
+                <button aria-label="Close the style preview" onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: false }); }); }} style={{ flexShrink: 0, minWidth: 36, minHeight: 36, background: "none", border: "1px solid var(--c-br)", borderRadius: 18, color: "var(--c-mut)", cursor: "pointer", fontSize: "var(--f12)" }}>{"✕"}</button>
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {Object.keys(TUTOR_STYLES).map(function(key) {
                   var st = TUTOR_STYLES[key];
                   var isActive = (s.tutorStyle || "engaging") === key;
                   return (
-                    <button key={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key }); }); }} style={{ textAlign: "left", padding: "8px 10px", background: isActive ? c.a + "12" : "var(--c-bg)", border: "1px solid " + (isActive ? c.a + "55" : "var(--c-br)"), borderRadius: 10, cursor: "pointer", display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button key={key} data-style-pick={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key, showStylePreview: false }); }); }} style={{ textAlign: "left", padding: "8px 10px", background: isActive ? c.a + "12" : "var(--c-bg)", border: "1px solid " + (isActive ? c.a + "55" : "var(--c-br)"), borderRadius: 10, cursor: "pointer", display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontSize: "var(--f13)" }}>{st.icon}</span>
                         <span style={{ fontSize: "var(--f11)", fontWeight: 700, color: isActive ? c.a : "var(--c-tx)" }}>{st.label}</span>
@@ -14669,9 +14896,9 @@ export default function UroStudyHub() {
             </div>
           )}
           {s.showTutorCustom && (
-            <div style={{ padding: "6px 12px 8px", borderBottom: "1px solid " + c.cd, background: c.cd + "40" }}>
+            <div data-tutor-custom style={{ padding: "6px 12px 8px", borderBottom: "1px solid " + c.cd, background: c.cd + "40", maxHeight: "min(50vh, 440px)", overflowY: "auto", overscrollBehavior: "contain", flexShrink: 1 }}>
               <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)", marginBottom: 4 }}>Personal note for the AI tutor — tell it about your background, learning style, what you struggle with, etc.</div>
-              <textarea value={s.tutorCustomNote || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { tutorCustomNote: e.target.value }); }); }} placeholder={"e.g. \"I'm a PGY-3 who's strong on oncology but weak on infertility. I learn best with clinical scenarios. Don't go easy on me.\""} style={{ width: "100%", minHeight: 50, padding: 8, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: "var(--f10)", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
+              <textarea value={s.tutorCustomNote || ""} onChange={function(e) { setS(function(p) { return Object.assign({}, p, { tutorCustomNote: e.target.value }); }); }} rows={4} placeholder={"e.g. \"I'm a PGY-3 who's strong on oncology but weak on infertility. I learn best with clinical scenarios. Don't go easy on me.\""} style={{ width: "100%", minHeight: 92, padding: 8, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 10, color: "var(--c-tx)", fontSize: "var(--f10)", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }} />
               {(s.myHooks || []).length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: "var(--f9)", color: "var(--c-mut)", marginBottom: 4 }}>{"🧠 My hooks (" + s.myHooks.length + ") — the tutor reuses these, and each one has an Anki card"}</div>
@@ -14743,7 +14970,7 @@ export default function UroStudyHub() {
                 {/* Mark Done: linked to the matching study-plan topic */}
                 {matchedTopic && (s.done[matchedTopic.key]
                   ? <span data-lecture-done title={"“" + matchedTopic.t + "” is done in your study plan"} style={{ fontSize: "var(--f11)", color: "var(--a-grn)", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, padding: "0 4px" }}>{"✓ Done"}</span>
-                  : <button data-lecture-markdone title={"Mark “" + matchedTopic.t + "” done in your study plan"} onClick={function() { markDone(matchedTopic.key); setSaveFeedback("Marked done! +XP +tokens"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={Object.assign(lb(c.a, c.a, "#fff", 700), { border: "none" })}>{"✓ Mark Done"}</button>)}
+                  : <button data-lecture-markdone title={"Mark “" + matchedTopic.t + "” done in your study plan"} onClick={function() { markDone(matchedTopic.key); setSaveFeedback(gamOn ? "Marked done! +XP +tokens" : "Marked done!"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={Object.assign(lb(c.a, c.a, "#fff", 700), { border: "none" })}>{"✓ Mark Done"}</button>)}
                 <button title="Session notes" onClick={function() { setShowTutorNotes(!showTutorNotes); if (!showTutorNotes) { setTutorNoteText((s.notes || {})[matchedTopic ? matchedTopic.key : "tutor_" + lectureTopic] || ""); } }} style={lb(showTutorNotes ? "#3b82f620" : "transparent", showTutorNotes ? "#3b82f650" : "var(--c-br)", showTutorNotes ? "var(--a-blu)" : "var(--c-mut2)")}>{"📝"}</button>
                 <button title="Save this session (+3 tokens)" onClick={function() {
                     saveLectureSession(lectureTopic, chatMsgs);
@@ -14863,7 +15090,7 @@ export default function UroStudyHub() {
               </div>
             </div>
           )}
-          {skillsCtx && chatView === "chat" && (function() {
+          {skillsCtx && orSkillsOn && chatView === "chat" && (function() {
             var _bm = SURGICAL_SKILLS.filter(function(m) { return m.id === skillsCtx.id; })[0];
             if (!_bm) return null;
             return (
@@ -14873,7 +15100,7 @@ export default function UroStudyHub() {
               </div>
             );
           })()}
-          {chatView === "skills" && (function() {
+          {chatView === "skills" && orSkillsOn && (function() {
             var prog = s.skillsProgress || {};
             function toggleSkill(id) { setExpandedSkill(function(p) { var n = Object.assign({}, p); n[id] = !n[id]; return n; }); }
             function setSkillProg(id, patch) { setS(function(p) { var sp = Object.assign({}, p.skillsProgress || {}); sp[id] = Object.assign({}, sp[id] || {}, patch, { ts: Date.now() }); return Object.assign({}, p, { skillsProgress: sp }); }); }
@@ -15135,14 +15362,14 @@ export default function UroStudyHub() {
                     );
                   })}
                 </div>
-                <div onClick={function() { setChatView("skills"); }} style={{ marginTop: 16, background: "#f9731610", border: "1px solid #f9731640", borderRadius: 14, padding: 14, maxWidth: 360, marginLeft: "auto", marginRight: "auto", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                {orSkillsOn && <div data-orskills-card onClick={function() { setChatView("skills"); }} style={{ marginTop: 16, background: "#f9731610", border: "1px solid #f9731640", borderRadius: 14, padding: 14, maxWidth: 360, marginLeft: "auto", marginRight: "auto", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ fontSize: 26, flexShrink: 0 }}>{"🔪"}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: "var(--f13)", fontWeight: 800, color: "var(--a-or)" }}>{"New — OR Skills course"}</div>
                     <div style={{ fontSize: "var(--f11)", color: "var(--c-mut)", lineHeight: 1.5, marginTop: 2 }}>{"Surgical fundamentals for sub-Is & interns: scalpel, suture, knots, closure, drains. Read a module or get taught & quizzed by the tutor."}</div>
                   </div>
                   <div style={{ fontSize: "var(--f16)", color: "var(--a-or)", flexShrink: 0 }}>{"→"}</div>
-                </div>
+                </div>}
               </div>
             )}
             {chatMsgs.map(function(msg, i) {
@@ -15157,6 +15384,17 @@ export default function UroStudyHub() {
                     {msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && parseHooks(msg.content).map(function(h, hi) { return hookCard(h, hi, false); })}
                     {msg.role === "assistant" && !(chatLoad && i === chatMsgs.length - 1) && isRapidReview(msg.content) && savedHas(savedLectures, msg.content) && (
                       <button data-cheat-saved onClick={function() { setSavedFilter("cheat"); setSavedQuery(""); setChatView("saved"); }} title="Open your saved cheat sheets" style={{ display: "block", marginTop: 10, background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--a-grn)", fontSize: "var(--f10)", fontWeight: 700 }}>{"✓ Saved to your cheat sheets (tap to open)"}</button>
+                    )}
+                    {msg.role === "assistant" && msg.cut && !(chatLoad && i === chatMsgs.length - 1) && (
+                      <div data-cutoff style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dashed var(--c-br2)", fontSize: "var(--f11)", color: "var(--a-or2)", fontWeight: 600, whiteSpace: "normal" }}>
+                        {"⚠ Cut off: this reply hit the model's length limit, so it isn't finished."}
+                        {i === chatMsgs.length - 1 && !chatLoad && (
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            <button data-cutoff-continue onClick={continueReply} style={tutBtn(false)}>{"▶ Continue"}</button>
+                            <button data-cutoff-regen onClick={regenerateResponse} style={tutBtn(false)}>{"🔄 Regenerate"}</button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   {msg.role === "assistant" && (
@@ -15323,7 +15561,6 @@ export default function UroStudyHub() {
                 </button>
               );
             })}
-            <a href="anki://" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", margin: "0 4px", background: "#fb923c20", border: "1px solid #fb923c40", borderRadius: 8, textDecoration: "none", color: "var(--a-or)", fontSize: "var(--f9)", fontWeight: 600, whiteSpace: "nowrap" }}>🧠 Open Anki</a>
           </div>
           <div style={{ padding: "14px 12px" }}>
             {/* Progress bar */}
@@ -15467,6 +15704,7 @@ export default function UroStudyHub() {
                     <button onClick={exportAnki} style={{ width: "100%", padding: 12, background: c.a, color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: "var(--f13)", marginBottom: 8 }}>
                       Download for Anki Import
                     </button>
+                    <a data-open-anki href="anki://" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 40, marginBottom: 8, background: "#fb923c20", border: "1px solid #fb923c40", borderRadius: 10, textDecoration: "none", color: "var(--a-or)", fontSize: "var(--f11)", fontWeight: 700 }}>{"🧠 Open Anki"}</a>
                     {/* Quick import guide */}
                     <div style={{ background: c.cd, borderRadius: 10, padding: 10, marginBottom: 12, border: "1px solid var(--c-br)" }}>
                       <p style={{ fontSize: "var(--f10)", fontWeight: 700, color: "var(--c-mut)", margin: "0 0 6px 0" }}>Quick Import Steps:</p>
@@ -15726,7 +15964,7 @@ export default function UroStudyHub() {
         function saveCurrentAsPack() {
           var name = prompt("Name this card pack (e.g., \"Urology\", \"Gen Surg\", \"EM Rotation\"):");
           if (!name || !name.trim()) return;
-          var pack = { name: name.trim(), hidden: Object.assign({}, hiddenCards), date: new Date().toISOString().slice(0, 10) };
+          var pack = { name: name.trim(), hidden: Object.assign({}, hiddenCards), date: localYmd() };
           setCardPacks(function(prev) {
             // Replace if same name exists
             var filtered = prev.filter(function(p) { return p.name !== pack.name; });
@@ -17560,7 +17798,7 @@ export default function UroStudyHub() {
       })()}
 
       {/* ═══ STUDENT TOOLKIT ═══ */}
-      {page === "student" && (
+      {page === "student" && ff.subI !== false && (
         <div style={{ padding: "0 0 80px" }}>
           {(function() {
             var stuTab = s.stuTab || "cards";
@@ -17732,7 +17970,7 @@ export default function UroStudyHub() {
                       } else {
                         setS(function(p) { return Object.assign({}, p, { caseLog: (p.caseLog || []).concat([newCase]) }); });
                       }
-                      setCaseLogForm({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
+                      setCaseLogForm({ date: localYmd(), procedure: "", role: "Observer", attending: "", notes: "", tags: "" });
                     }
 
                     function deleteCase(id) {
@@ -17819,7 +18057,7 @@ export default function UroStudyHub() {
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>
                             <button onClick={saveCase} style={{ flex: 1, padding: "8px 0", background: "linear-gradient(135deg, " + c.a + ", " + c.a2 + ")", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }}>{caseLogEdit ? "Update" : "Log Case"}</button>
-                            {caseLogEdit && <button onClick={function() { setCaseLogEdit(null); setCaseLogForm({ date: new Date().toISOString().slice(0,10), procedure: "", role: "Observer", attending: "", notes: "", tags: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
+                            {caseLogEdit && <button onClick={function() { setCaseLogEdit(null); setCaseLogForm({ date: localYmd(), procedure: "", role: "Observer", attending: "", notes: "", tags: "" }); }} style={{ padding: "8px 12px", background: "transparent", border: "1px solid #64748b", borderRadius: 10, color: "var(--c-mut2)", fontSize: "var(--f11)", cursor: "pointer" }}>Cancel</button>}
                           </div>
                         </div>
 

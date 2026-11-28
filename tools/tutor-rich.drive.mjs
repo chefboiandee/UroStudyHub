@@ -236,6 +236,11 @@ async function open(viewport, mode) {
   if (!ok) throw new Error('no Tutor tab');
   await p.waitForFunction(() => [...document.querySelectorAll('h1')].some((h) => /AI Tutor/.test(h.textContent)), null, { timeout: 5000 });
   await p.waitForTimeout(200);
+  // The full app opens "AI off" and sends nothing until a model is connected: connect the saved OpenAI key
+  await p.locator('[data-aipick]').click();
+  await p.locator('[data-aipick-prov="openai"]').click();
+  await p.locator('[data-aipick]').click();
+  await p.waitForTimeout(150);
   return { ctx, p, errs };
 }
 const errCheck = (label, errs) => { check('no console errors · ' + label, errs.length === 0, errs.slice(0, 3).join(' | ')); errs.length = 0; };
