@@ -129,12 +129,9 @@ async function toTutor(p) {
   await p.waitForFunction(() => [...document.querySelectorAll('h1')].some((h) => /AI Tutor/.test(h.textContent)), null, { timeout: 5000 });
   await p.waitForTimeout(200);
   // The full app opens "AI off" and sends nothing until a model is connected: connect the saved OpenAI key
-  const tapSel = (sel) => p.evaluate((q) => { const b = document.querySelector(q); if (b) b.click(); }, sel);
-  await tapSel('[data-aipick]');
-  await p.waitForTimeout(100);
-  await tapSel('[data-aipick-prov="openai"]');
-  await p.waitForTimeout(100);
-  if (await p.locator('[data-aipick-panel]').count()) await tapSel('[data-aipick]');
+  await p.locator('[data-aipick]').click();
+  await p.locator('[data-aipick-prov="openai"]').click();
+  if (await p.locator('[data-aipick-panel]').count()) await p.locator('[data-aipick]').click();
   await p.waitForTimeout(150);
 }
 async function open(viewport, seedExtra) {
@@ -179,8 +176,16 @@ async function settle(p, n) {
 async function saveLS(p) {
   return p.evaluate(() => { try { return (JSON.parse(localStorage.getItem('uroStudyHub_progress')).savedLectures) || []; } catch (e) { return null; } });
 }
+// A Tutor tool: in the toolbar on wide screens; on a phone (under 700px) behind the Tools button, in its sheet
+async function tool(p, name) {
+  const btn = p.locator('[data-tools-btn]');
+  if ((await btn.count()) && !(await p.locator('[data-tools-sheet]').count())) { await btn.click(); await p.waitForTimeout(150); }
+  return p.locator('[data-tool="' + name + '"]').first();
+}
+async function closeTools(p) { if (await p.locator('[data-tools-close]').count()) { await p.locator('[data-tools-close]').click(); await p.waitForTimeout(100); } }
 async function savedBtnCount(p) {
-  const t = await p.locator('button', { hasText: /^Saved/ }).first().innerText();
+  const t = await (await tool(p, 'saved')).innerText();
+  await closeTools(p);
   const m = t.match(/\((\d+)\)/);
   return m ? +m[1] : 0;
 }
@@ -232,7 +237,7 @@ await block('A. Lecture to phase 9: the sheet files itself, the phase-8 tail doe
   check('tapping it opens Saved on the Cheat sheets filter', (await p.locator('[data-saved-filter="cheat"]').evaluate((b) => /Cheat sheets \(1\)/.test(b.textContent))) && (await p.locator('[data-saved-item]').count()) === 1);
   check('the card says cheat sheet + auto-saved', await p.locator('[data-saved-item="cheat"]').evaluate((el) => /📄/.test(el.textContent) && /auto-saved/.test(el.textContent) && /RAPID REVIEW/.test(el.textContent)));
   await shot(p, 'phone-saved-cheat');
-  await p.locator('button', { hasText: /^Saved/ }).first().click();   // back to the chat
+  await (await tool(p, 'saved')).click();   // back to the chat
   await p.waitForSelector('[data-chat-msg]', { timeout: 3000 });
 
   // Manual saves still work, next to it
@@ -276,7 +281,7 @@ await block('B. Not a lecture: nothing auto-saves; a sheet bookmarked by hand ea
   await p.waitForTimeout(500);
   check('outside a lecture a "rapid review" reply is not auto-saved', (await saveLS(p)).length === 3 && (await p.locator('[data-cheat-saved]').count()) === 0);
 
-  await p.locator('button', { hasText: /^Saved/ }).first().click();
+  await (await tool(p, 'saved')).click();
   await p.waitForSelector('[data-saved-filter]', { timeout: 3000 });
   const chip = (k) => p.locator('[data-saved-filter="' + k + '"]').innerText();
   check('filter counts: all 3, cheat 1, sessions 1, bookmarks 1', /\(3\)/.test(await chip('all')) && /\(1\)/.test(await chip('cheat')) && /\(1\)/.test(await chip('session')) && /\(1\)/.test(await chip('bookmark')), [await chip('all'), await chip('cheat'), await chip('session'), await chip('bookmark')].join(' | '));
@@ -324,8 +329,7 @@ await block('C. Survives a reload; deleting an auto-saved sheet sticks; a "## Ph
   await p.waitForTimeout(900);   // the progress blob is written on the next render
   await p.reload();
   await toTutor(p);
-  // DOM click: after the reload the "Unfinished lecture" banner sits over the toolbar
-  await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /^Saved/.test(x.textContent.trim()) && x.getClientRects().length); if (b) b.click(); });
+  await (await tool(p, 'saved')).click();
   await p.waitForSelector('[data-saved-filter]', { timeout: 3000 });
   await p.locator('[data-saved-filter="cheat"]').click();
   check('after a reload the sheet is still there', (await p.locator('[data-saved-item="cheat"]').count()) === 1 && /Stones/.test(await p.locator('[data-saved-item="cheat"]').innerText()));

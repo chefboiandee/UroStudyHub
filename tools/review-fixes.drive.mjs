@@ -163,6 +163,9 @@ async function connect(p) {
   if (await vis(p, '[data-aipick-panel]')) await p.locator('[data-aipick]').click();
   await p.waitForTimeout(200);
 }
+// Phones (under 700px): the Tutor's tools are in the Tools sheet behind [data-tools-btn]
+async function openTools(p) { if ((await p.locator('[data-tools-btn]').count()) && !(await p.locator('[data-tools-sheet]').count())) { await p.locator('[data-tools-btn]').click(); await p.waitForTimeout(150); } }
+async function closeTools(p) { if (await p.locator('[data-tools-close]').count()) { await p.locator('[data-tools-close]').click(); await p.waitForTimeout(100); } }
 const queue = (p, ...rs) => p.evaluate((x) => { window.__q.push(...x); }, rs);
 const nAi = (p) => p.evaluate(() => window.__ai.length);
 async function waitAi(p, n) { await p.waitForFunction((k) => window.__ai.length >= k, n, { timeout: 8000 }); await p.waitForTimeout(400); }
@@ -215,7 +218,9 @@ await block('A1. Switches off: no ranks, coins, OR Skills, Sub-I or Op Log', asy
   await shot(p, 'a1-stats-light');
   // Tutor: no OR Skills, no cost pill while no AI is connected
   await nav(p, 'chat');
-  check('Tutor: no OR Skills button or card', !(await has(p, '[data-orskills-btn]')) && !(await has(p, '[data-orskills-card]')));
+  await openTools(p);
+  check('Tutor: no OR Skills button (Tools sheet) or card', (await has(p, '[data-tools-sheet]')) && !(await has(p, '[data-orskills-btn]')) && !(await has(p, '[data-orskills-card]')));
+  await closeTools(p);
   check('Tutor: no cost pill while no AI is connected', !(await has(p, '[data-cost]')));
   // Anki: a session summary without XP / coins
   await nav(p, 'anki');
@@ -246,7 +251,9 @@ await block('A2. Switches on (the default): ranks, OR Skills, Sub-I and Op Log a
   await studyTab(p, 'Stats');
   check('Stats: the rank grid', await vis(p, '[data-rank-grid]'));
   await nav(p, 'chat');
-  check('Tutor: OR Skills button and card', (await has(p, '[data-orskills-btn]')) && (await has(p, '[data-orskills-card]')));
+  await openTools(p);
+  check('Tutor: OR Skills button (Tools sheet) and card', (await has(p, '[data-orskills-btn]')) && (await has(p, '[data-orskills-card]')));
+  await closeTools(p);
   errCheck('A2', errs);
   await ctx.close();
 });
@@ -269,7 +276,9 @@ await block('A3. The trimmed window (the host\'s text swaps on the built page)',
   check('Stats: no rank grid', !(await has(p, '[data-rank-grid]')));
   await shot(p, 'a3-host-stats');
   await nav(p, 'chat');
-  check('Tutor: no OR Skills', !(await has(p, '[data-orskills-btn]')) && !(await has(p, '[data-orskills-card]')));
+  await openTools(p);
+  check('Tutor: no OR Skills', (await has(p, '[data-tools-sheet]')) && !(await has(p, '[data-orskills-btn]')) && !(await has(p, '[data-orskills-card]')));
+  await closeTools(p);
   await p.locator('[data-hdr-import]').click().catch(() => {});
   await p.waitForTimeout(200);
   const imp = await has(p, '[data-import-copy]') ? await p.locator('[data-import-copy]').innerText() : '';
@@ -438,16 +447,19 @@ await block('B10. Pomodoro: a phase that ended while the phone was locked is ove
   const t0 = new Date('2026-11-27T15:00:00Z');
   const { ctx, p, errs } = await open({ clock: t0 });
   await nav(p, 'chat');
-  await p.locator('span', { hasText: /^▶ Start$/ }).first().click();
+  await openTools(p);
+  await p.locator('[data-tools-sheet] span', { hasText: /^▶ Start$/ }).first().click();
+  await closeTools(p);
   await p.clock.runFor(2000);
-  const shown = async () => p.evaluate(() => (document.body.innerText.match(/\b(\d\d):(\d\d)\b/) || [''])[0]);
-  check('running: 25:00 counting down', /^24:5\d$/.test(await shown()), await shown());
+  // with the sheet closed, the Tools button shows the timer
+  const shown = async () => ((await p.locator('[data-tools-btn]').innerText()).match(/\d\d:\d\d/) || [''])[0];
+  check('running: 25:00 counting down, on the Tools button', /^24:5\d$/.test(await shown()) && /🍅/.test(await p.locator('[data-tools-btn]').innerText()), await shown());
   // locked for 26 minutes: the clock moves on, timers don't fire
   await p.clock.setSystemTime(new Date(t0.getTime() + 26 * 60000 + 2000));
   await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await p.clock.runFor(600);
   const t = await body(p);
-  check('back after 26 min: the work phase is done and the break is ~4 min in', /Break!/.test(t) && /^0[34]:\d\d$/.test(await shown()), await shown());
+  check('back after 26 min: the work phase is done and the break is ~4 min in', /☕/.test(await p.locator('[data-tools-btn]').innerText()) && /^0[34]:\d\d$/.test(await shown()), await p.locator('[data-tools-btn]').innerText());
   check('…and the Pomodoro counted', ((await getProg(p)).pomodorosToday || 0) === 1);
   await p.clock.setSystemTime(new Date(t0.getTime() + 40 * 60000));
   await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -503,10 +515,19 @@ await block('B12. An unreadable or full save is kept and the learner is told', a
 await block('C1. Tutor on a phone: empty chat, style preview, note box, Settings', async () => {
   const { ctx, p, errs } = await open();
   await nav(p, 'chat');
-  const top = await p.evaluate(() => { const pane = [...document.querySelectorAll('div')].find((d) => d.scrollHeight > d.clientHeight && getComputedStyle(d).overflowY === 'auto' && d.querySelector('[data-upload-card]')); return pane ? pane.scrollTop : -1; });
-  check('empty chat stays scrolled to the top', top === 0, 'scrollTop ' + top);
+  const top = await p.evaluate(() => {
+    const card = document.querySelector('[data-upload-card]');
+    let pane = card && card.parentElement;
+    while (pane && getComputedStyle(pane).overflowY !== 'auto') pane = pane.parentElement;
+    const tb = document.querySelector('[data-tutor-toolbar]').getBoundingClientRect();
+    const head = [...pane.querySelectorAll('*')].find((d) => /Urology Board Tutor/.test(d.textContent) && !d.children.length);
+    return pane ? { st: pane.scrollTop, headTop: head ? Math.round(head.getBoundingClientRect().top) : -1, tbBottom: Math.round(tb.bottom) } : null;
+  });
+  check('empty chat stays scrolled to the top, its heading below the toolbar', top && top.st === 0 && top.headTop > top.tbBottom, JSON.stringify(top));
   await shot(p, 'c1-tutor-empty');
-  await p.locator('button', { hasText: /ℹ Preview/ }).click();
+  await openTools(p);
+  await p.locator('[data-tool="preview"]').click();
+  check('the Tools sheet closes for the preview', !(await has(p, '[data-tools-sheet]')));
   await p.waitForTimeout(250);
   const box = await p.locator('[data-style-preview]').boundingBox();
   const inp = await p.locator('input[data-chat-input]').boundingBox();
@@ -516,6 +537,7 @@ await block('C1. Tutor on a phone: empty chat, style preview, note box, Settings
   await p.locator('[data-style-pick="clinical"]').click();
   await p.waitForTimeout(200);
   check('picking a style closes the preview', !(await has(p, '[data-style-preview]')) && (await getProg(p)).tutorStyle === 'clinical');
+  await openTools(p);
   await p.locator('button[title^="Tutor settings"]').click();
   await p.waitForTimeout(200);
   const ta = await p.locator('[data-tutor-custom] textarea').first().evaluate((el) => ({ h: el.clientHeight, ph: el.placeholder.length }));
@@ -551,6 +573,68 @@ await block('C2. No AI connected: no cost pill; sending opens the model picker, 
   // closing the picker without connecting drops the waiting question
   errCheck('C2', errs);
   await ctx.close();
+});
+
+await block('C3. Tutor toolbar on a phone: one row, the rest in the Tools sheet; wide screens unchanged', async () => {
+  const session = { topic: 'Earlier session (driver)', messages: [{ role: 'user', content: 'Teach me renal physiology.' }, { role: 'assistant', content: 'Sure.' }, { role: 'user', content: 'More.' }, { role: 'assistant', content: 'OK.' }], lecturePhase: 2, lectureMode: true };
+  const { ctx, p, errs } = await open();
+  await nav(p, 'chat');
+  await connect(p);
+  const tb = await p.locator('[data-tutor-toolbar]').boundingBox();
+  check('the toolbar is one row (≤ 60 px)', tb && tb.height <= 60, tb && Math.round(tb.height) + 'px');
+  const row = await p.evaluate(() => [...document.querySelector('[data-tutor-toolbar]').children].filter((e) => e.getClientRects().length).map((e) => e.getAttribute('data-aipick') !== null ? 'model' : e.getAttribute('data-cost') !== null ? 'cost' : e.getAttribute('data-voice-toggle') !== null ? 'voice' : e.getAttribute('data-tools-btn') !== null ? 'tools' : e.tagName));
+  check('…model · cost · voice · Tools', row.join(',') === 'model,cost,voice,tools', row.join(','));
+  check('no tool buttons on screen until Tools is tapped', (await p.locator('[data-tool]').count()) === 0);
+  await shot(p, 'c3-toolbar');
+  await p.locator('[data-tools-btn]').click();
+  await p.waitForTimeout(200);
+  const tools = await p.evaluate(() => [...document.querySelectorAll('[data-tools-sheet] [data-tool]')].map((b) => b.getAttribute('data-tool')).sort());
+  check('the sheet holds upload, Auto-Anki, Saved, OR Skills, Clear, preview, note', tools.join(',') === 'autoanki,clear,custom,orskills,preview,saved,upload', tools.join(','));
+  check('…and the timer and the style chips', /▶ Start/.test(await p.locator('[data-tools-sheet]').innerText()) && (await p.locator('[data-tools-sheet] [data-style-row] button').count()) >= 4);
+  const sheet = await p.locator('[data-tools-sheet]').boundingBox();
+  check('…as a sheet at the bottom, inside the screen', sheet && sheet.y + sheet.height <= PHONE.height + 1 && sheet.y > PHONE.height * 0.15, sheet && Math.round(sheet.y) + '+' + Math.round(sheet.height));
+  await shot(p, 'c3-sheet');
+  await p.locator('[data-tool="autoanki"]').click();
+  check('a toggle (Auto-Anki) keeps the sheet open', (await has(p, '[data-tools-sheet]')) && /on/.test(await p.locator('[data-tool="autoanki"]').innerText()));
+  const fc = p.waitForEvent('filechooser', { timeout: 3000 }).then(() => true).catch(() => false);
+  await p.locator('[data-tool="upload"]').click();
+  check('Upload opens the file picker and closes the sheet', (await fc) && !(await has(p, '[data-tools-sheet]')));
+  await openTools(p);
+  await p.locator('[data-tool="saved"]').click();
+  await p.waitForTimeout(200);
+  check('Saved opens the saved list and closes the sheet', ((await has(p, '[data-saved-filter]')) || /Nothing saved yet/.test(await body(p))) && !(await has(p, '[data-tools-sheet]')));
+  await openTools(p);
+  await p.locator('[data-tools-backdrop]').click({ position: { x: 20, y: 120 } });
+  check('tapping outside closes the sheet', !(await has(p, '[data-tools-sheet]')));
+  // the resume banner sits under the toolbar on the Tutor, not over it
+  await p.evaluate((sess) => new Promise((res, rej) => {
+    const rq = indexedDB.open('uroStudyHubDB', 1);
+    rq.onupgradeneeded = () => { try { rq.result.createObjectStore('kv'); } catch (e) { /* exists */ } };
+    rq.onerror = () => rej(rq.error);
+    rq.onsuccess = () => { const tx = rq.result.transaction('kv', 'readwrite'); tx.objectStore('kv').put(sess, 'activeSession'); tx.oncomplete = () => { rq.result.close(); res(true); }; };
+  }), session);
+  await reload(p);
+  await nav(p, 'chat');
+  await p.waitForSelector('[data-resume-banner]', { timeout: 5000 });
+  const ban = await p.locator('[data-resume-banner]').boundingBox(), tb2 = await p.locator('[data-tutor-toolbar]').boundingBox();
+  const chipFree = await p.evaluate(() => { const c = document.querySelector('[data-aipick]').getBoundingClientRect(); const el = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2); return !!(el && el.closest('[data-aipick]')); });
+  check('resume banner: under the toolbar, the AI chip stays tappable', ban && tb2 && ban.y >= tb2.y + tb2.height - 1 && chipFree, ban && Math.round(ban.y) + ' vs toolbar bottom ' + Math.round(tb2.y + tb2.height));
+  await shot(p, 'c3-resume');
+  errCheck('C3 phone', errs);
+  await ctx.close();
+  // wide screen: the toolbar as before (inline, wrapping), no Tools button
+  const w = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  await w.addInitScript(pageInit, { seed: { uroStudyHub_progress: prog(), uroStudyHub_lmSettings: LM, uroStudyHub_mode: 'light' } });
+  const pw = await w.newPage();
+  await pw.goto(PAGE_URL);
+  await boot(pw);
+  await nav(pw, 'chat');
+  check('desktop: no Tools button; Saved, Clear, Upload and the style chips are in the toolbar', !(await has(pw, '[data-tools-btn]')) && (await vis(pw, '[data-tutor-toolbar] [data-tool="saved"]')) && (await vis(pw, '[data-tutor-toolbar] [data-tool="clear"]')) && (await vis(pw, '[data-tutor-toolbar] [data-tool="upload"]')) && (await vis(pw, '[data-tutor-toolbar] [data-style-row]')));
+  check('desktop: the voice button keeps its label', /Voice off/.test(await pw.locator('[data-voice-toggle]').innerText()));
+  await pw.setViewportSize({ width: 390, height: 844 });
+  await pw.waitForTimeout(300);
+  check('narrowing the window switches to the one-row toolbar', (await has(pw, '[data-tools-btn]')) && !(await has(pw, '[data-tool="saved"]')));
+  await w.close();
 });
 
 await browser.close();

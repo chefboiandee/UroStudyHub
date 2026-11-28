@@ -275,7 +275,7 @@ await block('B. Speech but no listening: replies read aloud, answers typed', asy
   const { ctx, p, errs } = await open({ tts: true, stt: false });
   await goTutor(p);
   await connectClaude(p);
-  check('Voice button shows (off)', /Voice off/.test(await p.locator(sel('voice-toggle')).innerText()));
+  check('Voice button shows (off)', /Voice off/.test(await p.locator(sel('voice-toggle')).getAttribute('aria-label')));
   await tap(p, sel('voice-toggle'));
   check('bar says it reads aloud and to type', /can't listen, so type/.test(await status(p)), await status(p));
   check('no mic button', !(await visible(p, sel('voice-mic'))));
@@ -298,7 +298,7 @@ await block('C. Full voice: talk, listen, commands, cut in, settings', async () 
   await connectClaude(p);
   check('no mic before voice is on', !(await visible(p, sel('voice-mic'))));
   await tap(p, sel('voice-toggle'));
-  check('Voice on', /Voice on/.test(await p.locator(sel('voice-toggle')).innerText()));
+  check('Voice on', /Voice on/.test(await p.locator(sel('voice-toggle')).getAttribute('aria-label')));
   check('saved per device', (await ev(p, () => JSON.parse(localStorage.getItem('uroStudyHub_voice')))).on === true);
   check('the tap unlocked speech with a silent utterance', (await said(p)).some((x) => x.volume === 0));
   check('mic and voice bar show', (await visible(p, sel('voice-mic'))) && (await visible(p, sel('voice-bar'))));
@@ -480,7 +480,7 @@ await block('D. A structured lecture by voice: "next", "go deeper", phases kept 
   const { ctx, p, errs } = await open({ seed: { uroStudyHub_voice: JSON.stringify({ on: true, hands: true, beep: true, uri: '', rate: 1 }) } });
   await goTutor(p);
   await connectClaude(p);
-  check('voice stays on after a reload', /Voice on/.test(await p.locator(sel('voice-toggle')).innerText()));
+  check('voice stays on after a reload', /Voice on/.test(await p.locator(sel('voice-toggle')).getAttribute('aria-label')));
   await ev(p, () => window.__replies.push('🗺️ Phase 1, Big Picture. Picture a man who cannot pee. Ready for the framework? Say next when you are ready.'));
   await p.locator('input[type=file]').first().setInputFiles({ name: 'BPH.txt', mimeType: 'text/plain', buffer: Buffer.from('# BPH\n\nBenign prostatic hyperplasia. The transition zone grows. Alpha blockers and 5-ARIs.\n'.repeat(5)) });
   await waitReqs(p, 1, 8000);
@@ -521,7 +521,8 @@ await block('E. Voice starters, a blocked mic', async () => {
   check('outside a drill, "hint" is just words', lastUser((await reqs(p))[1]) === 'hint');
   await waitFor(p, () => window.__streamEnds.length >= 2);
   // Clear, then a quiz starter with the mic blocked
-  await p.locator('button:has-text("Clear")').first().click();
+  if (await p.locator('[data-tools-btn]').count()) await p.locator('[data-tools-btn]').click();  // phones: Clear is in the Tools sheet
+  await p.locator('[data-tool="clear"]').first().click();
   await p.waitForTimeout(200);
   await ev(p, () => { window.__recDeny = true; });
   await tap(p, sel('voice-starter', 'quiz'));
