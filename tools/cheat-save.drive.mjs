@@ -128,6 +128,14 @@ async function toTutor(p) {
   if (!ok) throw new Error('no Tutor tab');
   await p.waitForFunction(() => [...document.querySelectorAll('h1')].some((h) => /AI Tutor/.test(h.textContent)), null, { timeout: 5000 });
   await p.waitForTimeout(200);
+  // The full app opens "AI off" and sends nothing until a model is connected: connect the saved OpenAI key
+  const tapSel = (sel) => p.evaluate((q) => { const b = document.querySelector(q); if (b) b.click(); }, sel);
+  await tapSel('[data-aipick]');
+  await p.waitForTimeout(100);
+  await tapSel('[data-aipick-prov="openai"]');
+  await p.waitForTimeout(100);
+  if (await p.locator('[data-aipick-panel]').count()) await tapSel('[data-aipick]');
+  await p.waitForTimeout(150);
 }
 async function open(viewport, seedExtra) {
   const mobile = viewport.width < 600;
@@ -316,7 +324,8 @@ await block('C. Survives a reload; deleting an auto-saved sheet sticks; a "## Ph
   await p.waitForTimeout(900);   // the progress blob is written on the next render
   await p.reload();
   await toTutor(p);
-  await p.locator('button', { hasText: /^Saved/ }).first().click();
+  // DOM click: after the reload the "Unfinished lecture" banner sits over the toolbar
+  await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /^Saved/.test(x.textContent.trim()) && x.getClientRects().length); if (b) b.click(); });
   await p.waitForSelector('[data-saved-filter]', { timeout: 3000 });
   await p.locator('[data-saved-filter="cheat"]').click();
   check('after a reload the sheet is still there', (await p.locator('[data-saved-item="cheat"]').count()) === 1 && /Stones/.test(await p.locator('[data-saved-item="cheat"]').innerText()));

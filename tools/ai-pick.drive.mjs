@@ -313,14 +313,14 @@ await block('F. Settings from the tutor, and the effort control in Settings', as
   await tap(p, sel('aipick-prov', 'openrouter'));
   check('a provider with no key opens Settings on its tab, over the tutor', (await p.getByText('OpenRouter API Key').count()) > 0 && (await onTutor(p)));
   check('…without switching provider', (await lmSaved(p)).provider === 'claude');
-  await p.locator('h2:has-text("AI Provider") + button').click();
+  await p.locator('h2:has-text("Settings") + button').click();
   await p.waitForTimeout(200);
   check('closing Settings: still on the tutor with the panel open', (await onTutor(p)) && (await visible(p, sel('aipick-panel'))));
   await tap(p, sel('aipick-settings'));
   check('"All AI settings" opens on the connected provider', (await p.getByText('Anthropic API Key').count()) > 0);
   const box = p.locator(sel('set-effort'));
   check('Settings has the effort control', (await box.locator(sel('effort-opt')).count()) === 6);
-  const scroller = 'h2:has-text("AI Provider") >> xpath=../..';
+  const scroller = 'h2:has-text("Settings") >> xpath=../..';
   // scroll the modal so the control sits mid-screen (a remount would put it back at the top)
   const top0 = await p.locator(scroller).evaluate((el, h) => { el.scrollTop = 0; const b = document.querySelector(h); el.scrollTop = b.getBoundingClientRect().top - el.getBoundingClientRect().top - 120; return el.scrollTop; }, sel('set-effort'));
   await box.locator(sel('effort-opt', 'low')).click();
@@ -329,7 +329,7 @@ await block('F. Settings from the tutor, and the effort control in Settings', as
   check('Low from Settings is saved', (await lmSaved(p)).effort === 'low');
   check('Settings didn\'t remount or jump to the top', top0 > 0 && Math.abs(top1 - top0) < 2 && (await box.locator(sel('effort-opt', 'low')).getAttribute('style')).indexOf('font-weight: 800') >= 0, top0 + ' → ' + top1);
   await shot(p, 'f1-settings-effort');
-  await p.locator('h2:has-text("AI Provider") + button').click();
+  await p.locator('h2:has-text("Settings") + button').click();
   await p.waitForTimeout(150);
   await tap(p, sel('aipick-prov', 'claude'));
   check('the tutor chip and panel show it', / · Low/.test(await chip(p)) && (await p.locator(sel('aipick-panel') + ' ' + sel('effort-opt', 'low')).getAttribute('style')).indexOf('font-weight: 800') >= 0);

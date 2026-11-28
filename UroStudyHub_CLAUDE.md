@@ -154,6 +154,10 @@ Three built-in plan types:
 3. **Custom Plans** — User-uploaded syllabi parsed by AI into structured phases/topics.
 
 Active plan selected via `activePlanId` state. The `PHASES`, `FLAT`, and `TOTAL` variables dynamically switch based on which plan is active.
+Each plan keeps its own ticks (`topicKeyOf` / `buildFlat(phases, ns)`, `PLAN_NS`): AUA Core keys are `p-s-t`, the Sub-I plan's
+`subi:p-s-t`, a custom plan's `<plan id>:p-s-t` (s.done / conf / srs / notes all use them). Ticks saved before 2026-11 were all
+`p-s-t`, so they stay with AUA Core. `doneN`, `TOTAL`, the stats and the schedule count the active plan only. Reorganize saves
+`scheduleAnchorDone` / `scheduleAnchorPlan`, and "behind / ahead" counts the ticks after it.
 
 ### Study Commitment Settings
 
@@ -191,8 +195,16 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 - **Structured Lecture mode:** Upload a PDF/EPUB/text chapter → AI delivers a 9-phase lecture:
   1. Big Picture, 2. Core Concepts, 3. Pathophysiology, 4. Diagnosis, 5. Management,
   6. Surgical Techniques, 7. Complications, 8. Board Pearls, 9. Rapid Review
-- Lecture phase detection from AI response content
-- "NEXT" and "SKIP" commands to advance phases
+- Lecture phase detection from AI response content (`lecturePhaseOf`, REVIEW-HELPERS block): only a phase heading moves the
+  bar (the phase emoji or "Phase N" next to its name, "Phase N" opening a line, the emoji opening the reply, or, outside
+  voice mode, a line opening with the phase name); "treatment", "mnemonic", "phase 3 trial" in passing don't
+- "NEXT" and "SKIP" commands to advance phases (`isPhaseCommand`: the command, not "Next, explain…")
+- **No AI connected:** sending (typed, a topic chip, a lecture start) opens the model picker instead; the message waits in
+  the box and goes once a model is picked (`pendingAsk`). No cost pill until connected.
+- **Cut-off replies:** `callAI` reads `finish_reason` / `stop_reason` and calls `onSuccess(text, { cut })`. A tutor reply
+  cut at the length limit is marked (`msg.cut`, only role + content go to the API) with ▶ Continue / 🔄 Regenerate;
+  Quick Ask notes it; Anki generation keeps the complete cards of a cut JSON list (`salvageJsonArray`) and says so; the
+  syllabus parser says "cut off" instead of "invalid format".
 - "DEEP" button for more detail on current section
 - **Tutor Style/Persona picker** — 4 presets injected into system prompt:
   - 🔥 Engaging — dynamic, case-driven, energetic
@@ -403,7 +415,17 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
 
 ### Other Features
 - **Pomodoro Timer** — Hub page (full card) + Tutor page (compact strip). Configurable: 15/25/45 min.
-- **SurgiLog Integration** — toggle via `ENABLE_SURGILOG` constant
+- **SurgiLog Integration** — toggle via `ENABLE_SURGILOG` constant and the `opLog` feature flag; the "paste your Extension ID"
+  warning shows only where `chrome.runtime` exists (desktop Chrome; never on an iPhone)
+- **Feature flags** (`s.featureFlags`, Settings › admin › Study Mode Controls; every gate reads `ff`, a host that trims the page
+  swaps the line `var ff = s.featureFlags || {};`): `games`, `shop`, `gamification` (XP, coins, tokens, streaks, ranks: the
+  header strip, the Stats rank grid, coin / XP toasts, the Anki session's "+N XP", Reorganize's coin price), `prefCards`,
+  `links`, `orSkills` (the Tutor's OR Skills button, empty-chat card and view), `subI` (the Sub-I plan in Plans + the
+  student tab), `opLog` (Study › Op Log and SurgiLog in Settings). Missing = on.
+- **Dates** — "today" is `studyToday()` (local, the day starts at 4am like Anki and the sprint); a case's date is
+  `localYmd()` (local calendar date). Never `toISOString()` for a date the learner sees.
+- **Storage problems are shown** — an unreadable save is kept as `uroStudyHub_progress_bad` and a bar says so; when storage
+  is full the bar says saved sessions were trimmed to 4 messages, or that progress isn't being saved.
 - **Dark / light mode** (header sun/moon button) with 5 color themes: Night Shift, Surgical Green, Renal Sunset, Cryoablation, Board Certified Gold; **Text size** (Compact / Standard / Large) in Settings
 - **Export** — CSV export of study data
 - **Gate Questions** — knowledge-check popups as engagement mechanism
