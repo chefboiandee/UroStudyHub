@@ -217,11 +217,7 @@
   @media (max-width: 520px) { .ush-hide-narrow { display: none !important; } }
   /* 700px and up: the timer and actions flow one by one with the model chip, so they fill rows instead of wrapping as a block */
   @media (min-width: 700px) { .ush-tscroll { display: contents !important; } }
-  @media (max-width: 699px) {
-    .ush-tscroll, .ush-sscroll { flex-wrap: nowrap !important; overflow-x: auto; flex: 0 0 calc(100% + 28px) !important; max-width: none !important; margin: 0 -14px; padding: 0 14px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-    .ush-tscroll::-webkit-scrollbar, .ush-sscroll::-webkit-scrollbar { display: none; }
-    .ush-tscroll, .ush-sscroll { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-  }
+  /* Under 700px the Tutor toolbar is one row and its tools open in a sheet (tutNarrow in the app), so no swipe rows */
   /* Loading screen */
   #loading { position: fixed; inset: 0; background: var(--c-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
   #loading .spinner { width: 34px; height: 34px; border: 3px solid var(--c-fill); border-top-color: var(--c-focus); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
@@ -1621,6 +1617,7 @@ doc: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M12 17.
 bookmark: "M6.5 3.5h11v17L12 16.5l-5.5 4z",
 compose: "M12 4.5H6a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h11.5a2 2 0 0 0 2-2v-6M17.6 3.4a1.9 1.9 0 0 1 2.7 2.7L12.6 13.8 9 14.8l1-3.6z",
 chevDown: "M6 9.5l6 6 6-6",
+more: "M5.5 12h.01M12 12h.01M18.5 12h.01",
 stop: "M7.5 6.5h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z",
 mic: "M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM5.8 11.2a6.2 6.2 0 0 0 12.4 0M12 17.4v3.1M8.8 20.5h6.4",
 speaker: "M4 9.4h3.4L12 5.6v12.8l-4.6-3.8H4zM15.6 9.2a3.9 3.9 0 0 1 0 5.6M18.1 6.7a7.4 7.4 0 0 1 0 10.6"
@@ -6653,6 +6650,16 @@ try { return JSON.parse(localStorage.getItem("uroStudyHub_prices") || "{}") || {
 });
 var [showCost, setShowCost] = useState(false);
 var [showAiPick, setShowAiPick] = useState(false);  // the tutor's AI panel: provider, model, reasoning effort
+var [showTools, setShowTools] = useState(false);
+var [tutNarrow, setTutNarrow] = useState(function() { try { return window.matchMedia("(max-width: 699px)").matches; } catch (e) { return false; } });
+useEffect(function() {
+var mq;
+try { mq = window.matchMedia("(max-width: 699px)"); } catch (e) { return undefined; }
+function on() { setTutNarrow(mq.matches); if (!mq.matches) setShowTools(false); }
+if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
+return function() { if (mq.removeEventListener) mq.removeEventListener("change", on); else if (mq.removeListener) mq.removeListener(on); };
+}, []);
+useEffect(function() { if (page !== "chat") { setShowTools(false); setShowAiPick(false); } }, [page]);
 var vEng = useRef(null);
 if (!vEng.current) vEng.current = makeVoiceEngine();
 var VE = vEng.current;
@@ -11141,6 +11148,21 @@ var hdrBtn = { width: 36, height: 36, borderRadius: 18, background: "var(--c-fil
 var hdrChip = { display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 9px", borderRadius: 13, background: "var(--c-fill2)", fontSize: "var(--f11)", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, fontVariantNumeric: "tabular-nums" };
 var tutBtn = function(on, hex, txt) { return { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 36, padding: "0 13px", background: on ? (hex || c.a) + "1f" : c.cd, border: "1px solid " + (on ? (hex || c.a) + "70" : "var(--c-br)"), borderRadius: 11, cursor: "pointer", color: on ? (txt || hex || c.a) : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: on ? 700 : 600, whiteSpace: "nowrap", flexShrink: 0 }; };
 var xpPct = nRank ? Math.max(0, Math.min(100, (s.xp - rank.minXP) / (nRank.minXP - rank.minXP) * 100)) : 100;
+function resumeBanner(inline) {
+return (
+<div data-resume-banner style={Object.assign({ background: "var(--c-cd)", border: "1px solid #a78bfa60", borderRadius: 14, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 },
+inline ? { margin: "8px 12px 0", flexShrink: 0 } : { position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(96vw, 560px)", zIndex: 290, boxShadow: "0 6px 24px rgba(0,0,0,0.5)" })}>
+<span style={{ fontSize: 18 }}>{"📖"}</span>
+<div style={{ flex: 1, minWidth: 0 }}>
+<div style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--c-tx)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{"Unfinished lecture: " + (pendingResume.topic || "session")}</div>
+<div style={{ fontSize: "var(--f9)", color: "var(--c-mut)" }}>{(pendingResume.masteryMode ? "🎯 Mastery · " : pendingResume.lectureMode ? "Phase " + ((pendingResume.lecturePhase || 0) + 1) + "/" + LECTURE_PHASES.length + " · " : "") + (pendingResume.messages || []).filter(function(m) { return m.role !== "system"; }).length + " messages" + (pendingResume.upText ? " · 📄 chapter attached" : "")}</div>
+</div>
+<button onClick={resumeInterrupted} style={{ padding: "6px 12px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f10)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{"▶ Resume"}</button>
+<button onClick={function() { var sess = pendingResume; setPendingResume(null); saveLectureSession(sess.topic, sess.messages, { sideMsgs: sess.sideMsgs || [], lecturePhase: sess.lecturePhase || 0, lectureMode: !!sess.lectureMode, masteryMode: !!sess.masteryMode, upText: sess.upText || "" }); idbDel("activeSession").catch(function() {}); setSaveFeedback("Saved to 📚 Saved sessions"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "6px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 10, color: "var(--a-grn)", fontSize: "var(--f10)", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{"💾 Save"}</button>
+<button onClick={function() { setPendingResume(null); idbDel("activeSession").catch(function() {}); }} title="Discard" style={{ background: "none", border: "none", color: "var(--c-mut2)", cursor: "pointer", fontSize: "var(--f12)", padding: 2 }}>{"✕"}</button>
+</div>
+);
+}
 var header = (
 <div data-ush-header className={page === "chat" ? "ush-wide" : undefined} style={{ padding: page === "chat" ? "8px 14px 8px" : "12px 16px 10px", borderBottom: "1px solid var(--c-sep)", width: "100%", maxWidth: 820, margin: "0 auto", flexShrink: 0 }}>
 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -11199,18 +11221,7 @@ return (
 {saveFeedback && page !== "chat" && (
 <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: "var(--a-grn)", color: "var(--c-ongrn)", padding: "8px 20px", borderRadius: 12, fontSize: "var(--f12)", fontWeight: 700, zIndex: 300, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", pointerEvents: "none" }}>{saveFeedback}</div>
 )}
-{pendingResume && (
-<div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", width: "min(96vw, 560px)", background: "var(--c-cd)", border: "1px solid #a78bfa60", borderRadius: 14, padding: "10px 12px", zIndex: 290, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", display: "flex", alignItems: "center", gap: 10 }}>
-<span style={{ fontSize: 18 }}>{"📖"}</span>
-<div style={{ flex: 1, minWidth: 0 }}>
-<div style={{ fontSize: "var(--f11)", fontWeight: 700, color: "var(--c-tx)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{"Unfinished lecture: " + (pendingResume.topic || "session")}</div>
-<div style={{ fontSize: "var(--f9)", color: "var(--c-mut)" }}>{(pendingResume.masteryMode ? "🎯 Mastery · " : pendingResume.lectureMode ? "Phase " + ((pendingResume.lecturePhase || 0) + 1) + "/" + LECTURE_PHASES.length + " · " : "") + (pendingResume.messages || []).filter(function(m) { return m.role !== "system"; }).length + " messages" + (pendingResume.upText ? " · 📄 chapter attached" : "")}</div>
-</div>
-<button onClick={resumeInterrupted} style={{ padding: "6px 12px", background: "linear-gradient(135deg,var(--a-vio),var(--a-vio2))", border: "none", borderRadius: 10, color: "#fff", fontSize: "var(--f10)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{"▶ Resume"}</button>
-<button onClick={function() { var sess = pendingResume; setPendingResume(null); saveLectureSession(sess.topic, sess.messages, { sideMsgs: sess.sideMsgs || [], lecturePhase: sess.lecturePhase || 0, lectureMode: !!sess.lectureMode, masteryMode: !!sess.masteryMode, upText: sess.upText || "" }); idbDel("activeSession").catch(function() {}); setSaveFeedback("Saved to 📚 Saved sessions"); setTimeout(function() { setSaveFeedback(""); }, 2000); }} style={{ padding: "6px 10px", background: "#4ade8020", border: "1px solid #4ade8040", borderRadius: 10, color: "var(--a-grn)", fontSize: "var(--f10)", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>{"💾 Save"}</button>
-<button onClick={function() { setPendingResume(null); idbDel("activeSession").catch(function() {}); }} title="Discard" style={{ background: "none", border: "none", color: "var(--c-mut2)", cursor: "pointer", fontSize: "var(--f12)", padding: 2 }}>{"✕"}</button>
-</div>
-)}
+{pendingResume && page !== "chat" && resumeBanner(false)}
 {showReorg && (
 <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 250, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }} onClick={function() { setShowReorg(false); }}>
 <div style={{ background: c.bg, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, padding: "20px 20px 30px", border: "1px solid " + c.a + "33", borderBottom: "none", maxHeight: "85vh", overflowY: "auto" }} onClick={function(e) { e.stopPropagation(); }}>
@@ -13139,51 +13150,7 @@ return <div key={ti} data-heat-cell={dn ? "done" : "open"} style={{ width: 11, h
 )}
 {page === "chat" && (
 <div data-tutor-col className="ush-wide" style={{ display: "flex", flexDirection: "column", flex: "1 1 0", minHeight: 0, width: "100%", maxWidth: 820, margin: "0 auto", position: "relative" }}>
-<div className="ush-tbar" style={{ display: "flex", gap: 8, padding: "10px 14px", borderBottom: "1px solid var(--c-sep)", alignItems: "center", flexWrap: "wrap" }}>
-{(function() {
-var cm = currentModel(), ef = effortFor(lm.provider, cm, lm.effort);
-var label = lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + cm.split("/").pop().substring(0, 20) + (ef ? " · " + EFFORT_LABEL[ef] : "") : "AI off · pick a model";
-return (
-<button data-aipick onClick={function() { setShowCost(false); setShowAiPick(!showAiPick); }} title="Switch AI provider, model or reasoning effort" style={Object.assign(tutBtn(showAiPick), { gap: 7, flex: "1 1 200px", maxWidth: 320, minWidth: 0, justifyContent: "flex-start" })}>
-<div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
-<span style={{ fontSize: "var(--f12)", fontWeight: 600, color: lm.on ? "var(--c-tx)" : "var(--a-red0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-<span style={{ color: "var(--c-mut)" }}>{Icon("chevDown", 15, 2.2)}</span>
-</button>
-);
-})()}
-{lm.on && (function() {
-var lc = liveSessCost();
-var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
-var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
-return (
-<button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowAiPick(false); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={Object.assign(tutBtn(showCost), { gap: 5, border: "1px solid " + (lc.live || showCost ? c.a + "80" : "var(--c-br)"), color: lc.live ? c.a : "var(--c-tx2)", fontWeight: 700, fontVariantNumeric: "tabular-nums" })}>
-<span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>{label}
-</button>
-);
-})()}
-<div className="ush-tscroll" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: "1 1 auto", minWidth: 0 }}>
-{VE.tts && <button data-voice-toggle onClick={toggleVoice} aria-pressed={vOn} style={tutBtn(vOn)} title={vOn ? "Voice mode is on: replies are read aloud" + (VE.stt ? " and it listens for your answer" : "") + ". Tap to turn it off." : "Voice mode: a spoken back-and-forth. The tutor explains a bit at a time out loud, quizzes you, and you answer by talking."}>{Icon("mic", 17, 2)}{"Voice " + (vOn ? "on" : "off")}</button>}
-<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "2px 5px 2px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40, flexShrink: 0, whiteSpace: "nowrap" }}>
-<span style={{ fontSize: "var(--f15)" }}>{"🍅"}</span>
-<span style={{ fontSize: "var(--f16)", fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
-{Math.floor(pomoTime / 60).toString().padStart(2, "0") + ":" + (pomoTime % 60).toString().padStart(2, "0")}
-</span>
-{pomoState === "idle" && [15, 25, 45].map(function(m) {
-return <button key={m} onClick={function(e) { e.stopPropagation(); setPomoDuration(m); setPomoTime(m * 60); }} style={{ minHeight: 32, padding: "0 10px", background: pomoDuration === m ? c.a + "26" : "transparent", border: "1px solid " + (pomoDuration === m ? c.a + "66" : "var(--c-br)"), borderRadius: 9, color: pomoDuration === m ? c.a : "var(--c-mut)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }}>{m + "m"}</button>;
-})}
-{pomoState === "idle" && <span style={{ fontSize: "var(--f11)", color: "var(--a-red)", fontWeight: 800 }}>{"▶ Start"}</span>}
-{pomoState === "work" && (pomoPaused
-? <button onClick={resumePomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid #4ade8060", borderRadius: 8, color: "var(--a-grn)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"▶"}</button>
-: <button onClick={pausePomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx2)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"⏸"}</button>)}
-{pomoState === "work" && <button onClick={resetPomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-mut)", fontSize: "var(--f11)", cursor: "pointer", padding: "4px 10px" }}>{"✕"}</button>}
-{pomoState === "break" && <span style={{ fontSize: "var(--f11)", color: "var(--a-grn)", fontWeight: 800 }}>Break!</span>}
-{pomoState === "done" && <button onClick={resetPomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid " + c.a + "50", borderRadius: 8, color: c.a, fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"↻ Reset"}</button>}
-{pomoCount > 0 && <span title={pomoCount + " pomodoro" + (pomoCount === 1 ? "" : "s") + " completed this session"} style={{ fontSize: "var(--f11)", fontWeight: 800, color: "var(--a-am)", background: "#fbbf2415", border: "1px solid #fbbf2435", borderRadius: 8, padding: "3px 7px" }}>{"×" + pomoCount}</span>}
-<button onClick={function(e) { e.stopPropagation(); togglePomoSound(); }} title={pomoSound ? "Chime on when the timer goes off — tap to mute" : "Chime muted — tap to unmute"} style={{ minHeight: 32, minWidth: 30, background: "transparent", border: "none", fontSize: "var(--f13)", cursor: "pointer", padding: 0, opacity: pomoSound ? 1 : 0.4, lineHeight: 1 }}>{pomoSound ? "🔔" : "🔕"}</button>
-</div>
-<div style={{ flex: 1 }} />
-<button onClick={function() { setAutoAnki(!autoAnki); }} aria-pressed={autoAnki} style={tutBtn(autoAnki, "#fb923c", "var(--a-or)")} title="Auto-generate Anki cards when uploading a topic">{"📇 Auto-Anki " + (autoAnki ? "on" : "off")}</button>
-<button onClick={function() { fileRef.current && fileRef.current.click(); }} style={tutBtn(false)} title="Upload a chapter (PDF, DOCX, text): starts a structured lecture">{Icon("doc", 18)}{"Upload"}</button>
+<div className="ush-tbar" data-tutor-toolbar style={{ display: "flex", gap: 8, padding: tutNarrow ? "8px 12px" : "10px 14px", borderBottom: "1px solid var(--c-sep)", alignItems: "center", flexWrap: tutNarrow ? "nowrap" : "wrap" }}>
 <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md,.html,.htm,.csv,.rtf" onChange={function(e) {
 var file = e.target.files && e.target.files[0];
 e.target.value = ""; // reset so re-picking the same file fires change again (e.g. retry after a failed upload)
@@ -13262,21 +13229,119 @@ reader.onload = function(evt) { finishUpload(evt.target.result); };
 reader.readAsText(file);
 }
 }} style={{ display: "none" }} />
-{orSkillsOn && <button data-orskills-btn onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={tutBtn(chatView === "skills", "#f97316", "var(--a-or)")}>{"🔪 OR Skills"}</button>}
-<button onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={tutBtn(chatView === "saved", "#a78bfa", "var(--a-vio)")}>{Icon("bookmark", 17)}{"Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>
-<button onClick={function() { stopChatReply(); setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={tutBtn(false)} title="Clear the chat and start fresh">{Icon("compose", 17)}{"Clear"}</button>
+{(function() {
+var cm = currentModel(), ef = effortFor(lm.provider, cm, lm.effort);
+var label = lm.on ? ({ claude: "Claude", gemini: "Gemini", openai: "OpenAI", openrouter: "Router", lmstudio: "Local" }[lm.provider] || lm.provider) + " · " + cm.split("/").pop().substring(0, 20) + (ef ? " · " + EFFORT_LABEL[ef] : "") : "AI off · pick a model";
+return (
+<button data-aipick onClick={function() { setShowCost(false); setShowTools(false); setShowAiPick(!showAiPick); }} title="Switch AI provider, model or reasoning effort" style={Object.assign(tutBtn(showAiPick), { gap: 7, flex: tutNarrow ? "1 1 auto" : "1 1 200px", maxWidth: tutNarrow ? "none" : 320, minWidth: 0, justifyContent: "flex-start" })}>
+<div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: lm.on ? "var(--a-grn)" : "var(--a-red0)" }} />
+<span style={{ fontSize: "var(--f12)", fontWeight: 600, color: lm.on ? "var(--c-tx)" : "var(--a-red0)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+<span style={{ color: "var(--c-mut)" }}>{Icon("chevDown", 15, 2.2)}</span>
+</button>
+);
+})()}
+{lm.on && (function() {
+var lc = liveSessCost();
+var free = lm.provider === "lmstudio" && !priceOv[currentModel()] && !lc.usd;
+var label = free ? "free" : (lc.unknown && !lc.usd ? "$ ?" : (lc.est ? "≈" : "") + fmtUsd(lc.usd));
+return (
+<button data-cost onClick={function() { var pr = priceOv[currentModel()]; setPriceDraft(pr ? [String(pr[0]), String(pr[1])] : ["", ""]); setShowAiPick(false); setShowTools(false); setShowCost(!showCost); }} title="What this tutor session has cost so far — tap for details" style={Object.assign(tutBtn(showCost), { gap: 5, border: "1px solid " + (lc.live || showCost ? c.a + "80" : "var(--c-br)"), color: lc.live ? c.a : "var(--c-tx2)", fontWeight: 700, fontVariantNumeric: "tabular-nums" })}>
+{!tutNarrow && <span style={{ fontWeight: 500, opacity: 0.75 }}>{"cost"}</span>}{label}
+</button>
+);
+})()}
+{(function() {
+var voiceBtn = VE.tts && <button data-voice-toggle onClick={toggleVoice} aria-pressed={vOn} aria-label={"Voice " + (vOn ? "on" : "off")} style={tutNarrow ? Object.assign(tutBtn(vOn), { padding: "0 11px" }) : tutBtn(vOn)} title={vOn ? "Voice mode is on: replies are read aloud" + (VE.stt ? " and it listens for your answer" : "") + ". Tap to turn it off." : "Voice mode: a spoken back-and-forth. The tutor explains a bit at a time out loud, quizzes you, and you answer by talking."}>{Icon("mic", 17, 2)}{tutNarrow ? null : "Voice " + (vOn ? "on" : "off")}</button>;
+var pomoEl = (
+<div onClick={pomoState === "idle" ? startPomo : undefined} style={{ display: "flex", alignItems: "center", gap: 7, background: pomoState === "work" ? "#ef444415" : pomoState === "break" ? "#4ade8015" : c.cd, border: "1.5px solid " + (pomoState === "work" ? "#ef444460" : pomoState === "break" ? "#4ade8060" : "var(--c-br)"), borderRadius: 12, padding: "2px 5px 2px 12px", cursor: pomoState === "idle" ? "pointer" : "default", minHeight: 40, flexShrink: 0, whiteSpace: "nowrap" }}>
+<span style={{ fontSize: "var(--f15)" }}>{"🍅"}</span>
+<span style={{ fontSize: "var(--f16)", fontWeight: 800, fontFamily: "monospace", lineHeight: 1, color: pomoState !== "idle" ? "var(--c-tx)" : "var(--c-mut)", minWidth: 54 }}>
+{Math.floor(pomoTime / 60).toString().padStart(2, "0") + ":" + (pomoTime % 60).toString().padStart(2, "0")}
+</span>
+{pomoState === "idle" && [15, 25, 45].map(function(m) {
+return <button key={m} onClick={function(e) { e.stopPropagation(); setPomoDuration(m); setPomoTime(m * 60); }} style={{ minHeight: 32, padding: "0 10px", background: pomoDuration === m ? c.a + "26" : "transparent", border: "1px solid " + (pomoDuration === m ? c.a + "66" : "var(--c-br)"), borderRadius: 9, color: pomoDuration === m ? c.a : "var(--c-mut)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer" }}>{m + "m"}</button>;
+})}
+{pomoState === "idle" && <span style={{ fontSize: "var(--f11)", color: "var(--a-red)", fontWeight: 800 }}>{"▶ Start"}</span>}
+{pomoState === "work" && (pomoPaused
+? <button onClick={resumePomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid #4ade8060", borderRadius: 8, color: "var(--a-grn)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"▶"}</button>
+: <button onClick={pausePomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-tx2)", fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"⏸"}</button>)}
+{pomoState === "work" && <button onClick={resetPomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid var(--c-br)", borderRadius: 8, color: "var(--c-mut)", fontSize: "var(--f11)", cursor: "pointer", padding: "4px 10px" }}>{"✕"}</button>}
+{pomoState === "break" && <span style={{ fontSize: "var(--f11)", color: "var(--a-grn)", fontWeight: 800 }}>Break!</span>}
+{pomoState === "done" && <button onClick={resetPomo} style={{ minHeight: 32, background: "var(--c-bg)", border: "1px solid " + c.a + "50", borderRadius: 8, color: c.a, fontSize: "var(--f11)", fontWeight: 700, cursor: "pointer", padding: "4px 10px" }}>{"↻ Reset"}</button>}
+{pomoCount > 0 && <span title={pomoCount + " pomodoro" + (pomoCount === 1 ? "" : "s") + " completed this session"} style={{ fontSize: "var(--f11)", fontWeight: 800, color: "var(--a-am)", background: "#fbbf2415", border: "1px solid #fbbf2435", borderRadius: 8, padding: "3px 7px" }}>{"×" + pomoCount}</span>}
+<button onClick={function(e) { e.stopPropagation(); togglePomoSound(); }} title={pomoSound ? "Chime on when the timer goes off — tap to mute" : "Chime muted — tap to unmute"} style={{ minHeight: 32, minWidth: 30, background: "transparent", border: "none", fontSize: "var(--f13)", cursor: "pointer", padding: 0, opacity: pomoSound ? 1 : 0.4, lineHeight: 1 }}>{pomoSound ? "🔔" : "🔕"}</button>
 </div>
-<div className="ush-sscroll" data-style-row style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: "100%", overflowX: "auto" }}>
-<span style={{ fontSize: "var(--f11)", fontWeight: 600, color: "var(--c-mut2)", flexShrink: 0 }}>Style</span>
+);
+var autoAnkiBtn = <button data-tool="autoanki" onClick={function() { setAutoAnki(!autoAnki); }} aria-pressed={autoAnki} style={tutBtn(autoAnki, "#fb923c", "var(--a-or)")} title="Auto-generate Anki cards when uploading a topic">{"📇 Auto-Anki " + (autoAnki ? "on" : "off")}</button>;
+var uploadBtn = <button data-tool="upload" data-tool-close onClick={function() { fileRef.current && fileRef.current.click(); }} style={tutBtn(false)} title="Upload a chapter (PDF, DOCX, text): starts a structured lecture">{Icon("doc", 18)}{"Upload"}</button>;
+var orBtn = orSkillsOn && <button data-orskills-btn data-tool="orskills" data-tool-close onClick={function() { setChatView(chatView === "skills" ? "chat" : "skills"); }} style={tutBtn(chatView === "skills", "#f97316", "var(--a-or)")}>{"🔪 OR Skills"}</button>;
+var savedBtn = <button data-tool="saved" data-tool-close onClick={function() { setChatView(chatView === "saved" ? "chat" : "saved"); }} style={tutBtn(chatView === "saved", "#a78bfa", "var(--a-vio)")}>{Icon("bookmark", 17)}{"Saved" + (savedLectures.length ? " (" + savedLectures.length + ")" : "")}</button>;
+var clearBtn = <button data-tool="clear" data-tool-close onClick={function() { stopChatReply(); setChatMsgs([]); setUpText(""); setLectureMode(false); setMasteryMode(false); setLecturePhase(0); setLectureTopic(""); exitSkills(); resetSidekick(); setChatView("chat"); }} style={tutBtn(false)} title="Clear the chat and start fresh">{Icon("compose", 17)}{"Clear"}</button>;
+var styleRow = (
+<div className={tutNarrow ? undefined : "ush-sscroll"} data-style-row style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, maxWidth: "100%", overflowX: tutNarrow ? "visible" : "auto", flexWrap: tutNarrow ? "wrap" : undefined }}>
+{!tutNarrow && <span style={{ fontSize: "var(--f11)", fontWeight: 600, color: "var(--c-mut2)", flexShrink: 0 }}>Style</span>}
 {Object.keys(TUTOR_STYLES).map(function(key) {
 var st = TUTOR_STYLES[key];
 var isActive = (s.tutorStyle || "engaging") === key;
 return <button key={key} onClick={function() { setS(function(p) { return Object.assign({}, p, { tutorStyle: key, showStylePreview: false }); }); }} title={st.desc} style={{ padding: "0 14px", background: isActive ? c.a + "1f" : "transparent", border: "1px solid " + (isActive ? c.a + "70" : "var(--c-br)"), borderRadius: 18, color: isActive ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", fontWeight: isActive ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }}>{st.icon + " " + st.label}</button>;
 })}
-<button onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
-<button onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", flexShrink: 0, minHeight: 34, minWidth: 40 }} title="Tutor settings: personal note, live replies, my hooks">{"✏️"}</button>
+<button data-tool="preview" data-tool-close onClick={function() { setS(function(p) { return Object.assign({}, p, { showStylePreview: !p.showStylePreview }); }); }} style={{ background: s.showStylePreview ? c.a + "15" : "transparent", border: "1px solid " + (s.showStylePreview ? c.a + "40" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: s.showStylePreview ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", whiteSpace: "nowrap", flexShrink: 0, minHeight: 34 }} title="Preview how each style sounds">{s.showStylePreview ? "▲ Hide" : "ℹ Preview"}</button>
+<button data-tool="custom" data-tool-close onClick={function() { setS(function(p) { return Object.assign({}, p, { showTutorCustom: !p.showTutorCustom }); }); }} style={{ background: (s.tutorCustomNote || "").trim() ? c.a + "15" : "transparent", border: "1px solid " + ((s.tutorCustomNote || "").trim() ? c.a + "30" : "var(--c-br)"), borderRadius: 18, padding: "0 13px", cursor: "pointer", color: (s.tutorCustomNote || "").trim() ? c.a : "var(--c-tx2)", fontSize: "var(--f12)", flexShrink: 0, minHeight: 34, minWidth: 40 }} title="Tutor settings: personal note, live replies, my hooks">{tutNarrow ? "✏️ Note & settings" : "✏️"}</button>
+</div>
+);
+if (!tutNarrow) return (
+<React.Fragment>
+<div className="ush-tscroll" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: "1 1 auto", minWidth: 0 }}>
+{voiceBtn}
+{pomoEl}
+<div style={{ flex: 1 }} />
+{autoAnkiBtn}
+{uploadBtn}
+{orBtn}
+{savedBtn}
+{clearBtn}
+</div>
+{styleRow}
+</React.Fragment>
+);
+var mmss = Math.floor(pomoTime / 60).toString().padStart(2, "0") + ":" + (pomoTime % 60).toString().padStart(2, "0");
+var pomoOn = pomoState !== "idle";
+var toolsLbl = pomoState === "work" ? "🍅 " + mmss + (pomoPaused ? " ⏸" : "") : pomoState === "break" ? "☕ " + mmss : pomoState === "done" ? "🍅 ✓" : "";
+var secH = { fontSize: "var(--f10)", fontWeight: 700, color: "var(--c-mut2)", textTransform: "uppercase", letterSpacing: ".5px", margin: "2px 0 6px" };
+return (
+<React.Fragment>
+{voiceBtn}
+<button data-tools-btn aria-label={"Tutor tools" + (toolsLbl ? ", timer " + mmss : "")} aria-expanded={showTools} onClick={function() { setShowAiPick(false); setShowCost(false); setShowTools(!showTools); }} title="Timer, upload, saved sessions, clear, style" style={Object.assign(tutBtn(showTools || pomoOn, pomoState === "break" ? "#4ade80" : pomoOn ? "#ef4444" : undefined), { padding: toolsLbl ? "0 11px" : "0 10px", fontVariantNumeric: "tabular-nums" })}>
+{toolsLbl ? <span style={{ fontWeight: 800 }}>{toolsLbl}</span> : Icon("more", 20, 3)}
+</button>
+{showTools && (
+<div data-tools-backdrop onClick={function() { setShowTools(false); }} style={{ position: "fixed", inset: 0, zIndex: 260, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+<div data-tools-sheet role="dialog" aria-label="Tutor tools" onClick={function(e) { e.stopPropagation(); var t = e.target; while (t && t !== e.currentTarget) { if (t.getAttribute && t.getAttribute("data-tool-close") !== null) { setShowTools(false); break; } t = t.parentNode; } }} style={{ width: "100%", maxWidth: 560, maxHeight: "82vh", overflowY: "auto", overscrollBehavior: "contain", background: c.bg, borderRadius: "18px 18px 0 0", border: "1px solid var(--c-br)", borderBottom: "none", padding: "8px 14px 18px", boxSizing: "border-box", boxShadow: "0 -8px 30px rgba(0,0,0,.3)" }}>
+<div style={{ width: 36, height: 4, background: "var(--c-br)", borderRadius: 2, margin: "0 auto 6px" }} />
+<div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+<div style={{ flex: 1, fontSize: "var(--f14)", fontWeight: 800, color: "var(--c-tx0)" }}>{"Tools"}</div>
+<button data-tools-close aria-label="Close tools" onClick={function() { setShowTools(false); }} style={{ minWidth: 36, minHeight: 36, background: "none", border: "1px solid var(--c-br)", borderRadius: 18, color: "var(--c-mut)", cursor: "pointer", fontSize: "var(--f12)" }}>{"✕"}</button>
+</div>
+<div style={secH}>{"Focus timer"}</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>{pomoEl}</div>
+<div style={secH}>{"Session"}</div>
+<div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+{uploadBtn}
+{autoAnkiBtn}
+{savedBtn}
+{orBtn}
+{clearBtn}
+</div>
+<div style={secH}>{"Tutor style"}</div>
+{styleRow}
 </div>
 </div>
+)}
+</React.Fragment>
+);
+})()}
+</div>
+{pendingResume && resumeBanner(true)}
 {vOn && (function() {
 var status = vState === "thinking" ? "Thinking…"
 : vState === "speaking" ? (VE.stt ? "Speaking. Tap the mic to cut in." : "Speaking…")

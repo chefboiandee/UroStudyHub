@@ -3,6 +3,32 @@
 **Updated:** 2026-11-28
 **Tool:** Claude Code
 
+## 2026-11-28 (later) — 📱 Tutor toolbar on a phone: one row + a Tools sheet
+
+Andrew picked the first of the bigger phone moves proposed with the review fixes: the Tutor toolbar took three rows (about a
+quarter of the screen) and two of them were swipe strips hiding Start, Auto-Anki, Upload, OR Skills, Saved, Clear, Chill,
+Preview and ✏️ off-screen. **Done** (`UroStudyHub.html`; written up in `UroStudyHub_CLAUDE.md` > AI Tutor):
+- **Under 700px:** one row, model chip · cost · voice (mic icon; `aria-label` says on / off) · **Tools**. The Tools button
+  shows `🍅 mm:ss` (`☕` on a break) while the Pomodoro runs, so the timer stays in sight. Tools opens a bottom sheet:
+  Focus timer, Session (Upload, Auto-Anki, Saved, OR Skills, Clear), Tutor style (chips, Preview, ✏️ Note & settings).
+  Actions close the sheet, toggles and the timer don't, tapping outside closes it. 53px of toolbar instead of ~130.
+- **700px and up (iPad, laptop):** unchanged, the same elements inline and wrapping. Narrowing the window switches over live.
+- **"Unfinished lecture" banner:** on the Tutor it now sits under the toolbar instead of floating over the AI chip and the
+  first row; it still floats on the other pages.
+- Leaving the Tutor closes the Tools sheet and the AI picker (the picker used to stay open and cover the chat on return).
+**Verified:** `node tools/review-fixes.drive.mjs` 110 (new block C3: one row ≤ 60px with model · cost · voice · Tools, the
+sheet's contents and closing rules, Upload opens the file picker from the sheet, the resume banner under the toolbar with
+the AI chip tappable, desktop unchanged, resizing switches layouts; B10: the timer on the Tools button). Phone (390),
+iPad (768) and desktop (1280) screenshots looked at. Regression, all passing: `ai-pick` 67, `anki-study` 63, `cheat-save`
+40 / 19, `ise-plan` 150 / 45, `tutor-app` 54, `tutor-rich` 57, `voice-tutor` 75, `voice-text` 18, `anki-sched` 32,
+`arcade-cards` 119, `arcade-play` 24, `review-fixes.test` 12. Harnesses that tap Saved / Clear / the voice label at phone
+width now go through the Tools sheet (`cheat-save`, `tutor-rich`, `voice-tutor`).
+**Next steps:** try it on the iPhone (a lecture with the timer running; Upload from the sheet). The other proposed moves
+(In-Service Sprint as its own Study tab, first-run / Hub clean-up) wait for Andrew.
+**Open questions:**
+- iPad portrait (768px) still gets the full wrapped toolbar (about 4 rows, ~190px). Say if the one-row version should go up
+  to iPad portrait too (one number: the 700px breakpoint).
+
 ## 2026-11-28 — 🔧 Fixes from an outside review: trim leaks, 12 bugs, phone UI quick wins
 
 Andrew had the app reviewed from outside (UI critique of phone / desktop screenshots + a bug hunt), each item re-checked against

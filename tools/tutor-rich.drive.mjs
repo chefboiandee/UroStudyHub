@@ -354,6 +354,8 @@ await block('A. Phone, light: prompt, table, inline markdown', async () => {
   await p.waitForTimeout(150);
 
   // Bookmarked replies draw the same way in 📚 Saved
+  await p.evaluate(() => { const tb = document.querySelector('[data-tools-btn]'); if (tb) tb.click(); });  // phones: Saved is in the Tools sheet
+  await p.waitForTimeout(150);
   await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /(^|\s)Saved( \(\d+\))?$/.test(b.textContent.trim()) && b.getClientRects().length).click(); });
   await p.waitForTimeout(300);
   await p.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /Show more/.test(x.textContent)); if (b) b.click(); });
@@ -361,6 +363,8 @@ await block('A. Phone, light: prompt, table, inline markdown', async () => {
   const sg = await flowGeom(p);
   check('bookmark in 📚 Saved: the flowchart draws there too', sg.nodes.length === 8 && !noOverlaps(sg.nodes, 1), sg.nodes.length + ' boxes');
   await shot(p, 'phone-saved', '[data-flowchart]');
+  await p.evaluate(() => { const tb = document.querySelector('[data-tools-btn]'); if (tb) tb.click(); });  // phones: Saved is in the Tools sheet
+  await p.waitForTimeout(150);
   await p.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /(^|\s)Saved( \(\d+\))?$/.test(b.textContent.trim()) && b.getClientRects().length).click(); });
   await p.waitForSelector('[data-chat-msg]', { timeout: 5000 });
   errCheck('flowcharts', errs);
