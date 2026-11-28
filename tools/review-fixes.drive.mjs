@@ -634,6 +634,23 @@ await block('C3. Tutor toolbar on a phone: one row, the rest in the Tools sheet;
   await pw.setViewportSize({ width: 390, height: 844 });
   await pw.waitForTimeout(300);
   check('narrowing the window switches to the one-row toolbar', (await has(pw, '[data-tools-btn]')) && !(await has(pw, '[data-tool="saved"]')));
+  // iPads: portrait (744-1024) gets the one-row toolbar with its labels and a panel under Tools; landscape (1133+) stays inline
+  for (const [vw, vh, label] of [[744, 1133, 'iPad mini portrait'], [820, 1180, 'iPad Air portrait'], [1024, 1366, 'iPad Pro 12.9 portrait']]) {
+    await pw.setViewportSize({ width: vw, height: vh });
+    await pw.waitForTimeout(300);
+    const t = await pw.locator('[data-tutor-toolbar]').boundingBox();
+    const lbl = (await pw.locator('[data-voice-toggle]').innerText()) + ' | ' + (await pw.locator('[data-tools-btn]').innerText());
+    check(label + ': one row (≤ 60 px), voice and Tools keep their labels', t.height <= 60 && /Voice off/.test(lbl) && /Tools/.test(lbl), Math.round(t.height) + 'px · ' + lbl);
+  }
+  await pw.locator('[data-tools-btn]').click();
+  await pw.waitForTimeout(200);
+  const btnBox = await pw.locator('[data-tools-btn]').boundingBox(), panel = await pw.locator('[data-tools-sheet]').boundingBox();
+  check('iPad portrait: Tools opens a panel right under its button', panel && btnBox && Math.abs(panel.y - (btnBox.y + btnBox.height + 6)) <= 2 && Math.abs((panel.x + panel.width) - (btnBox.x + btnBox.width)) <= 2 && panel.width <= 460, panel && Math.round(panel.x) + ',' + Math.round(panel.y) + ' ' + Math.round(panel.width) + 'w');
+  await pw.screenshot({ path: join(SHOTS, 'c3-ipad-portrait-tools.png') });
+  await pw.locator('[data-tools-close]').click();
+  await pw.setViewportSize({ width: 1180, height: 820 });
+  await pw.waitForTimeout(300);
+  check('iPad landscape (1180): the inline toolbar, no Tools button', !(await has(pw, '[data-tools-btn]')) && (await vis(pw, '[data-tutor-toolbar] [data-tool="saved"]')));
   await w.close();
 });
 

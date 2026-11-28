@@ -200,10 +200,12 @@ The weekly schedule display adapts: fewer-topics-than-days shows "Review / catch
   bar (the phase emoji or "Phase N" next to its name, "Phase N" opening a line, the emoji opening the reply, or, outside
   voice mode, a line opening with the phase name); "treatment", "mnemonic", "phase 3 trial" in passing don't
 - "NEXT" and "SKIP" commands to advance phases (`isPhaseCommand`: the command, not "Next, explain…")
-- **Toolbar:** phones (under 700px, `tutNarrow` from `matchMedia`) get one row: model chip · cost · voice (icon) · Tools
-  (`data-tools-btn`; shows 🍅 mm:ss while the timer runs). Tools opens a bottom sheet (`data-tools-sheet`) with the timer,
-  Upload / Auto-Anki / Saved / OR Skills / Clear and the style chips + Preview + ✏️; buttons marked `data-tool-close` close
-  it. 700px and up: the same elements inline, wrapping, as before. The file input lives outside both so Upload works from
+- **Toolbar:** under 1100px (`tutNarrow`, `matchMedia`: phones and every iPad in portrait, 744-1024; every iPad in landscape
+  is 1133+) one row: model chip · cost · voice · Tools (`data-tools-btn`; shows 🍅 mm:ss while the timer runs). Under 700px
+  (`tutPhone`) that row drops its text labels (mic icon, no "cost" word, "⋯"). Tools opens the timer, Upload / Auto-Anki /
+  Saved / OR Skills / Clear and the style chips + Preview + ✏️ (`data-tools-sheet`): a bottom sheet on phones, a panel under
+  the Tools button on tablets (`toolsAt`); buttons marked `data-tool-close` close it. 1100px and up: the same elements
+  inline, wrapping, as before. The file input lives outside both so Upload works from
   the sheet. The "Unfinished lecture" banner sits in the Tutor column under the toolbar (`resumeBanner(true)`), floating
   only on other pages. Leaving the Tutor closes the sheet and the AI picker.
 - **No AI connected:** sending (typed, a topic chip, a lecture start) opens the model picker instead; the message waits in
